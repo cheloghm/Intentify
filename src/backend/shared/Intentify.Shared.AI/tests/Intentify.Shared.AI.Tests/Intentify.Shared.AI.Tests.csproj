@@ -20,7 +20,4 @@
     <ProjectReference Include="..\..\src\Intentify.Shared.AI\Intentify.Shared.AI.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Using Include="Xunit" />
-  </ItemGroup>
 </Project>

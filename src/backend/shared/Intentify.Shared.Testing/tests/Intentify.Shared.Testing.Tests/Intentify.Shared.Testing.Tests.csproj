@@ -21,7 +21,4 @@
     <ProjectReference Include="..\..\src\Intentify.Shared.Testing\Intentify.Shared.Testing.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Using Include="Xunit" />
-  </ItemGroup>
 </Project>

@@ -20,7 +20,4 @@
     <ProjectReference Include="..\..\src\Intentify.Shared.Security\Intentify.Shared.Security.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Using Include="Xunit" />
-  </ItemGroup>
 </Project>

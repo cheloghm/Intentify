@@ -21,7 +21,4 @@
     <ProjectReference Include="..\..\Intentify.AppHost.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Using Include="Xunit" />
-  </ItemGroup>
 </Project>
