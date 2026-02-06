@@ -18,7 +18,7 @@ public sealed class JwtTokenValidator
         var optionsValidation = ValidateOptions(options);
         if (!optionsValidation.IsSuccess)
         {
-            return Result<ClaimsPrincipal>.Failure(optionsValidation.Error!);
+            return Result<ClaimsPrincipal>.Failure(optionsValidation.Error ?? new Error("JwtOptions.Invalid", "JWT options are invalid."));
         }
 
         var handler = new JwtSecurityTokenHandler();
