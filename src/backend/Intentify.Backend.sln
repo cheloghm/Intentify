@@ -12,6 +12,14 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Shared.Web", "sha
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Shared.Web.Tests", "shared/Intentify.Shared.Web/tests/Intentify.Shared.Web.Tests/Intentify.Shared.Web.Tests.csproj", "{8F939E60-4BB8-494E-9B94-921728BA2E58}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Shared.Security", "shared/Intentify.Shared.Security/src/Intentify.Shared.Security/Intentify.Shared.Security.csproj", "{745AA3B8-0A1D-4D3E-8BD1-7BD06F0CA3D5}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Shared.Security.Tests", "shared/Intentify.Shared.Security/tests/Intentify.Shared.Security.Tests/Intentify.Shared.Security.Tests.csproj", "{88ADDF8C-07C7-4B0D-A947-D891B7EFF1CB}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Shared.Data.Mongo", "shared/Intentify.Shared.Data.Mongo/src/Intentify.Shared.Data.Mongo/Intentify.Shared.Data.Mongo.csproj", "{B0EF4081-E2BA-4B9C-9B84-ABEEC50F86B8}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Shared.Data.Mongo.Tests", "shared/Intentify.Shared.Data.Mongo/tests/Intentify.Shared.Data.Mongo.Tests/Intentify.Shared.Data.Mongo.Tests.csproj", "{3C317476-2240-49D4-8F4C-A48FB65459CD}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -38,6 +46,22 @@ Global
 		{8F939E60-4BB8-494E-9B94-921728BA2E58}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{8F939E60-4BB8-494E-9B94-921728BA2E58}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{8F939E60-4BB8-494E-9B94-921728BA2E58}.Release|Any CPU.Build.0 = Release|Any CPU
+		{745AA3B8-0A1D-4D3E-8BD1-7BD06F0CA3D5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{745AA3B8-0A1D-4D3E-8BD1-7BD06F0CA3D5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{745AA3B8-0A1D-4D3E-8BD1-7BD06F0CA3D5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{745AA3B8-0A1D-4D3E-8BD1-7BD06F0CA3D5}.Release|Any CPU.Build.0 = Release|Any CPU
+		{88ADDF8C-07C7-4B0D-A947-D891B7EFF1CB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{88ADDF8C-07C7-4B0D-A947-D891B7EFF1CB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{88ADDF8C-07C7-4B0D-A947-D891B7EFF1CB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{88ADDF8C-07C7-4B0D-A947-D891B7EFF1CB}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B0EF4081-E2BA-4B9C-9B84-ABEEC50F86B8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B0EF4081-E2BA-4B9C-9B84-ABEEC50F86B8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B0EF4081-E2BA-4B9C-9B84-ABEEC50F86B8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B0EF4081-E2BA-4B9C-9B84-ABEEC50F86B8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3C317476-2240-49D4-8F4C-A48FB65459CD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3C317476-2240-49D4-8F4C-A48FB65459CD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3C317476-2240-49D4-8F4C-A48FB65459CD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3C317476-2240-49D4-8F4C-A48FB65459CD}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
