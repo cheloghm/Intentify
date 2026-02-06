@@ -1,0 +1,6 @@
+<Project>
+  <PropertyGroup>
+    <!-- Central Package Management baseline -->
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+</Project>

@@ -1,0 +1,24 @@
+# Build outputs
+bin/
+obj/
+
+# Logs
+logs/
+test-logs/
+
+# Local environment files (never commit)
+.env
+.env.*
+!.env.example
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Node
+node_modules/
+.next/
+out/
+dist/
