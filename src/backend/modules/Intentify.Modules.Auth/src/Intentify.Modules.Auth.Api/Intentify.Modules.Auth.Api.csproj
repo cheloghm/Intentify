@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Intentify.Modules.Auth.Domain/Intentify.Modules.Auth.Domain.csproj" />
+    <ProjectReference Include="../../../shared/Intentify.Shared.Security/src/Intentify.Shared.Security/Intentify.Shared.Security.csproj" />
+    <ProjectReference Include="../../../shared/Intentify.Shared.Data.Mongo/src/Intentify.Shared.Data.Mongo/Intentify.Shared.Data.Mongo.csproj" />
+    <ProjectReference Include="../../../shared/Intentify.Shared.Web/src/Intentify.Shared.Web/Intentify.Shared.Web.csproj" />
+  </ItemGroup>
+</Project>
