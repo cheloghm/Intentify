@@ -84,3 +84,73 @@ Commit rules:
 
 If my previous PR conflicts with local fixes, rebase/merge from main first and KEEP the local fixes.
 Do not overwrite changes made outside this PR scope.
+
+Codex — Mandatory Guardrails for Intentify (.NET, DRY, DevSecOps)
+
+You are working on an existing repo. Do exactly the requested task and nothing else.
+
+0) First actions (required)
+
+Pull latest main branch and confirm you are not working on stale files.
+
+Before changing code, run:
+
+dotnet restore .\src\backend\Intentify.sln
+
+dotnet build -c Debug .\src\backend\Intentify.sln
+
+dotnet test -c Debug .\src\backend\Intentify.sln
+
+If build/test fails, identify which project fails (e.g., Intentify.AppHost vs Intentify.AppHost.Tests) and fix the root cause with the smallest diff.
+
+1) DRY + repo conventions (non-negotiable)
+
+Do not introduce duplicate helpers, duplicate configuration, or parallel implementations.
+
+Reuse existing shared packages and existing patterns.
+
+Do not add “nice-to-haves”, refactors, renames, or solution restructuring unless explicitly requested.
+
+2) Test project rules (must follow)
+
+Test projects must compile only in the test .csproj, never accidentally in app projects.
+
+If test source files live under an app folder, ensure the app .csproj excludes them:
+
+Add <Compile Remove="tests\**\*.cs" /> (or equivalent minimal exclusion).
+
+If xUnit attributes like [Fact] are missing, do NOT “spray” <Using Include="Xunit" /> into many projects.
+
+First verify the correct project is compiling the file.
+
+Ensure the test .csproj references xunit, xunit.runner.visualstudio, and Microsoft.NET.Test.Sdk.
+
+3) Central package management rules
+
+Keep versions in Directory.Packages.props only.
+
+In .csproj, use <PackageReference Include="..." /> without versions.
+
+Do not add per-project package versions unless explicitly requested.
+
+4) DevSecOps basics (required)
+
+Never log or return secrets (JWT signing key, API keys, connection strings).
+
+Any debug endpoint must be Development-only and sanitized.
+
+5) Proof before PR
+
+PR is only acceptable if:
+
+dotnet build -c Debug .\src\backend\Intentify.sln passes
+
+dotnet test -c Debug .\src\backend\Intentify.sln passes
+
+Include in the PR description:
+
+What files changed
+
+Exact commands run and results
+
+Why the root cause happened (1–2 sentences)

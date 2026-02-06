@@ -1,6 +1,7 @@
 using System.Net;
 using Intentify.AppHost;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Hosting;
 using Xunit;

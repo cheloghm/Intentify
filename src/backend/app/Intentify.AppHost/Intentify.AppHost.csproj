@@ -8,4 +8,9 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Intentify.AppHost.Tests" />
   </ItemGroup>
+
+  <!-- IMPORTANT: prevent the web project from compiling test sources under /tests -->
+  <ItemGroup>
+    <Compile Remove="tests\**\*.cs" />
+  </ItemGroup>
 </Project>
