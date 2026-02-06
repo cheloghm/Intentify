@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.101"
+
+      - name: Backend - Restore/Build/Test (if src/backend exists)
+        shell: bash
+        run: |
+          if [ -d "src/backend" ]; then
+            echo "src/backend found. Running .NET build/test..."
+            cd src/backend
+            dotnet restore
+            dotnet build -c Debug --no-restore
+            dotnet test -c Debug --no-build
+          else
+            echo "src/backend not found. Skipping backend steps."
+          fi
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24.x"
+          cache: "npm"
+          cache-dependency-path: "src/frontend/web/package-lock.json"
+
+      - name: Frontend - npm ci && npm run build (if src/frontend/web exists)
+        shell: bash
+        run: |
+          if [ -d "src/frontend/web" ]; then
+            echo "src/frontend/web found. Running npm ci/build..."
+            cd src/frontend/web
+            if [ -f "package-lock.json" ]; then
+              npm ci
+            else
+              npm install
+            fi
+            npm run build
+          else
+            echo "src/frontend/web not found. Skipping frontend steps."
+          fi
