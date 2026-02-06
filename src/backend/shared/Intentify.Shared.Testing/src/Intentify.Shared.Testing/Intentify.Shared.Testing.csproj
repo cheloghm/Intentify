@@ -6,6 +6,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Testcontainers.MongoDb" Version="4.6.0" />
+    <PackageReference Include="Testcontainers.MongoDb" />
   </ItemGroup>
 </Project>
