@@ -50,3 +50,37 @@ After changes:
 - expected output/behavior
 - 3–8 manual checks
 - rollback steps
+
+You are working on an EXISTING codebase. Do NOT re-scaffold, regenerate, or replace files unless explicitly asked.
+
+Before making changes:
+1) Sync and verify baseline:
+   - git status (must be clean)
+   - git pull (or confirm branch up-to-date)
+   - dotnet test -c Debug .\Intentify.sln (capture failing projects + exact errors)
+
+2) Analyze before editing:
+   - Identify existing conventions (central packages via Directory.Packages.props if present).
+   - Reuse existing patterns and shared packages; do not reimplement helpers already present.
+   - If you need xUnit Facts/IAsyncLifetime, verify the test csproj already references:
+     Microsoft.NET.Test.Sdk, xunit, xunit.runner.visualstudio.
+   - If you use ServiceCollection / BuildServiceProvider / GetRequiredService / GetServices,
+     ensure the project references Microsoft.Extensions.DependencyInjection and includes
+     `using Microsoft.Extensions.DependencyInjection;`.
+
+Change rules:
+- Smallest possible diff.
+- Only edit files required to fix the stated errors.
+- Do not delete or replace files to “make it work”.
+- Do not add new libraries unless already used in repo; prefer project/package references consistent with current repo.
+
+Commit rules:
+- After each fix, rerun:
+  dotnet restore .\Intentify.sln
+  dotnet build  -c Debug .\Intentify.sln
+  dotnet test   -c Debug .\Intentify.sln
+- If any command fails, STOP and fix before committing.
+- Include in PR description: list of files changed + test output summary.
+
+If my previous PR conflicts with local fixes, rebase/merge from main first and KEEP the local fixes.
+Do not overwrite changes made outside this PR scope.

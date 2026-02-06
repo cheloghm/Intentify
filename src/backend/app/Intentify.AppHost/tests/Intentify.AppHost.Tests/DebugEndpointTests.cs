@@ -3,6 +3,7 @@ using Intentify.AppHost;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Hosting;
+using Xunit;
 
 namespace Intentify.AppHost.Tests;
 
