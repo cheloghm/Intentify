@@ -28,9 +28,9 @@ jobs:
           if [ -d "src/backend" ]; then
             echo "src/backend found. Running .NET build/test..."
             cd src/backend
-            dotnet restore
-            dotnet build -c Debug --no-restore
-            dotnet test -c Debug --no-build
+            dotnet restore Intentify.Backend.sln
+            dotnet build -c Debug Intentify.Backend.sln --no-restore
+            dotnet test -c Debug Intentify.Backend.sln --no-build
           else
             echo "src/backend not found. Skipping backend steps."
           fi
