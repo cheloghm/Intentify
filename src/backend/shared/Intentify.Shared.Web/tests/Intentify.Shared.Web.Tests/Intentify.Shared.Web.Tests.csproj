@@ -22,7 +22,4 @@
     <ProjectReference Include="..\..\src\Intentify.Shared.Web\Intentify.Shared.Web.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Using Include="Xunit" />
-  </ItemGroup>
 </Project>

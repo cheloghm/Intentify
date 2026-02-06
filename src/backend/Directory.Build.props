@@ -5,4 +5,17 @@
     <Deterministic>true</Deterministic>
     <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
   </PropertyGroup>
+
+  <ItemGroup Condition="'$(IsTestProject)' == 'true'">
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <Target Name="ValidateTestReferences" BeforeTargets="CollectPackageReferences" Condition="'$(IsTestProject)' == 'true'">
+    <Error
+      Condition=" '@(PackageReference->WithMetadataValue('Identity','Microsoft.NET.Test.Sdk'))' == '' "
+      Text="Test project is missing Microsoft.NET.Test.Sdk. Add &lt;PackageReference Include=&quot;Microsoft.NET.Test.Sdk&quot; /&gt; to $(MSBuildProjectFullPath)." />
+    <Error
+      Condition=" '@(PackageReference->WithMetadataValue('Identity','xunit'))' == '' "
+      Text="Test project is missing xunit. Add &lt;PackageReference Include=&quot;xunit&quot; /&gt; to $(MSBuildProjectFullPath)." />
+  </Target>
 </Project>

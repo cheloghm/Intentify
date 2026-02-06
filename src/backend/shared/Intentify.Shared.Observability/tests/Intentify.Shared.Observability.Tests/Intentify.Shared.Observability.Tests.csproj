@@ -20,7 +20,4 @@
     <ProjectReference Include="..\..\src\Intentify.Shared.Observability\Intentify.Shared.Observability.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Using Include="Xunit" />
-  </ItemGroup>
 </Project>

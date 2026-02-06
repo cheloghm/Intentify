@@ -21,7 +21,4 @@
     <ProjectReference Include="..\..\src\Intentify.Shared.Messaging\Intentify.Shared.Messaging.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Using Include="Xunit" />
-  </ItemGroup>
 </Project>
