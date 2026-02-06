@@ -1,7 +1,7 @@
-var builder = WebApplication.CreateBuilder(args);
+using Intentify.AppHost;
 
-var app = builder.Build();
+var builder = AppHostApplication.CreateBuilder(args);
 
-app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
+var app = AppHostApplication.Build(builder);
 
 app.Run();
