@@ -13,7 +13,7 @@ public sealed class JwtTokenIssuer
         var optionsValidation = ValidateOptions(options);
         if (!optionsValidation.IsSuccess)
         {
-            return Result<string>.Failure(optionsValidation.Error!);
+            return Result<string>.Failure(optionsValidation.Error ?? new Error("JwtOptions.Invalid", "JWT options are invalid."));
         }
 
         var now = DateTime.UtcNow;
