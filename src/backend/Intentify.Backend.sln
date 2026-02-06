@@ -8,6 +8,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Shared.Abstractio
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Shared.Abstractions.Tests", "shared/Intentify.Shared.Abstractions/tests/Intentify.Shared.Abstractions.Tests/Intentify.Shared.Abstractions.Tests.csproj", "{8A8FB1A4-B240-47F8-B8B2-4A7C019255E2}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Shared.Web", "shared/Intentify.Shared.Web/src/Intentify.Shared.Web/Intentify.Shared.Web.csproj", "{3CEC9B96-1969-4326-8CEE-A11A1E869C2A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Shared.Web.Tests", "shared/Intentify.Shared.Web/tests/Intentify.Shared.Web.Tests/Intentify.Shared.Web.Tests.csproj", "{8F939E60-4BB8-494E-9B94-921728BA2E58}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -26,6 +30,14 @@ Global
 		{8A8FB1A4-B240-47F8-B8B2-4A7C019255E2}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{8A8FB1A4-B240-47F8-B8B2-4A7C019255E2}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{8A8FB1A4-B240-47F8-B8B2-4A7C019255E2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3CEC9B96-1969-4326-8CEE-A11A1E869C2A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3CEC9B96-1969-4326-8CEE-A11A1E869C2A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3CEC9B96-1969-4326-8CEE-A11A1E869C2A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3CEC9B96-1969-4326-8CEE-A11A1E869C2A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8F939E60-4BB8-494E-9B94-921728BA2E58}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8F939E60-4BB8-494E-9B94-921728BA2E58}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8F939E60-4BB8-494E-9B94-921728BA2E58}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8F939E60-4BB8-494E-9B94-921728BA2E58}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
