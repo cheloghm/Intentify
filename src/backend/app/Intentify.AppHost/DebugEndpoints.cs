@@ -1,5 +1,9 @@
+using Intentify.Modules.Auth.Api;
+using Intentify.Shared.Data.Mongo;
+using Intentify.Shared.Security;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Primitives;
@@ -21,7 +25,7 @@ internal static class DebugEndpoints
             return endpoints;
         }
 
-        endpoints.MapGet("/debug", (HttpContext context, AppModuleRegistry registry, IHostEnvironment hostEnvironment) =>
+        endpoints.MapGet("/debug", (HttpContext context, AppModuleRegistry registry, IHostEnvironment hostEnvironment, IConfiguration configuration) =>
         {
             var expectedSecret = Environment.GetEnvironmentVariable(DebugSecretEnvironmentVariable);
             if (string.IsNullOrWhiteSpace(expectedSecret))
@@ -35,6 +39,8 @@ internal static class DebugEndpoints
                 return Results.Unauthorized();
             }
 
+            var jwtOptions = configuration.GetSection("Intentify:Jwt").Get<JwtOptions>() ?? new JwtOptions();
+            var mongoOptions = configuration.GetSection("Intentify:Mongo").Get<MongoOptions>() ?? new MongoOptions();
             var response = new
             {
                 environment = hostEnvironment.EnvironmentName,
@@ -42,7 +48,27 @@ internal static class DebugEndpoints
                 modules = registry.Modules.Select(module => new
                 {
                     name = module.Name
-                })
+                }),
+                auth = new
+                {
+                    jwt = new
+                    {
+                        issuer = jwtOptions.Issuer,
+                        audience = jwtOptions.Audience,
+                        accessTokenMinutes = jwtOptions.AccessTokenMinutes,
+                        signingKeyConfigured = !string.IsNullOrWhiteSpace(jwtOptions.SigningKey)
+                    },
+                    collections = new
+                    {
+                        users = AuthMongoCollections.Users,
+                        tenants = AuthMongoCollections.Tenants
+                    },
+                    mongo = new
+                    {
+                        connectionStringConfigured = !string.IsNullOrWhiteSpace(mongoOptions.ConnectionString),
+                        databaseName = mongoOptions.DatabaseName
+                    }
+                }
             };
 
             return Results.Ok(response);

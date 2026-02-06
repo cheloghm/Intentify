@@ -1,21 +1,14 @@
+using Intentify.Modules.Auth.Api;
+using Intentify.Shared.Web;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Intentify.AppHost;
 
-internal interface IAppModule
+public static class AppModuleCatalog
 {
-    string Name { get; }
-
-    void RegisterServices(IServiceCollection services, IConfiguration configuration);
-
-    void MapEndpoints(IEndpointRouteBuilder endpoints);
-}
-
-internal static class AppModuleCatalog
-{
-    public static IReadOnlyList<IAppModule> Modules { get; } = [];
+    public static IReadOnlyList<IAppModule> Modules { get; } = [new Intentify.Modules.Auth.Api.AuthModule()];
 }
 
 internal sealed class AppModuleRegistry
