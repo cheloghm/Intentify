@@ -3,6 +3,7 @@ using System.Security.Claims;
 using Intentify.Modules.Auth.Domain;
 using Intentify.Shared.Security;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Options;
 using MongoDB.Driver;
 

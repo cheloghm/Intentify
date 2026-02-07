@@ -10,6 +10,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../../../shared/Intentify.Shared.Abstractions/src/Intentify.Shared.Abstractions/Intentify.Shared.Abstractions.csproj" />
+    <ProjectReference Include="../../../../shared/Intentify.Shared.Abstractions/src/Intentify.Shared.Abstractions/Intentify.Shared.Abstractions.csproj" />
   </ItemGroup>
 </Project>

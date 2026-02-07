@@ -15,10 +15,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../../../app/Intentify.AppHost/Intentify.AppHost.csproj" />
-    <ProjectReference Include="../../../modules/Intentify.Modules.Auth/src/Intentify.Modules.Auth.Api/Intentify.Modules.Auth.Api.csproj" />
-    <ProjectReference Include="../../../modules/Intentify.Modules.Auth/src/Intentify.Modules.Auth.Domain/Intentify.Modules.Auth.Domain.csproj" />
-    <ProjectReference Include="../../../shared/Intentify.Shared.Testing/src/Intentify.Shared.Testing/Intentify.Shared.Testing.csproj" />
-    <ProjectReference Include="../../../shared/Intentify.Shared.Security/src/Intentify.Shared.Security/Intentify.Shared.Security.csproj" />
+    <ProjectReference Include="../../../../app/Intentify.AppHost/Intentify.AppHost.csproj" />
+    <ProjectReference Include="../../../../modules/Intentify.Modules.Auth/src/Intentify.Modules.Auth.Api/Intentify.Modules.Auth.Api.csproj" />
+    <ProjectReference Include="../../../../modules/Intentify.Modules.Auth/src/Intentify.Modules.Auth.Domain/Intentify.Modules.Auth.Domain.csproj" />
+    <ProjectReference Include="../../../../shared/Intentify.Shared.Testing/src/Intentify.Shared.Testing/Intentify.Shared.Testing.csproj" />
+    <ProjectReference Include="../../../../shared/Intentify.Shared.Security/src/Intentify.Shared.Security/Intentify.Shared.Security.csproj" />
   </ItemGroup>
 </Project>
