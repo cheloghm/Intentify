@@ -6,6 +6,11 @@ obj/
 logs/
 test-logs/
 
+**.zip
+*.zip
+.zip
+.tar.gz
+
 # Local environment files (never commit)
 .env
 .env.*
