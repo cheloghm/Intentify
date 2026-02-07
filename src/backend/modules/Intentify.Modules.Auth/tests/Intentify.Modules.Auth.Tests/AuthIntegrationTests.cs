@@ -32,7 +32,7 @@ public sealed class AuthIntegrationTests : IAsyncLifetime
         {
             ["Intentify:Jwt:Issuer"] = "intentify",
             ["Intentify:Jwt:Audience"] = "intentify-users",
-            ["Intentify:Jwt:SigningKey"] = "test-signing-key-1234567890",
+            ["Intentify:Jwt:SigningKey"] = "test-signing-key-1234567890-EXTRA-KEY",
             ["Intentify:Jwt:AccessTokenMinutes"] = "30",
             ["Intentify:Mongo:ConnectionString"] = _mongo.ConnectionString,
             ["Intentify:Mongo:DatabaseName"] = _mongo.DatabaseName

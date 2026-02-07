@@ -6,6 +6,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Swashbuckle.AspNetCore" />
+  </ItemGroup>
+
+  <ItemGroup>
     <InternalsVisibleTo Include="Intentify.AppHost.Tests" />
     <InternalsVisibleTo Include="Intentify.Modules.Auth.Tests" />
   </ItemGroup>
