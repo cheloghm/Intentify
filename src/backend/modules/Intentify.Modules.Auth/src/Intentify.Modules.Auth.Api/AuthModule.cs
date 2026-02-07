@@ -42,6 +42,7 @@ public sealed class AuthModule : IAppModule
 
         var group = endpoints.MapGroup("/auth");
 
+        group.MapPost("/register", AuthEndpoints.RegisterAsync);
         group.MapPost("/login", AuthEndpoints.LoginAsync);
         group.MapGet("/me", AuthEndpoints.GetCurrentUser)
             .AddEndpointFilter<RequireAuthFilter>();

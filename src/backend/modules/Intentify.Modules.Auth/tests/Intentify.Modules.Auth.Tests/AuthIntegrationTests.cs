@@ -70,6 +70,30 @@ public sealed class AuthIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Register_ReturnsJwt()
+    {
+        var request = new RegisterRequest("New Tester", "newtester@intentify.local", "password-456");
+
+        var response = await _client!.PostAsJsonAsync("/auth/register", request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var payload = await response.Content.ReadFromJsonAsync<LoginResponse>();
+        Assert.NotNull(payload);
+        Assert.False(string.IsNullOrWhiteSpace(payload!.AccessToken));
+    }
+
+    [Fact]
+    public async Task Register_DuplicateEmail_ReturnsClientError()
+    {
+        var request = new RegisterRequest("Dup Tester", "tester@intentify.local", "password-456");
+
+        var response = await _client!.PostAsJsonAsync("/auth/register", request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
     public async Task ProtectedEndpoint_RequiresAuth()
     {
         var response = await _client!.GetAsync("/auth/me");
