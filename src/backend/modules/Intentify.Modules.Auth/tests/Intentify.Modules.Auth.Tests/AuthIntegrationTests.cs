@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using Intentify.AppHost;
 using Intentify.Modules.Auth.Api;
 using Intentify.Modules.Auth.Domain;
+using Intentify.Shared.Data.Mongo;
 using Intentify.Shared.Security;
 using Intentify.Shared.Testing;
 using Microsoft.AspNetCore.Builder;
@@ -78,6 +79,8 @@ public sealed class AuthIntegrationTests : IAsyncLifetime
 
     private async Task SeedUserAsync()
     {
+        MongoConventions.Register();
+
         var client = new MongoClient(_mongo.ConnectionString);
         var database = client.GetDatabase(_mongo.DatabaseName);
 
