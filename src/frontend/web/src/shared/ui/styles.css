@@ -36,6 +36,12 @@
   font-size: 14px;
 }
 
+.ui-field-error {
+  color: var(--ui-danger);
+  font-size: 12px;
+  min-height: 14px;
+}
+
 .ui-table {
   width: 100%;
   border-collapse: collapse;
