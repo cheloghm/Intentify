@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text.Json;
 using Intentify.AppHost;
 using Intentify.Modules.Auth.Api;
 using Intentify.Modules.Auth.Domain;
@@ -92,6 +93,56 @@ public sealed class AuthIntegrationTests : IAsyncLifetime
         var response = await _client!.PostAsJsonAsync("/auth/register", request);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+
+        await AssertValidationErrorAsync(response, "email");
+    }
+
+    [Fact]
+    public async Task Register_InvalidEmail_ReturnsValidationError()
+    {
+        var request = new RegisterRequest("Bad Email", "invalid-email", "password-456");
+
+        var response = await _client!.PostAsJsonAsync("/auth/register", request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+
+        await AssertValidationErrorAsync(response, "email");
+    }
+
+    [Fact]
+    public async Task Register_WeakPassword_ReturnsValidationError()
+    {
+        var request = new RegisterRequest("Weak Password", "weakpass@intentify.local", "short1");
+
+        var response = await _client!.PostAsJsonAsync("/auth/register", request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+
+        await AssertValidationErrorAsync(response, "password");
+    }
+
+    [Fact]
+    public async Task Login_InvalidEmail_ReturnsValidationError()
+    {
+        var request = new LoginRequest("invalid-email", "password-123");
+
+        var response = await _client!.PostAsJsonAsync("/auth/login", request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+
+        await AssertValidationErrorAsync(response, "email");
+    }
+
+    [Fact]
+    public async Task Login_WeakPassword_ReturnsValidationError()
+    {
+        var request = new LoginRequest("tester@intentify.local", "short1");
+
+        var response = await _client!.PostAsJsonAsync("/auth/login", request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+
+        await AssertValidationErrorAsync(response, "password");
     }
 
     [Fact]
@@ -159,5 +210,16 @@ public sealed class AuthIntegrationTests : IAsyncLifetime
 
         await tenants.InsertOneAsync(tenant);
         await users.InsertOneAsync(user);
+    }
+
+    private static async Task AssertValidationErrorAsync(HttpResponseMessage response, string fieldName)
+    {
+        var content = await response.Content.ReadAsStringAsync();
+        using var document = JsonDocument.Parse(content);
+        var root = document.RootElement;
+
+        Assert.Equal("Validation failed", root.GetProperty("title").GetString());
+        var errors = root.GetProperty("errors");
+        Assert.True(errors.TryGetProperty(fieldName, out _));
     }
 }
