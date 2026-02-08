@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Intentify.AppHost;
 using Intentify.Modules.Auth.Api;
@@ -99,6 +100,29 @@ public sealed class AuthIntegrationTests : IAsyncLifetime
         var response = await _client!.GetAsync("/auth/me");
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task CurrentUser_ReturnsDisplayName()
+    {
+        var loginRequest = new LoginRequest("tester@intentify.local", "password-123");
+        var loginResponse = await _client!.PostAsJsonAsync("/auth/login", loginRequest);
+
+        Assert.Equal(HttpStatusCode.OK, loginResponse.StatusCode);
+
+        var loginPayload = await loginResponse.Content.ReadFromJsonAsync<LoginResponse>();
+        Assert.NotNull(loginPayload);
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/auth/me");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", loginPayload!.AccessToken);
+
+        var response = await _client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var payload = await response.Content.ReadFromJsonAsync<CurrentUserResponse>();
+        Assert.NotNull(payload);
+        Assert.Equal("Tester", payload!.DisplayName);
     }
 
     private async Task SeedUserAsync()

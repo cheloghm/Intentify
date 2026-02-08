@@ -1,5 +1,3 @@
-using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
 using Intentify.Modules.Auth.Domain;
 using Intentify.Shared.Security;
 using Microsoft.AspNetCore.Http;
@@ -107,14 +105,9 @@ internal static class AuthEndpoints
         return Results.Ok(new LoginResponse(tokenResult.Value));
     }
 
-    public static IResult GetCurrentUser(HttpContext context)
+    public static async Task<IResult> GetCurrentUser(HttpContext context, IMongoDatabase database)
     {
-        var userId = context.User.FindFirstValue(ClaimTypes.NameIdentifier) ??
-            context.User.FindFirstValue(JwtRegisteredClaimNames.Sub) ??
-            string.Empty;
-        var tenantId = context.User.FindFirstValue("tenantId") ?? string.Empty;
-        var roles = context.User.FindAll(ClaimTypes.Role).Select(role => role.Value).ToArray();
-
-        return Results.Ok(new CurrentUserResponse(userId, tenantId, roles));
+        var response = await CurrentUserResponseFactory.CreateAsync(context, database);
+        return Results.Ok(response);
     }
 }
