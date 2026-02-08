@@ -1,9 +1,11 @@
 using Intentify.Modules.Auth.Domain;
 using Intentify.Shared.Security;
+using Intentify.Shared.Web;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Options;
 using MongoDB.Driver;
+using System.Net.Mail;
 
 namespace Intentify.Modules.Auth.Api;
 
@@ -16,18 +18,22 @@ internal static class AuthEndpoints
         JwtTokenIssuer tokenIssuer,
         IOptions<JwtOptions> jwtOptions)
     {
-        if (string.IsNullOrWhiteSpace(request.DisplayName) ||
-            string.IsNullOrWhiteSpace(request.Email) ||
-            string.IsNullOrWhiteSpace(request.Password))
+        var registrationErrors = ValidateRegistrationRequest(request);
+        if (registrationErrors.Count > 0)
         {
-            return Results.BadRequest();
+            var problemDetails = ProblemDetailsHelpers.CreateValidationProblemDetails(registrationErrors);
+            return Results.BadRequest(problemDetails);
         }
 
         var users = database.GetCollection<User>(AuthMongoCollections.Users);
         var existingUser = await users.Find(x => x.Email == request.Email).FirstOrDefaultAsync();
         if (existingUser is not null)
         {
-            return Results.BadRequest();
+            var problemDetails = ProblemDetailsHelpers.CreateValidationProblemDetails(new Dictionary<string, string[]>
+            {
+                ["email"] = ["Email is already registered."]
+            });
+            return Results.BadRequest(problemDetails);
         }
 
         var tenants = database.GetCollection<Tenant>(AuthMongoCollections.Tenants);
@@ -78,9 +84,11 @@ internal static class AuthEndpoints
         JwtTokenIssuer tokenIssuer,
         IOptions<JwtOptions> jwtOptions)
     {
-        if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password))
+        var loginErrors = ValidateLoginRequest(request);
+        if (loginErrors.Count > 0)
         {
-            return Results.BadRequest();
+            var problemDetails = ProblemDetailsHelpers.CreateValidationProblemDetails(loginErrors);
+            return Results.BadRequest(problemDetails);
         }
 
         var users = database.GetCollection<User>(AuthMongoCollections.Users);
@@ -109,5 +117,110 @@ internal static class AuthEndpoints
     {
         var response = await CurrentUserResponseFactory.CreateAsync(context, database);
         return Results.Ok(response);
+    }
+
+    private static Dictionary<string, string[]> ValidateRegistrationRequest(RegisterRequest request)
+    {
+        var errors = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
+
+        if (string.IsNullOrWhiteSpace(request.DisplayName))
+        {
+            errors["displayName"] = ["Display name is required."];
+        }
+
+        if (!IsValidEmail(request.Email))
+        {
+            errors["email"] = ["Email is invalid."];
+        }
+
+        if (!IsValidPassword(request.Password))
+        {
+            errors["password"] = ["Password must be at least 10 characters and contain at least one letter and one digit."];
+        }
+
+        return errors;
+    }
+
+    private static Dictionary<string, string[]> ValidateLoginRequest(LoginRequest request)
+    {
+        var errors = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
+
+        if (!IsValidEmail(request.Email))
+        {
+            errors["email"] = ["Email is invalid."];
+        }
+
+        if (!IsValidPassword(request.Password))
+        {
+            errors["password"] = ["Password must be at least 10 characters and contain at least one letter and one digit."];
+        }
+
+        return errors;
+    }
+
+    private static bool IsValidEmail(string email)
+    {
+        if (string.IsNullOrWhiteSpace(email))
+        {
+            return false;
+        }
+
+        var trimmedEmail = email.Trim();
+        try
+        {
+            var mailAddress = new MailAddress(trimmedEmail);
+            if (!string.Equals(mailAddress.Address, trimmedEmail, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            var atIndex = trimmedEmail.IndexOf('@');
+            if (atIndex <= 0 || atIndex == trimmedEmail.Length - 1)
+            {
+                return false;
+            }
+
+            var domain = trimmedEmail[(atIndex + 1)..];
+            return domain.Contains('.', StringComparison.Ordinal);
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
+    }
+
+    private static bool IsValidPassword(string password)
+    {
+        if (string.IsNullOrWhiteSpace(password))
+        {
+            return false;
+        }
+
+        if (password.Length < 10)
+        {
+            return false;
+        }
+
+        var hasLetter = false;
+        var hasDigit = false;
+
+        foreach (var character in password)
+        {
+            if (char.IsLetter(character))
+            {
+                hasLetter = true;
+            }
+            else if (char.IsDigit(character))
+            {
+                hasDigit = true;
+            }
+
+            if (hasLetter && hasDigit)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
