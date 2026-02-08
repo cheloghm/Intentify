@@ -19,6 +19,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\Intentify.AppHost.csproj" />
+    <ProjectReference Include="..\..\..\..\shared\Intentify.Shared.Testing\src\Intentify.Shared.Testing\Intentify.Shared.Testing.csproj" />
   </ItemGroup>
 
 </Project>

@@ -24,32 +24,35 @@ internal static class DebugEndpoints
             return endpoints;
         }
 
-        endpoints.MapGet("/debug", async (HttpContext context, IHostEnvironment hostEnvironment, IMongoDatabase database) =>
+        endpoints.MapGet("/debug", async (
+            HttpContext context,
+            IHostEnvironment hostEnvironment,
+            IMongoDatabase database) =>
+        {
+            var expectedSecret = Environment.GetEnvironmentVariable(DebugSecretEnvironmentVariable);
+            if (string.IsNullOrWhiteSpace(expectedSecret))
             {
-                var expectedSecret = Environment.GetEnvironmentVariable(DebugSecretEnvironmentVariable);
-                if (string.IsNullOrWhiteSpace(expectedSecret))
-                {
-                    return Results.Unauthorized();
-                }
+                return Results.Unauthorized();
+            }
 
-                if (!context.Request.Headers.TryGetValue(DebugSecretHeaderName, out var providedSecret) ||
-                    !StringValuesMatch(providedSecret, expectedSecret))
-                {
-                    return Results.Unauthorized();
-                }
+            context.Request.Headers.TryGetValue(DebugSecretHeaderName, out var providedSecret);
 
-                var user = await CurrentUserResponseFactory.CreateAsync(context, database);
-                var response = new
-                {
-                    environment = hostEnvironment.EnvironmentName,
-                    user,
-                    correlationId = Activity.Current?.Id ?? context.TraceIdentifier,
-                    utcNow = DateTime.UtcNow.ToString("O")
-                };
+            if (!StringValuesMatch(providedSecret, expectedSecret))
+            {
+                return Results.Unauthorized();
+            }
 
-                return Results.Ok(response);
-            })
-            .AddEndpointFilter<RequireAuthFilter>();
+            var user = await CurrentUserResponseFactory.CreateAsync(context, database);
+
+            return Results.Ok(new
+            {
+                environment = hostEnvironment.EnvironmentName,
+                user,
+                correlationId = Activity.Current?.Id ?? context.TraceIdentifier,
+                utcNow = DateTime.UtcNow.ToString("O")
+            });
+        })
+        .AddEndpointFilter<RequireAuthFilter>(); // keep ONLY if /auth/me uses it successfully
 
         return endpoints;
     }
