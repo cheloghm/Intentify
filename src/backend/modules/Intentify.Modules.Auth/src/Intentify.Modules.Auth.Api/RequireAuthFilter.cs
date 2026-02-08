@@ -7,7 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Intentify.Modules.Auth.Api;
 
-internal sealed class RequireAuthFilter : IEndpointFilter
+public sealed class RequireAuthFilter : IEndpointFilter
 {
     public async ValueTask<object?> InvokeAsync(EndpointFilterInvocationContext context, EndpointFilterDelegate next)
     {
