@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
@@ -10,6 +13,8 @@ namespace Intentify.AppHost;
 
 internal static class AppHostApplication
 {
+    private const string CorsPolicyName = "IntentifyCors";
+
     public static WebApplicationBuilder CreateBuilder(string[] args, string? environmentName = null)
     {
         DotEnvLoader.Load();
@@ -74,6 +79,9 @@ internal static class AppHostApplication
 
         builder.Services.AddAuthorization();
 
+        // ✅ CORS (required for frontend calling backend)
+        ConfigureCors(builder);
+
         var app = builder.Build();
 
         if (app.Environment.IsDevelopment())
@@ -82,11 +90,54 @@ internal static class AppHostApplication
             app.UseSwaggerUI();
         }
 
+        // ✅ Apply CORS BEFORE mapping endpoints
+        app.UseCors(CorsPolicyName);
+
         app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
         app.MapAppModules();
         app.MapDebugEndpoints();
 
         return app;
+    }
+
+    private static void ConfigureCors(WebApplicationBuilder builder)
+    {
+        // Supports env var:
+        // Intentify__Cors__AllowedOrigins=http://127.0.0.1:3000,http://localhost:3000
+        var configured = builder.Configuration["Intentify:Cors:AllowedOrigins"];
+
+        var origins = (configured ?? string.Empty)
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(o => !string.IsNullOrWhiteSpace(o))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        // Dev fallback to avoid local friction; prod must be explicit
+        if (origins.Length == 0)
+        {
+            if (!builder.Environment.IsDevelopment())
+            {
+                throw new InvalidOperationException(
+                    "CORS is not configured. Set Intentify__Cors__AllowedOrigins (e.g. http://localhost:3000).");
+            }
+
+            origins = new[] { "http://localhost:3000", "http://127.0.0.1:3000" };
+        }
+
+        builder.Services.AddCors(options =>
+        {
+            options.AddPolicy(CorsPolicyName, policy =>
+            {
+                policy
+                    .WithOrigins(origins)
+                    .AllowAnyHeader()
+                    .AllowAnyMethod();
+
+                // IMPORTANT:
+                // Do NOT call AllowCredentials() unless you're using cookies.
+                // Your frontend uses Bearer tokens, so credentials are not required.
+            });
+        });
     }
 
     private sealed class DebugSecretForDebugEndpointOperationFilter : IOperationFilter

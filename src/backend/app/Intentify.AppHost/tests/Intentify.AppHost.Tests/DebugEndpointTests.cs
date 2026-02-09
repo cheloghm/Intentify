@@ -1,5 +1,9 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Net;
 using System.Net.Http.Headers;
+using System.Threading.Tasks;
 using Intentify.AppHost;
 using Intentify.Shared.Security;
 using Intentify.Shared.Testing;
@@ -88,10 +92,29 @@ public sealed class DebugEndpointTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
+    [Fact]
+    public async Task Cors_AllowsConfiguredFrontendOrigin_ForAuthRegisterPreflight()
+    {
+        await using var app = await BuildApp(Environments.Development);
+
+        using var request = new HttpRequestMessage(HttpMethod.Options, "/auth/register");
+        request.Headers.Add("Origin", "http://127.0.0.1:3000");
+        request.Headers.Add("Access-Control-Request-Method", "POST");
+        request.Headers.Add("Access-Control-Request-Headers", "content-type");
+
+        var response = await app.GetTestClient().SendAsync(request);
+
+        Assert.True(
+            response.Headers.TryGetValues("Access-Control-Allow-Origin", out var values) &&
+            values.Contains("http://127.0.0.1:3000"),
+            "Expected Access-Control-Allow-Origin header for configured frontend origin.");
+    }
+
     private async Task<WebApplication> BuildApp(string environment)
     {
         var builder = AppHostApplication.CreateBuilder([], environment);
         builder.WebHost.UseTestServer();
+
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
         {
             ["Intentify:Jwt:Issuer"] = _jwtOptions.Issuer,
@@ -99,7 +122,10 @@ public sealed class DebugEndpointTests : IAsyncLifetime
             ["Intentify:Jwt:SigningKey"] = _jwtOptions.SigningKey,
             ["Intentify:Jwt:AccessTokenMinutes"] = _jwtOptions.AccessTokenMinutes.ToString(),
             ["Intentify:Mongo:ConnectionString"] = _mongo.ConnectionString,
-            ["Intentify:Mongo:DatabaseName"] = _mongo.DatabaseName
+            ["Intentify:Mongo:DatabaseName"] = _mongo.DatabaseName,
+
+            // ✅ CORS configuration for tests (matches frontend origins)
+            ["Intentify:Cors:AllowedOrigins"] = "http://127.0.0.1:3000,http://localhost:3000"
         });
 
         var app = AppHostApplication.Build(builder);
@@ -110,7 +136,12 @@ public sealed class DebugEndpointTests : IAsyncLifetime
     private string CreateAccessToken()
     {
         var issuer = new JwtTokenIssuer();
-        var tokenResult = issuer.IssueAccessToken(Guid.NewGuid().ToString("N"), Guid.NewGuid().ToString("N"), new[] { "user" }, _jwtOptions);
+        var tokenResult = issuer.IssueAccessToken(
+            Guid.NewGuid().ToString("N"),
+            Guid.NewGuid().ToString("N"),
+            new[] { "user" },
+            _jwtOptions);
+
         if (!tokenResult.IsSuccess || string.IsNullOrWhiteSpace(tokenResult.Value))
         {
             throw new InvalidOperationException("Failed to generate access token for debug endpoint tests.");
