@@ -12,6 +12,7 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Intentify.AppHost.Tests" />
     <InternalsVisibleTo Include="Intentify.Modules.Auth.Tests" />
+    <InternalsVisibleTo Include="Intentify.Modules.Sites.Tests" />
   </ItemGroup>
 
   <ItemGroup>
