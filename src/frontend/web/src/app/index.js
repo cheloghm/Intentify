@@ -1,6 +1,7 @@
 import { createCard, createInput, createTable, createToastManager } from '../shared/ui/index.js';
 import { createApiClient, mapApiError } from '../shared/apiClient.js';
 import { clearToken, getToken, setToken } from '../shared/auth.js';
+import { renderSitesView } from '../pages/sites.js';
 
 const app = document.getElementById('app');
 const toast = createToastManager();
@@ -123,6 +124,7 @@ const createNavbar = ({ isAuthenticated }) => {
     links.appendChild(createNavLink({ label: 'Login', href: '#/login' }));
     links.appendChild(createNavLink({ label: 'Register', href: '#/register' }));
   } else {
+    links.appendChild(createNavLink({ label: 'Sites', href: '#/sites' }));
     links.appendChild(createNavLink({ label: 'Dashboard', href: '#/dashboard' }));
     const logoutButton = document.createElement('button');
     logoutButton.type = 'button';
@@ -443,6 +445,7 @@ const routes = {
   '/login': renderLoginView,
   '/register': renderRegisterView,
   '/dashboard': renderDashboardView,
+  '/sites': renderSitesView,
 };
 
 const getRouteFromHash = () => {
@@ -464,7 +467,7 @@ const renderApp = () => {
   const route = getRouteFromHash();
   const isAuthenticated = Boolean(getToken());
 
-  if (route === '/dashboard' && !isAuthenticated) {
+  if ((route === '/dashboard' || route === '/sites') && !isAuthenticated) {
     window.location.hash = '#/login';
     return;
   }
@@ -479,7 +482,7 @@ const renderApp = () => {
   const navbar = createNavbar({ isAuthenticated });
   const main = createMain();
   app.append(navbar, main);
-  view(main);
+  view(main, { apiClient, toast });
 };
 
 window.addEventListener('hashchange', renderApp);
