@@ -49,6 +49,6 @@ export const handleSessionExpired = () => {
   clearToken();
 
   if (typeof window !== 'undefined') {
-    window.location.href = '/public/login.html';
+    window.location.hash = '#/login';
   }
 };
