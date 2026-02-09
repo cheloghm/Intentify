@@ -244,6 +244,19 @@ internal static class SitesEndpoints
             return Results.StatusCode(StatusCodes.Status403Forbidden);
         }
 
+        context.Response.Headers["Access-Control-Allow-Origin"] = origin;
+        var varyHeader = context.Response.Headers["Vary"].ToString();
+        if (string.IsNullOrWhiteSpace(varyHeader))
+        {
+            context.Response.Headers["Vary"] = "Origin";
+        }
+        else if (!varyHeader
+            .Split(',', StringSplitOptions.TrimEntries)
+            .Any(value => value.Equals("Origin", StringComparison.OrdinalIgnoreCase)))
+        {
+            context.Response.Headers["Vary"] = $"{varyHeader}, Origin";
+        }
+
         return Results.Ok(ToInstallationStatusResponse(site));
     }
 
