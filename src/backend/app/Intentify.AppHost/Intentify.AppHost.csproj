@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <ProjectReference Include="../../modules/Intentify.Modules.Auth/src/Intentify.Modules.Auth.Api/Intentify.Modules.Auth.Api.csproj" />
+    <ProjectReference Include="../../modules/Intentify.Modules.Sites/src/Intentify.Modules.Sites.Api/Intentify.Modules.Sites.Api.csproj" />
     <ProjectReference Include="../../shared/Intentify.Shared.Web/src/Intentify.Shared.Web/Intentify.Shared.Web.csproj" />
   </ItemGroup>
 

@@ -1,4 +1,5 @@
 using Intentify.Modules.Auth.Api;
+using Intentify.Modules.Sites.Api;
 using Intentify.Shared.Web;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
@@ -8,7 +9,11 @@ namespace Intentify.AppHost;
 
 public static class AppModuleCatalog
 {
-    public static IReadOnlyList<IAppModule> Modules { get; } = [new Intentify.Modules.Auth.Api.AuthModule()];
+    public static IReadOnlyList<IAppModule> Modules { get; } =
+    [
+        new Intentify.Modules.Auth.Api.AuthModule(),
+        new Intentify.Modules.Sites.Api.SitesModule()
+    ];
 }
 
 internal sealed class AppModuleRegistry
