@@ -1,4 +1,5 @@
 using Intentify.Modules.Auth.Api;
+using Intentify.Modules.Collector.Api;
 using Intentify.Modules.Sites.Api;
 using Intentify.Shared.Web;
 using Microsoft.AspNetCore.Builder;
@@ -12,6 +13,7 @@ public static class AppModuleCatalog
     public static IReadOnlyList<IAppModule> Modules { get; } =
     [
         new Intentify.Modules.Auth.Api.AuthModule(),
+        new Intentify.Modules.Collector.Api.CollectorModule(),
         new Intentify.Modules.Sites.Api.SitesModule()
     ];
 }
