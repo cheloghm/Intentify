@@ -2,6 +2,7 @@ import { createCard, createInput, createTable, createToastManager } from '../sha
 import { createApiClient, mapApiError } from '../shared/apiClient.js';
 import { clearToken, getToken, setToken } from '../shared/auth.js';
 import { renderSitesView } from '../pages/sites.js';
+import { renderInstallView } from '../pages/install.js';
 
 const app = document.getElementById('app');
 const toast = createToastManager();
@@ -505,15 +506,27 @@ const routes = {
   '/register': renderRegisterView,
   '/dashboard': renderDashboardView,
   '/sites': renderSitesView,
+  '/install': renderInstallView,
 };
 
 const getRouteFromHash = () => {
   const hash = window.location.hash.replace(/^#/, '');
   if (!hash || hash === '/') {
-    return '/';
+    return { path: '/', query: {} };
   }
 
-  return hash.startsWith('/') ? hash : `/${hash}`;
+  const [pathSegment, queryString] = hash.split('?');
+  const path = pathSegment.startsWith('/') ? pathSegment : `/${pathSegment}`;
+  const query = {};
+
+  if (queryString) {
+    const params = new URLSearchParams(queryString);
+    params.forEach((value, key) => {
+      query[key] = value;
+    });
+  }
+
+  return { path, query };
 };
 
 const renderApp = () => {
@@ -523,10 +536,10 @@ const renderApp = () => {
 
   setAppLayout();
 
-  const route = getRouteFromHash();
+  const { path: route, query } = getRouteFromHash();
   const isAuthenticated = Boolean(getToken());
 
-  if ((route === '/dashboard' || route === '/sites') && !isAuthenticated) {
+  if ((route === '/dashboard' || route === '/sites' || route === '/install') && !isAuthenticated) {
     window.location.hash = '#/login';
     return;
   }
@@ -541,7 +554,7 @@ const renderApp = () => {
   const navbar = createNavbar({ isAuthenticated });
   const main = createMain();
   app.append(navbar, main);
-  view(main, { apiClient, toast });
+  view(main, { apiClient, toast, query });
 };
 
 window.addEventListener('hashchange', renderApp);
