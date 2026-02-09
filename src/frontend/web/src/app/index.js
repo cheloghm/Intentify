@@ -411,6 +411,13 @@ const renderDashboardView = async (container) => {
 
   try {
     const me = await apiClient.request('/auth/me');
+    let sites = [];
+    try {
+      sites = await apiClient.request('/sites');
+    } catch (error) {
+      const uiError = mapApiError(error);
+      toast.show({ message: uiError.message, variant: 'warning' });
+    }
     const rows = [
       { field: 'Display name', value: me.displayName || '' },
       { field: 'User ID', value: me.userId || '' },
@@ -429,7 +436,59 @@ const renderDashboardView = async (container) => {
       rows,
     });
 
-    body.replaceChildren(table);
+    const sitesSection = document.createElement('div');
+    sitesSection.style.marginTop = '24px';
+
+    const sitesHeader = document.createElement('div');
+    sitesHeader.style.display = 'flex';
+    sitesHeader.style.alignItems = 'center';
+    sitesHeader.style.justifyContent = 'space-between';
+
+    const sitesTitle = document.createElement('h3');
+    sitesTitle.textContent = 'Sites';
+    sitesTitle.style.margin = '0';
+    sitesTitle.style.fontSize = '18px';
+    sitesTitle.style.color = '#0f172a';
+
+    const manageSitesLink = document.createElement('a');
+    manageSitesLink.textContent = 'Manage Sites';
+    manageSitesLink.href = '#/sites';
+    manageSitesLink.style.color = '#2563eb';
+    manageSitesLink.style.textDecoration = 'none';
+    manageSitesLink.style.fontWeight = '500';
+
+    sitesHeader.append(sitesTitle, manageSitesLink);
+    sitesSection.appendChild(sitesHeader);
+
+    if (Array.isArray(sites) && sites.length > 0) {
+      const sitesTable = createTable({
+        columns: [
+          { key: 'domain', label: 'Domain' },
+          { key: 'siteId', label: 'Site ID' },
+          { key: 'configured', label: 'Configured' },
+          { key: 'allowedOrigins', label: 'Allowed Origins (count)' },
+        ],
+        rows: sites.map((site) => ({
+          domain: site.domain || '',
+          siteId: site.siteId || '',
+          configured: site.installationStatus?.isConfigured ? 'Yes' : 'No',
+          allowedOrigins:
+            site.installationStatus?.allowedOriginsCount !== undefined
+              ? String(site.installationStatus.allowedOriginsCount)
+              : '0',
+        })),
+      });
+      sitesTable.style.marginTop = '12px';
+      sitesSection.appendChild(sitesTable);
+    } else {
+      const emptyText = document.createElement('div');
+      emptyText.textContent = 'No sites yet. Create one in the Sites page.';
+      emptyText.style.marginTop = '12px';
+      emptyText.style.color = '#475569';
+      sitesSection.appendChild(emptyText);
+    }
+
+    body.replaceChildren(table, sitesSection);
   } catch (error) {
     const uiError = mapApiError(error);
     if (uiError.status === 401) {
