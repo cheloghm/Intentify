@@ -1,0 +1,36 @@
+using Intentify.Modules.Auth.Api;
+using Intentify.Shared.Web;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace Intentify.Modules.Sites.Api;
+
+public sealed class SitesModule : IAppModule
+{
+    public string Name => "Sites";
+
+    public void RegisterServices(IServiceCollection services, IConfiguration configuration)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(configuration);
+    }
+
+    public void MapEndpoints(IEndpointRouteBuilder endpoints)
+    {
+        ArgumentNullException.ThrowIfNull(endpoints);
+
+        var group = endpoints.MapGroup("/sites");
+        var protectedGroup = group.MapGroup(string.Empty)
+            .AddEndpointFilter<RequireAuthFilter>();
+
+        protectedGroup.MapPost(string.Empty, SitesEndpoints.CreateSiteAsync);
+        protectedGroup.MapGet(string.Empty, SitesEndpoints.ListSitesAsync);
+        protectedGroup.MapPut("/{siteId}/origins", SitesEndpoints.UpdateAllowedOriginsAsync);
+        protectedGroup.MapPost("/{siteId}/keys/regenerate", SitesEndpoints.RegenerateKeysAsync);
+        protectedGroup.MapGet("/{siteId}/installation-status", SitesEndpoints.GetInstallationStatusAsync);
+
+        group.MapGet("/installation/status", SitesEndpoints.GetPublicInstallationStatusAsync);
+    }
+}

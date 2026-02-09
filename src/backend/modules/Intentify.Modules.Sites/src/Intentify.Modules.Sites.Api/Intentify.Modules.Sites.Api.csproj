@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Intentify.Modules.Sites.Domain/Intentify.Modules.Sites.Domain.csproj" />
+    <ProjectReference Include="../../Intentify.Modules.Auth/src/Intentify.Modules.Auth.Api/Intentify.Modules.Auth.Api.csproj" />
+    <ProjectReference Include="../../../../shared/Intentify.Shared.Data.Mongo/src/Intentify.Shared.Data.Mongo/Intentify.Shared.Data.Mongo.csproj" />
+    <ProjectReference Include="../../../../shared/Intentify.Shared.Web/src/Intentify.Shared.Web/Intentify.Shared.Web.csproj" />
+  </ItemGroup>
+</Project>
