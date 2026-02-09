@@ -12,6 +12,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Auth.Api"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Auth.Tests", "modules/Intentify.Modules.Auth/tests/Intentify.Modules.Auth.Tests/Intentify.Modules.Auth.Tests.csproj", "{35942561-016E-4422-940B-1DE1BDB8D3B0}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Sites.Tests", "modules/Intentify.Modules.Sites/tests/Intentify.Modules.Sites.Tests/Intentify.Modules.Sites.Tests.csproj", "{EF38EE61-F842-4C33-8563-74A56AE136C0}"
+EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Sites.Domain", "modules/Intentify.Modules.Sites/src/Intentify.Modules.Sites.Domain/Intentify.Modules.Sites.Domain.csproj", "{BBBDF6D7-889C-4B50-996D-3CD430ADE004}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Sites.Api", "modules/Intentify.Modules.Sites/src/Intentify.Modules.Sites.Api/Intentify.Modules.Sites.Api.csproj", "{3D8842DC-9F60-4CC0-AC50-48B5A0EBCEF8}"
@@ -74,6 +76,10 @@ Global
 		{35942561-016E-4422-940B-1DE1BDB8D3B0}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{35942561-016E-4422-940B-1DE1BDB8D3B0}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{35942561-016E-4422-940B-1DE1BDB8D3B0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{EF38EE61-F842-4C33-8563-74A56AE136C0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EF38EE61-F842-4C33-8563-74A56AE136C0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EF38EE61-F842-4C33-8563-74A56AE136C0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EF38EE61-F842-4C33-8563-74A56AE136C0}.Release|Any CPU.Build.0 = Release|Any CPU
 		{BBBDF6D7-889C-4B50-996D-3CD430ADE004}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{BBBDF6D7-889C-4B50-996D-3CD430ADE004}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{BBBDF6D7-889C-4B50-996D-3CD430ADE004}.Release|Any CPU.ActiveCfg = Release|Any CPU
