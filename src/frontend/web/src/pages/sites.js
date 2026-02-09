@@ -308,6 +308,23 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
       });
 
       const summaryActions = document.createElement('div');
+      summaryActions.style.display = 'flex';
+      summaryActions.style.gap = '8px';
+      summaryActions.style.flexWrap = 'wrap';
+
+      const installButton = createButton({ label: 'Install' });
+      installButton.addEventListener('click', () => {
+        const params = new URLSearchParams();
+        if (siteId) {
+          params.set('siteId', siteId);
+        }
+        if (site.domain) {
+          params.set('domain', site.domain);
+        }
+        const query = params.toString();
+        window.location.hash = query ? `#/install?${query}` : '#/install';
+      });
+
       const regenButton = createButton({ label: 'Regenerate keys' });
       regenButton.addEventListener('click', async () => {
         regenButton.disabled = true;
@@ -331,7 +348,7 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
           regenButton.textContent = 'Regenerate keys';
         }
       });
-      summaryActions.appendChild(regenButton);
+      summaryActions.append(installButton, regenButton);
 
       summaryRow.append(summaryLeft, statusBadge, summaryActions);
 
