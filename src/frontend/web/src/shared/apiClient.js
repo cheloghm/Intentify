@@ -1,4 +1,4 @@
-import { API_BASE_URL } from './config.js';
+import { API_BASE } from './config.js';
 import { getToken, handleSessionExpired } from './auth.js';
 
 const buildUrl = (path, baseUrl) => {
@@ -47,7 +47,7 @@ const parseErrorResponse = async (response) => {
   };
 };
 
-export const createApiClient = ({ baseUrl = API_BASE_URL } = {}) => {
+export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
   const request = async (path, options = {}) => {
     const url = path.startsWith('http') ? path : buildUrl(path, baseUrl);
     const headers = new Headers(options.headers || {});
