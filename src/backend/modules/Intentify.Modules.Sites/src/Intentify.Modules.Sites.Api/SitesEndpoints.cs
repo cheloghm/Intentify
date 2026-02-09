@@ -454,11 +454,15 @@ internal static class SitesEndpoints
     {
         var allowedCount = site.AllowedOrigins.Count;
         var isConfigured = allowedCount > 0;
+        var firstEventReceivedAtUtc = site.FirstEventReceivedAtUtc;
+        var isInstalled = firstEventReceivedAtUtc is not null;
 
         return new InstallationStatusResponse(
             site.Id.ToString("N"),
             site.Domain,
             isConfigured,
-            allowedCount);
+            allowedCount,
+            isInstalled,
+            firstEventReceivedAtUtc);
     }
 }

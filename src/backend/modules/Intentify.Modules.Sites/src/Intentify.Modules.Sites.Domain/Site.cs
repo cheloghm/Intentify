@@ -21,4 +21,6 @@ public sealed class Site
     public DateTime CreatedAtUtc { get; init; } = DateTime.UtcNow;
 
     public DateTime UpdatedAtUtc { get; init; } = DateTime.UtcNow;
+
+    public DateTime? FirstEventReceivedAtUtc { get; init; }
 }

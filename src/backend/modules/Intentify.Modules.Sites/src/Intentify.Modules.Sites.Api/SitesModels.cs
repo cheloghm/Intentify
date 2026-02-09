@@ -25,4 +25,6 @@ public sealed record InstallationStatusResponse(
     string SiteId,
     string Domain,
     bool IsConfigured,
-    int AllowedOriginsCount);
+    int AllowedOriginsCount,
+    bool IsInstalled,
+    DateTime? FirstEventReceivedAtUtc);
