@@ -90,8 +90,10 @@ internal static class AppHostApplication
             app.UseSwaggerUI();
         }
 
-        // ✅ Apply CORS BEFORE mapping endpoints
-        app.UseCors(CorsPolicyName);
+        // ✅ Apply global CORS to everything EXCEPT the public installation-status endpoint
+        app.UseWhen(
+            ctx => !ctx.Request.Path.StartsWithSegments("/sites/installation/status", StringComparison.OrdinalIgnoreCase),
+            branch => branch.UseCors(CorsPolicyName));
 
         app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
         app.MapAppModules();
