@@ -1,0 +1,129 @@
+using Intentify.Modules.Sites.Application;
+using Intentify.Modules.Sites.Domain;
+using Intentify.Shared.Data.Mongo;
+using MongoDB.Driver;
+
+namespace Intentify.Modules.Sites.Infrastructure;
+
+public sealed class SiteRepository : ISiteRepository
+{
+    private readonly IMongoCollection<Site> _sites;
+    private readonly Task _ensureIndexes;
+
+    public SiteRepository(IMongoDatabase database)
+    {
+        _sites = database.GetCollection<Site>(SitesMongoCollections.Sites);
+        _ensureIndexes = EnsureIndexesAsync();
+    }
+
+    public async Task<Site?> GetByTenantAndDomainAsync(Guid tenantId, string domain, CancellationToken cancellationToken = default)
+    {
+        await _ensureIndexes;
+        return await _sites.Find(site => site.TenantId == tenantId && site.Domain == domain)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    public async Task<Site?> GetByTenantAndIdAsync(Guid tenantId, Guid siteId, CancellationToken cancellationToken = default)
+    {
+        await _ensureIndexes;
+        return await _sites.Find(site => site.TenantId == tenantId && site.Id == siteId)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    public async Task<Site?> GetByWidgetKeyAsync(string widgetKey, CancellationToken cancellationToken = default)
+    {
+        await _ensureIndexes;
+        return await _sites.Find(site => site.WidgetKey == widgetKey)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    public async Task<Site?> GetBySiteKeyAsync(string siteKey, CancellationToken cancellationToken = default)
+    {
+        await _ensureIndexes;
+        return await _sites.Find(site => site.SiteKey == siteKey)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyCollection<Site>> ListByTenantAsync(Guid tenantId, CancellationToken cancellationToken = default)
+    {
+        await _ensureIndexes;
+        var results = await _sites.Find(site => site.TenantId == tenantId)
+            .ToListAsync(cancellationToken);
+        return results;
+    }
+
+    public async Task InsertAsync(Site site, CancellationToken cancellationToken = default)
+    {
+        await _ensureIndexes;
+        await _sites.InsertOneAsync(site, cancellationToken: cancellationToken);
+    }
+
+    public async Task<Site?> UpdateAllowedOriginsAsync(Guid tenantId, Guid siteId, IReadOnlyCollection<string> allowedOrigins, CancellationToken cancellationToken = default)
+    {
+        await _ensureIndexes;
+        var filter = Builders<Site>.Filter.Eq(site => site.Id, siteId) &
+            Builders<Site>.Filter.Eq(site => site.TenantId, tenantId);
+        var update = Builders<Site>.Update
+            .Set(site => site.AllowedOrigins, allowedOrigins.ToList())
+            .Set(site => site.UpdatedAtUtc, DateTime.UtcNow);
+
+        return await _sites.FindOneAndUpdateAsync(
+            filter,
+            update,
+            new FindOneAndUpdateOptions<Site> { ReturnDocument = ReturnDocument.After },
+            cancellationToken);
+    }
+
+    public async Task<Site?> RotateKeysAsync(Guid tenantId, Guid siteId, string siteKey, string widgetKey, CancellationToken cancellationToken = default)
+    {
+        await _ensureIndexes;
+        var filter = Builders<Site>.Filter.Eq(site => site.Id, siteId) &
+            Builders<Site>.Filter.Eq(site => site.TenantId, tenantId);
+        var update = Builders<Site>.Update
+            .Set(site => site.SiteKey, siteKey)
+            .Set(site => site.WidgetKey, widgetKey)
+            .Set(site => site.UpdatedAtUtc, DateTime.UtcNow);
+
+        return await _sites.FindOneAndUpdateAsync(
+            filter,
+            update,
+            new FindOneAndUpdateOptions<Site> { ReturnDocument = ReturnDocument.After },
+            cancellationToken);
+    }
+
+    public async Task<Site?> UpdateFirstEventReceivedAsync(Guid siteId, DateTime timestampUtc, CancellationToken cancellationToken = default)
+    {
+        await _ensureIndexes;
+        var filter = Builders<Site>.Filter.Eq(site => site.Id, siteId) &
+            Builders<Site>.Filter.Eq(site => site.FirstEventReceivedAtUtc, null);
+        var update = Builders<Site>.Update
+            .Set(site => site.FirstEventReceivedAtUtc, timestampUtc)
+            .Set(site => site.UpdatedAtUtc, timestampUtc);
+
+        return await _sites.FindOneAndUpdateAsync(
+            filter,
+            update,
+            new FindOneAndUpdateOptions<Site> { ReturnDocument = ReturnDocument.After },
+            cancellationToken);
+    }
+
+    private Task EnsureIndexesAsync()
+    {
+        var indexes = new[]
+        {
+            new CreateIndexModel<Site>(
+                Builders<Site>.IndexKeys
+                    .Ascending(site => site.TenantId)
+                    .Ascending(site => site.Domain),
+                new CreateIndexOptions { Unique = true }),
+            new CreateIndexModel<Site>(
+                Builders<Site>.IndexKeys.Ascending(site => site.SiteKey),
+                new CreateIndexOptions { Unique = true }),
+            new CreateIndexModel<Site>(
+                Builders<Site>.IndexKeys.Ascending(site => site.WidgetKey),
+                new CreateIndexOptions { Unique = true })
+        };
+
+        return MongoIndexHelper.EnsureIndexesAsync(_sites, indexes);
+    }
+}

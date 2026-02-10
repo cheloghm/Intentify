@@ -1,4 +1,4 @@
-namespace Intentify.Modules.Collector.Api;
+namespace Intentify.Modules.Collector.Domain;
 
 public static class CollectorMongoCollections
 {
