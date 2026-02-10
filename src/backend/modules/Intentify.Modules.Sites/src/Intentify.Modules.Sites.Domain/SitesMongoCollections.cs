@@ -1,4 +1,4 @@
-namespace Intentify.Modules.Sites.Api;
+namespace Intentify.Modules.Sites.Domain;
 
 public static class SitesMongoCollections
 {

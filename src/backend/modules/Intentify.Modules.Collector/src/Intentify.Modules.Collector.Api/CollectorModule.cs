@@ -1,3 +1,5 @@
+using Intentify.Modules.Collector.Application;
+using Intentify.Modules.Collector.Infrastructure;
 using Intentify.Shared.Web;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -15,6 +17,10 @@ public sealed class CollectorModule : IAppModule
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configuration);
+
+        services.AddSingleton<ICollectorEventRepository, CollectorEventRepository>();
+        services.AddSingleton<ISiteLookupRepository, SiteLookupRepository>();
+        services.AddSingleton<IngestCollectorEventHandler>();
     }
 
     public void MapEndpoints(IEndpointRouteBuilder endpoints)

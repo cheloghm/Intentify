@@ -126,6 +126,7 @@ const createNavbar = ({ isAuthenticated }) => {
     links.appendChild(createNavLink({ label: 'Register', href: '#/register' }));
   } else {
     links.appendChild(createNavLink({ label: 'Sites', href: '#/sites' }));
+    links.appendChild(createNavLink({ label: 'Install', href: '#/install' }));
     links.appendChild(createNavLink({ label: 'Dashboard', href: '#/dashboard' }));
     const logoutButton = document.createElement('button');
     logoutButton.type = 'button';
