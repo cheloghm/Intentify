@@ -1,5 +1,4 @@
 using Intentify.Modules.Collector.Domain;
-using Intentify.Modules.Sites.Api;
 using Intentify.Modules.Sites.Domain;
 using Intentify.Shared.Web;
 using Microsoft.AspNetCore.Http;
@@ -14,6 +13,7 @@ internal static class CollectorEndpoints
     private const int MaxTypeLength = 64;
     private const int MaxUrlLength = 2048;
     private const int MaxReferrerLength = 2048;
+    private const string SitesCollectionName = "sites.sites";
     private const string TrackerResourceName = "Intentify.Modules.Collector.Api.assets.tracker.js";
 
     public static async Task<IResult> GetTrackerAsync()
@@ -55,7 +55,7 @@ internal static class CollectorEndpoints
             }));
         }
 
-        var sites = database.GetCollection<Site>(SitesMongoCollections.Sites);
+        var sites = database.GetCollection<Site>(SitesCollectionName);
         var site = await sites.Find(candidate => candidate.SiteKey == request!.SiteKey.Trim())
             .FirstOrDefaultAsync();
         if (site is null)
