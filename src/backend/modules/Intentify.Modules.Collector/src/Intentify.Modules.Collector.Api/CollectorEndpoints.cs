@@ -1,8 +1,8 @@
 using Intentify.Modules.Collector.Domain;
+using Intentify.Modules.Sites.Api;
 using Intentify.Modules.Sites.Domain;
 using Intentify.Shared.Web;
 using Microsoft.AspNetCore.Http;
-using MongoDB.Driver;
 
 namespace Intentify.Modules.Collector.Api;
 
@@ -13,7 +13,6 @@ internal static class CollectorEndpoints
     private const int MaxTypeLength = 64;
     private const int MaxUrlLength = 2048;
     private const int MaxReferrerLength = 2048;
-    private const string SitesCollectionName = "sites.sites";
     private const string TrackerResourceName = "Intentify.Modules.Collector.Api.assets.tracker.js";
 
     public static async Task<IResult> GetTrackerAsync()
@@ -33,17 +32,11 @@ internal static class CollectorEndpoints
     public static async Task<IResult> CollectEventAsync(
         CollectorEventRequest? request,
         HttpContext context,
-        IMongoDatabase database)
+        IngestCollectorEventHandler handler)
     {
         if (context.Request.ContentLength is > MaxContentLengthBytes)
         {
             return Results.StatusCode(StatusCodes.Status413PayloadTooLarge);
-        }
-
-        var errors = ValidateRequest(request);
-        if (errors.Count > 0)
-        {
-            return Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(errors));
         }
 
         var origin = TryResolveOrigin(context.Request);
@@ -55,7 +48,7 @@ internal static class CollectorEndpoints
             }));
         }
 
-        var sites = database.GetCollection<Site>(SitesCollectionName);
+        var sites = database.GetCollection<Site>(SitesMongoCollections.Sites);
         var site = await sites.Find(candidate => candidate.SiteKey == request!.SiteKey.Trim())
             .FirstOrDefaultAsync();
         if (site is null)
@@ -220,11 +213,7 @@ internal static class CollectorEndpoints
     {
         if (request.Headers.TryGetValue("Origin", out var originValues))
         {
-            var headerOrigin = originValues.ToString();
-            if (TryNormalizeOrigin(headerOrigin, out var normalized))
-            {
-                return normalized;
-            }
+            return originValues.ToString();
         }
 
         if (request.Headers.TryGetValue("Referer", out var refererValues))
@@ -232,11 +221,7 @@ internal static class CollectorEndpoints
             var referer = refererValues.ToString();
             if (Uri.TryCreate(referer, UriKind.Absolute, out var uri))
             {
-                var candidate = uri.GetLeftPart(UriPartial.Authority);
-                if (TryNormalizeOrigin(candidate, out var normalized))
-                {
-                    return normalized;
-                }
+                return uri.GetLeftPart(UriPartial.Authority);
             }
         }
 

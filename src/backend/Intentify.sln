@@ -8,6 +8,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.AppHost.Tests", "
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Auth.Domain", "modules/Intentify.Modules.Auth/src/Intentify.Modules.Auth.Domain/Intentify.Modules.Auth.Domain.csproj", "{A9E124B5-1CEA-483B-9F3D-0871E0E4B151}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Auth.Application", "modules/Intentify.Modules.Auth/src/Intentify.Modules.Auth.Application/Intentify.Modules.Auth.Application.csproj", "{54380C1F-C770-489F-80A9-4D87DD8AAA55}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Auth.Infrastructure", "modules/Intentify.Modules.Auth/src/Intentify.Modules.Auth.Infrastructure/Intentify.Modules.Auth.Infrastructure.csproj", "{217C4B37-D4F1-4BC7-B6D7-B211D54921DC}"
+EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Auth.Api", "modules/Intentify.Modules.Auth/src/Intentify.Modules.Auth.Api/Intentify.Modules.Auth.Api.csproj", "{87A01776-9230-4489-9896-612539C0B021}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Auth.Tests", "modules/Intentify.Modules.Auth/tests/Intentify.Modules.Auth.Tests/Intentify.Modules.Auth.Tests.csproj", "{35942561-016E-4422-940B-1DE1BDB8D3B0}"
@@ -16,9 +20,17 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Sites.Tes
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Sites.Domain", "modules/Intentify.Modules.Sites/src/Intentify.Modules.Sites.Domain/Intentify.Modules.Sites.Domain.csproj", "{BBBDF6D7-889C-4B50-996D-3CD430ADE004}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Sites.Application", "modules/Intentify.Modules.Sites/src/Intentify.Modules.Sites.Application/Intentify.Modules.Sites.Application.csproj", "{34074389-077C-42FC-8D93-5BD4D7290025}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Sites.Infrastructure", "modules/Intentify.Modules.Sites/src/Intentify.Modules.Sites.Infrastructure/Intentify.Modules.Sites.Infrastructure.csproj", "{71E9AD23-783B-4321-B956-63F98F6DA217}"
+EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Sites.Api", "modules/Intentify.Modules.Sites/src/Intentify.Modules.Sites.Api/Intentify.Modules.Sites.Api.csproj", "{3D8842DC-9F60-4CC0-AC50-48B5A0EBCEF8}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Collector.Domain", "modules/Intentify.Modules.Collector/src/Intentify.Modules.Collector.Domain/Intentify.Modules.Collector.Domain.csproj", "{699E6F74-7FAE-48FA-A4E9-FCC480D888D2}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Collector.Application", "modules/Intentify.Modules.Collector/src/Intentify.Modules.Collector.Application/Intentify.Modules.Collector.Application.csproj", "{D9F9C013-FA9A-4EE0-9498-48288FB3DF1A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Collector.Infrastructure", "modules/Intentify.Modules.Collector/src/Intentify.Modules.Collector.Infrastructure/Intentify.Modules.Collector.Infrastructure.csproj", "{4C25530D-9526-46BB-9CFD-336748F912B1}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Collector.Api", "modules/Intentify.Modules.Collector/src/Intentify.Modules.Collector.Api/Intentify.Modules.Collector.Api.csproj", "{C5E54192-58FA-4DB5-B4F2-7138CD9F27AA}"
 EndProject
@@ -56,6 +68,14 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Shared.Testing", 
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Shared.Testing.Tests", "shared/Intentify.Shared.Testing/tests/Intentify.Shared.Testing.Tests/Intentify.Shared.Testing.Tests.csproj", "{CBB14B9D-95EE-4EF5-8B9F-7887DFA3567F}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Shared.KeyManagement", "shared/Intentify.Shared.KeyManagement/src/Intentify.Shared.KeyManagement/Intentify.Shared.KeyManagement.csproj", "{34DF723B-C801-44BD-83A0-D923A44EFD74}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Shared.KeyManagement.Tests", "shared/Intentify.Shared.KeyManagement/tests/Intentify.Shared.KeyManagement.Tests/Intentify.Shared.KeyManagement.Tests.csproj", "{86A8E0C9-041F-4FBB-B089-D71C0DD5CB21}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Shared.Validation", "shared/Intentify.Shared.Validation/src/Intentify.Shared.Validation/Intentify.Shared.Validation.csproj", "{4FFE4D26-41CE-4763-9BE6-A58C60606D81}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Shared.Validation.Tests", "shared/Intentify.Shared.Validation/tests/Intentify.Shared.Validation.Tests/Intentify.Shared.Validation.Tests.csproj", "{7290DDF2-FF42-4984-A7EE-272C8610CD59}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -74,6 +94,14 @@ Global
 		{A9E124B5-1CEA-483B-9F3D-0871E0E4B151}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A9E124B5-1CEA-483B-9F3D-0871E0E4B151}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A9E124B5-1CEA-483B-9F3D-0871E0E4B151}.Release|Any CPU.Build.0 = Release|Any CPU
+		{54380C1F-C770-489F-80A9-4D87DD8AAA55}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{54380C1F-C770-489F-80A9-4D87DD8AAA55}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{54380C1F-C770-489F-80A9-4D87DD8AAA55}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{54380C1F-C770-489F-80A9-4D87DD8AAA55}.Release|Any CPU.Build.0 = Release|Any CPU
+		{217C4B37-D4F1-4BC7-B6D7-B211D54921DC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{217C4B37-D4F1-4BC7-B6D7-B211D54921DC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{217C4B37-D4F1-4BC7-B6D7-B211D54921DC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{217C4B37-D4F1-4BC7-B6D7-B211D54921DC}.Release|Any CPU.Build.0 = Release|Any CPU
 		{87A01776-9230-4489-9896-612539C0B021}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{87A01776-9230-4489-9896-612539C0B021}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{87A01776-9230-4489-9896-612539C0B021}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -90,6 +118,14 @@ Global
 		{BBBDF6D7-889C-4B50-996D-3CD430ADE004}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{BBBDF6D7-889C-4B50-996D-3CD430ADE004}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{BBBDF6D7-889C-4B50-996D-3CD430ADE004}.Release|Any CPU.Build.0 = Release|Any CPU
+		{34074389-077C-42FC-8D93-5BD4D7290025}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{34074389-077C-42FC-8D93-5BD4D7290025}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{34074389-077C-42FC-8D93-5BD4D7290025}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{34074389-077C-42FC-8D93-5BD4D7290025}.Release|Any CPU.Build.0 = Release|Any CPU
+		{71E9AD23-783B-4321-B956-63F98F6DA217}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{71E9AD23-783B-4321-B956-63F98F6DA217}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{71E9AD23-783B-4321-B956-63F98F6DA217}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{71E9AD23-783B-4321-B956-63F98F6DA217}.Release|Any CPU.Build.0 = Release|Any CPU
 		{3D8842DC-9F60-4CC0-AC50-48B5A0EBCEF8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{3D8842DC-9F60-4CC0-AC50-48B5A0EBCEF8}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{3D8842DC-9F60-4CC0-AC50-48B5A0EBCEF8}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -98,6 +134,14 @@ Global
 		{699E6F74-7FAE-48FA-A4E9-FCC480D888D2}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{699E6F74-7FAE-48FA-A4E9-FCC480D888D2}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{699E6F74-7FAE-48FA-A4E9-FCC480D888D2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D9F9C013-FA9A-4EE0-9498-48288FB3DF1A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D9F9C013-FA9A-4EE0-9498-48288FB3DF1A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D9F9C013-FA9A-4EE0-9498-48288FB3DF1A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D9F9C013-FA9A-4EE0-9498-48288FB3DF1A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4C25530D-9526-46BB-9CFD-336748F912B1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4C25530D-9526-46BB-9CFD-336748F912B1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4C25530D-9526-46BB-9CFD-336748F912B1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4C25530D-9526-46BB-9CFD-336748F912B1}.Release|Any CPU.Build.0 = Release|Any CPU
 		{C5E54192-58FA-4DB5-B4F2-7138CD9F27AA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{C5E54192-58FA-4DB5-B4F2-7138CD9F27AA}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{C5E54192-58FA-4DB5-B4F2-7138CD9F27AA}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -170,6 +214,22 @@ Global
 		{CBB14B9D-95EE-4EF5-8B9F-7887DFA3567F}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{CBB14B9D-95EE-4EF5-8B9F-7887DFA3567F}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{CBB14B9D-95EE-4EF5-8B9F-7887DFA3567F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{34DF723B-C801-44BD-83A0-D923A44EFD74}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{34DF723B-C801-44BD-83A0-D923A44EFD74}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{34DF723B-C801-44BD-83A0-D923A44EFD74}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{34DF723B-C801-44BD-83A0-D923A44EFD74}.Release|Any CPU.Build.0 = Release|Any CPU
+		{86A8E0C9-041F-4FBB-B089-D71C0DD5CB21}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{86A8E0C9-041F-4FBB-B089-D71C0DD5CB21}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{86A8E0C9-041F-4FBB-B089-D71C0DD5CB21}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{86A8E0C9-041F-4FBB-B089-D71C0DD5CB21}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4FFE4D26-41CE-4763-9BE6-A58C60606D81}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4FFE4D26-41CE-4763-9BE6-A58C60606D81}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4FFE4D26-41CE-4763-9BE6-A58C60606D81}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4FFE4D26-41CE-4763-9BE6-A58C60606D81}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7290DDF2-FF42-4984-A7EE-272C8610CD59}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7290DDF2-FF42-4984-A7EE-272C8610CD59}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7290DDF2-FF42-4984-A7EE-272C8610CD59}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7290DDF2-FF42-4984-A7EE-272C8610CD59}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

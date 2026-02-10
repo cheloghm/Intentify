@@ -1,4 +1,7 @@
 using Intentify.Modules.Auth.Api;
+using Intentify.Modules.Sites.Application;
+using Intentify.Modules.Sites.Infrastructure;
+using Intentify.Shared.KeyManagement;
 using Intentify.Shared.Web;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -16,6 +19,15 @@ public sealed class SitesModule : IAppModule
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configuration);
+
+        services.AddSingleton<IKeyGenerator, KeyGenerator>();
+        services.AddSingleton<ISiteRepository, SiteRepository>();
+        services.AddSingleton<CreateSiteHandler>();
+        services.AddSingleton<ListSitesHandler>();
+        services.AddSingleton<UpdateAllowedOriginsHandler>();
+        services.AddSingleton<RotateKeysHandler>();
+        services.AddSingleton<GetInstallationStatusHandler>();
+        services.AddSingleton<GetPublicInstallationStatusHandler>();
     }
 
     public void MapEndpoints(IEndpointRouteBuilder endpoints)

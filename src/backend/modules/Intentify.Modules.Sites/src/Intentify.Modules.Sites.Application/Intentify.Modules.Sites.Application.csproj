@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Intentify.Modules.Sites.Domain\Intentify.Modules.Sites.Domain.csproj" />
+    <ProjectReference Include="..\..\..\..\shared\Intentify.Shared.KeyManagement\src\Intentify.Shared.KeyManagement\Intentify.Shared.KeyManagement.csproj" />
+    <ProjectReference Include="..\..\..\..\shared\Intentify.Shared.Validation\src\Intentify.Shared.Validation\Intentify.Shared.Validation.csproj" />
+  </ItemGroup>
+</Project>

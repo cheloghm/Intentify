@@ -1,3 +1,5 @@
+using Intentify.Modules.Auth.Application;
+using Intentify.Modules.Auth.Infrastructure;
 using Intentify.Shared.Data.Mongo;
 using Intentify.Shared.Security;
 using Intentify.Shared.Web;
@@ -34,6 +36,10 @@ public sealed class AuthModule : IAppModule
         services.AddSingleton<JwtTokenIssuer>();
         services.AddSingleton<JwtTokenValidator>();
         services.AddSingleton<PasswordHasher>();
+        services.AddSingleton<IUserRepository, UserRepository>();
+        services.AddSingleton<ITenantRepository, TenantRepository>();
+        services.AddSingleton<RegisterUserHandler>();
+        services.AddSingleton<LoginUserHandler>();
     }
 
     public void MapEndpoints(IEndpointRouteBuilder endpoints)

@@ -1,4 +1,4 @@
-namespace Intentify.Modules.Auth.Api;
+namespace Intentify.Modules.Auth.Domain;
 
 public static class AuthMongoCollections
 {
