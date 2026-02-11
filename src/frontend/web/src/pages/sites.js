@@ -103,7 +103,7 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
       return;
     }
 
-    const { domain, siteKey, widgetKey } = state.keys;
+    const { domain, siteId, siteKey, widgetKey } = state.keys;
 
     const body = document.createElement('div');
     body.style.display = 'flex';
@@ -156,6 +156,23 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
       createKeyRow({ label: 'Widget key', value: widgetKey })
     );
 
+    const openInstallButton = createButton({ label: 'Open Install' });
+    openInstallButton.style.alignSelf = 'flex-start';
+    openInstallButton.addEventListener('click', () => {
+      const params = new URLSearchParams();
+      if (siteId) {
+        params.set('siteId', siteId);
+      }
+      if (domain) {
+        params.set('domain', domain);
+      }
+      if (siteKey) {
+        params.set('siteKey', siteKey);
+      }
+      window.location.hash = `#/install?${params.toString()}`;
+    });
+    body.appendChild(openInstallButton);
+
     const card = createCard({
       title: domain ? `Keys for ${domain}` : 'Keys',
       body,
@@ -205,7 +222,12 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
           siteId,
           installationStatus: status || response.installationStatus,
         }, ...state.sites];
-        state.keys = { domain: response.domain, siteKey: response.siteKey, widgetKey: response.widgetKey };
+        state.keys = {
+          domain: response.domain,
+          siteId,
+          siteKey: response.siteKey,
+          widgetKey: response.widgetKey,
+        };
 
         notifier.show({ message: 'Site created.', variant: 'success' });
         domainField.input.value = '';
@@ -335,6 +357,7 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
           });
           state.keys = {
             domain: site.domain,
+            siteId,
             siteKey: response.siteKey,
             widgetKey: response.widgetKey,
           };
