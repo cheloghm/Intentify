@@ -2,10 +2,14 @@ import { createCard, createInput, createToastManager } from '../shared/ui/index.
 import { createApiClient, mapApiError } from '../shared/apiClient.js';
 import { API_BASE } from '../shared/config.js';
 
-const copyToClipboard = async (value) => {
+const copyToClipboardRobust = async (value) => {
   if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(value);
-    return;
+    try {
+      await navigator.clipboard.writeText(value);
+      return;
+    } catch (error) {
+      // Fallback below.
+    }
   }
 
   const textarea = document.createElement('textarea');
@@ -15,8 +19,12 @@ const copyToClipboard = async (value) => {
   document.body.appendChild(textarea);
   textarea.focus();
   textarea.select();
-  document.execCommand('copy');
+  const copied = document.execCommand('copy');
   textarea.remove();
+
+  if (!copied) {
+    throw new Error('Copy command failed.');
+  }
 };
 
 const createButton = ({ label, variant = 'default', type = 'button' } = {}) => {
@@ -33,12 +41,54 @@ const createButton = ({ label, variant = 'default', type = 'button' } = {}) => {
   return button;
 };
 
+const loadCachedKeys = (siteId) => {
+  if (!siteId) {
+    return null;
+  }
+
+  try {
+    const raw = localStorage.getItem(`intentify.siteKeys.${siteId}`);
+    if (!raw) {
+      return null;
+    }
+
+    const parsed = JSON.parse(raw);
+    if (
+      parsed &&
+      typeof parsed.siteKey === 'string' &&
+      typeof parsed.widgetKey === 'string' &&
+      parsed.siteKey &&
+      parsed.widgetKey
+    ) {
+      return parsed;
+    }
+  } catch (error) {
+    return null;
+  }
+
+  return null;
+};
+
+const saveCachedKeys = (siteId, { siteKey, widgetKey }) => {
+  if (!siteId || !siteKey || !widgetKey) {
+    return;
+  }
+
+  localStorage.setItem(
+    `intentify.siteKeys.${siteId}`,
+    JSON.stringify({
+      siteKey,
+      widgetKey,
+      cachedAtUtc: new Date().toISOString(),
+    })
+  );
+};
+
 export const renderInstallView = (container, { apiClient, toast, query } = {}) => {
   const client = apiClient || createApiClient();
   const notifier = toast || createToastManager();
   const siteId = query?.siteId;
   const domain = query?.domain || '';
-  const storageKey = siteId ? `intentify:siteKeys:${siteId}` : '';
 
   if (!siteId) {
     const message = document.createElement('div');
@@ -49,24 +99,12 @@ export const renderInstallView = (container, { apiClient, toast, query } = {}) =
     return;
   }
 
-  let storedKeys = null;
-  if (storageKey) {
-    try {
-      const rawStored = sessionStorage.getItem(storageKey);
-      if (rawStored) {
-        const parsedStored = JSON.parse(rawStored);
-        if (parsedStored && typeof parsedStored === 'object') {
-          storedKeys = parsedStored;
-        }
-      }
-    } catch (error) {
-      storedKeys = null;
-    }
-  }
+  const cachedKeys = loadCachedKeys(siteId);
 
   const state = {
-    siteKey: storedKeys?.siteKey || '',
-    widgetKey: storedKeys?.widgetKey || '',
+    siteKey: cachedKeys?.siteKey || '',
+    widgetKey: cachedKeys?.widgetKey || '',
+    keysLoading: false,
     copyMessage: '',
     status: null,
     statusError: '',
@@ -160,26 +198,69 @@ export const renderInstallView = (container, { apiClient, toast, query } = {}) =
   copyStatus.style.fontSize = '12px';
   copyStatus.style.color = '#15803d';
 
+  const snippetHint = document.createElement('div');
+  snippetHint.style.fontSize = '12px';
+  snippetHint.style.color = '#64748b';
+
   const actionErrorText = document.createElement('div');
   actionErrorText.style.fontSize = '13px';
   actionErrorText.style.color = '#dc2626';
 
   const updateSnippet = () => {
     const baseUrl = API_BASE.replace(/\/$/, '');
-    const key = siteKeyInput.value.trim();
-    state.siteKey = key;
+    const key = state.siteKey ? state.siteKey.trim() : '';
+    siteKeyInput.value = key;
     snippetValue.value = `<script async src="${baseUrl}/collector/tracker.js" data-site-key="${key}"></script>`;
-    copyButton.disabled = !key;
+    copyButton.disabled = !key || state.keysLoading;
+    snippetHint.textContent = state.keysLoading
+      ? 'Loading keys...'
+      : key
+      ? ''
+      : 'Generating keys...';
     copyStatus.textContent = state.copyMessage;
     actionErrorText.textContent = state.actionError;
   };
 
-  siteKeyInput.addEventListener('input', updateSnippet);
+  const updateKeys = ({ siteKey, widgetKey } = {}) => {
+    state.siteKey = siteKey || '';
+    state.widgetKey = widgetKey || '';
+    updateSnippet();
+    renderVerification();
+  };
+
+  const tryGetKeys = async (activeSiteId) => {
+    if (!client.sites?.getKeys) {
+      return null;
+    }
+
+    try {
+      return await client.sites.getKeys(activeSiteId);
+    } catch (error) {
+      const uiError = mapApiError(error);
+      if (uiError.status === 404) {
+        return null;
+      }
+      return null;
+    }
+  };
+
+  const regenerateKeys = async (activeSiteId) => {
+    if (client.sites?.regenerateKeys) {
+      return client.sites.regenerateKeys(activeSiteId);
+    }
+
+    return client.request(`/sites/${activeSiteId}/keys/regenerate`, { method: 'POST' });
+  };
+
+  siteKeyInput.addEventListener('input', () => {
+    state.siteKey = siteKeyInput.value.trim();
+    updateSnippet();
+  });
   updateSnippet();
 
   copyButton.addEventListener('click', async () => {
     try {
-      await copyToClipboard(snippetValue.value);
+      await copyToClipboardRobust(snippetValue.value);
       state.copyMessage = 'Copied';
       state.actionError = '';
       copyStatus.textContent = state.copyMessage;
@@ -203,30 +284,24 @@ export const renderInstallView = (container, { apiClient, toast, query } = {}) =
     state.copyMessage = '';
     copyStatus.textContent = '';
     try {
-      const response = await client.request(`/sites/${siteId}/keys/regenerate`, { method: 'POST' });
-      state.siteKey = response?.siteKey || '';
-      state.widgetKey = response?.widgetKey || '';
-      siteKeyInput.value = state.siteKey;
-      if (storageKey) {
-        sessionStorage.setItem(
-          storageKey,
-          JSON.stringify({ siteKey: state.siteKey, widgetKey: state.widgetKey })
-        );
-      }
-      updateSnippet();
-      renderVerification();
+      const response = await regenerateKeys(siteId);
+      const siteKey = response?.siteKey || '';
+      const widgetKey = response?.widgetKey || '';
+      updateKeys({ siteKey, widgetKey });
+      saveCachedKeys(siteId, { siteKey, widgetKey });
       notifier.show({ message: 'Keys regenerated.', variant: 'success' });
     } catch (error) {
       const uiError = mapApiError(error);
       state.actionError = uiError.message;
       actionErrorText.textContent = state.actionError;
+      notifier.show({ message: uiError.message, variant: 'danger' });
     } finally {
       regenerateButton.disabled = false;
       regenerateButton.textContent = 'Regenerate keys';
     }
   });
 
-  snippetBox.append(snippetValue, copyButton, copyStatus, actionErrorText);
+  snippetBox.append(snippetValue, copyButton, snippetHint, copyStatus, actionErrorText);
 
   const statusTitle = document.createElement('div');
   statusTitle.textContent = '3. Verify installation';
@@ -318,18 +393,19 @@ export const renderInstallView = (container, { apiClient, toast, query } = {}) =
   verifyPre.style.fontSize = '12px';
   verifyPre.style.display = 'none';
 
-  const renderVerification = () => {
+  function renderVerification() {
     verifyPre.style.display = state.verifyResult ? 'block' : 'none';
     verifyPre.textContent = state.verifyResult ? JSON.stringify(state.verifyResult, null, 2) : '';
     verifyErrorText.textContent = state.verifyError;
+    testStatusButton.disabled = !state.widgetKey;
     if (!state.widgetKey) {
-      verifyHelper.textContent = 'Regenerate keys to get widget key for verification.';
-      testStatusButton.style.display = 'none';
+      verifyHelper.textContent = state.keysLoading
+        ? 'Generating keys...'
+        : 'Regenerate keys to get widget key for verification.';
       return;
     }
     verifyHelper.textContent = `Widget key ready: ${state.widgetKey}`;
-    testStatusButton.style.display = 'inline-block';
-  };
+  }
 
   testStatusButton.addEventListener('click', async () => {
     if (!state.widgetKey) {
@@ -394,4 +470,46 @@ export const renderInstallView = (container, { apiClient, toast, query } = {}) =
   container.appendChild(page);
   updateStatusDisplay();
   loadInstallationStatus();
+
+  const resolveKeys = async () => {
+    state.keysLoading = true;
+    updateSnippet();
+    renderVerification();
+
+    if (cachedKeys?.siteKey && cachedKeys?.widgetKey) {
+      updateKeys({ siteKey: cachedKeys.siteKey, widgetKey: cachedKeys.widgetKey });
+    }
+
+    let resolved = false;
+
+    const getKeysResponse = await tryGetKeys(siteId);
+    if (getKeysResponse?.siteKey && getKeysResponse?.widgetKey) {
+      updateKeys({ siteKey: getKeysResponse.siteKey, widgetKey: getKeysResponse.widgetKey });
+      saveCachedKeys(siteId, {
+        siteKey: getKeysResponse.siteKey,
+        widgetKey: getKeysResponse.widgetKey,
+      });
+      resolved = true;
+    }
+
+    if (!resolved && !state.siteKey && !state.widgetKey) {
+      try {
+        const regenerated = await regenerateKeys(siteId);
+        if (regenerated?.siteKey && regenerated?.widgetKey) {
+          updateKeys({ siteKey: regenerated.siteKey, widgetKey: regenerated.widgetKey });
+          saveCachedKeys(siteId, { siteKey: regenerated.siteKey, widgetKey: regenerated.widgetKey });
+        }
+      } catch (error) {
+        const uiError = mapApiError(error);
+        state.actionError = uiError.message;
+        actionErrorText.textContent = state.actionError;
+      }
+    }
+
+    state.keysLoading = false;
+    updateSnippet();
+    renderVerification();
+  };
+
+  resolveKeys();
 };
