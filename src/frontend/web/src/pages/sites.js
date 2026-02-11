@@ -159,10 +159,13 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
     const openInstallButton = createButton({ label: 'Open Install' });
     openInstallButton.style.alignSelf = 'flex-start';
     openInstallButton.addEventListener('click', () => {
-      const params = new URLSearchParams();
-      if (siteId) {
-        params.set('siteId', siteId);
+      if (!siteId) {
+        window.location.hash = '#/install';
+        return;
       }
+
+      const params = new URLSearchParams();
+      params.set('siteId', siteId);
       if (domain) {
         params.set('domain', domain);
       }
@@ -336,15 +339,17 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
 
       const installButton = createButton({ label: 'Install' });
       installButton.addEventListener('click', () => {
-        const params = new URLSearchParams();
-        if (siteId) {
-          params.set('siteId', siteId);
+        if (!siteId) {
+          window.location.hash = '#/install';
+          return;
         }
+
+        const params = new URLSearchParams();
+        params.set('siteId', siteId);
         if (site.domain) {
           params.set('domain', site.domain);
         }
-        const query = params.toString();
-        window.location.hash = query ? `#/install?${query}` : '#/install';
+        window.location.hash = `#/install?${params.toString()}`;
       });
 
       const regenButton = createButton({ label: 'Regenerate keys' });
