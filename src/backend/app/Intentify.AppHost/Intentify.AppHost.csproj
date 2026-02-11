@@ -14,12 +14,14 @@
     <InternalsVisibleTo Include="Intentify.Modules.Auth.Tests" />
     <InternalsVisibleTo Include="Intentify.Modules.Collector.Tests" />
     <InternalsVisibleTo Include="Intentify.Modules.Sites.Tests" />
+    <InternalsVisibleTo Include="Intentify.Modules.Visitors.Tests" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="../../modules/Intentify.Modules.Auth/src/Intentify.Modules.Auth.Api/Intentify.Modules.Auth.Api.csproj" />
     <ProjectReference Include="../../modules/Intentify.Modules.Collector/src/Intentify.Modules.Collector.Api/Intentify.Modules.Collector.Api.csproj" />
     <ProjectReference Include="../../modules/Intentify.Modules.Sites/src/Intentify.Modules.Sites.Api/Intentify.Modules.Sites.Api.csproj" />
+    <ProjectReference Include="../../modules/Intentify.Modules.Visitors/src/Intentify.Modules.Visitors.Api/Intentify.Modules.Visitors.Api.csproj" />
     <ProjectReference Include="../../shared/Intentify.Shared.Web/src/Intentify.Shared.Web/Intentify.Shared.Web.csproj" />
   </ItemGroup>
 

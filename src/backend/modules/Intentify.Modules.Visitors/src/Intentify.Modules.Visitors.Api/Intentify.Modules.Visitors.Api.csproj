@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Intentify.Modules.Visitors.Domain\Intentify.Modules.Visitors.Domain.csproj" />
+    <ProjectReference Include="..\Intentify.Modules.Visitors.Application\Intentify.Modules.Visitors.Application.csproj" />
+    <ProjectReference Include="..\Intentify.Modules.Visitors.Infrastructure\Intentify.Modules.Visitors.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\..\Intentify.Modules.Auth\src\Intentify.Modules.Auth.Api\Intentify.Modules.Auth.Api.csproj" />
+    <ProjectReference Include="..\..\..\Intentify.Modules.Collector\src\Intentify.Modules.Collector.Application\Intentify.Modules.Collector.Application.csproj" />
+    <ProjectReference Include="..\..\..\..\shared\Intentify.Shared.Web\src\Intentify.Shared.Web\Intentify.Shared.Web.csproj" />
+    <ProjectReference Include="..\..\..\..\shared\Intentify.Shared.Data.Mongo\src\Intentify.Shared.Data.Mongo\Intentify.Shared.Data.Mongo.csproj" />
+  </ItemGroup>
+</Project>

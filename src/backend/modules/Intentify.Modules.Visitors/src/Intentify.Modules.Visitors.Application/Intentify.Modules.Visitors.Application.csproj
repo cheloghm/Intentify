@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Intentify.Modules.Visitors.Domain\Intentify.Modules.Visitors.Domain.csproj" />
+    <ProjectReference Include="..\..\..\Intentify.Modules.Collector\src\Intentify.Modules.Collector.Application\Intentify.Modules.Collector.Application.csproj" />
+  </ItemGroup>
+</Project>

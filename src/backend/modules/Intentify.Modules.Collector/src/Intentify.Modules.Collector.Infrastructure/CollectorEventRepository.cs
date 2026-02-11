@@ -27,7 +27,12 @@ public sealed class CollectorEventRepository : ICollectorEventRepository
         var indexes = new[]
         {
             new CreateIndexModel<CollectorEvent>(
-                Builders<CollectorEvent>.IndexKeys.Ascending(evt => evt.SiteId))
+                Builders<CollectorEvent>.IndexKeys.Ascending(evt => evt.SiteId)),
+            new CreateIndexModel<CollectorEvent>(
+                Builders<CollectorEvent>.IndexKeys
+                    .Ascending(evt => evt.SiteId)
+                    .Ascending(evt => evt.SessionId)
+                    .Descending(evt => evt.OccurredAtUtc))
         };
 
         return MongoIndexHelper.EnsureIndexesAsync(_events, indexes);
