@@ -12,7 +12,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Intentify.Modules.Collector.Domain\Intentify.Modules.Collector.Domain.csproj" />
     <ProjectReference Include="..\Intentify.Modules.Collector.Application\Intentify.Modules.Collector.Application.csproj" />
-    <ProjectReference Include="..\..\Intentify.Modules.Sites\src\Intentify.Modules.Sites.Domain\Intentify.Modules.Sites.Domain.csproj" />
+    <ProjectReference Include="..\..\..\Intentify.Modules.Sites\src\Intentify.Modules.Sites.Domain\Intentify.Modules.Sites.Domain.csproj" />
     <ProjectReference Include="..\..\..\..\shared\Intentify.Shared.Data.Mongo\src\Intentify.Shared.Data.Mongo\Intentify.Shared.Data.Mongo.csproj" />
   </ItemGroup>
 </Project>

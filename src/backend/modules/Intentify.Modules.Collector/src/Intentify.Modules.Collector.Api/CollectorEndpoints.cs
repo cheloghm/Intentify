@@ -1,7 +1,9 @@
+using Intentify.Modules.Collector.Application;
 using Intentify.Modules.Collector.Domain;
 using Intentify.Modules.Sites.Api;
 using Intentify.Modules.Sites.Domain;
 using Intentify.Shared.Web;
+using Intentify.Shared.Validation;
 using Microsoft.AspNetCore.Http;
 
 namespace Intentify.Modules.Collector.Api;
@@ -30,13 +32,19 @@ internal static class CollectorEndpoints
     }
 
     public static async Task<IResult> CollectEventAsync(
-        CollectorEventRequest? request,
-        HttpContext context,
-        IngestCollectorEventHandler handler)
+    CollectorEventRequest? request,
+    HttpContext context,
+    IngestCollectorEventHandler handler)
     {
         if (context.Request.ContentLength is > MaxContentLengthBytes)
         {
             return Results.StatusCode(StatusCodes.Status413PayloadTooLarge);
+        }
+
+        var errors = ValidateRequest(request);
+        if (errors.Count > 0)
+        {
+            return Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(errors));
         }
 
         var origin = TryResolveOrigin(context.Request);
@@ -48,51 +56,30 @@ internal static class CollectorEndpoints
             }));
         }
 
-        var sites = database.GetCollection<Site>(SitesMongoCollections.Sites);
-        var site = await sites.Find(candidate => candidate.SiteKey == request!.SiteKey.Trim())
-            .FirstOrDefaultAsync();
-        if (site is null)
-        {
-            return Results.NotFound();
-        }
+        var command = new CollectEventCommand(
+            request!.SiteKey,
+            request.Type,
+            request.Url,
+            request.Referrer,
+            request.TsUtc,
+            origin);
 
-        if (!site.AllowedOrigins.Contains(origin, StringComparer.OrdinalIgnoreCase))
-        {
-            return Results.StatusCode(StatusCodes.Status403Forbidden);
-        }
+        var result = await handler.HandleAsync(command, context.RequestAborted);
 
-        var now = DateTime.UtcNow;
-        var occurredAt = request!.TsUtc?.ToUniversalTime() ?? now;
-        var normalizedType = request.Type.Trim();
-        var normalizedUrl = request.Url.Trim();
-        var normalizedReferrer = string.IsNullOrWhiteSpace(request.Referrer) ? null : request.Referrer.Trim();
-
-        var events = database.GetCollection<CollectorEvent>(CollectorMongoCollections.Events);
-        var collectorEvent = new CollectorEvent
+        return result.Status switch
         {
-            SiteId = site.Id,
-            TenantId = site.TenantId,
-            Type = normalizedType,
-            Url = normalizedUrl,
-            Referrer = normalizedReferrer,
-            OccurredAtUtc = occurredAt,
-            ReceivedAtUtc = now,
-            Origin = origin
+            OperationStatus.Success => Results.Ok(),
+
+            OperationStatus.ValidationFailed => Results.BadRequest(
+                ProblemDetailsHelpers.CreateValidationProblemDetails(result.Errors!.Errors)),
+
+            OperationStatus.Forbidden => Results.StatusCode(StatusCodes.Status403Forbidden),
+
+            OperationStatus.NotFound => Results.NotFound(),
+
+            _ => Results.StatusCode(StatusCodes.Status500InternalServerError)
         };
-
-        await events.InsertOneAsync(collectorEvent);
-
-        if (site.FirstEventReceivedAtUtc is null)
-        {
-            var filter = Builders<Site>.Filter.Eq(candidate => candidate.Id, site.Id) &
-                Builders<Site>.Filter.Eq(candidate => candidate.FirstEventReceivedAtUtc, null);
-            var update = Builders<Site>.Update
-                .Set(candidate => candidate.FirstEventReceivedAtUtc, now)
-                .Set(candidate => candidate.UpdatedAtUtc, now);
-            await sites.UpdateOneAsync(filter, update);
-        }
-
-        return Results.Ok();
+        
     }
 
     private static Dictionary<string, string[]> ValidateRequest(CollectorEventRequest? request)
