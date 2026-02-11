@@ -1,5 +1,8 @@
 using Intentify.Modules.Collector.Domain;
 using Intentify.Shared.Validation;
+using MongoDB.Bson;
+using MongoDB.Bson.Serialization;
+using System.Text.Json;
 
 namespace Intentify.Modules.Collector.Application;
 
@@ -56,7 +59,9 @@ public sealed class IngestCollectorEventHandler
             Referrer = normalizedReferrer,
             OccurredAtUtc = occurredAt,
             ReceivedAtUtc = now,
-            Origin = normalizedOrigin
+            Origin = normalizedOrigin,
+            SessionId = command.SessionId,
+            Data = ToBsonDocument(command.Data)
         };
 
         await _events.InsertAsync(collectorEvent, cancellationToken);
@@ -149,5 +154,20 @@ public sealed class IngestCollectorEventHandler
 
         normalized = uri.ToString();
         return true;
+    }
+
+    private static BsonDocument? ToBsonDocument(JsonElement? data)
+    {
+        if (data is null || data.Value.ValueKind == JsonValueKind.Null || data.Value.ValueKind == JsonValueKind.Undefined)
+        {
+            return null;
+        }
+
+        if (data.Value.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        return BsonSerializer.Deserialize<BsonDocument>(data.Value.GetRawText());
     }
 }

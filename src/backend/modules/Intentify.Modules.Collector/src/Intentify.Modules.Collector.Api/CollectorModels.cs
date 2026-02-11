@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace Intentify.Modules.Collector.Api;
 
 public sealed record CollectorEventRequest(
@@ -5,4 +7,6 @@ public sealed record CollectorEventRequest(
     string Type,
     string Url,
     string? Referrer,
-    DateTime? TsUtc);
+    DateTime? TsUtc,
+    string? SessionId = null,
+    JsonElement? Data = null);

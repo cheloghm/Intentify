@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace Intentify.Modules.Collector.Application;
 
 public sealed record CollectEventCommand(
@@ -6,4 +8,6 @@ public sealed record CollectEventCommand(
     string? Url,
     string? Referrer,
     DateTime? TsUtc,
-    string? Origin);
+    string? Origin,
+    string? SessionId,
+    JsonElement? Data);

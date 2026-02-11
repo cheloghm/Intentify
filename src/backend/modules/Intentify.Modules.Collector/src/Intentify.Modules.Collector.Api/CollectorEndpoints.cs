@@ -1,6 +1,6 @@
-using Intentify.Modules.Collector.Domain;
-using Intentify.Modules.Sites.Api;
-using Intentify.Modules.Sites.Domain;
+using System.Text.Json;
+using Intentify.Modules.Collector.Application;
+using Intentify.Shared.Validation;
 using Intentify.Shared.Web;
 using Microsoft.AspNetCore.Http;
 
@@ -9,10 +9,14 @@ namespace Intentify.Modules.Collector.Api;
 internal static class CollectorEndpoints
 {
     private const int MaxContentLengthBytes = 32 * 1024;
+    private const int MaxSessionIdLength = 128;
     private const int MaxSiteKeyLength = 256;
     private const int MaxTypeLength = 64;
     private const int MaxUrlLength = 2048;
     private const int MaxReferrerLength = 2048;
+    private const int MaxDataKeys = 32;
+    private const int MaxDataKeyLength = 64;
+    private const int MaxDataStringLength = 256;
     private const string TrackerResourceName = "Intentify.Modules.Collector.Api.assets.tracker.js";
 
     public static async Task<IResult> GetTrackerAsync()
@@ -39,60 +43,31 @@ internal static class CollectorEndpoints
             return Results.StatusCode(StatusCodes.Status413PayloadTooLarge);
         }
 
-        var origin = TryResolveOrigin(context.Request);
-        if (origin is null)
+        var requestErrors = ValidateRequest(request);
+        if (requestErrors.Count > 0)
         {
-            return Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(new Dictionary<string, string[]>
-            {
-                ["origin"] = ["Origin or Referer header is required to determine the request origin."]
-            }));
+            return Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(requestErrors));
         }
 
-        var sites = database.GetCollection<Site>(SitesMongoCollections.Sites);
-        var site = await sites.Find(candidate => candidate.SiteKey == request!.SiteKey.Trim())
-            .FirstOrDefaultAsync();
-        if (site is null)
-        {
-            return Results.NotFound();
-        }
+        var result = await handler.HandleAsync(new CollectEventCommand(
+            request!.SiteKey,
+            request.Type,
+            request.Url,
+            request.Referrer,
+            request.TsUtc,
+            TryResolveOrigin(context.Request),
+            request.SessionId,
+            request.Data),
+            context.RequestAborted);
 
-        if (!site.AllowedOrigins.Contains(origin, StringComparer.OrdinalIgnoreCase))
+        return result.Status switch
         {
-            return Results.StatusCode(StatusCodes.Status403Forbidden);
-        }
-
-        var now = DateTime.UtcNow;
-        var occurredAt = request!.TsUtc?.ToUniversalTime() ?? now;
-        var normalizedType = request.Type.Trim();
-        var normalizedUrl = request.Url.Trim();
-        var normalizedReferrer = string.IsNullOrWhiteSpace(request.Referrer) ? null : request.Referrer.Trim();
-
-        var events = database.GetCollection<CollectorEvent>(CollectorMongoCollections.Events);
-        var collectorEvent = new CollectorEvent
-        {
-            SiteId = site.Id,
-            TenantId = site.TenantId,
-            Type = normalizedType,
-            Url = normalizedUrl,
-            Referrer = normalizedReferrer,
-            OccurredAtUtc = occurredAt,
-            ReceivedAtUtc = now,
-            Origin = origin
+            OperationStatus.Success => Results.Ok(),
+            OperationStatus.ValidationFailed => Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(result.Errors?.Errors ?? new Dictionary<string, string[]>())),
+            OperationStatus.NotFound => Results.NotFound(),
+            OperationStatus.Forbidden => Results.StatusCode(StatusCodes.Status403Forbidden),
+            _ => Results.StatusCode(StatusCodes.Status500InternalServerError)
         };
-
-        await events.InsertOneAsync(collectorEvent);
-
-        if (site.FirstEventReceivedAtUtc is null)
-        {
-            var filter = Builders<Site>.Filter.Eq(candidate => candidate.Id, site.Id) &
-                Builders<Site>.Filter.Eq(candidate => candidate.FirstEventReceivedAtUtc, null);
-            var update = Builders<Site>.Update
-                .Set(candidate => candidate.FirstEventReceivedAtUtc, now)
-                .Set(candidate => candidate.UpdatedAtUtc, now);
-            await sites.UpdateOneAsync(filter, update);
-        }
-
-        return Results.Ok();
     }
 
     private static Dictionary<string, string[]> ValidateRequest(CollectorEventRequest? request)
@@ -148,6 +123,46 @@ internal static class CollectorEndpoints
             }
         }
 
+        if (!string.IsNullOrWhiteSpace(request.SessionId) && request.SessionId.Trim().Length > MaxSessionIdLength)
+        {
+            errors["sessionId"] = ["Session id is too long."];
+        }
+
+        if (request.Data is { } data && data.ValueKind != JsonValueKind.Null && data.ValueKind != JsonValueKind.Undefined)
+        {
+            if (data.ValueKind != JsonValueKind.Object)
+            {
+                errors["data"] = ["Data must be an object."];
+            }
+            else
+            {
+                var keyCount = 0;
+                foreach (var property in data.EnumerateObject())
+                {
+                    keyCount++;
+                    if (keyCount > MaxDataKeys)
+                    {
+                        errors["data"] = [$"Data cannot contain more than {MaxDataKeys} keys."];
+                        break;
+                    }
+
+                    if (property.Name.Length > MaxDataKeyLength)
+                    {
+                        errors["data"] = [$"Data keys cannot exceed {MaxDataKeyLength} characters."];
+                        break;
+                    }
+
+                    if (property.Value.ValueKind == JsonValueKind.String
+                        && property.Value.GetString() is { } value
+                        && value.Length > MaxDataStringLength)
+                    {
+                        errors["data"] = [$"Data string values cannot exceed {MaxDataStringLength} characters."];
+                        break;
+                    }
+                }
+            }
+        }
+
         return errors;
     }
 
@@ -172,40 +187,6 @@ internal static class CollectorEndpoints
         }
 
         normalized = uri.ToString();
-        return true;
-    }
-
-    private static bool TryNormalizeOrigin(string? origin, out string normalized)
-    {
-        normalized = string.Empty;
-        if (string.IsNullOrWhiteSpace(origin))
-        {
-            return false;
-        }
-
-        var trimmed = origin.Trim();
-        if (!Uri.TryCreate(trimmed, UriKind.Absolute, out var uri))
-        {
-            return false;
-        }
-
-        if (!string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        if (!string.IsNullOrEmpty(uri.Fragment))
-        {
-            return false;
-        }
-
-        if (uri.PathAndQuery is not ("" or "/"))
-        {
-            return false;
-        }
-
-        normalized = uri.GetLeftPart(UriPartial.Authority);
         return true;
     }
 
