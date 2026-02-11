@@ -1,6 +1,7 @@
 using Intentify.Modules.Auth.Api;
 using Intentify.Modules.Collector.Api;
 using Intentify.Modules.Sites.Api;
+using Intentify.Modules.Visitors.Api;
 using Intentify.Shared.Web;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
@@ -14,7 +15,8 @@ public static class AppModuleCatalog
     [
         new Intentify.Modules.Auth.Api.AuthModule(),
         new Intentify.Modules.Collector.Api.CollectorModule(),
-        new Intentify.Modules.Sites.Api.SitesModule()
+        new Intentify.Modules.Sites.Api.SitesModule(),
+        new Intentify.Modules.Visitors.Api.VisitorsModule()
     ];
 }
 

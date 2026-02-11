@@ -15,11 +15,16 @@ public sealed class IngestCollectorEventHandler
 
     private readonly ISiteLookupRepository _sites;
     private readonly ICollectorEventRepository _events;
+    private readonly IReadOnlyCollection<ICollectorEventObserver> _observers;
 
-    public IngestCollectorEventHandler(ISiteLookupRepository sites, ICollectorEventRepository events)
+    public IngestCollectorEventHandler(
+        ISiteLookupRepository sites,
+        ICollectorEventRepository events,
+        IEnumerable<ICollectorEventObserver> observers)
     {
         _sites = sites;
         _events = events;
+        _observers = observers.ToArray();
     }
 
     public async Task<OperationResult<bool>> HandleAsync(CollectEventCommand command, CancellationToken cancellationToken = default)
@@ -65,6 +70,24 @@ public sealed class IngestCollectorEventHandler
         };
 
         await _events.InsertAsync(collectorEvent, cancellationToken);
+
+        var notification = new CollectorEventIngestedNotification(
+            collectorEvent.SiteId,
+            collectorEvent.TenantId,
+            collectorEvent.OccurredAtUtc,
+            collectorEvent.Type,
+            collectorEvent.Url,
+            collectorEvent.Referrer,
+            collectorEvent.SessionId,
+            TryGetString(command.Data, "firstPartyId") ?? TryGetString(command.Data, "fpid"),
+            TryGetString(command.Data, "userAgent"),
+            TryGetString(command.Data, "language"),
+            TryGetString(command.Data, "platform"));
+
+        foreach (var observer in _observers)
+        {
+            await observer.OnCollectorEventIngestedAsync(notification, cancellationToken);
+        }
 
         if (site.FirstEventReceivedAtUtc is null)
         {
@@ -169,5 +192,20 @@ public sealed class IngestCollectorEventHandler
         }
 
         return BsonSerializer.Deserialize<BsonDocument>(data.Value.GetRawText());
+    }
+
+    private static string? TryGetString(JsonElement? data, string key)
+    {
+        if (data is null || data.Value.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        if (!data.Value.TryGetProperty(key, out var value) || value.ValueKind != JsonValueKind.String)
+        {
+            return null;
+        }
+
+        return value.GetString();
     }
 }

@@ -20,6 +20,7 @@ public sealed class CollectorModule : IAppModule
 
         services.AddSingleton<ICollectorEventRepository, CollectorEventRepository>();
         services.AddSingleton<ISiteLookupRepository, SiteLookupRepository>();
+        services.AddSingleton<ICollectorEventObserver, NoOpCollectorEventObserver>();
         services.AddSingleton<IngestCollectorEventHandler>();
     }
 
@@ -31,5 +32,13 @@ public sealed class CollectorModule : IAppModule
 
         group.MapGet("/tracker.js", CollectorEndpoints.GetTrackerAsync);
         group.MapPost("/events", CollectorEndpoints.CollectEventAsync);
+    }
+}
+
+internal sealed class NoOpCollectorEventObserver : ICollectorEventObserver
+{
+    public Task OnCollectorEventIngestedAsync(CollectorEventIngestedNotification notification, CancellationToken cancellationToken = default)
+    {
+        return Task.CompletedTask;
     }
 }
