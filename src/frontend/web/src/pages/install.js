@@ -216,7 +216,7 @@ export const renderInstallView = (container, { apiClient, toast, query } = {}) =
       ? 'Loading keys...'
       : key
       ? ''
-      : 'Generating keys...';
+      : 'Paste a site key or click Regenerate keys.';
     copyStatus.textContent = state.copyMessage;
     actionErrorText.textContent = state.actionError;
   };
@@ -226,22 +226,6 @@ export const renderInstallView = (container, { apiClient, toast, query } = {}) =
     state.widgetKey = widgetKey || '';
     updateSnippet();
     renderVerification();
-  };
-
-  const tryGetKeys = async (activeSiteId) => {
-    if (!client.sites?.getKeys) {
-      return null;
-    }
-
-    try {
-      return await client.sites.getKeys(activeSiteId);
-    } catch (error) {
-      const uiError = mapApiError(error);
-      if (uiError.status === 404) {
-        return null;
-      }
-      return null;
-    }
   };
 
   const regenerateKeys = async (activeSiteId) => {
@@ -471,45 +455,7 @@ export const renderInstallView = (container, { apiClient, toast, query } = {}) =
   updateStatusDisplay();
   loadInstallationStatus();
 
-  const resolveKeys = async () => {
-    state.keysLoading = true;
-    updateSnippet();
-    renderVerification();
-
-    if (cachedKeys?.siteKey && cachedKeys?.widgetKey) {
-      updateKeys({ siteKey: cachedKeys.siteKey, widgetKey: cachedKeys.widgetKey });
-    }
-
-    let resolved = false;
-
-    const getKeysResponse = await tryGetKeys(siteId);
-    if (getKeysResponse?.siteKey && getKeysResponse?.widgetKey) {
-      updateKeys({ siteKey: getKeysResponse.siteKey, widgetKey: getKeysResponse.widgetKey });
-      saveCachedKeys(siteId, {
-        siteKey: getKeysResponse.siteKey,
-        widgetKey: getKeysResponse.widgetKey,
-      });
-      resolved = true;
-    }
-
-    if (!resolved && !state.siteKey && !state.widgetKey) {
-      try {
-        const regenerated = await regenerateKeys(siteId);
-        if (regenerated?.siteKey && regenerated?.widgetKey) {
-          updateKeys({ siteKey: regenerated.siteKey, widgetKey: regenerated.widgetKey });
-          saveCachedKeys(siteId, { siteKey: regenerated.siteKey, widgetKey: regenerated.widgetKey });
-        }
-      } catch (error) {
-        const uiError = mapApiError(error);
-        state.actionError = uiError.message;
-        actionErrorText.textContent = state.actionError;
-      }
-    }
-
-    state.keysLoading = false;
-    updateSnippet();
-    renderVerification();
-  };
-
-  resolveKeys();
+  if (cachedKeys?.siteKey && cachedKeys?.widgetKey) {
+    updateKeys({ siteKey: cachedKeys.siteKey, widgetKey: cachedKeys.widgetKey });
+  }
 };

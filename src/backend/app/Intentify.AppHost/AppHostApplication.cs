@@ -90,10 +90,8 @@ internal static class AppHostApplication
             app.UseSwaggerUI();
         }
 
-        // ✅ Apply global CORS to everything EXCEPT the public installation-status endpoint
-        app.UseWhen(
-            ctx => !ctx.Request.Path.StartsWithSegments("/sites/installation/status", StringComparison.OrdinalIgnoreCase),
-            branch => branch.UseCors(CorsPolicyName));
+        // ✅ Apply global CORS middleware
+        app.UseCors(CorsPolicyName);
 
         app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
         app.MapAppModules();
@@ -123,7 +121,7 @@ internal static class AppHostApplication
                     "CORS is not configured. Set Intentify__Cors__AllowedOrigins (e.g. http://localhost:3000).");
             }
 
-            origins = new[] { "http://localhost:3000", "http://127.0.0.1:3000" };
+            origins = new[] { "http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:8088" };
         }
 
         builder.Services.AddCors(options =>
