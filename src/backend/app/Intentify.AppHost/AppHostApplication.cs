@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.OpenApi.Models;
 using Swashbuckle.AspNetCore.SwaggerGen;
 
@@ -14,6 +15,13 @@ namespace Intentify.AppHost;
 internal static class AppHostApplication
 {
     private const string CorsPolicyName = "IntentifyCors";
+    private static readonly string[] LocalCorsFallbackOrigins =
+    [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:8088",
+        "http://127.0.0.1:8088"
+    ];
 
     public static WebApplicationBuilder CreateBuilder(string[] args, string? environmentName = null)
     {
@@ -112,16 +120,29 @@ internal static class AppHostApplication
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        // Dev fallback to avoid local friction; prod must be explicit
+        // Dev fallback to avoid local friction.
         if (origins.Length == 0)
         {
-            if (!builder.Environment.IsDevelopment())
+            if (builder.Environment.IsDevelopment())
+            {
+                origins = LocalCorsFallbackOrigins;
+            }
+            else if (IsLocalNonContainerRun(builder.Configuration))
+            {
+                origins = LocalCorsFallbackOrigins;
+
+                using var loggerFactory = LoggerFactory.Create(logging => logging.AddConsole());
+                var logger = loggerFactory.CreateLogger("Intentify.AppHost.Cors");
+                logger.LogWarning(
+                    "Intentify:Cors:AllowedOrigins is not configured in non-development local run. " +
+                    "Using local-only fallback origins: {Origins}",
+                    string.Join(",", origins));
+            }
+            else
             {
                 throw new InvalidOperationException(
                     "CORS is not configured. Set Intentify__Cors__AllowedOrigins (e.g. http://localhost:3000).");
             }
-
-            origins = new[] { "http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:8088" };
         }
 
         builder.Services.AddCors(options =>
@@ -138,6 +159,46 @@ internal static class AppHostApplication
                 // Your frontend uses Bearer tokens, so credentials are not required.
             });
         });
+    }
+
+    private static bool IsLocalNonContainerRun(IConfiguration configuration)
+    {
+        var inContainer = configuration["DOTNET_RUNNING_IN_CONTAINER"];
+        if (bool.TryParse(inContainer, out var runningInContainer) && runningInContainer)
+        {
+            return false;
+        }
+
+        var urlsValue = configuration["ASPNETCORE_URLS"]
+            ?? configuration["URLS"]
+            ?? configuration["urls"];
+
+        if (string.IsNullOrWhiteSpace(urlsValue))
+        {
+            return true;
+        }
+
+        var urls = urlsValue.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (urls.Length == 0)
+        {
+            return true;
+        }
+
+        foreach (var url in urls)
+        {
+            if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
+            {
+                return false;
+            }
+
+            var host = uri.Host;
+            if (!host.Equals("localhost", StringComparison.OrdinalIgnoreCase) && host != "127.0.0.1")
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private sealed class DebugSecretForDebugEndpointOperationFilter : IOperationFilter

@@ -127,6 +127,25 @@ public sealed class SitesIntegrationTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.BadRequest, missingOriginResponse.StatusCode);
     }
 
+
+    [Fact]
+    public async Task PublicInstallationStatus_AllowsLocalhostOriginInDevelopment_WithoutConfiguredAllowedOrigins()
+    {
+        var accessToken = await RegisterUserAsync();
+        var domain = $"dev-local-{Guid.NewGuid():N}.intentify.local";
+
+        var createResponse = await SendAuthorizedAsync(HttpMethod.Post, "/sites", accessToken,
+            JsonContent.Create(new CreateSiteRequest(domain)));
+        Assert.Equal(HttpStatusCode.OK, createResponse.StatusCode);
+
+        var createPayload = await createResponse.Content.ReadFromJsonAsync<CreateSiteResponse>();
+        Assert.NotNull(createPayload);
+
+        var localOriginResponse = await SendOriginStatusRequestAsync(createPayload!.WidgetKey, "http://localhost:8088");
+
+        Assert.Equal(HttpStatusCode.OK, localOriginResponse.StatusCode);
+    }
+
     private async Task<string> RegisterUserAsync()
     {
         var email = $"tester-{Guid.NewGuid():N}@intentify.local";
