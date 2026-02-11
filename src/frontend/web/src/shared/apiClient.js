@@ -78,15 +78,12 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
     return response.text();
   };
 
-  const getSiteKeys = async (siteId) => request(`/sites/${siteId}/keys`);
-
   const regenerateSiteKeys = async (siteId) =>
     request(`/sites/${siteId}/keys/regenerate`, { method: 'POST' });
 
   return {
     request,
     sites: {
-      getKeys: getSiteKeys,
       regenerateKeys: regenerateSiteKeys,
     },
   };
