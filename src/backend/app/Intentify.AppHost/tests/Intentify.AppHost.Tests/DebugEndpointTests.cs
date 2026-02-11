@@ -110,23 +110,63 @@ public sealed class DebugEndpointTests : IAsyncLifetime
             "Expected Access-Control-Allow-Origin header for configured frontend origin.");
     }
 
-    private async Task<WebApplication> BuildApp(string environment)
+
+    [Fact]
+    public async Task Cors_UsesLocalFallbackOrigins_ForLocalProductionRunWithoutConfiguredOrigins()
+    {
+        await using var app = await BuildApp(
+            Environments.Production,
+            includeCorsConfiguration: false,
+            extraConfig: new Dictionary<string, string?>
+            {
+                ["ASPNETCORE_URLS"] = "http://localhost:5000"
+            });
+
+        using var request = new HttpRequestMessage(HttpMethod.Options, "/collector/events");
+        request.Headers.Add("Origin", "http://127.0.0.1:8088");
+        request.Headers.Add("Access-Control-Request-Method", "POST");
+        request.Headers.Add("Access-Control-Request-Headers", "content-type");
+
+        var response = await app.GetTestClient().SendAsync(request);
+
+        Assert.True(
+            response.Headers.TryGetValues("Access-Control-Allow-Origin", out var values) &&
+            values.Contains("http://127.0.0.1:8088"),
+            "Expected Access-Control-Allow-Origin header for local fallback origin.");
+    }
+
+    private async Task<WebApplication> BuildApp(
+        string environment,
+        bool includeCorsConfiguration = true,
+        IDictionary<string, string?>? extraConfig = null)
     {
         var builder = AppHostApplication.CreateBuilder([], environment);
         builder.WebHost.UseTestServer();
 
-        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+        var config = new Dictionary<string, string?>
         {
             ["Intentify:Jwt:Issuer"] = _jwtOptions.Issuer,
             ["Intentify:Jwt:Audience"] = _jwtOptions.Audience,
             ["Intentify:Jwt:SigningKey"] = _jwtOptions.SigningKey,
             ["Intentify:Jwt:AccessTokenMinutes"] = _jwtOptions.AccessTokenMinutes.ToString(),
             ["Intentify:Mongo:ConnectionString"] = _mongo.ConnectionString,
-            ["Intentify:Mongo:DatabaseName"] = _mongo.DatabaseName,
+            ["Intentify:Mongo:DatabaseName"] = _mongo.DatabaseName
+        };
 
-            // ✅ CORS configuration for tests (matches frontend origins)
-            ["Intentify:Cors:AllowedOrigins"] = "http://127.0.0.1:3000,http://localhost:3000"
-        });
+        if (includeCorsConfiguration)
+        {
+            config["Intentify:Cors:AllowedOrigins"] = "http://127.0.0.1:3000,http://localhost:3000";
+        }
+
+        if (extraConfig is not null)
+        {
+            foreach (var pair in extraConfig)
+            {
+                config[pair.Key] = pair.Value;
+            }
+        }
+
+        builder.Configuration.AddInMemoryCollection(config);
 
         var app = AppHostApplication.Build(builder);
         await app.StartAsync();

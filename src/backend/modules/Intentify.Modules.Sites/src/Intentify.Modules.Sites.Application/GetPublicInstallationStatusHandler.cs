@@ -1,14 +1,23 @@
 using Intentify.Shared.Validation;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
 
 namespace Intentify.Modules.Sites.Application;
 
 public sealed class GetPublicInstallationStatusHandler
 {
     private readonly ISiteRepository _sites;
+    private readonly IHostEnvironment _environment;
+    private readonly IConfiguration _configuration;
 
-    public GetPublicInstallationStatusHandler(ISiteRepository sites)
+    public GetPublicInstallationStatusHandler(
+        ISiteRepository sites,
+        IHostEnvironment environment,
+        IConfiguration configuration)
     {
         _sites = sites;
+        _environment = environment;
+        _configuration = configuration;
     }
 
     public async Task<OperationResult<PublicInstallationStatusResult>> HandleAsync(
@@ -35,11 +44,32 @@ public sealed class GetPublicInstallationStatusHandler
             return OperationResult<PublicInstallationStatusResult>.NotFound();
         }
 
-        if (!site.AllowedOrigins.Contains(normalizedOrigin, StringComparer.OrdinalIgnoreCase))
+        if (!site.AllowedOrigins.Contains(normalizedOrigin, StringComparer.OrdinalIgnoreCase) &&
+            !CanBypassOriginValidation(normalizedOrigin))
         {
             return OperationResult<PublicInstallationStatusResult>.Forbidden();
         }
 
         return OperationResult<PublicInstallationStatusResult>.Success(new PublicInstallationStatusResult(site, normalizedOrigin));
+    }
+
+    private bool CanBypassOriginValidation(string normalizedOrigin)
+    {
+        if (!_environment.IsDevelopment())
+        {
+            var allowLocalhost = _configuration.GetValue<bool>("Intentify:Sites:AllowLocalhostInstallStatus");
+            if (!allowLocalhost)
+            {
+                return false;
+            }
+        }
+
+        if (!Uri.TryCreate(normalizedOrigin, UriKind.Absolute, out var uri))
+        {
+            return false;
+        }
+
+        var host = uri.Host;
+        return host.Equals("localhost", StringComparison.OrdinalIgnoreCase) || host == "127.0.0.1";
     }
 }
