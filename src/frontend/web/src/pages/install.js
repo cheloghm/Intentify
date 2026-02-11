@@ -2,9 +2,6 @@ import { createCard, createInput, createToastManager } from '../shared/ui/index.
 import { createApiClient, mapApiError } from '../shared/apiClient.js';
 import { API_BASE } from '../shared/config.js';
 
-const POLL_INTERVAL_MS = 2000;
-const POLL_TIMEOUT_MS = 60000;
-
 const copyToClipboard = async (value) => {
   if (navigator.clipboard?.writeText) {
     await navigator.clipboard.writeText(value);
@@ -36,14 +33,47 @@ const createButton = ({ label, variant = 'default', type = 'button' } = {}) => {
   return button;
 };
 
-const wait = (duration) => new Promise((resolve) => setTimeout(resolve, duration));
-
 export const renderInstallView = (container, { apiClient, toast, query } = {}) => {
   const client = apiClient || createApiClient();
   const notifier = toast || createToastManager();
-  const siteId = query?.siteId || '';
+  const siteId = query?.siteId;
   const domain = query?.domain || '';
-  const siteKey = query?.siteKey || '';
+  const storageKey = siteId ? `intentify:siteKeys:${siteId}` : '';
+
+  if (!siteId) {
+    const message = document.createElement('div');
+    message.textContent = 'Missing site ID. Return to Sites and open Install again.';
+    message.style.color = '#dc2626';
+    message.style.fontSize = '14px';
+    container.appendChild(message);
+    return;
+  }
+
+  let storedKeys = null;
+  if (storageKey) {
+    try {
+      const rawStored = sessionStorage.getItem(storageKey);
+      if (rawStored) {
+        const parsedStored = JSON.parse(rawStored);
+        if (parsedStored && typeof parsedStored === 'object') {
+          storedKeys = parsedStored;
+        }
+      }
+    } catch (error) {
+      storedKeys = null;
+    }
+  }
+
+  const state = {
+    siteKey: storedKeys?.siteKey || '',
+    widgetKey: storedKeys?.widgetKey || '',
+    copyMessage: '',
+    status: null,
+    statusError: '',
+    verifyResult: null,
+    verifyError: '',
+    actionError: '',
+  };
 
   const page = document.createElement('div');
   page.style.display = 'flex';
@@ -83,6 +113,12 @@ export const renderInstallView = (container, { apiClient, toast, query } = {}) =
     label: 'Site key',
     placeholder: 'sk_live_••••••••',
   });
+  if (state.siteKey) {
+    siteKeyInput.value = state.siteKey;
+  }
+
+  const regenerateButton = createButton({ label: 'Regenerate keys' });
+  regenerateButton.style.alignSelf = 'flex-start';
 
   const snippetTitle = document.createElement('div');
   snippetTitle.textContent = '2. Copy the snippet';
@@ -120,29 +156,77 @@ export const renderInstallView = (container, { apiClient, toast, query } = {}) =
   const copyButton = createButton({ label: 'Copy snippet' });
   copyButton.style.alignSelf = 'flex-start';
 
+  const copyStatus = document.createElement('div');
+  copyStatus.style.fontSize = '12px';
+  copyStatus.style.color = '#15803d';
+
+  const actionErrorText = document.createElement('div');
+  actionErrorText.style.fontSize = '13px';
+  actionErrorText.style.color = '#dc2626';
+
   const updateSnippet = () => {
     const baseUrl = API_BASE.replace(/\/$/, '');
-    const key = siteKeyInput.value.trim() || 'YOUR_SITE_KEY';
+    const key = siteKeyInput.value.trim();
+    state.siteKey = key;
     snippetValue.value = `<script async src="${baseUrl}/collector/tracker.js" data-site-key="${key}"></script>`;
-    copyButton.disabled = !siteKeyInput.value.trim();
+    copyButton.disabled = !key;
+    copyStatus.textContent = state.copyMessage;
+    actionErrorText.textContent = state.actionError;
   };
 
   siteKeyInput.addEventListener('input', updateSnippet);
-  if (siteKey) {
-    siteKeyInput.value = siteKey;
-  }
   updateSnippet();
 
   copyButton.addEventListener('click', async () => {
     try {
       await copyToClipboard(snippetValue.value);
+      state.copyMessage = 'Copied';
+      state.actionError = '';
+      copyStatus.textContent = state.copyMessage;
       notifier.show({ message: 'Snippet copied to clipboard.', variant: 'success' });
+      window.setTimeout(() => {
+        state.copyMessage = '';
+        copyStatus.textContent = '';
+      }, 1500);
     } catch (error) {
+      state.actionError = 'Unable to copy snippet.';
+      actionErrorText.textContent = state.actionError;
       notifier.show({ message: 'Unable to copy snippet.', variant: 'danger' });
     }
   });
 
-  snippetBox.append(snippetValue, copyButton);
+  regenerateButton.addEventListener('click', async () => {
+    regenerateButton.disabled = true;
+    regenerateButton.textContent = 'Regenerating...';
+    state.actionError = '';
+    actionErrorText.textContent = '';
+    state.copyMessage = '';
+    copyStatus.textContent = '';
+    try {
+      const response = await client.request(`/sites/${siteId}/keys/regenerate`, { method: 'POST' });
+      state.siteKey = response?.siteKey || '';
+      state.widgetKey = response?.widgetKey || '';
+      siteKeyInput.value = state.siteKey;
+      if (storageKey) {
+        sessionStorage.setItem(
+          storageKey,
+          JSON.stringify({ siteKey: state.siteKey, widgetKey: state.widgetKey })
+        );
+      }
+      updateSnippet();
+      renderVerification();
+      notifier.show({ message: 'Keys regenerated.', variant: 'success' });
+    } catch (error) {
+      const uiError = mapApiError(error);
+      state.actionError = uiError.message;
+      actionErrorText.textContent = state.actionError;
+    } finally {
+      regenerateButton.disabled = false;
+      regenerateButton.textContent = 'Regenerate keys';
+    }
+  });
+
+  snippetBox.append(snippetValue, copyButton, copyStatus, actionErrorText);
 
   const statusTitle = document.createElement('div');
   statusTitle.textContent = '3. Verify installation';
@@ -150,101 +234,145 @@ export const renderInstallView = (container, { apiClient, toast, query } = {}) =
   statusTitle.style.fontSize = '14px';
 
   const statusDescription = document.createElement('div');
-  statusDescription.textContent = 'We will check for the first event from your site.';
+  statusDescription.textContent = 'Current installation status for this site.';
   statusDescription.style.fontSize = '13px';
   statusDescription.style.color = '#64748b';
 
   const statusRow = document.createElement('div');
   statusRow.style.display = 'flex';
-  statusRow.style.alignItems = 'center';
-  statusRow.style.justifyContent = 'space-between';
-  statusRow.style.gap = '12px';
+  statusRow.style.flexDirection = 'column';
+  statusRow.style.alignItems = 'flex-start';
+  statusRow.style.gap = '8px';
   statusRow.style.padding = '10px 12px';
   statusRow.style.border = '1px solid #e2e8f0';
   statusRow.style.borderRadius = '8px';
   statusRow.style.background = '#ffffff';
 
-  const statusText = document.createElement('div');
-  statusText.style.fontSize = '13px';
-  statusText.style.color = '#475569';
-  statusText.textContent = siteId
-    ? 'Ready to verify installation.'
-    : 'Missing site ID. Return to Sites and open Install again.';
+  const statusConfigured = document.createElement('div');
+  const statusInstalled = document.createElement('div');
+  const statusFirstEvent = document.createElement('div');
+  const statusCheckedAt = document.createElement('div');
+  const statusError = document.createElement('div');
+  statusConfigured.style.fontSize = '13px';
+  statusInstalled.style.fontSize = '13px';
+  statusFirstEvent.style.fontSize = '13px';
+  statusCheckedAt.style.fontSize = '13px';
+  statusError.style.fontSize = '13px';
+  statusError.style.color = '#dc2626';
 
-  const verifyButton = createButton({ label: 'Verify installation', variant: 'primary' });
-  verifyButton.disabled = !siteId;
+  const refreshStatusButton = createButton({ label: 'Refresh status', variant: 'primary' });
 
-  statusRow.append(statusText, verifyButton);
+  statusRow.append(statusConfigured, statusInstalled, statusFirstEvent, statusCheckedAt, statusError);
 
-  let pollInProgress = false;
+  const updateStatusDisplay = () => {
+    const status = state.status || {};
+    statusConfigured.textContent = `Configured: ${status.isConfigured ? 'Yes' : 'No'}`;
+    statusInstalled.textContent = `Installed: ${status.isInstalled ? 'Yes' : 'No'}`;
+    statusFirstEvent.textContent = `First event received: ${
+      status.firstEventReceivedAtUtc || 'Not yet'
+    }`;
+    statusCheckedAt.textContent = `Last checked: ${new Date().toISOString()}`;
+    statusError.textContent = state.statusError;
+  };
 
-  const setStatus = (message, variant = 'neutral') => {
-    statusText.textContent = message;
-    if (variant === 'success') {
-      statusText.style.color = '#15803d';
-    } else if (variant === 'warning') {
-      statusText.style.color = '#b45309';
-    } else if (variant === 'danger') {
-      statusText.style.color = '#dc2626';
-    } else {
-      statusText.style.color = '#475569';
+  const loadInstallationStatus = async () => {
+    refreshStatusButton.disabled = true;
+    refreshStatusButton.textContent = 'Loading...';
+    state.statusError = '';
+    try {
+      state.status = await client.request(`/sites/${siteId}/installation-status`);
+    } catch (error) {
+      const uiError = mapApiError(error);
+      state.statusError = uiError.message;
+    } finally {
+      refreshStatusButton.disabled = false;
+      refreshStatusButton.textContent = 'Refresh status';
+      updateStatusDisplay();
     }
   };
 
-  const pollInstallationStatus = async () => {
-    if (!siteId || pollInProgress) {
+  refreshStatusButton.addEventListener('click', loadInstallationStatus);
+
+  const verifySection = document.createElement('div');
+  verifySection.style.display = 'flex';
+  verifySection.style.flexDirection = 'column';
+  verifySection.style.gap = '8px';
+
+  const verifyHelper = document.createElement('div');
+  verifyHelper.style.fontSize = '13px';
+  verifyHelper.style.color = '#64748b';
+
+  const testStatusButton = createButton({ label: 'Test status' });
+  testStatusButton.style.alignSelf = 'flex-start';
+
+  const verifyErrorText = document.createElement('div');
+  verifyErrorText.style.fontSize = '13px';
+  verifyErrorText.style.color = '#dc2626';
+
+  const verifyPre = document.createElement('pre');
+  verifyPre.style.margin = '0';
+  verifyPre.style.padding = '10px 12px';
+  verifyPre.style.border = '1px solid #e2e8f0';
+  verifyPre.style.borderRadius = '8px';
+  verifyPre.style.background = '#f8fafc';
+  verifyPre.style.fontSize = '12px';
+  verifyPre.style.display = 'none';
+
+  const renderVerification = () => {
+    verifyPre.style.display = state.verifyResult ? 'block' : 'none';
+    verifyPre.textContent = state.verifyResult ? JSON.stringify(state.verifyResult, null, 2) : '';
+    verifyErrorText.textContent = state.verifyError;
+    if (!state.widgetKey) {
+      verifyHelper.textContent = 'Regenerate keys to get widget key for verification.';
+      testStatusButton.style.display = 'none';
       return;
     }
-
-    pollInProgress = true;
-    verifyButton.disabled = true;
-    verifyButton.textContent = 'Checking...';
-
-    const startTime = Date.now();
-
-    while (Date.now() - startTime < POLL_TIMEOUT_MS) {
-      if (!container.isConnected) {
-        pollInProgress = false;
-        return;
-      }
-
-      try {
-        const status = await client.request(`/sites/${siteId}/installation-status`);
-        const isConfigured = Boolean(status?.isConfigured);
-        const isInstalled = Boolean(status?.isInstalled);
-
-        if (!isConfigured) {
-          setStatus('Not configured. Add allowed origins in the Sites page.', 'warning');
-        } else if (isInstalled) {
-          setStatus('Installed ✅', 'success');
-          pollInProgress = false;
-          verifyButton.disabled = false;
-          verifyButton.textContent = 'Verify installation';
-          return;
-        } else {
-          setStatus('Waiting for first event…', 'neutral');
-        }
-      } catch (error) {
-        const uiError = mapApiError(error);
-        setStatus(uiError.message, 'danger');
-      }
-
-      await wait(POLL_INTERVAL_MS);
-    }
-
-    setStatus('Still waiting for installation. Check again in a moment.', 'warning');
-    pollInProgress = false;
-    verifyButton.disabled = false;
-    verifyButton.textContent = 'Verify installation';
+    verifyHelper.textContent = `Widget key ready: ${state.widgetKey}`;
+    testStatusButton.style.display = 'inline-block';
   };
 
-  verifyButton.addEventListener('click', pollInstallationStatus);
+  testStatusButton.addEventListener('click', async () => {
+    if (!state.widgetKey) {
+      return;
+    }
+    testStatusButton.disabled = true;
+    testStatusButton.textContent = 'Testing...';
+    state.verifyError = '';
+    try {
+      const response = await fetch(
+        `${API_BASE.replace(/\/$/, '')}/sites/installation/status?widgetKey=${encodeURIComponent(
+          state.widgetKey
+        )}`
+      );
+      if (!response.ok) {
+        throw new Error(`Request failed with status ${response.status}`);
+      }
+      state.verifyResult = await response.json();
+    } catch (error) {
+      state.verifyError = error.message || 'Unable to verify widget key status.';
+    } finally {
+      testStatusButton.disabled = false;
+      testStatusButton.textContent = 'Test status';
+      renderVerification();
+    }
+  });
+
+  verifySection.append(verifyHelper, testStatusButton, verifyErrorText, verifyPre);
+  renderVerification();
 
   const installBody = document.createElement('div');
   installBody.style.display = 'flex';
   installBody.style.flexDirection = 'column';
   installBody.style.gap = '14px';
-  installBody.append(instructions, siteKeyWrapper, snippetTitle, snippetDescription, testingTip, snippetBox);
+  installBody.append(
+    instructions,
+    siteKeyWrapper,
+    regenerateButton,
+    snippetTitle,
+    snippetDescription,
+    testingTip,
+    snippetBox
+  );
 
   const installCard = createCard({
     title: 'Installation snippet',
@@ -255,7 +383,7 @@ export const renderInstallView = (container, { apiClient, toast, query } = {}) =
   statusBody.style.display = 'flex';
   statusBody.style.flexDirection = 'column';
   statusBody.style.gap = '10px';
-  statusBody.append(statusTitle, statusDescription, statusRow);
+  statusBody.append(statusTitle, statusDescription, refreshStatusButton, statusRow, verifySection);
 
   const statusCard = createCard({
     title: 'Verification',
@@ -264,8 +392,6 @@ export const renderInstallView = (container, { apiClient, toast, query } = {}) =
 
   page.append(header, installCard, statusCard);
   container.appendChild(page);
-
-  if (siteId) {
-    pollInstallationStatus();
-  }
+  updateStatusDisplay();
+  loadInstallationStatus();
 };
