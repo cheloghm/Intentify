@@ -43,6 +43,7 @@ export const renderInstallView = (container, { apiClient, toast, query } = {}) =
   const notifier = toast || createToastManager();
   const siteId = query?.siteId || '';
   const domain = query?.domain || '';
+  const siteKey = query?.siteKey || '';
 
   const page = document.createElement('div');
   page.style.display = 'flex';
@@ -73,7 +74,7 @@ export const renderInstallView = (container, { apiClient, toast, query } = {}) =
   instructionTitle.style.fontSize = '14px';
   const instructionText = document.createElement('div');
   instructionText.textContent =
-    'Keys are shown once after creation. Paste the site key below to generate the snippet.';
+    'If you just created/regenerated keys, the site key is pre-filled. Otherwise paste it.';
   instructionText.style.fontSize = '13px';
   instructionText.style.color = '#64748b';
   instructions.append(instructionTitle, instructionText);
@@ -92,6 +93,12 @@ export const renderInstallView = (container, { apiClient, toast, query } = {}) =
   snippetDescription.textContent = 'Add this tag to the <head> of your site.';
   snippetDescription.style.fontSize = '13px';
   snippetDescription.style.color = '#64748b';
+
+  const testingTip = document.createElement('div');
+  testingTip.textContent =
+    'For local testing, add http://localhost:8088 to Allowed origins in Sites.';
+  testingTip.style.fontSize = '13px';
+  testingTip.style.color = '#64748b';
 
   const snippetBox = document.createElement('div');
   snippetBox.style.display = 'flex';
@@ -121,6 +128,9 @@ export const renderInstallView = (container, { apiClient, toast, query } = {}) =
   };
 
   siteKeyInput.addEventListener('input', updateSnippet);
+  if (siteKey) {
+    siteKeyInput.value = siteKey;
+  }
   updateSnippet();
 
   copyButton.addEventListener('click', async () => {
@@ -234,7 +244,7 @@ export const renderInstallView = (container, { apiClient, toast, query } = {}) =
   installBody.style.display = 'flex';
   installBody.style.flexDirection = 'column';
   installBody.style.gap = '14px';
-  installBody.append(instructions, siteKeyWrapper, snippetTitle, snippetDescription, snippetBox);
+  installBody.append(instructions, siteKeyWrapper, snippetTitle, snippetDescription, testingTip, snippetBox);
 
   const installCard = createCard({
     title: 'Installation snippet',
