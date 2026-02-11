@@ -1,7 +1,6 @@
+using System.Text.Json;
 using Intentify.Modules.Collector.Application;
-using Intentify.Modules.Collector.Domain;
-using Intentify.Modules.Sites.Api;
-using Intentify.Modules.Sites.Domain;
+using Intentify.Shared.Validation;
 using Intentify.Shared.Web;
 using Intentify.Shared.Validation;
 using Microsoft.AspNetCore.Http;
@@ -11,10 +10,14 @@ namespace Intentify.Modules.Collector.Api;
 internal static class CollectorEndpoints
 {
     private const int MaxContentLengthBytes = 32 * 1024;
+    private const int MaxSessionIdLength = 128;
     private const int MaxSiteKeyLength = 256;
     private const int MaxTypeLength = 64;
     private const int MaxUrlLength = 2048;
     private const int MaxReferrerLength = 2048;
+    private const int MaxDataKeys = 32;
+    private const int MaxDataKeyLength = 64;
+    private const int MaxDataStringLength = 256;
     private const string TrackerResourceName = "Intentify.Modules.Collector.Api.assets.tracker.js";
 
     public static async Task<IResult> GetTrackerAsync()
@@ -41,45 +44,31 @@ internal static class CollectorEndpoints
             return Results.StatusCode(StatusCodes.Status413PayloadTooLarge);
         }
 
-        var errors = ValidateRequest(request);
-        if (errors.Count > 0)
+        var requestErrors = ValidateRequest(request);
+        if (requestErrors.Count > 0)
         {
-            return Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(errors));
+            return Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(requestErrors));
         }
 
-        var origin = TryResolveOrigin(context.Request);
-        if (origin is null)
-        {
-            return Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(new Dictionary<string, string[]>
-            {
-                ["origin"] = ["Origin or Referer header is required to determine the request origin."]
-            }));
-        }
-
-        var command = new CollectEventCommand(
+        var result = await handler.HandleAsync(new CollectEventCommand(
             request!.SiteKey,
             request.Type,
             request.Url,
             request.Referrer,
             request.TsUtc,
-            origin);
-
-        var result = await handler.HandleAsync(command, context.RequestAborted);
+            TryResolveOrigin(context.Request),
+            request.SessionId,
+            request.Data),
+            context.RequestAborted);
 
         return result.Status switch
         {
             OperationStatus.Success => Results.Ok(),
-
-            OperationStatus.ValidationFailed => Results.BadRequest(
-                ProblemDetailsHelpers.CreateValidationProblemDetails(result.Errors!.Errors)),
-
-            OperationStatus.Forbidden => Results.StatusCode(StatusCodes.Status403Forbidden),
-
+            OperationStatus.ValidationFailed => Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(result.Errors?.Errors ?? new Dictionary<string, string[]>())),
             OperationStatus.NotFound => Results.NotFound(),
-
+            OperationStatus.Forbidden => Results.StatusCode(StatusCodes.Status403Forbidden),
             _ => Results.StatusCode(StatusCodes.Status500InternalServerError)
         };
-        
     }
 
     private static Dictionary<string, string[]> ValidateRequest(CollectorEventRequest? request)
@@ -135,6 +124,46 @@ internal static class CollectorEndpoints
             }
         }
 
+        if (!string.IsNullOrWhiteSpace(request.SessionId) && request.SessionId.Trim().Length > MaxSessionIdLength)
+        {
+            errors["sessionId"] = ["Session id is too long."];
+        }
+
+        if (request.Data is { } data && data.ValueKind != JsonValueKind.Null && data.ValueKind != JsonValueKind.Undefined)
+        {
+            if (data.ValueKind != JsonValueKind.Object)
+            {
+                errors["data"] = ["Data must be an object."];
+            }
+            else
+            {
+                var keyCount = 0;
+                foreach (var property in data.EnumerateObject())
+                {
+                    keyCount++;
+                    if (keyCount > MaxDataKeys)
+                    {
+                        errors["data"] = [$"Data cannot contain more than {MaxDataKeys} keys."];
+                        break;
+                    }
+
+                    if (property.Name.Length > MaxDataKeyLength)
+                    {
+                        errors["data"] = [$"Data keys cannot exceed {MaxDataKeyLength} characters."];
+                        break;
+                    }
+
+                    if (property.Value.ValueKind == JsonValueKind.String
+                        && property.Value.GetString() is { } value
+                        && value.Length > MaxDataStringLength)
+                    {
+                        errors["data"] = [$"Data string values cannot exceed {MaxDataStringLength} characters."];
+                        break;
+                    }
+                }
+            }
+        }
+
         return errors;
     }
 
@@ -159,40 +188,6 @@ internal static class CollectorEndpoints
         }
 
         normalized = uri.ToString();
-        return true;
-    }
-
-    private static bool TryNormalizeOrigin(string? origin, out string normalized)
-    {
-        normalized = string.Empty;
-        if (string.IsNullOrWhiteSpace(origin))
-        {
-            return false;
-        }
-
-        var trimmed = origin.Trim();
-        if (!Uri.TryCreate(trimmed, UriKind.Absolute, out var uri))
-        {
-            return false;
-        }
-
-        if (!string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        if (!string.IsNullOrEmpty(uri.Fragment))
-        {
-            return false;
-        }
-
-        if (uri.PathAndQuery is not ("" or "/"))
-        {
-            return false;
-        }
-
-        normalized = uri.GetLeftPart(UriPartial.Authority);
         return true;
     }
 

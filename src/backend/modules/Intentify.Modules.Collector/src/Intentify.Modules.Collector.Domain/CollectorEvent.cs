@@ -1,4 +1,5 @@
 using MongoDB.Bson.Serialization.Attributes;
+using MongoDB.Bson;
 
 namespace Intentify.Modules.Collector.Domain;
 
@@ -22,4 +23,8 @@ public sealed class CollectorEvent
     public DateTime ReceivedAtUtc { get; init; }
 
     public string Origin { get; init; } = string.Empty;
+
+    public string? SessionId { get; init; }
+
+    public BsonDocument? Data { get; init; }
 }
