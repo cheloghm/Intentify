@@ -400,9 +400,7 @@ export const renderInstallView = (container, { apiClient, toast, query } = {}) =
     state.verifyError = '';
     try {
       const response = await fetch(
-        `${API_BASE.replace(/\/$/, '')}/sites/installation/status?widgetKey=${encodeURIComponent(
-          state.widgetKey
-        )}`
+        `/sites/installation/status?widgetKey=${encodeURIComponent(state.widgetKey)}`
       );
       if (!response.ok) {
         throw new Error(`Request failed with status ${response.status}`);

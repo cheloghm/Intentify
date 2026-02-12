@@ -81,10 +81,36 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
   const regenerateSiteKeys = async (siteId) =>
     request(`/sites/${siteId}/keys/regenerate`, { method: 'POST' });
 
+  const buildQueryString = (params = {}) => {
+    const search = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value === undefined || value === null || value === '') {
+        return;
+      }
+      search.set(key, String(value));
+    });
+    const queryString = search.toString();
+    return queryString ? `?${queryString}` : '';
+  };
+
+  const listVisitors = async (siteId, page = 1, pageSize = 50) =>
+    request(`/visitors${buildQueryString({ siteId, page, pageSize })}`);
+
+  const getVisitorTimeline = async (visitorId, limit = 200, siteId) =>
+    request(`/visitors/${visitorId}/timeline${buildQueryString({ siteId, limit })}`);
+
+  const getVisitCounts = async (siteId) =>
+    request(`/visitors/visits/counts${buildQueryString({ siteId })}`);
+
   return {
     request,
     sites: {
       regenerateKeys: regenerateSiteKeys,
+    },
+    visitors: {
+      list: listVisitors,
+      timeline: getVisitorTimeline,
+      visitCounts: getVisitCounts,
     },
   };
 };

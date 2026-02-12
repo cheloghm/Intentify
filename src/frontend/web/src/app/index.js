@@ -3,6 +3,8 @@ import { createApiClient, mapApiError } from '../shared/apiClient.js';
 import { clearToken, getToken, setToken } from '../shared/auth.js';
 import { renderSitesView } from '../pages/sites.js';
 import { renderInstallView } from '../pages/install.js';
+import { renderVisitorsView } from '../pages/visitors.js';
+import { renderVisitorProfileView } from '../pages/visitorProfile.js';
 
 const app = document.getElementById('app');
 const toast = createToastManager();
@@ -128,6 +130,7 @@ const createNavbar = ({ isAuthenticated }) => {
     links.appendChild(createNavLink({ label: 'Sites', href: '#/sites' }));
     links.appendChild(createNavLink({ label: 'Install', href: '#/install' }));
     links.appendChild(createNavLink({ label: 'Dashboard', href: '#/dashboard' }));
+    links.appendChild(createNavLink({ label: 'Visitors', href: '#/visitors' }));
     const logoutButton = document.createElement('button');
     logoutButton.type = 'button';
     logoutButton.textContent = 'Logout';
@@ -508,12 +511,13 @@ const routes = {
   '/dashboard': renderDashboardView,
   '/sites': renderSitesView,
   '/install': renderInstallView,
+  '/visitors': renderVisitorsView,
 };
 
 const getRouteFromHash = () => {
   const hash = window.location.hash.replace(/^#/, '');
   if (!hash || hash === '/') {
-    return { path: '/', query: {} };
+    return { path: '/', query: {}, params: {} };
   }
 
   const [pathSegment, queryString] = hash.split('?');
@@ -527,7 +531,12 @@ const getRouteFromHash = () => {
     });
   }
 
-  return { path, query };
+  const visitorMatch = path.match(/^\/visitors\/([^/]+)$/);
+  if (visitorMatch) {
+    return { path: '/visitors/:visitorId', query, params: { visitorId: visitorMatch[1] } };
+  }
+
+  return { path, query, params: {} };
 };
 
 const renderApp = () => {
@@ -537,10 +546,10 @@ const renderApp = () => {
 
   setAppLayout();
 
-  const { path: route, query } = getRouteFromHash();
+  const { path: route, query, params } = getRouteFromHash();
   const isAuthenticated = Boolean(getToken());
 
-  if ((route === '/dashboard' || route === '/sites' || route === '/install') && !isAuthenticated) {
+  if ((route === '/dashboard' || route === '/sites' || route === '/install' || route === '/visitors' || route === '/visitors/:visitorId') && !isAuthenticated) {
     window.location.hash = '#/login';
     return;
   }
@@ -555,7 +564,12 @@ const renderApp = () => {
   const navbar = createNavbar({ isAuthenticated });
   const main = createMain();
   app.append(navbar, main);
-  view(main, { apiClient, toast, query });
+  if (route === '/visitors/:visitorId') {
+    renderVisitorProfileView(main, { apiClient, toast, query, params });
+    return;
+  }
+
+  view(main, { apiClient, toast, query, params });
 };
 
 window.addEventListener('hashchange', renderApp);
