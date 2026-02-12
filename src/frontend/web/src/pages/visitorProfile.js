@@ -57,6 +57,82 @@ const sortByOccurredDesc = (items) => {
   });
 };
 
+const getEventData = (timelineItem) => {
+  const raw = timelineItem?.metadataSummary ?? timelineItem?.data;
+  if (!raw) {
+    return null;
+  }
+
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === 'object' ? parsed : null;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  return typeof raw === 'object' ? raw : null;
+};
+
+const parseNumber = (value) => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  return null;
+};
+
+const formatDuration = (secondsValue) => {
+  const seconds = parseNumber(secondsValue);
+  if (seconds === null) {
+    return '—';
+  }
+
+  const totalSeconds = Math.max(0, Math.round(seconds));
+  const minutes = Math.floor(totalSeconds / 60);
+  const remainingSeconds = totalSeconds % 60;
+  return `${minutes}m ${remainingSeconds}s`;
+};
+
+const getTimelineDetails = (item) => {
+  const data = getEventData(item);
+  if (!data) {
+    return '—';
+  }
+
+  const type = String(item?.type || '').toLowerCase();
+  if (type === 'scroll_depth') {
+    const percent = parseNumber(data.percent ?? data.value);
+    return percent === null ? '—' : `${Math.round(percent)}%`;
+  }
+
+  if (type === 'click' || type === 'outbound_click') {
+    return data.text || data.href || data.id || data.tag || '—';
+  }
+
+  return '—';
+};
+
+const getTimeOnSite = (events = []) => {
+  const totalSeconds = events.reduce((sum, item) => {
+    if (String(item?.type || '').toLowerCase() !== 'time_on_page') {
+      return sum;
+    }
+
+    const data = getEventData(item);
+    const seconds = parseNumber(data?.seconds ?? data?.durationSeconds ?? data?.duration ?? item?.seconds);
+    return seconds === null ? sum : sum + seconds;
+  }, 0);
+
+  return totalSeconds > 0 ? formatDuration(totalSeconds) : '—';
+};
+
 export const renderVisitorProfileView = async (
   container,
   { apiClient, toast, params = {}, query = {} } = {}
@@ -111,7 +187,7 @@ export const renderVisitorProfileView = async (
       createSummaryValue('Last seen', formatDate(query.lastSeenAtUtc || events[0]?.occurredAtUtc)),
       createSummaryValue('Sessions count', query.sessionsCount || (sessionsFromTimeline || '—')),
       createSummaryValue('Pages visited', String(pagesVisited)),
-      createSummaryValue('Time on site', '—'),
+      createSummaryValue('Time on site', getTimeOnSite(events)),
       createSummaryValue('Engagement score', query.lastSessionEngagementScore || '—'),
       createSummaryValue('Recent events', String(events.length))
     );
@@ -133,7 +209,7 @@ export const renderVisitorProfileView = async (
 
     const thead = document.createElement('thead');
     const row = document.createElement('tr');
-    ['Timestamp', 'Event', 'Path / URL', 'Referrer'].forEach((label) => {
+    ['Timestamp', 'Event', 'Path / URL', 'Referrer', 'Details'].forEach((label) => {
       const th = document.createElement('th');
       th.textContent = label;
       row.appendChild(th);
@@ -149,6 +225,7 @@ export const renderVisitorProfileView = async (
         item.type || '—',
         mapPath(item),
         item.referrer || '—',
+        getTimelineDetails(item),
       ];
 
       values.forEach((value) => {
