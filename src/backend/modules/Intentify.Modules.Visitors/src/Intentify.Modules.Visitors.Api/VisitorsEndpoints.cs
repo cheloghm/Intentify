@@ -9,7 +9,7 @@ internal static class VisitorsEndpoints
 {
     public static async Task<IResult> ListVisitorsAsync(
         HttpContext context,
-        Guid siteId,
+        string siteId,
         int page,
         int pageSize,
         ListVisitorsHandler handler)
@@ -20,17 +20,22 @@ internal static class VisitorsEndpoints
             return Results.Unauthorized();
         }
 
+        if (!TryParseSiteId(siteId, out var parsedSiteId))
+        {
+            return InvalidSiteId();
+        }
+
         page = page <= 0 ? 1 : page;
         pageSize = pageSize is <= 0 or > 200 ? 50 : pageSize;
 
-        var result = await handler.HandleAsync(new ListVisitorsQuery(tenantId.Value, siteId, page, pageSize), context.RequestAborted);
+        var result = await handler.HandleAsync(new ListVisitorsQuery(tenantId.Value, parsedSiteId, page, pageSize), context.RequestAborted);
         return Results.Ok(result);
     }
 
     public static async Task<IResult> GetTimelineAsync(
         HttpContext context,
         string visitorId,
-        Guid siteId,
+        string siteId,
         int limit,
         GetVisitorTimelineHandler handler)
     {
@@ -38,6 +43,11 @@ internal static class VisitorsEndpoints
         if (tenantId is null)
         {
             return Results.Unauthorized();
+        }
+
+        if (!TryParseSiteId(siteId, out var parsedSiteId))
+        {
+            return InvalidSiteId();
         }
 
         if (!Guid.TryParse(visitorId, out var parsedVisitorId))
@@ -50,13 +60,13 @@ internal static class VisitorsEndpoints
 
         limit = limit is <= 0 or > 500 ? 200 : limit;
 
-        var result = await handler.HandleAsync(new VisitorTimelineQuery(tenantId.Value, siteId, parsedVisitorId, limit), context.RequestAborted);
+        var result = await handler.HandleAsync(new VisitorTimelineQuery(tenantId.Value, parsedSiteId, parsedVisitorId, limit), context.RequestAborted);
         return Results.Ok(result);
     }
 
     public static async Task<IResult> GetVisitCountsAsync(
         HttpContext context,
-        Guid siteId,
+        string siteId,
         GetVisitCountWindowsHandler handler)
     {
         var tenantId = TryGetTenantId(context.User);
@@ -65,8 +75,27 @@ internal static class VisitorsEndpoints
             return Results.Unauthorized();
         }
 
-        var result = await handler.HandleAsync(tenantId.Value, siteId, context.RequestAborted);
+        if (!TryParseSiteId(siteId, out var parsedSiteId))
+        {
+            return InvalidSiteId();
+        }
+
+        var result = await handler.HandleAsync(tenantId.Value, parsedSiteId, context.RequestAborted);
         return Results.Ok(new VisitCountsResponse(result.Last7, result.Last30, result.Last90));
+    }
+
+    private static bool TryParseSiteId(string siteId, out Guid parsedSiteId)
+    {
+        return Guid.TryParseExact(siteId, "N", out parsedSiteId)
+            || Guid.TryParseExact(siteId, "D", out parsedSiteId);
+    }
+
+    private static IResult InvalidSiteId()
+    {
+        return Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(new Dictionary<string, string[]>
+        {
+            ["siteId"] = ["Value must be a Guid."]
+        }));
     }
 
     private static Guid? TryGetTenantId(ClaimsPrincipal user)
