@@ -7,8 +7,8 @@ using System.Threading.Tasks;
 using Intentify.AppHost;
 using Intentify.Shared.Security;
 using Intentify.Shared.Testing;
-using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
@@ -16,9 +16,20 @@ using Xunit;
 
 namespace Intentify.AppHost.Tests;
 
-public sealed class DebugEndpointTests : IAsyncLifetime
+// IMPORTANT:
+// xUnit creates a new instance of the test class per [Fact].
+// ICollectionFixture gives us a single Mongo container instance shared across all tests in this file.
+// This prevents repeated container start/stop and avoids Docker named-pipe timeouts on Windows.
+[CollectionDefinition(MongoCollectionName)]
+public sealed class AppHostMongoCollection : ICollectionFixture<MongoContainerFixture>
 {
-    private readonly MongoContainerFixture _mongo = new();
+    public const string MongoCollectionName = "Intentify.AppHost.Tests.Mongo";
+}
+
+[Collection(AppHostMongoCollection.MongoCollectionName)]
+public sealed class DebugEndpointTests
+{
+    private readonly MongoContainerFixture _mongo;
     private readonly JwtOptions _jwtOptions = new()
     {
         Issuer = "intentify",
@@ -27,14 +38,9 @@ public sealed class DebugEndpointTests : IAsyncLifetime
         AccessTokenMinutes = 30
     };
 
-    public async Task InitializeAsync()
+    public DebugEndpointTests(MongoContainerFixture mongo)
     {
-        await _mongo.InitializeAsync();
-    }
-
-    public async Task DisposeAsync()
-    {
-        await _mongo.DisposeAsync();
+        _mongo = mongo;
     }
 
     [Fact]
@@ -51,8 +57,11 @@ public sealed class DebugEndpointTests : IAsyncLifetime
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", CreateAccessToken());
 
             var response = await app.GetTestClient().SendAsync(request);
+            var body = await response.Content.ReadAsStringAsync();
 
-            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            Assert.True(
+                response.StatusCode == HttpStatusCode.OK,
+                $"Expected 200 OK but got {(int)response.StatusCode} {response.StatusCode}. Body: {body}");
         }
         finally
         {
@@ -109,7 +118,6 @@ public sealed class DebugEndpointTests : IAsyncLifetime
             values.Contains("http://127.0.0.1:3000"),
             "Expected Access-Control-Allow-Origin header for configured frontend origin.");
     }
-
 
     [Fact]
     public async Task Cors_UsesLocalFallbackOrigins_ForLocalProductionRunWithoutConfiguredOrigins()

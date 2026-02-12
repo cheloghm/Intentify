@@ -1,10 +1,8 @@
-using MongoDB.Bson.Serialization.Attributes;
 
 namespace Intentify.Modules.Visitors.Domain;
 
 public sealed class Visitor
 {
-    [BsonId]
     public Guid Id { get; init; } = Guid.NewGuid();
 
     public Guid SiteId { get; init; }

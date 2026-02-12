@@ -23,6 +23,9 @@ internal static class AppHostApplication
         "http://127.0.0.1:8088"
     ];
 
+    private const string MongoConnectionStringKey = "Intentify:Mongo:ConnectionString";
+    private const string MongoDatabaseNameKey = "Intentify:Mongo:DatabaseName";
+
     public static WebApplicationBuilder CreateBuilder(string[] args, string? environmentName = null)
     {
         DotEnvLoader.Load();
@@ -83,6 +86,10 @@ internal static class AppHostApplication
             });
         });
 
+        // ✅ Ensure Mongo is configured for local/dev runs even if .env is missing,
+        // to prevent module registration from throwing during app build/tests.
+        EnsureMongoConfiguration(builder);
+
         builder.Services.AddAppModules(builder.Configuration);
 
         builder.Services.AddAuthorization();
@@ -114,35 +121,36 @@ internal static class AppHostApplication
         // Intentify__Cors__AllowedOrigins=http://127.0.0.1:3000,http://localhost:3000
         var configured = builder.Configuration["Intentify:Cors:AllowedOrigins"];
 
-        var origins = (configured ?? string.Empty)
+        var configuredOrigins = (configured ?? string.Empty)
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Where(o => !string.IsNullOrWhiteSpace(o))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        // Dev fallback to avoid local friction.
+        var isLocalRun = builder.Environment.IsDevelopment() || IsLocalNonContainerRun(builder.Configuration);
+
+        // ✅ For local runs, ALWAYS include fallback origins (union), even if some origins are configured.
+        // This prevents local env/machine overrides from breaking local dev + tests.
+        var origins = isLocalRun
+            ? configuredOrigins.Concat(LocalCorsFallbackOrigins)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray()
+            : configuredOrigins;
+
         if (origins.Length == 0)
         {
-            if (builder.Environment.IsDevelopment())
-            {
-                origins = LocalCorsFallbackOrigins;
-            }
-            else if (IsLocalNonContainerRun(builder.Configuration))
-            {
-                origins = LocalCorsFallbackOrigins;
+            throw new InvalidOperationException(
+                "CORS is not configured. Set Intentify__Cors__AllowedOrigins (e.g. http://localhost:3000).");
+        }
 
-                using var loggerFactory = LoggerFactory.Create(logging => logging.AddConsole());
-                var logger = loggerFactory.CreateLogger("Intentify.AppHost.Cors");
-                logger.LogWarning(
-                    "Intentify:Cors:AllowedOrigins is not configured in non-development local run. " +
-                    "Using local-only fallback origins: {Origins}",
-                    string.Join(",", origins));
-            }
-            else
-            {
-                throw new InvalidOperationException(
-                    "CORS is not configured. Set Intentify__Cors__AllowedOrigins (e.g. http://localhost:3000).");
-            }
+        if (isLocalRun && configuredOrigins.Length > 0)
+        {
+            using var loggerFactory = LoggerFactory.Create(logging => logging.AddConsole());
+            var logger = loggerFactory.CreateLogger("Intentify.AppHost.Cors");
+            logger.LogInformation(
+                "Local run detected. Merged configured CORS origins with local fallback origins. Configured: {Configured}; Effective: {Effective}",
+                string.Join(",", configuredOrigins),
+                string.Join(",", origins));
         }
 
         builder.Services.AddCors(options =>
@@ -159,6 +167,45 @@ internal static class AppHostApplication
                 // Your frontend uses Bearer tokens, so credentials are not required.
             });
         });
+    }
+
+    private static void EnsureMongoConfiguration(WebApplicationBuilder builder)
+    {
+        var hasConnectionString = !string.IsNullOrWhiteSpace(builder.Configuration[MongoConnectionStringKey]);
+        var hasDatabaseName = !string.IsNullOrWhiteSpace(builder.Configuration[MongoDatabaseNameKey]);
+
+        if (hasConnectionString && hasDatabaseName)
+        {
+            return;
+        }
+
+        // Only apply fallback for local/dev runs to avoid masking real config issues in real deployments.
+        var allowLocalFallback = builder.Environment.IsDevelopment() || IsLocalNonContainerRun(builder.Configuration);
+        if (!allowLocalFallback)
+        {
+            throw new InvalidOperationException(
+                "Mongo is not configured. Set Intentify__Mongo__ConnectionString and Intentify__Mongo__DatabaseName.");
+        }
+
+        var defaults = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+
+        if (!hasConnectionString)
+        {
+            defaults[MongoConnectionStringKey] = "mongodb://localhost:27017";
+        }
+
+        if (!hasDatabaseName)
+        {
+            defaults[MongoDatabaseNameKey] = "Intentify";
+        }
+
+        builder.Configuration.AddInMemoryCollection(defaults);
+
+        using var loggerFactory = LoggerFactory.Create(logging => logging.AddConsole());
+        var logger = loggerFactory.CreateLogger("Intentify.AppHost.Mongo");
+        logger.LogWarning(
+            "Mongo configuration was missing for local/dev run. Applied fallback values for: {Keys}",
+            string.Join(", ", defaults.Keys));
     }
 
     private static bool IsLocalNonContainerRun(IConfiguration configuration)

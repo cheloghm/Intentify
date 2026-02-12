@@ -51,7 +51,7 @@ public sealed class GetVisitorTimelineHandler
             return Array.Empty<VisitorTimelineItem>();
         }
 
-        var retentionFloorUtc = _retentionOptions.RetentionDays is > 0
+        DateTime? retentionFloorUtc = _retentionOptions.RetentionDays is > 0
             ? DateTime.UtcNow.AddDays(-_retentionOptions.RetentionDays.Value)
             : null;
 

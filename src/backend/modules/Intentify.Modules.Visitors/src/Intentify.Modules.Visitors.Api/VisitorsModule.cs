@@ -4,6 +4,7 @@ using Intentify.Modules.Visitors.Application;
 using Intentify.Modules.Visitors.Infrastructure;
 using Intentify.Shared.Web;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
