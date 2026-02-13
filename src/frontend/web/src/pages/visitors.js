@@ -113,7 +113,7 @@ export const renderVisitorsView = async (container, { apiClient, toast, query } 
   siteSelect.style.border = '1px solid #cbd5e1';
   siteSelect.style.background = '#ffffff';
 
-  const refreshButton = createButton({ label: 'Refresh' });
+  const refreshButton = createButton({ label: 'View latest events' });
 
   siteField.append(siteFieldLabel, siteSelect);
   controls.append(siteField, refreshButton);
@@ -178,10 +178,19 @@ export const renderVisitorsView = async (container, { apiClient, toast, query } 
     if (!state.visitors.length) {
       const empty = document.createElement('div');
       empty.textContent = state.siteId
-        ? 'No visitors yet for this site.'
+        ? 'No events received for this site yet. Install snippet and verify.'
         : 'Select a site to view visitors.';
       empty.style.color = '#64748b';
       listBody.appendChild(empty);
+
+      if (state.siteId) {
+        const installButton = createButton({ label: 'Go to Install' });
+        installButton.style.alignSelf = 'flex-start';
+        installButton.addEventListener('click', () => {
+          window.location.hash = `#/install?siteId=${encodeURIComponent(state.siteId)}`;
+        });
+        listBody.appendChild(installButton);
+      }
       return;
     }
 

@@ -15,6 +15,7 @@ namespace Intentify.AppHost;
 internal static class AppHostApplication
 {
     private const string CorsPolicyName = "IntentifyCors";
+    private const string CollectorCorsPolicyName = "CollectorCors";
     private static readonly string[] LocalCorsFallbackOrigins =
     [
         "http://localhost:3000",
@@ -165,6 +166,14 @@ internal static class AppHostApplication
                 // IMPORTANT:
                 // Do NOT call AllowCredentials() unless you're using cookies.
                 // Your frontend uses Bearer tokens, so credentials are not required.
+            });
+
+            options.AddPolicy(CollectorCorsPolicyName, policy =>
+            {
+                policy
+                    .SetIsOriginAllowed(_ => true)
+                    .AllowAnyHeader()
+                    .AllowAnyMethod();
             });
         });
     }

@@ -28,7 +28,8 @@ public sealed class CollectorModule : IAppModule
     {
         ArgumentNullException.ThrowIfNull(endpoints);
 
-        var group = endpoints.MapGroup("/collector");
+        var group = endpoints.MapGroup("/collector")
+            .RequireCors("CollectorCors");
 
         group.MapGet("/tracker.js", CollectorEndpoints.GetTrackerAsync);
         group.MapPost("/events", CollectorEndpoints.CollectEventAsync);

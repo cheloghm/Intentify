@@ -51,6 +51,19 @@ const mapPath = (timelineItem) => {
   }
 };
 
+const mapReferrerHost = (timelineItem) => {
+  const referrer = timelineItem?.referrer;
+  if (!referrer) {
+    return '—';
+  }
+
+  try {
+    return new URL(referrer).hostname || '—';
+  } catch (error) {
+    return referrer;
+  }
+};
+
 const sortByOccurredDesc = (items) => {
   return [...items].sort((left, right) => {
     const leftMs = new Date(left?.occurredAtUtc || 0).getTime();
@@ -125,7 +138,13 @@ const getTimelineDetails = (item) => {
   }
 
   if (type === 'click' || type === 'outbound_click') {
-    return data.text || data.href || data.id || data.tag || '—';
+    const text = typeof data.text === 'string' ? data.text.trim() : '';
+    const id = typeof data.id === 'string' ? data.id.trim() : '';
+    const tag = typeof data.tag === 'string' ? data.tag.trim() : '';
+    if (text && id) {
+      return `${text} (#${id})`;
+    }
+    return text || (id ? `#${id}` : '') || data.href || tag || '—';
   }
 
   return '—';
@@ -193,6 +212,32 @@ export const renderVisitorProfileView = async (
   timelineBody.style.flexDirection = 'column';
   timelineBody.style.gap = '10px';
 
+  const timelineControls = document.createElement('div');
+  timelineControls.style.display = 'flex';
+  timelineControls.style.gap = '10px';
+  timelineControls.style.flexWrap = 'wrap';
+
+  const typeFilter = document.createElement('select');
+  typeFilter.style.padding = '8px 10px';
+  typeFilter.style.borderRadius = '6px';
+  typeFilter.style.border = '1px solid #cbd5e1';
+
+  const searchInput = document.createElement('input');
+  searchInput.type = 'search';
+  searchInput.placeholder = 'Search path or details';
+  searchInput.style.padding = '8px 10px';
+  searchInput.style.borderRadius = '6px';
+  searchInput.style.border = '1px solid #cbd5e1';
+  searchInput.style.minWidth = '240px';
+
+  timelineControls.append(typeFilter, searchInput);
+
+  const state = {
+    events: [],
+    typeFilter: 'all',
+    search: '',
+  };
+
   const fillSummary = (events = []) => {
     const sessionsFromTimeline = new Set(
       events.map((item) => item?.metadataSummary?.sessionId).filter(Boolean)
@@ -242,7 +287,7 @@ export const renderVisitorProfileView = async (
         formatDate(item.occurredAtUtc),
         item.type || '—',
         mapPath(item),
-        item.referrer || '—',
+        mapReferrerHost(item),
         getTimelineDetails(item),
       ];
 
@@ -266,7 +311,70 @@ export const renderVisitorProfileView = async (
 
   const timelineCard = createCard({
     title: 'Timeline',
-    body: timelineBody,
+    body: (() => {
+      const wrapper = document.createElement('div');
+      wrapper.style.display = 'flex';
+      wrapper.style.flexDirection = 'column';
+      wrapper.style.gap = '10px';
+      wrapper.append(timelineControls, timelineBody);
+      return wrapper;
+    })(),
+  });
+
+  const getFilteredTimeline = () => {
+    const searchTerm = state.search.trim().toLowerCase();
+    return state.events.filter((item) => {
+      const itemType = String(item?.type || '').toLowerCase();
+      if (state.typeFilter !== 'all' && itemType !== state.typeFilter) {
+        return false;
+      }
+
+      if (!searchTerm) {
+        return true;
+      }
+
+      const haystack = `${mapPath(item)} ${getTimelineDetails(item)}`.toLowerCase();
+      return haystack.includes(searchTerm);
+    });
+  };
+
+  const refreshTimeline = () => {
+    renderTimeline(getFilteredTimeline());
+  };
+
+  const setTypeOptions = (events = []) => {
+    const typeValues = Array.from(
+      new Set(
+        events
+          .map((item) => String(item?.type || '').toLowerCase())
+          .filter(Boolean)
+      )
+    ).sort();
+
+    typeFilter.innerHTML = '';
+    const allOption = document.createElement('option');
+    allOption.value = 'all';
+    allOption.textContent = 'All event types';
+    typeFilter.appendChild(allOption);
+
+    typeValues.forEach((eventType) => {
+      const option = document.createElement('option');
+      option.value = eventType;
+      option.textContent = eventType;
+      typeFilter.appendChild(option);
+    });
+
+    typeFilter.value = state.typeFilter;
+  };
+
+  typeFilter.addEventListener('change', () => {
+    state.typeFilter = typeFilter.value;
+    refreshTimeline();
+  });
+
+  searchInput.addEventListener('input', () => {
+    state.search = searchInput.value;
+    refreshTimeline();
   });
 
   page.append(backLink, header, summaryCard, timelineCard);
@@ -288,12 +396,16 @@ export const renderVisitorProfileView = async (
         );
 
     const sortedTimeline = Array.isArray(timeline) ? sortByOccurredDesc(timeline) : [];
+    state.events = sortedTimeline;
+    setTypeOptions(sortedTimeline);
     fillSummary(sortedTimeline);
-    renderTimeline(sortedTimeline);
+    refreshTimeline();
   } catch (error) {
     const uiError = mapApiError(error);
     notifier.show({ message: uiError.message, variant: 'danger' });
+    state.events = [];
+    setTypeOptions([]);
     fillSummary();
-    renderTimeline();
+    refreshTimeline();
   }
 };
