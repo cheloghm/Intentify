@@ -89,6 +89,8 @@ export const renderInstallView = (container, { apiClient, toast, query } = {}) =
   const notifier = toast || createToastManager();
   const siteId = query?.siteId;
   const domain = query?.domain || '';
+  const querySiteKey = typeof query?.siteKey === 'string' ? query.siteKey.trim() : '';
+  const queryWidgetKey = typeof query?.widgetKey === 'string' ? query.widgetKey.trim() : '';
 
   if (!siteId) {
     const message = document.createElement('div');
@@ -99,11 +101,13 @@ export const renderInstallView = (container, { apiClient, toast, query } = {}) =
     return;
   }
 
-  const cachedKeys = loadCachedKeys(siteId);
+  const cachedKeys = !querySiteKey || !queryWidgetKey ? loadCachedKeys(siteId) : null;
+  const initialSiteKey = querySiteKey || cachedKeys?.siteKey || '';
+  const initialWidgetKey = queryWidgetKey || cachedKeys?.widgetKey || '';
 
   const state = {
-    siteKey: cachedKeys?.siteKey || '',
-    widgetKey: cachedKeys?.widgetKey || '',
+    siteKey: initialSiteKey,
+    widgetKey: initialWidgetKey,
     keysLoading: false,
     copyMessage: '',
     status: null,
@@ -453,7 +457,7 @@ export const renderInstallView = (container, { apiClient, toast, query } = {}) =
   updateStatusDisplay();
   loadInstallationStatus();
 
-  if (cachedKeys?.siteKey && cachedKeys?.widgetKey) {
-    updateKeys({ siteKey: cachedKeys.siteKey, widgetKey: cachedKeys.widgetKey });
+  if (state.siteKey && state.widgetKey) {
+    updateKeys({ siteKey: state.siteKey, widgetKey: state.widgetKey });
   }
 };
