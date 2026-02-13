@@ -45,20 +45,25 @@ const mapPath = (timelineItem) => {
   }
 
   try {
-    return new URL(url).pathname || url;
+    const parsedUrl = new URL(url);
+    const path = parsedUrl.pathname || '/';
+    const search = parsedUrl.search || '';
+    const hash = parsedUrl.hash || '';
+    const combined = `${path}${search}${hash}`;
+    return combined || url;
   } catch (error) {
     return url;
   }
 };
 
-const mapReferrerHost = (timelineItem) => {
+const mapReferrer = (timelineItem) => {
   const referrer = timelineItem?.referrer;
   if (!referrer) {
-    return '—';
+    return 'Direct / None';
   }
 
   try {
-    return new URL(referrer).hostname || '—';
+    return new URL(referrer).hostname || referrer;
   } catch (error) {
     return referrer;
   }
@@ -135,6 +140,10 @@ const getTimelineDetails = (item) => {
   if (type === 'scroll_depth') {
     const percent = parseNumber(data.percent ?? data.value);
     return percent === null ? '—' : `${Math.round(percent)}%`;
+  }
+
+  if (type === 'pageview') {
+    return data.title || data.pageTitle || '—';
   }
 
   if (type === 'click' || type === 'outbound_click') {
@@ -287,7 +296,7 @@ export const renderVisitorProfileView = async (
         formatDate(item.occurredAtUtc),
         item.type || '—',
         mapPath(item),
-        mapReferrerHost(item),
+        mapReferrer(item),
         getTimelineDetails(item),
       ];
 
