@@ -102,15 +102,74 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
   const getVisitCounts = async (siteId) =>
     request(`/visitors/visits/counts${buildQueryString({ siteId })}`);
 
+  const listSites = async () => request('/sites');
+
+  const createKnowledgeSource = async (payload) =>
+    request('/knowledge/sources', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+  const uploadKnowledgePdf = async (sourceId, file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return request(`/knowledge/sources/${sourceId}/pdf`, {
+      method: 'POST',
+      body: formData,
+    });
+  };
+
+  const indexKnowledgeSource = async (sourceId) =>
+    request(`/knowledge/sources/${sourceId}/index`, {
+      method: 'POST',
+    });
+
+  const listKnowledgeSources = async (siteId) =>
+    request(`/knowledge/sources${buildQueryString({ siteId })}`);
+
+  const retrieveKnowledgeChunks = async ({ siteId, query, top = 5 }) =>
+    request(`/knowledge/retrieve${buildQueryString({ siteId, query, top })}`);
+
+  const sendEngageChat = async (payload) =>
+    request('/engage/chat/send', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+  const listEngageConversations = async (siteId) =>
+    request(`/engage/conversations${buildQueryString({ siteId })}`);
+
+  const getEngageConversationMessages = async (sessionId) =>
+    request(`/engage/conversations/${sessionId}/messages`);
+
   return {
     request,
     sites: {
       regenerateKeys: regenerateSiteKeys,
+      list: listSites,
     },
     visitors: {
       list: listVisitors,
       timeline: getVisitorTimeline,
       visitCounts: getVisitCounts,
+    },
+    knowledge: {
+      createSource: createKnowledgeSource,
+      uploadPdf: uploadKnowledgePdf,
+      indexSource: indexKnowledgeSource,
+      listSources: listKnowledgeSources,
+      retrieve: retrieveKnowledgeChunks,
+    },
+    engage: {
+      sendChat: sendEngageChat,
+      listConversations: listEngageConversations,
+      getConversationMessages: getEngageConversationMessages,
     },
   };
 };
