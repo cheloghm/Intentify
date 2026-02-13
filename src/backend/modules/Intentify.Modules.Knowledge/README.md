@@ -1,1 +1,1 @@
-Intentify.Modules.Knowledge — placeholder documentation; full details will be added at the end of the project.
+Intentify.Modules.Knowledge — knowledge sources (URL/TEXT/PDF), indexing status pipeline, chunking, and keyword retrieval endpoints under `/knowledge`.

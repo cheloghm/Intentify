@@ -1,5 +1,6 @@
 using Intentify.Modules.Auth.Api;
 using Intentify.Modules.Collector.Api;
+using Intentify.Modules.Knowledge.Api;
 using Intentify.Modules.Sites.Api;
 using Intentify.Modules.Visitors.Api;
 using Intentify.Shared.Web;
@@ -13,10 +14,11 @@ public static class AppModuleCatalog
 {
     public static IReadOnlyList<IAppModule> Modules { get; } =
     [
-        new Intentify.Modules.Auth.Api.AuthModule(),
-        new Intentify.Modules.Collector.Api.CollectorModule(),
-        new Intentify.Modules.Sites.Api.SitesModule(),
-        new Intentify.Modules.Visitors.Api.VisitorsModule()
+        new AuthModule(),
+        new CollectorModule(),
+        new SitesModule(),
+        new KnowledgeModule(),
+        new VisitorsModule()
     ];
 }
 
