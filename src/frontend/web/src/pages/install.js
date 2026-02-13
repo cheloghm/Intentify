@@ -1,6 +1,8 @@
-import { createCard, createInput, createToastManager } from '../shared/ui/index.js';
+import { createCard, createToastManager } from '../shared/ui/index.js';
 import { createApiClient, mapApiError } from '../shared/apiClient.js';
 import { API_BASE } from '../shared/config.js';
+
+const ORIGIN_HELPER_TEXT = 'Paste the website origin (scheme + host + port). No paths.';
 
 const copyToClipboardRobust = async (value) => {
   if (navigator.clipboard?.writeText) {
@@ -39,6 +41,55 @@ const createButton = ({ label, variant = 'default', type = 'button' } = {}) => {
   button.style.cursor = 'pointer';
   button.style.fontSize = '13px';
   return button;
+};
+
+const normalizeOrigin = (value) => {
+  const input = typeof value === 'string' ? value.trim() : '';
+  if (!input) {
+    return { value: '', error: ORIGIN_HELPER_TEXT };
+  }
+
+  const withoutTrailingSlash = input.replace(/\/+$/, '');
+  let normalized = withoutTrailingSlash;
+
+  if (withoutTrailingSlash.includes('/')) {
+    try {
+      const parsed = new URL(withoutTrailingSlash);
+      normalized = `${parsed.protocol}//${parsed.host}`;
+    } catch (error) {
+      normalized = withoutTrailingSlash;
+    }
+  }
+
+  if (!/^https?:\/\//i.test(normalized)) {
+    return { value: '', error: ORIGIN_HELPER_TEXT };
+  }
+
+  try {
+    const parsed = new URL(normalized);
+    if (!parsed.hostname) {
+      return { value: '', error: ORIGIN_HELPER_TEXT };
+    }
+    return { value: `${parsed.protocol}//${parsed.host}`, error: '' };
+  } catch (error) {
+    return { value: '', error: ORIGIN_HELPER_TEXT };
+  }
+};
+
+const normalizeOrigins = (origins) => {
+  const unique = new Map();
+  origins.forEach((origin) => {
+    const normalizedResult = normalizeOrigin(origin);
+    if (!normalizedResult.value) {
+      return;
+    }
+
+    const key = normalizedResult.value.toLowerCase();
+    if (!unique.has(key)) {
+      unique.set(key, normalizedResult.value);
+    }
+  });
+  return Array.from(unique.values());
 };
 
 const loadCachedKeys = (siteId) => {
@@ -84,6 +135,8 @@ const saveCachedKeys = (siteId, { siteKey, widgetKey }) => {
   );
 };
 
+const getSiteId = (site) => site?.siteId || site?.id || '';
+
 export const renderInstallView = (container, { apiClient, toast, query } = {}) => {
   const client = apiClient || createApiClient();
   const notifier = toast || createToastManager();
@@ -102,19 +155,24 @@ export const renderInstallView = (container, { apiClient, toast, query } = {}) =
   }
 
   const cachedKeys = !querySiteKey || !queryWidgetKey ? loadCachedKeys(siteId) : null;
-  const initialSiteKey = querySiteKey || cachedKeys?.siteKey || '';
-  const initialWidgetKey = queryWidgetKey || cachedKeys?.widgetKey || '';
 
   const state = {
-    siteKey: initialSiteKey,
-    widgetKey: initialWidgetKey,
+    site: null,
+    siteLoading: false,
+    origins: [],
+    originInput: '',
+    originInputError: '',
+    savingOrigins: false,
+    originsError: '',
+    rawSiteKey: querySiteKey || cachedKeys?.siteKey || '',
+    rawWidgetKey: queryWidgetKey || cachedKeys?.widgetKey || '',
     keysLoading: false,
+    revealSiteKey: false,
     copyMessage: '',
     status: null,
     statusError: '',
-    verifyResult: null,
-    verifyError: '',
     actionError: '',
+    sendingTest: false,
   };
 
   const page = document.createElement('div');
@@ -136,52 +194,208 @@ export const renderInstallView = (container, { apiClient, toast, query } = {}) =
   subtitle.style.color = '#64748b';
   header.append(title, subtitle);
 
-  const instructions = document.createElement('div');
-  instructions.style.display = 'flex';
-  instructions.style.flexDirection = 'column';
-  instructions.style.gap = '6px';
-  const instructionTitle = document.createElement('div');
-  instructionTitle.textContent = '1. Paste your site key';
-  instructionTitle.style.fontWeight = '600';
-  instructionTitle.style.fontSize = '14px';
-  const instructionText = document.createElement('div');
-  instructionText.textContent =
-    'If you just created/regenerated keys, the site key is pre-filled. Otherwise paste it.';
-  instructionText.style.fontSize = '13px';
-  instructionText.style.color = '#64748b';
-  instructions.append(instructionTitle, instructionText);
-
-  const { wrapper: siteKeyWrapper, input: siteKeyInput } = createInput({
-    label: 'Site key',
-    placeholder: 'sk_live_••••••••',
+  const stepsList = document.createElement('div');
+  stepsList.style.display = 'flex';
+  stepsList.style.gap = '10px';
+  ['1. Allowed origins', '2. Snippet', '3. Verify'].forEach((label) => {
+    const badge = document.createElement('div');
+    badge.textContent = label;
+    badge.style.fontSize = '12px';
+    badge.style.padding = '6px 10px';
+    badge.style.border = '1px solid #e2e8f0';
+    badge.style.borderRadius = '999px';
+    badge.style.color = '#475569';
+    stepsList.appendChild(badge);
   });
-  if (state.siteKey) {
-    siteKeyInput.value = state.siteKey;
-  }
 
-  const regenerateButton = createButton({ label: 'Regenerate keys' });
-  regenerateButton.style.alignSelf = 'flex-start';
+  const step1Body = document.createElement('div');
+  step1Body.style.display = 'flex';
+  step1Body.style.flexDirection = 'column';
+  step1Body.style.gap = '10px';
 
-  const snippetTitle = document.createElement('div');
-  snippetTitle.textContent = '2. Copy the snippet';
-  snippetTitle.style.fontWeight = '600';
-  snippetTitle.style.fontSize = '14px';
+  const originsList = document.createElement('div');
+  originsList.style.display = 'flex';
+  originsList.style.flexDirection = 'column';
+  originsList.style.gap = '8px';
 
-  const snippetDescription = document.createElement('div');
-  snippetDescription.textContent = 'Add this tag to the <head> of your site.';
-  snippetDescription.style.fontSize = '13px';
-  snippetDescription.style.color = '#64748b';
+  const originInput = document.createElement('input');
+  originInput.type = 'text';
+  originInput.placeholder = 'https://app.example.com';
+  originInput.style.padding = '8px 10px';
+  originInput.style.borderRadius = '6px';
+  originInput.style.border = '1px solid #cbd5e1';
 
-  const testingTip = document.createElement('div');
-  testingTip.textContent =
-    'For local testing, add http://localhost:8088 to Allowed origins in Sites.';
-  testingTip.style.fontSize = '13px';
-  testingTip.style.color = '#64748b';
+  const helperText = document.createElement('div');
+  helperText.style.fontSize = '12px';
+  helperText.style.color = '#64748b';
+  helperText.textContent = ORIGIN_HELPER_TEXT;
 
-  const snippetBox = document.createElement('div');
-  snippetBox.style.display = 'flex';
-  snippetBox.style.flexDirection = 'column';
-  snippetBox.style.gap = '10px';
+  const originInputError = document.createElement('div');
+  originInputError.style.fontSize = '12px';
+  originInputError.style.color = '#dc2626';
+
+  const originActions = document.createElement('div');
+  originActions.style.display = 'flex';
+  originActions.style.flexWrap = 'wrap';
+  originActions.style.gap = '8px';
+
+  const addOriginButton = createButton({ label: 'Add origin' });
+  const addDashboardOriginButton = createButton({ label: 'Add current origin (Dashboard origin)' });
+  const addLocalhostButton = createButton({ label: 'Add localhost current port' });
+  const saveOriginsButton = createButton({ label: 'Save origins', variant: 'primary' });
+  const originsErrorText = document.createElement('div');
+  originsErrorText.style.fontSize = '13px';
+  originsErrorText.style.color = '#dc2626';
+
+  originActions.append(
+    addOriginButton,
+    addDashboardOriginButton,
+    addLocalhostButton,
+    saveOriginsButton
+  );
+
+  step1Body.append(originsList, originInput, helperText, originInputError, originActions, originsErrorText);
+
+  const renderOrigins = () => {
+    originsList.innerHTML = '';
+    if (!state.origins.length) {
+      const empty = document.createElement('div');
+      empty.textContent = 'No origins configured yet.';
+      empty.style.color = '#94a3b8';
+      empty.style.fontSize = '13px';
+      originsList.appendChild(empty);
+    } else {
+      state.origins.forEach((origin, index) => {
+        const row = document.createElement('div');
+        row.style.display = 'flex';
+        row.style.justifyContent = 'space-between';
+        row.style.alignItems = 'center';
+        row.style.gap = '10px';
+        row.style.border = '1px solid #e2e8f0';
+        row.style.borderRadius = '6px';
+        row.style.padding = '8px 10px';
+
+        const text = document.createElement('span');
+        text.textContent = origin;
+        text.style.fontSize = '13px';
+
+        const removeButton = createButton({ label: 'Remove' });
+        removeButton.addEventListener('click', () => {
+          state.origins = state.origins.filter((_, i) => i !== index);
+          renderOrigins();
+        });
+
+        row.append(text, removeButton);
+        originsList.appendChild(row);
+      });
+    }
+
+    originInput.value = state.originInput;
+    originInputError.textContent = state.originInputError;
+    saveOriginsButton.disabled = state.savingOrigins || state.siteLoading;
+    saveOriginsButton.textContent = state.savingOrigins ? 'Saving...' : 'Save origins';
+    originsErrorText.textContent = state.originsError;
+  };
+
+  const addOrigin = (rawOrigin) => {
+    const normalizedResult = normalizeOrigin(rawOrigin);
+    if (!normalizedResult.value) {
+      state.originInputError = normalizedResult.error;
+      renderOrigins();
+      return;
+    }
+
+    const existing = state.origins.find(
+      (origin) => origin.toLowerCase() === normalizedResult.value.toLowerCase()
+    );
+    if (existing) {
+      notifier.show({ message: 'Origin already listed.', variant: 'warning' });
+      return;
+    }
+
+    state.originInputError = '';
+    state.origins.push(normalizedResult.value);
+    state.originInput = '';
+    renderOrigins();
+  };
+
+  originInput.addEventListener('input', () => {
+    state.originInput = originInput.value;
+    state.originInputError = '';
+  });
+
+  addOriginButton.addEventListener('click', () => {
+    addOrigin(state.originInput);
+  });
+
+  addDashboardOriginButton.addEventListener('click', () => {
+    addOrigin(window.location.origin);
+  });
+
+  addLocalhostButton.addEventListener('click', () => {
+    if (window.location.hostname !== 'localhost') {
+      state.originInputError = ORIGIN_HELPER_TEXT;
+      renderOrigins();
+      return;
+    }
+    addOrigin(`http://localhost:${window.location.port || 80}`);
+  });
+
+  saveOriginsButton.addEventListener('click', async () => {
+    state.savingOrigins = true;
+    state.originsError = '';
+    renderOrigins();
+
+    try {
+      const payloadOrigins = normalizeOrigins(state.origins);
+      const response = await client.request(`/sites/${siteId}/origins`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ allowedOrigins: payloadOrigins }),
+      });
+      state.origins = response?.allowedOrigins || payloadOrigins;
+      state.site = {
+        ...(state.site || {}),
+        ...response,
+        allowedOrigins: state.origins,
+      };
+      notifier.show({ message: 'Allowed origins updated.', variant: 'success' });
+    } catch (error) {
+      const uiError = mapApiError(error);
+      state.originsError = uiError.message;
+      notifier.show({ message: uiError.message, variant: 'danger' });
+    } finally {
+      state.savingOrigins = false;
+      renderOrigins();
+    }
+  });
+
+  const step2Body = document.createElement('div');
+  step2Body.style.display = 'flex';
+  step2Body.style.flexDirection = 'column';
+  step2Body.style.gap = '10px';
+
+  const siteKeyRow = document.createElement('div');
+  siteKeyRow.style.display = 'flex';
+  siteKeyRow.style.alignItems = 'center';
+  siteKeyRow.style.gap = '8px';
+
+  const siteKeyLabel = document.createElement('span');
+  siteKeyLabel.textContent = 'Site key:';
+  siteKeyLabel.style.fontSize = '13px';
+  siteKeyLabel.style.color = '#475569';
+
+  const siteKeyValue = document.createElement('code');
+  siteKeyValue.style.fontSize = '12px';
+  siteKeyValue.style.padding = '4px 6px';
+  siteKeyValue.style.borderRadius = '4px';
+  siteKeyValue.style.background = '#f1f5f9';
+
+  const revealButton = createButton({ label: 'Reveal' });
+  const generateKeysButton = createButton({ label: 'Generate keys for install' });
+  generateKeysButton.style.alignSelf = 'flex-start';
+
+  siteKeyRow.append(siteKeyLabel, siteKeyValue, revealButton);
 
   const snippetValue = document.createElement('textarea');
   snippetValue.readOnly = true;
@@ -198,13 +412,13 @@ export const renderInstallView = (container, { apiClient, toast, query } = {}) =
   const copyButton = createButton({ label: 'Copy snippet' });
   copyButton.style.alignSelf = 'flex-start';
 
-  const copyStatus = document.createElement('div');
-  copyStatus.style.fontSize = '12px';
-  copyStatus.style.color = '#15803d';
-
   const snippetHint = document.createElement('div');
   snippetHint.style.fontSize = '12px';
   snippetHint.style.color = '#64748b';
+
+  const copyStatus = document.createElement('div');
+  copyStatus.style.fontSize = '12px';
+  copyStatus.style.color = '#15803d';
 
   const actionErrorText = document.createElement('div');
   actionErrorText.style.fontSize = '13px';
@@ -212,24 +426,34 @@ export const renderInstallView = (container, { apiClient, toast, query } = {}) =
 
   const updateSnippet = () => {
     const baseUrl = API_BASE.replace(/\/$/, '');
-    const key = state.siteKey ? state.siteKey.trim() : '';
-    siteKeyInput.value = key;
+    const key = state.rawSiteKey ? state.rawSiteKey.trim() : '';
     snippetValue.value = `<script async src="${baseUrl}/collector/tracker.js" data-site-key="${key}"></script>`;
-    copyButton.disabled = !key || state.keysLoading;
+
+    const masked = key ? '••••••' : '••••••';
+    siteKeyValue.textContent = state.revealSiteKey && key ? key : masked;
+    revealButton.disabled = !key;
+    revealButton.textContent = state.revealSiteKey ? 'Hide' : 'Reveal';
+
+    const missingKey = !key;
+    copyButton.disabled = missingKey || state.keysLoading;
+    generateKeysButton.style.display = missingKey ? 'inline-block' : 'none';
+    generateKeysButton.disabled = state.keysLoading;
+    generateKeysButton.textContent = state.keysLoading ? 'Generating...' : 'Generate keys for install';
+
     snippetHint.textContent = state.keysLoading
-      ? 'Loading keys...'
-      : key
-      ? ''
-      : 'Paste a site key or click Regenerate keys.';
+      ? 'Generating keys...'
+      : missingKey
+      ? 'Generate keys for install to populate data-site-key automatically.'
+      : '';
+
     copyStatus.textContent = state.copyMessage;
     actionErrorText.textContent = state.actionError;
   };
 
   const updateKeys = ({ siteKey, widgetKey } = {}) => {
-    state.siteKey = siteKey || '';
-    state.widgetKey = widgetKey || '';
+    state.rawSiteKey = siteKey || '';
+    state.rawWidgetKey = widgetKey || '';
     updateSnippet();
-    renderVerification();
   };
 
   const regenerateKeys = async (activeSiteId) => {
@@ -240,18 +464,38 @@ export const renderInstallView = (container, { apiClient, toast, query } = {}) =
     return client.request(`/sites/${activeSiteId}/keys/regenerate`, { method: 'POST' });
   };
 
-  siteKeyInput.addEventListener('input', () => {
-    state.siteKey = siteKeyInput.value.trim();
+  revealButton.addEventListener('click', () => {
+    state.revealSiteKey = !state.revealSiteKey;
     updateSnippet();
   });
-  updateSnippet();
+
+  generateKeysButton.addEventListener('click', async () => {
+    state.keysLoading = true;
+    state.actionError = '';
+    updateSnippet();
+    try {
+      const response = await regenerateKeys(siteId);
+      const siteKey = response?.siteKey || '';
+      const widgetKey = response?.widgetKey || '';
+      updateKeys({ siteKey, widgetKey });
+      saveCachedKeys(siteId, { siteKey, widgetKey });
+      notifier.show({ message: 'Keys generated.', variant: 'success' });
+    } catch (error) {
+      const uiError = mapApiError(error);
+      state.actionError = uiError.message;
+      notifier.show({ message: uiError.message, variant: 'danger' });
+    } finally {
+      state.keysLoading = false;
+      updateSnippet();
+    }
+  });
 
   copyButton.addEventListener('click', async () => {
     try {
       await copyToClipboardRobust(snippetValue.value);
       state.copyMessage = 'Copied';
       state.actionError = '';
-      copyStatus.textContent = state.copyMessage;
+      updateSnippet();
       notifier.show({ message: 'Snippet copied to clipboard.', variant: 'success' });
       window.setTimeout(() => {
         state.copyMessage = '';
@@ -259,47 +503,17 @@ export const renderInstallView = (container, { apiClient, toast, query } = {}) =
       }, 1500);
     } catch (error) {
       state.actionError = 'Unable to copy snippet.';
-      actionErrorText.textContent = state.actionError;
+      updateSnippet();
       notifier.show({ message: 'Unable to copy snippet.', variant: 'danger' });
     }
   });
 
-  regenerateButton.addEventListener('click', async () => {
-    regenerateButton.disabled = true;
-    regenerateButton.textContent = 'Regenerating...';
-    state.actionError = '';
-    actionErrorText.textContent = '';
-    state.copyMessage = '';
-    copyStatus.textContent = '';
-    try {
-      const response = await regenerateKeys(siteId);
-      const siteKey = response?.siteKey || '';
-      const widgetKey = response?.widgetKey || '';
-      updateKeys({ siteKey, widgetKey });
-      saveCachedKeys(siteId, { siteKey, widgetKey });
-      notifier.show({ message: 'Keys regenerated.', variant: 'success' });
-    } catch (error) {
-      const uiError = mapApiError(error);
-      state.actionError = uiError.message;
-      actionErrorText.textContent = state.actionError;
-      notifier.show({ message: uiError.message, variant: 'danger' });
-    } finally {
-      regenerateButton.disabled = false;
-      regenerateButton.textContent = 'Regenerate keys';
-    }
-  });
+  step2Body.append(siteKeyRow, generateKeysButton, snippetValue, copyButton, snippetHint, copyStatus, actionErrorText);
 
-  snippetBox.append(snippetValue, copyButton, snippetHint, copyStatus, actionErrorText);
-
-  const statusTitle = document.createElement('div');
-  statusTitle.textContent = '3. Verify installation';
-  statusTitle.style.fontWeight = '600';
-  statusTitle.style.fontSize = '14px';
-
-  const statusDescription = document.createElement('div');
-  statusDescription.textContent = 'Current installation status for this site.';
-  statusDescription.style.fontSize = '13px';
-  statusDescription.style.color = '#64748b';
+  const step3Body = document.createElement('div');
+  step3Body.style.display = 'flex';
+  step3Body.style.flexDirection = 'column';
+  step3Body.style.gap = '10px';
 
   const statusRow = document.createElement('div');
   statusRow.style.display = 'flex';
@@ -316,14 +530,13 @@ export const renderInstallView = (container, { apiClient, toast, query } = {}) =
   const statusFirstEvent = document.createElement('div');
   const statusCheckedAt = document.createElement('div');
   const statusError = document.createElement('div');
-  statusConfigured.style.fontSize = '13px';
-  statusInstalled.style.fontSize = '13px';
-  statusFirstEvent.style.fontSize = '13px';
-  statusCheckedAt.style.fontSize = '13px';
-  statusError.style.fontSize = '13px';
   statusError.style.color = '#dc2626';
 
   const refreshStatusButton = createButton({ label: 'Refresh status', variant: 'primary' });
+  const sendTestEventButton = createButton({ label: 'Send test event' });
+  const verifyErrorText = document.createElement('div');
+  verifyErrorText.style.fontSize = '13px';
+  verifyErrorText.style.color = '#dc2626';
 
   statusRow.append(statusConfigured, statusInstalled, statusFirstEvent, statusCheckedAt, statusError);
 
@@ -331,11 +544,12 @@ export const renderInstallView = (container, { apiClient, toast, query } = {}) =
     const status = state.status || {};
     statusConfigured.textContent = `Configured: ${status.isConfigured ? 'Yes' : 'No'}`;
     statusInstalled.textContent = `Installed: ${status.isInstalled ? 'Yes' : 'No'}`;
-    statusFirstEvent.textContent = `First event received: ${
-      status.firstEventReceivedAtUtc || 'Not yet'
-    }`;
+    statusFirstEvent.textContent = `First event received: ${status.firstEventReceivedAtUtc || 'Not yet'}`;
     statusCheckedAt.textContent = `Last checked: ${new Date().toISOString()}`;
     statusError.textContent = state.statusError;
+    verifyErrorText.textContent = state.actionError;
+    sendTestEventButton.disabled = !state.rawSiteKey || state.sendingTest;
+    sendTestEventButton.textContent = state.sendingTest ? 'Sending...' : 'Send test event';
   };
 
   const loadInstallationStatus = async () => {
@@ -354,110 +568,90 @@ export const renderInstallView = (container, { apiClient, toast, query } = {}) =
     }
   };
 
-  refreshStatusButton.addEventListener('click', loadInstallationStatus);
-
-  const verifySection = document.createElement('div');
-  verifySection.style.display = 'flex';
-  verifySection.style.flexDirection = 'column';
-  verifySection.style.gap = '8px';
-
-  const verifyHelper = document.createElement('div');
-  verifyHelper.style.fontSize = '13px';
-  verifyHelper.style.color = '#64748b';
-
-  const testStatusButton = createButton({ label: 'Test status' });
-  testStatusButton.style.alignSelf = 'flex-start';
-
-  const verifyErrorText = document.createElement('div');
-  verifyErrorText.style.fontSize = '13px';
-  verifyErrorText.style.color = '#dc2626';
-
-  const verifyPre = document.createElement('pre');
-  verifyPre.style.margin = '0';
-  verifyPre.style.padding = '10px 12px';
-  verifyPre.style.border = '1px solid #e2e8f0';
-  verifyPre.style.borderRadius = '8px';
-  verifyPre.style.background = '#f8fafc';
-  verifyPre.style.fontSize = '12px';
-  verifyPre.style.display = 'none';
-
-  function renderVerification() {
-    verifyPre.style.display = state.verifyResult ? 'block' : 'none';
-    verifyPre.textContent = state.verifyResult ? JSON.stringify(state.verifyResult, null, 2) : '';
-    verifyErrorText.textContent = state.verifyError;
-    testStatusButton.disabled = !state.widgetKey;
-    if (!state.widgetKey) {
-      verifyHelper.textContent = state.keysLoading
-        ? 'Generating keys...'
-        : 'Regenerate keys to get widget key for verification.';
+  const sendTestEvent = async () => {
+    if (!state.rawSiteKey) {
       return;
     }
-    verifyHelper.textContent = `Widget key ready: ${state.widgetKey}`;
-  }
 
-  testStatusButton.addEventListener('click', async () => {
-    if (!state.widgetKey) {
-      return;
-    }
-    testStatusButton.disabled = true;
-    testStatusButton.textContent = 'Testing...';
-    state.verifyError = '';
+    state.sendingTest = true;
+    state.actionError = '';
+    updateStatusDisplay();
+
     try {
-      const response = await fetch(
-        `/sites/installation/status?widgetKey=${encodeURIComponent(state.widgetKey)}`
-      );
-      if (!response.ok) {
-        throw new Error(`Request failed with status ${response.status}`);
-      }
-      state.verifyResult = await response.json();
+      await client.request('/collector/events', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          siteKey: state.rawSiteKey,
+          type: 'pageview',
+          url: window.location.href || 'intentify://install-test',
+          referrer: window.location.origin || null,
+          tsUtc: new Date().toISOString(),
+          data: {
+            source: 'install-test',
+          },
+        }),
+      });
+      notifier.show({ message: 'Test event sent.', variant: 'success' });
     } catch (error) {
-      state.verifyError = error.message || 'Unable to verify widget key status.';
+      const uiError = mapApiError(error);
+      state.actionError = uiError.message;
+      notifier.show({ message: uiError.message, variant: 'danger' });
     } finally {
-      testStatusButton.disabled = false;
-      testStatusButton.textContent = 'Test status';
-      renderVerification();
+      state.sendingTest = false;
+      updateStatusDisplay();
     }
+  };
+
+  refreshStatusButton.addEventListener('click', loadInstallationStatus);
+  sendTestEventButton.addEventListener('click', sendTestEvent);
+
+  step3Body.append(refreshStatusButton, sendTestEventButton, statusRow, verifyErrorText);
+
+  const card = createCard({
+    title: 'Installation flow',
+    body: (() => {
+      const wrapper = document.createElement('div');
+      wrapper.style.display = 'flex';
+      wrapper.style.flexDirection = 'column';
+      wrapper.style.gap = '16px';
+
+      const step1Card = createCard({ title: 'Step 1: Allowed origins', body: step1Body });
+      const step2Card = createCard({ title: 'Step 2: Snippet', body: step2Body });
+      const step3Card = createCard({ title: 'Step 3: Verify', body: step3Body });
+      wrapper.append(step1Card, step2Card, step3Card);
+      return wrapper;
+    })(),
   });
 
-  verifySection.append(verifyHelper, testStatusButton, verifyErrorText, verifyPre);
-  renderVerification();
-
-  const installBody = document.createElement('div');
-  installBody.style.display = 'flex';
-  installBody.style.flexDirection = 'column';
-  installBody.style.gap = '14px';
-  installBody.append(
-    instructions,
-    siteKeyWrapper,
-    regenerateButton,
-    snippetTitle,
-    snippetDescription,
-    testingTip,
-    snippetBox
-  );
-
-  const installCard = createCard({
-    title: 'Installation snippet',
-    body: installBody,
-  });
-
-  const statusBody = document.createElement('div');
-  statusBody.style.display = 'flex';
-  statusBody.style.flexDirection = 'column';
-  statusBody.style.gap = '10px';
-  statusBody.append(statusTitle, statusDescription, refreshStatusButton, statusRow, verifySection);
-
-  const statusCard = createCard({
-    title: 'Verification',
-    body: statusBody,
-  });
-
-  page.append(header, installCard, statusCard);
+  page.append(header, stepsList, card);
   container.appendChild(page);
+
+  const loadSite = async () => {
+    state.siteLoading = true;
+    try {
+      const sites = await client.request('/sites');
+      const site = (Array.isArray(sites) ? sites : []).find((item) => getSiteId(item) === siteId);
+      state.site = site || null;
+      state.origins = normalizeOrigins(site?.allowedOrigins || []);
+    } catch (error) {
+      const uiError = mapApiError(error);
+      state.originsError = uiError.message;
+    } finally {
+      state.siteLoading = false;
+      renderOrigins();
+    }
+  };
+
+  renderOrigins();
+  updateSnippet();
   updateStatusDisplay();
   loadInstallationStatus();
+  loadSite();
 
-  if (state.siteKey && state.widgetKey) {
-    updateKeys({ siteKey: state.siteKey, widgetKey: state.widgetKey });
+  if (state.rawSiteKey && state.rawWidgetKey) {
+    updateKeys({ siteKey: state.rawSiteKey, widgetKey: state.rawWidgetKey });
   }
 };

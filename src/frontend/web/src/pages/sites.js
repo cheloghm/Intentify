@@ -1,18 +1,46 @@
 import { createBadge, createCard, createInput, createToastManager } from '../shared/ui/index.js';
 import { createApiClient, mapApiError } from '../shared/apiClient.js';
 
-const normalizeOriginInput = (value) => {
-  if (!value) {
-    return '';
+const ORIGIN_HELPER_TEXT = 'Paste the website origin (scheme + host + port). No paths.';
+
+const normalizeOrigin = (value) => {
+  const input = typeof value === 'string' ? value.trim() : '';
+  if (!input) {
+    return { value: '', error: ORIGIN_HELPER_TEXT };
   }
 
-  return value.trim().replace(/\/+$/, '');
+  const withoutTrailingSlash = input.replace(/\/+$/, '');
+  let normalized = withoutTrailingSlash;
+
+  if (withoutTrailingSlash.includes('/')) {
+    try {
+      const parsed = new URL(withoutTrailingSlash);
+      normalized = `${parsed.protocol}//${parsed.host}`;
+    } catch (error) {
+      normalized = withoutTrailingSlash;
+    }
+  }
+
+  if (!/^https?:\/\//i.test(normalized)) {
+    return { value: '', error: ORIGIN_HELPER_TEXT };
+  }
+
+  try {
+    const parsed = new URL(normalized);
+    if (!parsed.hostname) {
+      return { value: '', error: ORIGIN_HELPER_TEXT };
+    }
+    return { value: `${parsed.protocol}//${parsed.host}`, error: '' };
+  } catch (error) {
+    return { value: '', error: ORIGIN_HELPER_TEXT };
+  }
 };
 
 const normalizeOrigins = (origins) => {
   const unique = new Map();
   origins.forEach((origin) => {
-    const normalized = normalizeOriginInput(origin);
+    const normalizedResult = normalizeOrigin(origin);
+    const normalized = normalizedResult.value;
     if (!normalized) {
       return;
     }
@@ -122,6 +150,7 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
     expandedSiteId: null,
     originsDraftBySiteId: {},
     originInputBySiteId: {},
+    originInputErrorBySiteId: {},
     savingBySiteId: {},
     errorBySiteId: {},
   };
@@ -427,6 +456,9 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
         if (typeof state.originInputBySiteId[siteId] !== 'string') {
           state.originInputBySiteId[siteId] = '';
         }
+        if (typeof state.originInputErrorBySiteId[siteId] !== 'string') {
+          state.originInputErrorBySiteId[siteId] = '';
+        }
         if (typeof state.savingBySiteId[siteId] !== 'boolean') {
           state.savingBySiteId[siteId] = false;
         }
@@ -481,6 +513,7 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
 
       const originList = state.originsDraftBySiteId[siteId] || [...(site.allowedOrigins || [])];
       state.originsDraftBySiteId[siteId] = originList;
+
       const originListContainer = document.createElement('div');
       originListContainer.style.display = 'flex';
       originListContainer.style.flexDirection = 'column';
@@ -488,6 +521,7 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
 
       const renderOriginList = () => {
         originListContainer.innerHTML = '';
+
         if (!originList.length) {
           const emptyOrigin = document.createElement('div');
           emptyOrigin.textContent = 'No origins configured yet.';
@@ -529,22 +563,38 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
         label: 'Add origin',
         placeholder: 'https://app.example.com',
       });
+      const helperText = document.createElement('div');
+      helperText.style.fontSize = '12px';
+      helperText.style.color = '#64748b';
+      helperText.textContent = ORIGIN_HELPER_TEXT;
+      originInputWrapper.appendChild(helperText);
+
+      const originInputError = document.createElement('div');
+      originInputError.className = 'ui-field-error';
+      originInputError.textContent = state.originInputErrorBySiteId[siteId] || '';
+      originInputWrapper.appendChild(originInputError);
+
       const addButton = createButton({ label: 'Add' });
       addButton.style.alignSelf = 'flex-start';
+
+      const addLocalhostButton = createButton({ label: 'Add localhost current port' });
+      addLocalhostButton.style.alignSelf = 'flex-start';
 
       const addRow = document.createElement('div');
       addRow.style.display = 'flex';
       addRow.style.flexDirection = 'column';
       addRow.style.gap = '8px';
-      addRow.append(originInputWrapper, addButton);
+      addRow.append(originInputWrapper, addButton, addLocalhostButton);
 
-      addButton.addEventListener('click', () => {
-        const normalized = normalizeOriginInput(originInput.value);
-        if (!normalized) {
-          notifier.show({ message: 'Enter a valid origin.', variant: 'warning' });
+      const addOriginToList = (rawOrigin) => {
+        const normalizedResult = normalizeOrigin(rawOrigin);
+        if (!normalizedResult.value) {
+          state.originInputErrorBySiteId[siteId] = normalizedResult.error;
+          renderSites();
           return;
         }
 
+        const normalized = normalizedResult.value;
         const existing = originList.find(
           (origin) => origin.toLowerCase() === normalized.toLowerCase()
         );
@@ -553,16 +603,32 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
           return;
         }
 
+        state.originInputErrorBySiteId[siteId] = '';
         originList.push(normalized);
         state.originsDraftBySiteId[siteId] = [...originList];
         state.originInputBySiteId[siteId] = '';
-        originInput.value = '';
-        renderOriginList();
+        renderSites();
+      };
+
+      addButton.addEventListener('click', () => {
+        addOriginToList(originInput.value);
+      });
+
+      addLocalhostButton.addEventListener('click', () => {
+        if (window.location.hostname !== 'localhost') {
+          state.originInputErrorBySiteId[siteId] = ORIGIN_HELPER_TEXT;
+          renderSites();
+          return;
+        }
+
+        const localhostOrigin = `http://localhost:${window.location.port || 80}`;
+        addOriginToList(localhostOrigin);
       });
 
       originInput.value = state.originInputBySiteId[siteId] || '';
       originInput.addEventListener('input', () => {
         state.originInputBySiteId[siteId] = originInput.value;
+        state.originInputErrorBySiteId[siteId] = '';
       });
 
       const saveButton = createButton({ label: 'Save origins', variant: 'primary' });
