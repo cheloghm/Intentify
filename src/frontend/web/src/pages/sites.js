@@ -67,6 +67,49 @@ const createField = ({ label, placeholder }) => {
 
 const getSiteId = (site) => site.siteId || site.id;
 
+const loadCachedKeys = (siteId) => {
+  if (!siteId) {
+    return null;
+  }
+
+  try {
+    const raw = localStorage.getItem(`intentify.siteKeys.${siteId}`);
+    if (!raw) {
+      return null;
+    }
+
+    const parsed = JSON.parse(raw);
+    if (
+      parsed &&
+      typeof parsed.siteKey === 'string' &&
+      typeof parsed.widgetKey === 'string' &&
+      parsed.siteKey &&
+      parsed.widgetKey
+    ) {
+      return parsed;
+    }
+  } catch (error) {
+    return null;
+  }
+
+  return null;
+};
+
+const saveCachedKeys = (siteId, { siteKey, widgetKey }) => {
+  if (!siteId || !siteKey || !widgetKey) {
+    return;
+  }
+
+  localStorage.setItem(
+    `intentify.siteKeys.${siteId}`,
+    JSON.stringify({
+      siteKey,
+      widgetKey,
+      cachedAtUtc: new Date().toISOString(),
+    })
+  );
+};
+
 export const renderSitesView = (container, { apiClient, toast } = {}) => {
   const client = apiClient || createApiClient();
   const notifier = toast || createToastManager();
@@ -76,6 +119,11 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
     loading: true,
     error: null,
     keys: null,
+    expandedSiteId: null,
+    originsDraftBySiteId: {},
+    originInputBySiteId: {},
+    savingBySiteId: {},
+    errorBySiteId: {},
   };
 
   const page = document.createElement('div');
@@ -172,6 +220,9 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
       if (siteKey) {
         params.set('siteKey', siteKey);
       }
+      if (widgetKey) {
+        params.set('widgetKey', widgetKey);
+      }
       window.location.hash = `#/install?${params.toString()}`;
     });
     body.appendChild(openInstallButton);
@@ -231,6 +282,10 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
           siteKey: response.siteKey,
           widgetKey: response.widgetKey,
         };
+        saveCachedKeys(siteId, {
+          siteKey: response.siteKey,
+          widgetKey: response.widgetKey,
+        });
 
         notifier.show({ message: 'Site created.', variant: 'success' });
         domainField.input.value = '';
@@ -349,7 +404,36 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
         if (site.domain) {
           params.set('domain', site.domain);
         }
+        const cachedKeys = loadCachedKeys(siteId);
+        if (cachedKeys?.siteKey && cachedKeys?.widgetKey) {
+          params.set('siteKey', cachedKeys.siteKey);
+          params.set('widgetKey', cachedKeys.widgetKey);
+        }
         window.location.hash = `#/install?${params.toString()}`;
+      });
+
+      const configureButton = createButton({
+        label: state.expandedSiteId === siteId ? 'Hide' : 'Configure',
+      });
+      configureButton.addEventListener('click', () => {
+        if (state.expandedSiteId === siteId) {
+          state.expandedSiteId = null;
+          renderSites();
+          return;
+        }
+
+        state.expandedSiteId = siteId;
+        state.originsDraftBySiteId[siteId] = [...(site.allowedOrigins || [])];
+        if (typeof state.originInputBySiteId[siteId] !== 'string') {
+          state.originInputBySiteId[siteId] = '';
+        }
+        if (typeof state.savingBySiteId[siteId] !== 'boolean') {
+          state.savingBySiteId[siteId] = false;
+        }
+        if (typeof state.errorBySiteId[siteId] === 'undefined') {
+          state.errorBySiteId[siteId] = null;
+        }
+        renderSites();
       });
 
       const regenButton = createButton({ label: 'Regenerate keys' });
@@ -366,6 +450,10 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
             siteKey: response.siteKey,
             widgetKey: response.widgetKey,
           };
+          saveCachedKeys(siteId, {
+            siteKey: response.siteKey,
+            widgetKey: response.widgetKey,
+          });
           renderKeys();
           notifier.show({ message: 'Keys regenerated.', variant: 'success' });
         } catch (error) {
@@ -376,7 +464,7 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
           regenButton.textContent = 'Regenerate keys';
         }
       });
-      summaryActions.append(installButton, regenButton);
+      summaryActions.append(installButton, configureButton, regenButton);
 
       summaryRow.append(summaryLeft, statusBadge, summaryActions);
 
@@ -391,7 +479,8 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
       originsHeader.style.fontSize = '13px';
       originsHeader.style.color = '#475569';
 
-      const originList = [...(site.allowedOrigins || [])];
+      const originList = state.originsDraftBySiteId[siteId] || [...(site.allowedOrigins || [])];
+      state.originsDraftBySiteId[siteId] = originList;
       const originListContainer = document.createElement('div');
       originListContainer.style.display = 'flex';
       originListContainer.style.flexDirection = 'column';
@@ -425,6 +514,7 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
           const removeButton = createButton({ label: 'Remove' });
           removeButton.addEventListener('click', () => {
             originList.splice(index, 1);
+            state.originsDraftBySiteId[siteId] = [...originList];
             renderOriginList();
           });
 
@@ -464,15 +554,31 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
         }
 
         originList.push(normalized);
+        state.originsDraftBySiteId[siteId] = [...originList];
+        state.originInputBySiteId[siteId] = '';
         originInput.value = '';
         renderOriginList();
       });
 
+      originInput.value = state.originInputBySiteId[siteId] || '';
+      originInput.addEventListener('input', () => {
+        state.originInputBySiteId[siteId] = originInput.value;
+      });
+
       const saveButton = createButton({ label: 'Save origins', variant: 'primary' });
       saveButton.style.alignSelf = 'flex-start';
-      saveButton.addEventListener('click', async () => {
-        saveButton.disabled = true;
+      const saveError = document.createElement('div');
+      saveError.style.fontSize = '13px';
+      saveError.style.color = '#dc2626';
+      saveError.textContent = state.errorBySiteId[siteId] || '';
+      saveButton.disabled = Boolean(state.savingBySiteId[siteId]);
+      if (state.savingBySiteId[siteId]) {
         saveButton.textContent = 'Saving...';
+      }
+      saveButton.addEventListener('click', async () => {
+        state.savingBySiteId[siteId] = true;
+        state.errorBySiteId[siteId] = null;
+        renderSites();
 
         try {
           const normalized = normalizeOrigins(originList);
@@ -494,25 +600,25 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
           state.sites = state.sites.map((item) =>
             getSiteId(item) === siteId ? updatedSite : item
           );
+          state.originsDraftBySiteId[siteId] = [...(updatedSite.allowedOrigins || normalized)];
           notifier.show({ message: 'Allowed origins updated.', variant: 'success' });
           renderSites();
         } catch (error) {
           const uiError = mapApiError(error);
+          state.errorBySiteId[siteId] = uiError.message;
           notifier.show({ message: uiError.message, variant: 'danger' });
         } finally {
-          saveButton.disabled = false;
-          saveButton.textContent = 'Save origins';
+          state.savingBySiteId[siteId] = false;
+          renderSites();
         }
       });
 
-      originsEditor.append(
-        originsHeader,
-        originListContainer,
-        addRow,
-        saveButton
-      );
+      originsEditor.append(originsHeader, originListContainer, addRow, saveButton, saveError);
 
-      siteCardBody.append(summaryRow, originsEditor);
+      siteCardBody.append(summaryRow);
+      if (state.expandedSiteId === siteId) {
+        siteCardBody.append(originsEditor);
+      }
 
       const card = createCard({
         title: 'Site details',
