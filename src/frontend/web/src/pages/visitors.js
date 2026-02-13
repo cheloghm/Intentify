@@ -37,6 +37,27 @@ const toShortId = (value) => {
 };
 
 const getSiteId = (site) => site?.siteId || site?.id || '';
+const SELECTED_SITE_STORAGE_KEY = 'intentify.selectedSiteId';
+
+const loadSelectedSiteId = () => {
+  try {
+    return localStorage.getItem(SELECTED_SITE_STORAGE_KEY) || '';
+  } catch (error) {
+    return '';
+  }
+};
+
+const saveSelectedSiteId = (siteId) => {
+  try {
+    if (!siteId) {
+      localStorage.removeItem(SELECTED_SITE_STORAGE_KEY);
+      return;
+    }
+    localStorage.setItem(SELECTED_SITE_STORAGE_KEY, siteId);
+  } catch (error) {
+    // ignore storage failures
+  }
+};
 
 export const renderVisitorsView = async (container, { apiClient, toast, query } = {}) => {
   const client = apiClient || createApiClient();
@@ -281,6 +302,7 @@ export const renderVisitorsView = async (container, { apiClient, toast, query } 
 
   siteSelect.addEventListener('change', () => {
     state.siteId = siteSelect.value;
+    saveSelectedSiteId(state.siteId);
     if (state.siteId) {
       window.location.hash = `#/visitors?siteId=${encodeURIComponent(state.siteId)}`;
       return;
@@ -310,8 +332,19 @@ export const renderVisitorsView = async (container, { apiClient, toast, query } 
   try {
     const sites = await client.request('/sites');
     state.sites = Array.isArray(sites) ? sites : [];
-    if (!state.siteId && state.sites.length) {
+    const siteIds = new Set(state.sites.map((site) => getSiteId(site)).filter(Boolean));
+    const localSiteId = loadSelectedSiteId();
+
+    if (state.siteId && siteIds.has(state.siteId)) {
+      saveSelectedSiteId(state.siteId);
+    } else if (localSiteId && siteIds.has(localSiteId)) {
+      state.siteId = localSiteId;
+    } else if (state.sites.length) {
       state.siteId = getSiteId(state.sites[0]);
+      saveSelectedSiteId(state.siteId);
+    } else {
+      state.siteId = '';
+      saveSelectedSiteId('');
     }
   } catch (error) {
     const uiError = mapApiError(error);

@@ -1,6 +1,8 @@
 import { createCard, createToastManager } from '../shared/ui/index.js';
 import { createApiClient, mapApiError } from '../shared/apiClient.js';
 
+const SELECTED_SITE_STORAGE_KEY = 'intentify.selectedSiteId';
+
 const formatDate = (value) => {
   if (!value) {
     return '—';
@@ -107,6 +109,16 @@ const getTimelineDetails = (item) => {
   }
 
   const type = String(item?.type || '').toLowerCase();
+  if (type === 'time_on_page') {
+    const duration = formatDuration(data.seconds);
+    if (duration === '—') {
+      return '—';
+    }
+
+    const reason = typeof data.reason === 'string' ? data.reason.trim() : '';
+    return reason ? `${duration} (${reason})` : duration;
+  }
+
   if (type === 'scroll_depth') {
     const percent = parseNumber(data.percent ?? data.value);
     return percent === null ? '—' : `${Math.round(percent)}%`;
@@ -140,7 +152,13 @@ export const renderVisitorProfileView = async (
   const client = apiClient || createApiClient();
   const notifier = toast || createToastManager();
   const visitorId = params.visitorId;
-  const siteId = query.siteId || '';
+  let selectedSiteId = '';
+  try {
+    selectedSiteId = localStorage.getItem(SELECTED_SITE_STORAGE_KEY) || '';
+  } catch (error) {
+    selectedSiteId = '';
+  }
+  const siteId = query.siteId || selectedSiteId || '';
 
   const page = document.createElement('div');
   page.style.display = 'flex';
