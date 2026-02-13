@@ -14,21 +14,30 @@ internal static class VisitorsEndpoints
         int pageSize,
         ListVisitorsHandler handler)
     {
+        var errors = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
+        if (!Guid.TryParse(siteId, out var siteGuid))
+        {
+            errors["siteId"] = ["Site id is invalid."];
+        }
+
+        if (errors.Count > 0)
+        {
+            return Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(errors));
+        }
+
         var tenantId = TryGetTenantId(context.User);
         if (tenantId is null)
         {
             return Results.Unauthorized();
         }
 
-        if (!TryParseSiteId(siteId, out var parsedSiteId))
-        {
-            return InvalidSiteId();
-        }
-
         page = page <= 0 ? 1 : page;
         pageSize = pageSize is <= 0 or > 200 ? 50 : pageSize;
 
-        var result = await handler.HandleAsync(new ListVisitorsQuery(tenantId.Value, parsedSiteId, page, pageSize), context.RequestAborted);
+        var result = await handler.HandleAsync(
+            new ListVisitorsQuery(tenantId.Value, siteGuid, page, pageSize),
+            context.RequestAborted);
+
         return Results.Ok(result);
     }
 
@@ -39,28 +48,35 @@ internal static class VisitorsEndpoints
         int limit,
         GetVisitorTimelineHandler handler)
     {
+        var errors = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
+
+        if (!Guid.TryParse(siteId, out var siteGuid))
+        {
+            errors["siteId"] = ["Site id is invalid."];
+        }
+
+        if (!Guid.TryParse(visitorId, out var parsedVisitorId))
+        {
+            errors["visitorId"] = ["Visitor id is invalid."];
+        }
+
+        if (errors.Count > 0)
+        {
+            return Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(errors));
+        }
+
         var tenantId = TryGetTenantId(context.User);
         if (tenantId is null)
         {
             return Results.Unauthorized();
         }
 
-        if (!TryParseSiteId(siteId, out var parsedSiteId))
-        {
-            return InvalidSiteId();
-        }
-
-        if (!Guid.TryParse(visitorId, out var parsedVisitorId))
-        {
-            return Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(new Dictionary<string, string[]>
-            {
-                ["visitorId"] = ["Visitor id is invalid."]
-            }));
-        }
-
         limit = limit is <= 0 or > 500 ? 200 : limit;
 
-        var result = await handler.HandleAsync(new VisitorTimelineQuery(tenantId.Value, parsedSiteId, parsedVisitorId, limit), context.RequestAborted);
+        var result = await handler.HandleAsync(
+            new VisitorTimelineQuery(tenantId.Value, siteGuid, parsedVisitorId, limit),
+            context.RequestAborted);
+
         return Results.Ok(result);
     }
 
@@ -69,33 +85,25 @@ internal static class VisitorsEndpoints
         string siteId,
         GetVisitCountWindowsHandler handler)
     {
+        var errors = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
+        if (!Guid.TryParse(siteId, out var siteGuid))
+        {
+            errors["siteId"] = ["Site id is invalid."];
+        }
+
+        if (errors.Count > 0)
+        {
+            return Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(errors));
+        }
+
         var tenantId = TryGetTenantId(context.User);
         if (tenantId is null)
         {
             return Results.Unauthorized();
         }
 
-        if (!TryParseSiteId(siteId, out var parsedSiteId))
-        {
-            return InvalidSiteId();
-        }
-
-        var result = await handler.HandleAsync(tenantId.Value, parsedSiteId, context.RequestAborted);
+        var result = await handler.HandleAsync(tenantId.Value, siteGuid, context.RequestAborted);
         return Results.Ok(new VisitCountsResponse(result.Last7, result.Last30, result.Last90));
-    }
-
-    private static bool TryParseSiteId(string siteId, out Guid parsedSiteId)
-    {
-        return Guid.TryParseExact(siteId, "N", out parsedSiteId)
-            || Guid.TryParseExact(siteId, "D", out parsedSiteId);
-    }
-
-    private static IResult InvalidSiteId()
-    {
-        return Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(new Dictionary<string, string[]>
-        {
-            ["siteId"] = ["Value must be a Guid."]
-        }));
     }
 
     private static Guid? TryGetTenantId(ClaimsPrincipal user)
