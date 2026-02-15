@@ -1,12 +1,15 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Swashbuckle.AspNetCore.SwaggerGen;
 
@@ -91,6 +94,9 @@ internal static class AppHostApplication
         // to prevent module registration from throwing during app build/tests.
         EnsureMongoConfiguration(builder);
 
+        // ✅ Register JWT authentication so RequireAuthorization() doesn't 500 with missing IAuthenticationService.
+        ConfigureAuthentication(builder);
+
         builder.Services.AddAppModules(builder.Configuration);
 
         builder.Services.AddAuthorization();
@@ -109,11 +115,47 @@ internal static class AppHostApplication
         // ✅ Apply global CORS middleware
         app.UseCors(CorsPolicyName);
 
+        // ✅ Auth middleware (must be before endpoints)
+        app.UseAuthentication();
+        app.UseAuthorization();
+
         app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
         app.MapAppModules();
         app.MapDebugEndpoints();
 
         return app;
+    }
+
+    private static void ConfigureAuthentication(WebApplicationBuilder builder)
+    {
+        var issuer = builder.Configuration["Intentify:Jwt:Issuer"];
+        var audience = builder.Configuration["Intentify:Jwt:Audience"];
+        var signingKey = builder.Configuration["Intentify:Jwt:SigningKey"];
+
+        if (string.IsNullOrWhiteSpace(issuer) ||
+            string.IsNullOrWhiteSpace(audience) ||
+            string.IsNullOrWhiteSpace(signingKey))
+        {
+            throw new InvalidOperationException(
+                "JWT is not configured. Set Intentify__Jwt__Issuer, Intentify__Jwt__Audience, Intentify__Jwt__SigningKey.");
+        }
+
+        builder.Services
+            .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+            .AddJwtBearer(options =>
+            {
+                options.TokenValidationParameters = new TokenValidationParameters
+                {
+                    ValidateIssuerSigningKey = true,
+                    IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(signingKey)),
+                    ValidateIssuer = true,
+                    ValidIssuer = issuer,
+                    ValidateAudience = true,
+                    ValidAudience = audience,
+                    ValidateLifetime = true,
+                    ClockSkew = TimeSpan.Zero
+                };
+            });
     }
 
     private static void ConfigureCors(WebApplicationBuilder builder)

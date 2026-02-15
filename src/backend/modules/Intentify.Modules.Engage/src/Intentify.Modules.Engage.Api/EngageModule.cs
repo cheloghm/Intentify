@@ -29,15 +29,16 @@ public sealed class EngageModule : IAppModule
 
     public void MapEndpoints(IEndpointRouteBuilder endpoints)
     {
-        var group = endpoints.MapGroup("/engage");
+        var publicGroup = endpoints.MapGroup("/engage");
 
-        group.MapGet("/widget/bootstrap", EngageEndpoints.WidgetBootstrapAsync);
-        group.MapPost("/chat/send", EngageEndpoints.ChatSendAsync);
+        publicGroup.MapGet("/widget/bootstrap", EngageEndpoints.WidgetBootstrapAsync);
+        publicGroup.MapPost("/chat/send", EngageEndpoints.ChatSendAsync);
 
-        var protectedGroup = group.MapGroup(string.Empty)
-            .AddEndpointFilter<RequireAuthFilter>();
+        var adminGroup = endpoints.MapGroup("/engage")
+            .RequireAuthorization();
 
-        protectedGroup.MapGet("/conversations", EngageEndpoints.ListConversationsAsync);
-        protectedGroup.MapGet("/conversations/{sessionId}/messages", EngageEndpoints.GetConversationMessagesAsync);
+        adminGroup.MapGet("/conversations", EngageEndpoints.ListConversationsAsync);
+        adminGroup.MapGet("/conversations/{sessionId}/messages", EngageEndpoints.GetConversationMessagesAsync);
     }
+
 }

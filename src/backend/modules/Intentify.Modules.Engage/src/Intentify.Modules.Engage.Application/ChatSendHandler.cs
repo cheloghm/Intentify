@@ -32,20 +32,21 @@ public sealed class ChatSendHandler
 
     public async Task<OperationResult<ChatSendResult>> HandleAsync(ChatSendCommand command, CancellationToken cancellationToken = default)
     {
-        var errors = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
+        var validationErrors = new ValidationErrors();
+
         if (string.IsNullOrWhiteSpace(command.WidgetKey))
         {
-            errors["widgetKey"] = ["Widget key is required."];
+            validationErrors.Add("widgetKey", "Widget key is required.");
         }
 
         if (string.IsNullOrWhiteSpace(command.Message))
         {
-            errors["message"] = ["Message is required."];
+            validationErrors.Add("message", "Message is required.");
         }
 
-        if (errors.Count > 0)
+        if (validationErrors.HasErrors)
         {
-            return OperationResult<ChatSendResult>.ValidationFailure(new ValidationErrors(errors));
+            return OperationResult<ChatSendResult>.ValidationFailed(validationErrors);
         }
 
         var site = await _siteRepository.GetByWidgetKeyAsync(command.WidgetKey, cancellationToken);

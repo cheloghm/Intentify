@@ -32,7 +32,7 @@ public sealed class KnowledgeModule : IAppModule
     public void MapEndpoints(IEndpointRouteBuilder endpoints)
     {
         var group = endpoints.MapGroup("/knowledge")
-            .AddEndpointFilter<RequireAuthFilter>();
+            .RequireAuthorization();
 
         group.MapPost("/sources", KnowledgeEndpoints.CreateSourceAsync);
         group.MapPost("/sources/{sourceId}/pdf", KnowledgeEndpoints.UploadPdfAsync);

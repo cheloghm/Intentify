@@ -16,10 +16,10 @@ public sealed class WidgetBootstrapHandler
     {
         if (string.IsNullOrWhiteSpace(query.WidgetKey))
         {
-            return OperationResult<WidgetBootstrapResult>.ValidationFailure(new ValidationErrors(new Dictionary<string, string[]>
-            {
-                ["widgetKey"] = ["Widget key is required."]
-            }));
+            var validationErrors = new ValidationErrors();
+            validationErrors.Add("widgetKey", "Widget key is required.");
+
+            return OperationResult<WidgetBootstrapResult>.ValidationFailed(validationErrors);
         }
 
         var site = await _siteRepository.GetByWidgetKeyAsync(query.WidgetKey, cancellationToken);
