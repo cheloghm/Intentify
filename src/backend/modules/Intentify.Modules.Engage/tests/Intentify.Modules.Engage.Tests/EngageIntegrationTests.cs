@@ -60,6 +60,19 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
         var response = await _client!.GetAsync($"/engage/conversations?siteId={Guid.NewGuid():N}");
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
+
+    [Fact]
+    public async Task WidgetScript_ReturnsJavascript()
+    {
+        var response = await _client!.GetAsync("/engage/widget.js");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("application/javascript", response.Content.Headers.ContentType?.MediaType);
+
+        var script = await response.Content.ReadAsStringAsync();
+        Assert.Contains("data-widget-key", script);
+        Assert.Contains("/engage/chat/send", script);
+    }
+
     [Fact]
     public async Task ChatSend_WithKnowledge_ReturnsGroundedAnswerAndCitations()
     {
