@@ -21,6 +21,8 @@ public sealed record UpdateAllowedOriginsRequest(IReadOnlyCollection<string> All
 
 public sealed record RegenerateKeysResponse(string SiteKey, string WidgetKey);
 
+public sealed record SiteKeysResponse(string SiteKey, string WidgetKey);
+
 public sealed record InstallationStatusResponse(
     string SiteId,
     string Domain,

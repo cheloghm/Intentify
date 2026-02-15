@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
@@ -90,6 +91,7 @@ internal static class AppHostApplication
         // ✅ Ensure Mongo is configured for local/dev runs even if .env is missing,
         // to prevent module registration from throwing during app build/tests.
         EnsureMongoConfiguration(builder);
+        ConfigureAuthentication(builder);
 
         builder.Services.AddAppModules(builder.Configuration);
 
@@ -108,12 +110,24 @@ internal static class AppHostApplication
 
         // ✅ Apply global CORS middleware
         app.UseCors(CorsPolicyName);
+        app.UseAuthentication();
+        app.UseAuthorization();
 
         app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
         app.MapAppModules();
         app.MapDebugEndpoints();
 
         return app;
+    }
+
+    private static void ConfigureAuthentication(WebApplicationBuilder builder)
+    {
+        builder.Services.AddAuthentication(options =>
+        {
+            options.DefaultScheme = "Bearer";
+            options.DefaultAuthenticateScheme = "Bearer";
+            options.DefaultChallengeScheme = "Bearer";
+        }).AddScheme<AuthenticationSchemeOptions, PassThroughBearerAuthenticationHandler>("Bearer", _ => { });
     }
 
     private static void ConfigureCors(WebApplicationBuilder builder)

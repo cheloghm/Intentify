@@ -31,6 +31,7 @@ public sealed class EngageModule : IAppModule
     {
         var group = endpoints.MapGroup("/engage");
 
+        group.MapGet("/widget.js", EngageEndpoints.WidgetScriptAsync);
         group.MapGet("/widget/bootstrap", EngageEndpoints.WidgetBootstrapAsync);
         group.MapPost("/chat/send", EngageEndpoints.ChatSendAsync);
 
