@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
@@ -96,6 +97,7 @@ internal static class AppHostApplication
 
         // ✅ Register JWT authentication so RequireAuthorization() doesn't 500 with missing IAuthenticationService.
         ConfigureAuthentication(builder);
+        ConfigureAuthentication(builder);
 
         builder.Services.AddAppModules(builder.Configuration);
 
@@ -116,6 +118,8 @@ internal static class AppHostApplication
         app.UseCors(CorsPolicyName);
 
         // ✅ Auth middleware (must be before endpoints)
+        app.UseAuthentication();
+        app.UseAuthorization();
         app.UseAuthentication();
         app.UseAuthorization();
 
@@ -156,6 +160,16 @@ internal static class AppHostApplication
                     ClockSkew = TimeSpan.Zero
                 };
             });
+    }
+
+    private static void ConfigureAuthentication(WebApplicationBuilder builder)
+    {
+        builder.Services.AddAuthentication(options =>
+        {
+            options.DefaultScheme = "Bearer";
+            options.DefaultAuthenticateScheme = "Bearer";
+            options.DefaultChallengeScheme = "Bearer";
+        }).AddScheme<AuthenticationSchemeOptions, PassThroughBearerAuthenticationHandler>("Bearer", _ => { });
     }
 
     private static void ConfigureCors(WebApplicationBuilder builder)

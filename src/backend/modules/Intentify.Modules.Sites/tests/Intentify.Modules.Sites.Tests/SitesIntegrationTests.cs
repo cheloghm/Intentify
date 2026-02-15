@@ -146,6 +146,25 @@ public sealed class SitesIntegrationTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.OK, localOriginResponse.StatusCode);
     }
 
+    [Fact]
+    public async Task GetSiteKeys_ReturnsCurrentKeysWithoutRegeneration()
+    {
+        var accessToken = await RegisterUserAsync();
+        var domain = $"keys-{Guid.NewGuid():N}.intentify.local";
+
+        var createResponse = await SendAuthorizedAsync(HttpMethod.Post, "/sites", accessToken,
+            JsonContent.Create(new CreateSiteRequest(domain)));
+        var createPayload = await createResponse.Content.ReadFromJsonAsync<CreateSiteResponse>();
+
+        var keysResponse = await SendAuthorizedAsync(HttpMethod.Get, $"/sites/{createPayload!.SiteId}/keys", accessToken);
+        Assert.Equal(HttpStatusCode.OK, keysResponse.StatusCode);
+
+        var keysPayload = await keysResponse.Content.ReadFromJsonAsync<SiteKeysResponse>();
+        Assert.NotNull(keysPayload);
+        Assert.Equal(createPayload.SiteKey, keysPayload!.SiteKey);
+        Assert.Equal(createPayload.WidgetKey, keysPayload.WidgetKey);
+    }
+
     private async Task<string> RegisterUserAsync()
     {
         var email = $"tester-{Guid.NewGuid():N}@intentify.local";

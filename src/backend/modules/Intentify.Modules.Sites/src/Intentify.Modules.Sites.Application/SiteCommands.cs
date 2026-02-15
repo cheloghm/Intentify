@@ -6,6 +6,8 @@ public sealed record UpdateAllowedOriginsCommand(Guid TenantId, Guid SiteId, IRe
 
 public sealed record RotateKeysCommand(Guid TenantId, Guid SiteId);
 
+public sealed record GetSiteKeysCommand(Guid TenantId, Guid SiteId);
+
 public sealed record GetInstallationStatusCommand(Guid TenantId, Guid SiteId);
 
 public sealed record GetPublicInstallationStatusCommand(string WidgetKey, string? Origin);

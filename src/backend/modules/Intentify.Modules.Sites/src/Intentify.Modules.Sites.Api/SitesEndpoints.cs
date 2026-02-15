@@ -117,6 +117,34 @@ internal static class SitesEndpoints
         };
     }
 
+    public static async Task<IResult> GetSiteKeysAsync(
+        string siteId,
+        HttpContext context,
+        GetSiteKeysHandler handler)
+    {
+        if (!Guid.TryParse(siteId, out var siteGuid))
+        {
+            return Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(new Dictionary<string, string[]>
+            {
+                ["siteId"] = ["Site id is invalid."]
+            }));
+        }
+
+        var tenantId = TryGetTenantId(context.User);
+        if (tenantId is null)
+        {
+            return Results.Unauthorized();
+        }
+
+        var result = await handler.HandleAsync(new GetSiteKeysCommand(tenantId.Value, siteGuid));
+
+        return result.Status switch
+        {
+            OperationStatus.NotFound => Results.NotFound(),
+            _ => Results.Ok(new SiteKeysResponse(result.Value!.SiteKey, result.Value.WidgetKey))
+        };
+    }
+
     public static async Task<IResult> GetInstallationStatusAsync(
         string siteId,
         HttpContext context,
