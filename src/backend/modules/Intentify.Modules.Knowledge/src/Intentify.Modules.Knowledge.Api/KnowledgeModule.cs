@@ -21,6 +21,7 @@ public sealed class KnowledgeModule : IAppModule
         services.AddHttpClient("knowledge");
         services.AddSingleton<IKnowledgeSourceRepository, KnowledgeSourceRepository>();
         services.AddSingleton<IKnowledgeChunkRepository, KnowledgeChunkRepository>();
+        services.AddSingleton<IEngageBotResolver, EngageBotResolver>();
         services.AddSingleton<IKnowledgeTextExtractor, KnowledgeTextExtractor>();
         services.AddSingleton<IKnowledgeChunker, KnowledgeChunker>();
         services.AddSingleton<CreateKnowledgeSourceHandler>();

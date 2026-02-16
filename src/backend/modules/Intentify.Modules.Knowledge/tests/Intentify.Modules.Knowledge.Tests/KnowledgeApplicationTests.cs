@@ -9,6 +9,50 @@ namespace Intentify.Modules.Knowledge.Tests;
 public sealed class KnowledgeApplicationTests
 {
     [Fact]
+    public async Task CreateSource_AssignsResolvedBotId()
+    {
+        var sourceRepo = new RecordingSourceRepository();
+        var botId = Guid.NewGuid();
+        var handler = new CreateKnowledgeSourceHandler(sourceRepo, new StubBotResolver(botId));
+
+        var result = await handler.HandleAsync(new CreateKnowledgeSourceCommand(Guid.NewGuid(), Guid.NewGuid(), "Text", "name", null, "content"));
+
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(sourceRepo.Inserted);
+        Assert.Equal(botId, sourceRepo.Inserted!.BotId);
+    }
+
+    [Fact]
+    public async Task RetrieveTopChunks_FiltersByBot_WithSiteFallback()
+    {
+        var tenantId = Guid.NewGuid();
+        var siteId = Guid.NewGuid();
+        var matchingBotId = Guid.NewGuid();
+        var otherBotId = Guid.NewGuid();
+        var fallbackSourceId = Guid.NewGuid();
+        var matchingSourceId = Guid.NewGuid();
+        var otherSourceId = Guid.NewGuid();
+
+        var sourceRepo = new RetrievalSourceRepository([
+            new KnowledgeSource { Id = fallbackSourceId, TenantId = tenantId, SiteId = siteId, BotId = Guid.Empty },
+            new KnowledgeSource { Id = matchingSourceId, TenantId = tenantId, SiteId = siteId, BotId = matchingBotId },
+            new KnowledgeSource { Id = otherSourceId, TenantId = tenantId, SiteId = siteId, BotId = otherBotId }
+        ]);
+
+        var chunkRepo = new RetrievalChunkRepository([
+            new KnowledgeChunk { Id = Guid.NewGuid(), TenantId = tenantId, SiteId = siteId, SourceId = fallbackSourceId, ChunkIndex = 0, Content = "alpha fallback", CreatedAtUtc = DateTime.UtcNow },
+            new KnowledgeChunk { Id = Guid.NewGuid(), TenantId = tenantId, SiteId = siteId, SourceId = matchingSourceId, ChunkIndex = 1, Content = "alpha match", CreatedAtUtc = DateTime.UtcNow },
+            new KnowledgeChunk { Id = Guid.NewGuid(), TenantId = tenantId, SiteId = siteId, SourceId = otherSourceId, ChunkIndex = 2, Content = "alpha other", CreatedAtUtc = DateTime.UtcNow }
+        ]);
+
+        var handler = new RetrieveTopChunksHandler(chunkRepo, sourceRepo);
+        var results = await handler.HandleAsync(new RetrieveTopChunksQuery(tenantId, siteId, "alpha", 5, matchingBotId));
+
+        Assert.Equal(2, results.Count);
+        Assert.DoesNotContain(results, item => item.SourceId == otherSourceId);
+    }
+
+    [Fact]
     public async Task TextExtraction_ReturnsInput()
     {
         var extractor = new KnowledgeTextExtractor(new FakeFactory(_ => new HttpResponseMessage(HttpStatusCode.OK)));
@@ -130,6 +174,66 @@ internal sealed class FakeFactory : IHttpClientFactory
     {
         return new HttpClient(new FakeMessageHandler(_handler));
     }
+}
+
+internal sealed class StubBotResolver : IEngageBotResolver
+{
+    private readonly Guid _botId;
+
+    public StubBotResolver(Guid botId)
+    {
+        _botId = botId;
+    }
+
+    public Task<Guid> GetOrCreateForSiteAsync(Guid tenantId, Guid siteId, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(_botId);
+    }
+}
+
+internal sealed class RecordingSourceRepository : IKnowledgeSourceRepository
+{
+    public KnowledgeSource? Inserted { get; private set; }
+
+    public Task InsertSourceAsync(KnowledgeSource source, CancellationToken cancellationToken = default)
+    {
+        Inserted = source;
+        return Task.CompletedTask;
+    }
+
+    public Task<KnowledgeSource?> GetSourceByIdAsync(Guid tenantId, Guid sourceId, CancellationToken cancellationToken = default) => Task.FromResult<KnowledgeSource?>(null);
+    public Task<IReadOnlyCollection<KnowledgeSource>> ListSourcesAsync(Guid tenantId, Guid siteId, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyCollection<KnowledgeSource>>([]);
+    public Task UpdateStatusAsync(Guid tenantId, Guid sourceId, IndexStatus status, string? failureReason, DateTime? indexedAtUtc, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public Task ReplaceSourceContentAsync(Guid tenantId, Guid sourceId, byte[] pdfBytes, IndexStatus status, DateTime updatedAtUtc, CancellationToken cancellationToken = default) => Task.CompletedTask;
+}
+
+internal sealed class RetrievalSourceRepository : IKnowledgeSourceRepository
+{
+    private readonly IReadOnlyCollection<KnowledgeSource> _sources;
+
+    public RetrievalSourceRepository(IReadOnlyCollection<KnowledgeSource> sources)
+    {
+        _sources = sources;
+    }
+
+    public Task InsertSourceAsync(KnowledgeSource source, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public Task<KnowledgeSource?> GetSourceByIdAsync(Guid tenantId, Guid sourceId, CancellationToken cancellationToken = default) => Task.FromResult(_sources.FirstOrDefault(item => item.Id == sourceId));
+    public Task<IReadOnlyCollection<KnowledgeSource>> ListSourcesAsync(Guid tenantId, Guid siteId, CancellationToken cancellationToken = default) => Task.FromResult(_sources);
+    public Task UpdateStatusAsync(Guid tenantId, Guid sourceId, IndexStatus status, string? failureReason, DateTime? indexedAtUtc, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public Task ReplaceSourceContentAsync(Guid tenantId, Guid sourceId, byte[] pdfBytes, IndexStatus status, DateTime updatedAtUtc, CancellationToken cancellationToken = default) => Task.CompletedTask;
+}
+
+internal sealed class RetrievalChunkRepository : IKnowledgeChunkRepository
+{
+    private readonly IReadOnlyCollection<KnowledgeChunk> _chunks;
+
+    public RetrievalChunkRepository(IReadOnlyCollection<KnowledgeChunk> chunks)
+    {
+        _chunks = chunks;
+    }
+
+    public Task UpsertChunksAsync(Guid tenantId, Guid sourceId, IReadOnlyCollection<KnowledgeChunk> chunks, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public Task<IReadOnlyCollection<KnowledgeChunk>> ListBySiteAsync(Guid tenantId, Guid siteId, CancellationToken cancellationToken = default) => Task.FromResult(_chunks);
 }
 
 internal sealed class FakeMessageHandler : HttpMessageHandler

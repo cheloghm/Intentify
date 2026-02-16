@@ -6,7 +6,7 @@ public sealed record UploadPdfCommand(Guid TenantId, Guid SourceId, byte[] Bytes
 
 public sealed record IndexKnowledgeSourceCommand(Guid TenantId, Guid SourceId);
 
-public sealed record RetrieveTopChunksQuery(Guid TenantId, Guid SiteId, string Query, int TopK);
+public sealed record RetrieveTopChunksQuery(Guid TenantId, Guid SiteId, string Query, int TopK, Guid? BotId = null);
 
 public sealed record CreateKnowledgeSourceResult(Guid SourceId, string Status);
 
