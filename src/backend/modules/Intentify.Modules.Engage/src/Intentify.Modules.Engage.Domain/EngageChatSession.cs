@@ -8,6 +8,8 @@ public sealed class EngageChatSession
 
     public Guid SiteId { get; init; }
 
+    public Guid BotId { get; init; }
+
     public string WidgetKey { get; init; } = string.Empty;
 
     public DateTime CreatedAtUtc { get; init; }

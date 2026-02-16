@@ -14,6 +14,6 @@ public sealed record ListConversationsQuery(Guid TenantId, Guid SiteId);
 
 public sealed record ConversationSummaryResult(Guid SessionId, DateTime CreatedAtUtc, DateTime UpdatedAtUtc);
 
-public sealed record GetConversationMessagesQuery(Guid TenantId, Guid SessionId);
+public sealed record GetConversationMessagesQuery(Guid TenantId, Guid SiteId, Guid SessionId);
 
 public sealed record ConversationMessageResult(Guid MessageId, string Role, string Content, DateTime CreatedAtUtc, decimal? Confidence, IReadOnlyCollection<EngageCitationResult> Citations);

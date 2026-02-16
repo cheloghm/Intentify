@@ -62,6 +62,39 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Conversations_RequireSiteId_WhenAuthenticated()
+    {
+        var token = await RegisterUserAsync();
+
+        var response = await SendAuthorizedAsync(HttpMethod.Get, "/engage/conversations", token);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task ConversationMessages_ReturnNotFound_WhenSiteDoesNotMatchSession()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+        var otherSite = await CreateSiteAsync(token);
+
+        var sendResponse = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "hello"
+        });
+
+        using var sendJson = JsonDocument.Parse(await sendResponse.Content.ReadAsStringAsync());
+        var sessionId = sendJson.RootElement.GetProperty("sessionId").GetString();
+
+        var response = await SendAuthorizedAsync(
+            HttpMethod.Get,
+            $"/engage/conversations/{sessionId}/messages?siteId={otherSite.SiteId}",
+            token);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
     public async Task WidgetScript_ReturnsJavascript()
     {
         var response = await _client!.GetAsync("/engage/widget.js");
