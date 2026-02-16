@@ -8,6 +8,8 @@ public sealed class KnowledgeSource
 
     public Guid SiteId { get; init; }
 
+    public Guid BotId { get; init; }
+
     public string Type { get; set; } = string.Empty;
 
     public string? Name { get; set; }

@@ -71,7 +71,7 @@ public sealed class ChatSendHandler
         }, cancellationToken);
 
         var retrieved = await _retrieveTopChunksHandler.HandleAsync(
-            new RetrieveTopChunksQuery(site.TenantId, site.Id, command.Message, 3),
+            new RetrieveTopChunksQuery(site.TenantId, site.Id, command.Message, 3, bot.BotId),
             cancellationToken);
 
         var topScore = retrieved.Count == 0 ? 0 : retrieved.Max(item => item.Score);
