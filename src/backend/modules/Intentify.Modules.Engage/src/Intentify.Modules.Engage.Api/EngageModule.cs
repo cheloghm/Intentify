@@ -19,6 +19,7 @@ public sealed class EngageModule : IAppModule
         ArgumentNullException.ThrowIfNull(configuration);
 
         services.AddSingleton<IEngageChatSessionRepository, EngageChatSessionRepository>();
+        services.AddSingleton<IEngageBotRepository, EngageBotRepository>();
         services.AddSingleton<IEngageChatMessageRepository, EngageChatMessageRepository>();
         services.AddSingleton<IEngageHandoffTicketRepository, EngageHandoffTicketRepository>();
         services.AddSingleton<WidgetBootstrapHandler>();
@@ -31,9 +32,9 @@ public sealed class EngageModule : IAppModule
     {
         var publicGroup = endpoints.MapGroup("/engage");
 
-        group.MapGet("/widget.js", EngageEndpoints.WidgetScriptAsync);
-        group.MapGet("/widget/bootstrap", EngageEndpoints.WidgetBootstrapAsync);
-        group.MapPost("/chat/send", EngageEndpoints.ChatSendAsync);
+        publicGroup.MapGet("/widget.js", EngageEndpoints.WidgetScriptAsync);
+        publicGroup.MapGet("/widget/bootstrap", EngageEndpoints.WidgetBootstrapAsync);
+        publicGroup.MapPost("/chat/send", EngageEndpoints.ChatSendAsync);
 
         var adminGroup = endpoints.MapGroup("/engage")
             .RequireAuthorization();
