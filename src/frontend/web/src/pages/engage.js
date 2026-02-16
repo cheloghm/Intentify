@@ -1,5 +1,6 @@
 import { createCard, createToastManager } from '../shared/ui/index.js';
 import { createApiClient, mapApiError } from '../shared/apiClient.js';
+import { API_BASE } from '../shared/config.js';
 
 const createButton = ({ label, variant = 'default', type = 'button' } = {}) => {
   const button = document.createElement('button');
@@ -17,6 +18,31 @@ const createButton = ({ label, variant = 'default', type = 'button' } = {}) => {
 
 const getSiteId = (site) => site?.siteId || site?.id || '';
 
+const copyToClipboardRobust = async (value) => {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(value);
+      return;
+    } catch (error) {
+      // Fallback below.
+    }
+  }
+
+  const textarea = document.createElement('textarea');
+  textarea.value = value;
+  textarea.style.position = 'fixed';
+  textarea.style.opacity = '0';
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+  const copied = document.execCommand('copy');
+  textarea.remove();
+
+  if (!copied) {
+    throw new Error('Copy command failed.');
+  }
+};
+
 export const renderEngageView = (container, { apiClient, toast } = {}) => {
   const client = apiClient || createApiClient();
   const notifier = toast || createToastManager();
@@ -30,6 +56,7 @@ export const renderEngageView = (container, { apiClient, toast } = {}) => {
     conversations: [],
     selectedSessionId: '',
     selectedMessages: [],
+    revealWidgetKey: false,
   };
 
   const page = document.createElement('div');
@@ -87,6 +114,100 @@ export const renderEngageView = (container, { apiClient, toast } = {}) => {
   widgetWrap.append(widgetLabel, widgetValue);
 
   configBody.append(siteField, widgetWrap);
+
+  const installBody = document.createElement('div');
+  installBody.style.display = 'flex';
+  installBody.style.flexDirection = 'column';
+  installBody.style.gap = '10px';
+
+  const installKeyRow = document.createElement('div');
+  installKeyRow.style.display = 'flex';
+  installKeyRow.style.alignItems = 'center';
+  installKeyRow.style.gap = '8px';
+
+  const installKeyLabel = document.createElement('span');
+  installKeyLabel.textContent = 'Widget key:';
+  installKeyLabel.style.fontSize = '13px';
+  installKeyLabel.style.color = '#475569';
+
+  const installKeyValue = document.createElement('code');
+  installKeyValue.style.fontSize = '12px';
+  installKeyValue.style.padding = '4px 6px';
+  installKeyValue.style.borderRadius = '4px';
+  installKeyValue.style.background = '#f1f5f9';
+
+  const toggleWidgetKeyButton = createButton({ label: 'Reveal' });
+  const copyWidgetKeyButton = createButton({ label: 'Copy key' });
+  installKeyRow.append(installKeyLabel, installKeyValue, toggleWidgetKeyButton, copyWidgetKeyButton);
+
+  const snippetValue = document.createElement('textarea');
+  snippetValue.readOnly = true;
+  snippetValue.rows = 1;
+  snippetValue.style.width = '100%';
+  snippetValue.style.borderRadius = '8px';
+  snippetValue.style.border = '1px solid #e2e8f0';
+  snippetValue.style.padding = '10px 12px';
+  snippetValue.style.fontFamily = 'ui-monospace, SFMono-Regular, SFMono-Regular, Menlo, monospace';
+  snippetValue.style.fontSize = '12px';
+  snippetValue.style.color = '#1e293b';
+  snippetValue.style.background = '#f8fafc';
+
+  const copySnippetButton = createButton({ label: 'Copy snippet' });
+  copySnippetButton.style.alignSelf = 'flex-start';
+
+  const installInstructions = document.createElement('ul');
+  installInstructions.style.margin = '0';
+  installInstructions.style.paddingLeft = '18px';
+  installInstructions.style.color = '#475569';
+  installInstructions.style.fontSize = '13px';
+
+  const htmlInstruction = document.createElement('li');
+  htmlInstruction.textContent = 'HTML: paste before </body>.';
+  const wordpressInstruction = document.createElement('li');
+  wordpressInstruction.textContent =
+    'WordPress: paste into footer.php or use a header/footer injection plugin before </body>.';
+  installInstructions.append(htmlInstruction, wordpressInstruction);
+
+  const updateInstallCard = () => {
+    const hasSite = !!state.siteId;
+    const key = state.widgetKey ? state.widgetKey.trim() : '';
+    const baseUrl = API_BASE.replace(/\/+$/, '');
+    const masked = key ? '••••••' : '••••••';
+
+    installKeyValue.textContent = state.revealWidgetKey && key ? key : masked;
+    toggleWidgetKeyButton.disabled = !hasSite || !key;
+    toggleWidgetKeyButton.textContent = state.revealWidgetKey ? 'Hide' : 'Reveal';
+    copyWidgetKeyButton.disabled = !hasSite || !key;
+    copySnippetButton.disabled = !hasSite || !key;
+    snippetValue.value = hasSite && key
+      ? `<script async src="${baseUrl}/engage/widget.js" data-widget-key="${key}"></script>`
+      : 'Select a site to view snippet';
+  };
+
+  toggleWidgetKeyButton.addEventListener('click', () => {
+    state.revealWidgetKey = !state.revealWidgetKey;
+    updateInstallCard();
+  });
+
+  copyWidgetKeyButton.addEventListener('click', async () => {
+    try {
+      await copyToClipboardRobust(state.widgetKey || '');
+      notifier.show({ message: 'Widget key copied.', variant: 'success' });
+    } catch (error) {
+      notifier.show({ message: 'Unable to copy widget key.', variant: 'danger' });
+    }
+  });
+
+  copySnippetButton.addEventListener('click', async () => {
+    try {
+      await copyToClipboardRobust(snippetValue.value);
+      notifier.show({ message: 'Snippet copied to clipboard.', variant: 'success' });
+    } catch (error) {
+      notifier.show({ message: 'Unable to copy snippet.', variant: 'danger' });
+    }
+  });
+
+  installBody.append(installKeyRow, snippetValue, copySnippetButton, installInstructions);
 
   const chatBody = document.createElement('div');
   chatBody.style.display = 'flex';
@@ -191,8 +312,8 @@ export const renderEngageView = (container, { apiClient, toast } = {}) => {
         button.style.borderColor = '#bfdbfe';
       }
       button.addEventListener('click', async () => {
-        state.selectedSessionId = conversation.sessionId;
-        await loadConversationMessages();
+      state.selectedSessionId = conversation.sessionId;
+      await loadConversationMessages();
       });
       sessionsList.appendChild(button);
     });
@@ -249,12 +370,23 @@ export const renderEngageView = (container, { apiClient, toast } = {}) => {
     }
 
     try {
-      state.conversations = await client.engage.listConversations(state.siteId);
-      if (!state.selectedSessionId && state.conversations[0]) {
+      state.conversations = await client.engage.getConversations(state.siteId);
+      const selectedExists = state.conversations.some(
+        (conversation) => conversation.sessionId === state.selectedSessionId
+      );
+      if ((!state.selectedSessionId || !selectedExists) && state.conversations[0]) {
         state.selectedSessionId = state.conversations[0].sessionId;
       }
+      if (!state.conversations[0]) {
+        state.selectedSessionId = '';
+      }
       renderConversations();
-      await loadConversationMessages();
+      if (state.selectedSessionId) {
+        await loadConversationMessages();
+      } else {
+        state.selectedMessages = [];
+        renderConversationMessages();
+      }
     } catch (error) {
       notifier.show({ message: mapApiError(error).message, variant: 'danger' });
     }
@@ -268,7 +400,10 @@ export const renderEngageView = (container, { apiClient, toast } = {}) => {
     }
 
     try {
-      state.selectedMessages = await client.engage.getConversationMessages(state.selectedSessionId);
+      state.selectedMessages = await client.engage.getConversationMessages(
+        state.selectedSessionId,
+        state.siteId
+      );
       renderConversations();
       renderConversationMessages();
     } catch (error) {
@@ -280,7 +415,17 @@ export const renderEngageView = (container, { apiClient, toast } = {}) => {
     state.siteId = siteSelect.value;
     const site = state.sites.find((item) => getSiteId(item) === state.siteId);
     state.widgetKey = site?.widgetKey || '';
+    state.revealWidgetKey = false;
+    state.selectedSessionId = '';
+    state.selectedMessages = [];
+    state.conversations = [];
+    state.sessionId = '';
+    state.transcript = [];
     widgetValue.textContent = state.widgetKey || 'select site';
+    updateInstallCard();
+    renderTranscript();
+    renderConversations();
+    renderConversationMessages();
     await loadConversations();
   });
 
@@ -330,6 +475,7 @@ export const renderEngageView = (container, { apiClient, toast } = {}) => {
       }
       setSiteOptions();
       widgetValue.textContent = state.widgetKey || 'select site';
+      updateInstallCard();
       await loadConversations();
     } catch (error) {
       notifier.show({ message: mapApiError(error).message, variant: 'danger' });
@@ -339,6 +485,7 @@ export const renderEngageView = (container, { apiClient, toast } = {}) => {
   page.append(
     header,
     createCard({ title: 'Bot Config', body: configBody }),
+    createCard({ title: 'Install Engage', body: installBody }),
     createCard({ title: 'Test Chat', body: chatBody }),
     createCard({ title: 'Conversations', body: conversationsBody })
   );
@@ -348,5 +495,6 @@ export const renderEngageView = (container, { apiClient, toast } = {}) => {
   renderTranscript();
   renderConversations();
   renderConversationMessages();
+  updateInstallCard();
   void loadSites();
 };
