@@ -391,7 +391,7 @@ export const renderEngageView = (container, { apiClient, toast } = {}) => {
   };
 
   const loadConversationMessages = async () => {
-    if (!state.selectedSessionId) {
+    if (!state.siteId || !state.selectedSessionId) {
       state.selectedMessages = [];
       renderConversationMessages();
       return;

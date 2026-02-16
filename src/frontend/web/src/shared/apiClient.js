@@ -153,10 +153,12 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
   };
 
   const listEngageConversations = async (siteId) =>
-    request(`/engage/conversations${buildQueryString({ siteId })}`);
+    request(`/engage/conversations?siteId=${encodeURIComponent(siteId)}`);
 
   const getEngageConversationMessages = async (sessionId, siteId) =>
-    request(`/engage/conversations/${sessionId}/messages${buildQueryString({ siteId })}`);
+    request(
+      `/engage/conversations/${encodeURIComponent(sessionId)}/messages?siteId=${encodeURIComponent(siteId)}`
+    );
 
   return {
     request,
