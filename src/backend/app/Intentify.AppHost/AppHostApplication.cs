@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
@@ -95,8 +94,7 @@ internal static class AppHostApplication
         // to prevent module registration from throwing during app build/tests.
         EnsureMongoConfiguration(builder);
 
-        // ✅ Register JWT authentication so RequireAuthorization() doesn't 500 with missing IAuthenticationService.
-        ConfigureAuthentication(builder);
+        // ✅ Register JWT authentication so RequireAuthorization() works.
         ConfigureAuthentication(builder);
 
         builder.Services.AddAppModules(builder.Configuration);
@@ -118,8 +116,6 @@ internal static class AppHostApplication
         app.UseCors(CorsPolicyName);
 
         // ✅ Auth middleware (must be before endpoints)
-        app.UseAuthentication();
-        app.UseAuthorization();
         app.UseAuthentication();
         app.UseAuthorization();
 
@@ -162,16 +158,6 @@ internal static class AppHostApplication
             });
     }
 
-    private static void ConfigureAuthentication(WebApplicationBuilder builder)
-    {
-        builder.Services.AddAuthentication(options =>
-        {
-            options.DefaultScheme = "Bearer";
-            options.DefaultAuthenticateScheme = "Bearer";
-            options.DefaultChallengeScheme = "Bearer";
-        }).AddScheme<AuthenticationSchemeOptions, PassThroughBearerAuthenticationHandler>("Bearer", _ => { });
-    }
-
     private static void ConfigureCors(WebApplicationBuilder builder)
     {
         // Supports env var:
@@ -187,7 +173,6 @@ internal static class AppHostApplication
         var isLocalRun = builder.Environment.IsDevelopment() || IsLocalNonContainerRun(builder.Configuration);
 
         // ✅ For local runs, ALWAYS include fallback origins (union), even if some origins are configured.
-        // This prevents local env/machine overrides from breaking local dev + tests.
         var origins = isLocalRun
             ? configuredOrigins.Concat(LocalCorsFallbackOrigins)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -218,10 +203,6 @@ internal static class AppHostApplication
                     .WithOrigins(origins)
                     .AllowAnyHeader()
                     .AllowAnyMethod();
-
-                // IMPORTANT:
-                // Do NOT call AllowCredentials() unless you're using cookies.
-                // Your frontend uses Bearer tokens, so credentials are not required.
             });
 
             options.AddPolicy(CollectorCorsPolicyName, policy =>
@@ -322,8 +303,6 @@ internal static class AppHostApplication
                 return;
             }
 
-            // Operation-level security overrides global security.
-            // So for /debug we must explicitly require BOTH Bearer and DebugSecret.
             operation.Security = new List<OpenApiSecurityRequirement>
             {
                 new OpenApiSecurityRequirement
