@@ -162,10 +162,9 @@ export const renderEngageView = (container, { apiClient, toast } = {}) => {
   installInstructions.style.fontSize = '13px';
 
   const htmlInstruction = document.createElement('li');
-  htmlInstruction.textContent = 'HTML: paste before </body>.';
+  htmlInstruction.textContent = 'Paste before </body>';
   const wordpressInstruction = document.createElement('li');
-  wordpressInstruction.textContent =
-    'WordPress: paste into footer.php or use a header/footer injection plugin before </body>.';
+  wordpressInstruction.textContent = 'WordPress: add to footer or a header/footer injection plugin';
   installInstructions.append(htmlInstruction, wordpressInstruction);
 
   const updateInstallCard = () => {
@@ -179,9 +178,7 @@ export const renderEngageView = (container, { apiClient, toast } = {}) => {
     toggleWidgetKeyButton.textContent = state.revealWidgetKey ? 'Hide' : 'Reveal';
     copyWidgetKeyButton.disabled = !hasSite || !key;
     copySnippetButton.disabled = !hasSite || !key;
-    snippetValue.value = hasSite && key
-      ? `<script async src="${baseUrl}/engage/widget.js" data-widget-key="${key}"></script>`
-      : 'Select a site to view snippet';
+    snippetValue.value = `<script async src="${baseUrl}/engage/widget.js" data-widget-key="${key}"></script>`;
   };
 
   toggleWidgetKeyButton.addEventListener('click', () => {
