@@ -133,14 +133,24 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
   const retrieveKnowledgeChunks = async ({ siteId, query, top = 5 }) =>
     request(`/knowledge/retrieve${buildQueryString({ siteId, query, top })}`);
 
-  const sendEngageChat = async (payload) =>
-    request('/engage/chat/send', {
+  const sendEngageChat = async (widgetKeyOrPayload, sessionId, message) => {
+    const payload =
+      typeof widgetKeyOrPayload === 'object' && widgetKeyOrPayload !== null
+        ? widgetKeyOrPayload
+        : {
+            widgetKey: widgetKeyOrPayload,
+            sessionId,
+            message,
+          };
+
+    return request('/engage/chat/send', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(payload),
     });
+  };
 
   const listEngageConversations = async (siteId) =>
     request(`/engage/conversations${buildQueryString({ siteId })}`);
