@@ -19,6 +19,7 @@ public sealed class EngageModule : IAppModule
         ArgumentNullException.ThrowIfNull(configuration);
 
         services.AddSingleton<IEngageChatSessionRepository, EngageChatSessionRepository>();
+        services.AddSingleton<IEngageBotRepository, EngageBotRepository>();
         services.AddSingleton<IEngageChatMessageRepository, EngageChatMessageRepository>();
         services.AddSingleton<IEngageHandoffTicketRepository, EngageHandoffTicketRepository>();
         services.AddSingleton<WidgetBootstrapHandler>();

@@ -12,6 +12,7 @@ public sealed class ChatSendHandler
 
     private readonly ISiteRepository _siteRepository;
     private readonly IEngageChatSessionRepository _sessionRepository;
+    private readonly IEngageBotRepository _botRepository;
     private readonly IEngageChatMessageRepository _messageRepository;
     private readonly IEngageHandoffTicketRepository _ticketRepository;
     private readonly RetrieveTopChunksHandler _retrieveTopChunksHandler;
@@ -19,12 +20,14 @@ public sealed class ChatSendHandler
     public ChatSendHandler(
         ISiteRepository siteRepository,
         IEngageChatSessionRepository sessionRepository,
+        IEngageBotRepository botRepository,
         IEngageChatMessageRepository messageRepository,
         IEngageHandoffTicketRepository ticketRepository,
         RetrieveTopChunksHandler retrieveTopChunksHandler)
     {
         _siteRepository = siteRepository;
         _sessionRepository = sessionRepository;
+        _botRepository = botRepository;
         _messageRepository = messageRepository;
         _ticketRepository = ticketRepository;
         _retrieveTopChunksHandler = retrieveTopChunksHandler;
@@ -56,7 +59,8 @@ public sealed class ChatSendHandler
         }
 
         var now = DateTime.UtcNow;
-        var session = await ResolveSessionAsync(site.TenantId, site.Id, command.WidgetKey, command.SessionId, now, cancellationToken);
+        var bot = await _botRepository.GetOrCreateForSiteAsync(site.TenantId, site.Id, cancellationToken);
+        var session = await ResolveSessionAsync(site.TenantId, site.Id, bot.BotId, command.WidgetKey, command.SessionId, now, cancellationToken);
 
         await _messageRepository.InsertAsync(new EngageChatMessage
         {
@@ -67,7 +71,7 @@ public sealed class ChatSendHandler
         }, cancellationToken);
 
         var retrieved = await _retrieveTopChunksHandler.HandleAsync(
-            new RetrieveTopChunksQuery(site.TenantId, site.Id, command.Message, 3),
+            new RetrieveTopChunksQuery(site.TenantId, site.Id, command.Message, 3, bot.BotId),
             cancellationToken);
 
         var topScore = retrieved.Count == 0 ? 0 : retrieved.Max(item => item.Score);
@@ -149,6 +153,7 @@ public sealed class ChatSendHandler
     private async Task<EngageChatSession> ResolveSessionAsync(
         Guid tenantId,
         Guid siteId,
+        Guid botId,
         string widgetKey,
         Guid? sessionId,
         DateTime now,
@@ -157,7 +162,7 @@ public sealed class ChatSendHandler
         if (sessionId.HasValue)
         {
             var existing = await _sessionRepository.GetByIdAsync(sessionId.Value, cancellationToken);
-            if (existing is not null && existing.TenantId == tenantId && existing.SiteId == siteId)
+            if (existing is not null && existing.TenantId == tenantId && existing.SiteId == siteId && existing.BotId == botId)
             {
                 return existing;
             }
@@ -167,6 +172,7 @@ public sealed class ChatSendHandler
         {
             TenantId = tenantId,
             SiteId = siteId,
+            BotId = botId,
             WidgetKey = widgetKey,
             CreatedAtUtc = now,
             UpdatedAtUtc = now

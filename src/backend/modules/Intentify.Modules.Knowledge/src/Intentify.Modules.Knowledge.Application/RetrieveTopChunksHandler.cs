@@ -3,14 +3,24 @@ namespace Intentify.Modules.Knowledge.Application;
 public sealed class RetrieveTopChunksHandler
 {
     private readonly IKnowledgeChunkRepository _chunkRepository;
+    private readonly IKnowledgeSourceRepository _sourceRepository;
 
-    public RetrieveTopChunksHandler(IKnowledgeChunkRepository chunkRepository)
+    public RetrieveTopChunksHandler(IKnowledgeChunkRepository chunkRepository, IKnowledgeSourceRepository sourceRepository)
     {
         _chunkRepository = chunkRepository;
+        _sourceRepository = sourceRepository;
     }
 
     public async Task<IReadOnlyCollection<RetrievedChunkResult>> HandleAsync(RetrieveTopChunksQuery query, CancellationToken cancellationToken = default)
     {
+        var sources = await _sourceRepository.ListSourcesAsync(query.TenantId, query.SiteId, cancellationToken);
+        var allowedSourceIds = query.BotId.HasValue
+            ? sources
+                .Where(item => item.BotId == query.BotId.Value || item.BotId == Guid.Empty)
+                .Select(item => item.Id)
+                .ToHashSet()
+            : sources.Select(item => item.Id).ToHashSet();
+
         var chunks = await _chunkRepository.ListBySiteAsync(query.TenantId, query.SiteId, cancellationToken);
         var terms = query.Query
             .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
@@ -19,6 +29,7 @@ public sealed class RetrieveTopChunksHandler
             .ToArray();
 
         return chunks
+            .Where(chunk => allowedSourceIds.Contains(chunk.SourceId))
             .Select(chunk => new RetrievedChunkResult(
                 chunk.Id,
                 chunk.SourceId,

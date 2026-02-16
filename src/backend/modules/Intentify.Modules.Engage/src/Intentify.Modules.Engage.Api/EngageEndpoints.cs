@@ -163,8 +163,16 @@ internal static class EngageEndpoints
         };
     }
 
-    public static async Task<IResult> ListConversationsAsync(string siteId, HttpContext context, ListConversationsHandler handler)
+    public static async Task<IResult> ListConversationsAsync(string? siteId, HttpContext context, ListConversationsHandler handler)
     {
+        if (string.IsNullOrWhiteSpace(siteId))
+        {
+            return Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(new Dictionary<string, string[]>
+            {
+                ["siteId"] = ["Site id is required."]
+            }));
+        }
+
         if (!Guid.TryParse(siteId, out var parsedSiteId))
         {
             return Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(new Dictionary<string, string[]>
@@ -183,7 +191,7 @@ internal static class EngageEndpoints
         return Results.Ok(results.Select(item => new ConversationSummaryResponse(item.SessionId.ToString("N"), item.CreatedAtUtc, item.UpdatedAtUtc)).ToArray());
     }
 
-    public static async Task<IResult> GetConversationMessagesAsync(string sessionId, HttpContext context, GetConversationMessagesHandler handler)
+    public static async Task<IResult> GetConversationMessagesAsync(string sessionId, string? siteId, HttpContext context, GetConversationMessagesHandler handler)
     {
         if (!Guid.TryParse(sessionId, out var parsedSessionId))
         {
@@ -193,13 +201,29 @@ internal static class EngageEndpoints
             }));
         }
 
+        if (string.IsNullOrWhiteSpace(siteId))
+        {
+            return Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(new Dictionary<string, string[]>
+            {
+                ["siteId"] = ["Site id is required."]
+            }));
+        }
+
+        if (!Guid.TryParse(siteId, out var parsedSiteId))
+        {
+            return Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(new Dictionary<string, string[]>
+            {
+                ["siteId"] = ["Site id is invalid."]
+            }));
+        }
+
         var tenantId = TryGetTenantId(context.User);
         if (tenantId is null)
         {
             return Results.Unauthorized();
         }
 
-        var result = await handler.HandleAsync(new GetConversationMessagesQuery(tenantId.Value, parsedSessionId), context.RequestAborted);
+        var result = await handler.HandleAsync(new GetConversationMessagesQuery(tenantId.Value, parsedSiteId, parsedSessionId), context.RequestAborted);
         return result.Status switch
         {
             OperationStatus.NotFound => Results.NotFound(),

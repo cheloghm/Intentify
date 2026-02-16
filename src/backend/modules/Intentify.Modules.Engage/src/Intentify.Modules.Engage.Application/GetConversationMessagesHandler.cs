@@ -16,7 +16,7 @@ public sealed class GetConversationMessagesHandler
     public async Task<OperationResult<IReadOnlyCollection<ConversationMessageResult>>> HandleAsync(GetConversationMessagesQuery query, CancellationToken cancellationToken = default)
     {
         var session = await _sessionRepository.GetByIdAsync(query.SessionId, cancellationToken);
-        if (session is null || session.TenantId != query.TenantId)
+        if (session is null || session.TenantId != query.TenantId || session.SiteId != query.SiteId)
         {
             return OperationResult<IReadOnlyCollection<ConversationMessageResult>>.NotFound();
         }

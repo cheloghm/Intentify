@@ -6,10 +6,12 @@ namespace Intentify.Modules.Knowledge.Application;
 public sealed class CreateKnowledgeSourceHandler
 {
     private readonly IKnowledgeSourceRepository _sourceRepository;
+    private readonly IEngageBotResolver _botResolver;
 
-    public CreateKnowledgeSourceHandler(IKnowledgeSourceRepository sourceRepository)
+    public CreateKnowledgeSourceHandler(IKnowledgeSourceRepository sourceRepository, IEngageBotResolver botResolver)
     {
         _sourceRepository = sourceRepository;
+        _botResolver = botResolver;
     }
 
     public async Task<OperationResult<CreateKnowledgeSourceResult>> HandleAsync(CreateKnowledgeSourceCommand command, CancellationToken cancellationToken = default)
@@ -47,11 +49,13 @@ public sealed class CreateKnowledgeSourceHandler
             return OperationResult<CreateKnowledgeSourceResult>.ValidationFailed(errors);
         }
 
+        var botId = await _botResolver.GetOrCreateForSiteAsync(command.TenantId, command.SiteId, cancellationToken);
         var now = DateTime.UtcNow;
         var source = new KnowledgeSource
         {
             TenantId = command.TenantId,
             SiteId = command.SiteId,
+            BotId = botId,
             Type = normalizedType!,
             Name = command.Name,
             Url = command.Url,
