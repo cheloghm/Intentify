@@ -232,6 +232,7 @@ export const renderEngageView = (container, { apiClient, toast } = {}) => {
   chatInput.style.border = '1px solid #cbd5e1';
 
   const sendButton = createButton({ label: 'Send', variant: 'primary', type: 'submit' });
+  sendButton.type = 'submit';
 
   chatForm.append(chatInput, sendButton);
   chatBody.append(transcript, chatForm);
@@ -444,17 +445,16 @@ export const renderEngageView = (container, { apiClient, toast } = {}) => {
     sendButton.disabled = true;
     sendButton.textContent = 'Sending...';
 
-    state.transcript.push({ role: 'user', content: message });
-    renderTranscript();
     chatInput.value = '';
 
     try {
-      const response = await client.engage.sendChat({
-        widgetKey: state.widgetKey,
-        sessionId: state.sessionId || null,
-        message,
-      });
+      const response = await client.engage.sendChat(
+        state.widgetKey,
+        state.sessionId || null,
+        message
+      );
       state.sessionId = response.sessionId || state.sessionId;
+      state.transcript.push({ role: 'user', content: message });
       state.transcript.push({ role: 'assistant', content: response.response || '' });
       renderTranscript();
       await loadConversations();
