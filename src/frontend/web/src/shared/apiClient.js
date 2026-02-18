@@ -155,6 +155,21 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
     });
   };
 
+
+  const createPromo = async (payload) =>
+    request('/promos', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+  const listPromos = async (siteId) =>
+    request(`/promos${buildQueryString({ siteId })}`);
+
+  const listPromoEntries = async (promoId, page = 1, pageSize = 50) =>
+    request(`/promos/${encodeURIComponent(promoId)}/entries${buildQueryString({ page, pageSize })}`);
   const listEngageConversations = async (siteId) =>
     request(`/engage/conversations?siteId=${encodeURIComponent(siteId)}`);
 
@@ -181,6 +196,12 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
       indexSource: indexKnowledgeSource,
       listSources: listKnowledgeSources,
       retrieve: retrieveKnowledgeChunks,
+    },
+
+    promos: {
+      create: createPromo,
+      list: listPromos,
+      listEntries: listPromoEntries,
     },
     engage: {
       sendChat: sendEngageChat,

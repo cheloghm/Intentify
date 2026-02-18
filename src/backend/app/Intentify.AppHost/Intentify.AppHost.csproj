@@ -22,6 +22,8 @@
     <InternalsVisibleTo Include="Intentify.Modules.Visitors.Tests" />
     <InternalsVisibleTo Include="Intentify.Modules.Knowledge.Tests" />
     <InternalsVisibleTo Include="Intentify.Modules.Engage.Tests" />
+    <InternalsVisibleTo Include="Intentify.Modules.Tickets.Tests" />
+    <InternalsVisibleTo Include="Intentify.Modules.Promos.Tests" />
   </ItemGroup>
 
   <ItemGroup>
@@ -31,6 +33,8 @@
     <ProjectReference Include="../../modules/Intentify.Modules.Knowledge/src/Intentify.Modules.Knowledge.Api/Intentify.Modules.Knowledge.Api.csproj" />
     <ProjectReference Include="../../modules/Intentify.Modules.Engage/src/Intentify.Modules.Engage.Api/Intentify.Modules.Engage.Api.csproj" />
     <ProjectReference Include="../../modules/Intentify.Modules.Visitors/src/Intentify.Modules.Visitors.Api/Intentify.Modules.Visitors.Api.csproj" />
+    <ProjectReference Include="../../modules/Intentify.Modules.Tickets/src/Intentify.Modules.Tickets.Api/Intentify.Modules.Tickets.Api.csproj" />
+    <ProjectReference Include="../../modules/Intentify.Modules.Promos/src/Intentify.Modules.Promos.Api/Intentify.Modules.Promos.Api.csproj" />
     <ProjectReference Include="../../shared/Intentify.Shared.Web/src/Intentify.Shared.Web/Intentify.Shared.Web.csproj" />
   </ItemGroup>
 
