@@ -2,6 +2,7 @@ using Intentify.Modules.Auth.Api;
 using Intentify.Modules.Collector.Api;
 using Intentify.Modules.Engage.Api;
 using Intentify.Modules.Knowledge.Api;
+using Intentify.Modules.Leads.Api;
 using Intentify.Modules.Sites.Api;
 using Intentify.Modules.Tickets.Api;
 using Intentify.Modules.Visitors.Api;

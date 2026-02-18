@@ -21,6 +21,14 @@ public sealed class Visitor
 
     public string? Platform { get; set; }
 
+    public string? PrimaryEmail { get; set; }
+
+    public string? DisplayName { get; set; }
+
+    public string? Phone { get; set; }
+
+    public DateTime? LastIdentifiedAtUtc { get; set; }
+
     public List<VisitorSession> Sessions { get; set; } = [];
 }
 

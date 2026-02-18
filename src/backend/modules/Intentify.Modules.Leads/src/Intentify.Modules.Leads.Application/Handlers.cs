@@ -1,0 +1,118 @@
+using Intentify.Modules.Leads.Domain;
+using Intentify.Shared.Validation;
+
+namespace Intentify.Modules.Leads.Application;
+
+public sealed class UpsertLeadFromPromoEntryHandler
+{
+    private readonly ILeadRepository _leadRepository;
+    private readonly ILeadVisitorLinker _visitorLinker;
+
+    public UpsertLeadFromPromoEntryHandler(ILeadRepository leadRepository, ILeadVisitorLinker visitorLinker)
+    {
+        _leadRepository = leadRepository;
+        _visitorLinker = visitorLinker;
+    }
+
+    public async Task<OperationResult<Lead>> HandleAsync(UpsertLeadFromPromoEntryCommand command, CancellationToken cancellationToken = default)
+    {
+        var normalizedEmail = Normalize(command.Email, 320);
+        var normalizedFirstPartyId = Normalize(command.FirstPartyId, 200);
+        var normalizedName = Normalize(command.Name, 200);
+
+        Lead? lead = null;
+        if (!string.IsNullOrWhiteSpace(normalizedEmail))
+        {
+            lead = await _leadRepository.GetByEmailAsync(command.TenantId, command.SiteId, normalizedEmail, cancellationToken);
+        }
+        else if (!string.IsNullOrWhiteSpace(normalizedFirstPartyId))
+        {
+            lead = await _leadRepository.GetByFirstPartyIdAsync(command.TenantId, command.SiteId, normalizedFirstPartyId, cancellationToken);
+        }
+
+        var linkedVisitorId = await _visitorLinker.ResolveVisitorIdAsync(command.TenantId, command.SiteId, command.VisitorId, normalizedFirstPartyId, command.SessionId, cancellationToken);
+        var now = DateTime.UtcNow;
+
+        if (lead is null)
+        {
+            lead = new Lead
+            {
+                TenantId = command.TenantId,
+                SiteId = command.SiteId,
+                PrimaryEmail = normalizedEmail,
+                DisplayName = normalizedName,
+                LinkedVisitorId = linkedVisitorId,
+                FirstPartyId = normalizedFirstPartyId,
+                CreatedAtUtc = now,
+                UpdatedAtUtc = now
+            };
+
+            await _leadRepository.InsertAsync(lead, cancellationToken);
+        }
+        else
+        {
+            if (lead.PrimaryEmail is null && normalizedEmail is not null)
+            {
+                lead.PrimaryEmail = normalizedEmail;
+            }
+
+            if (lead.DisplayName is null && normalizedName is not null)
+            {
+                lead.DisplayName = normalizedName;
+            }
+
+            if (lead.FirstPartyId is null && normalizedFirstPartyId is not null)
+            {
+                lead.FirstPartyId = normalizedFirstPartyId;
+            }
+
+            if (lead.LinkedVisitorId is null && linkedVisitorId is not null)
+            {
+                lead.LinkedVisitorId = linkedVisitorId;
+            }
+
+            lead.UpdatedAtUtc = now;
+            await _leadRepository.ReplaceAsync(lead, cancellationToken);
+        }
+
+        await _visitorLinker.EnrichVisitorIfPermittedAsync(
+            command.TenantId,
+            command.SiteId,
+            linkedVisitorId,
+            command.ConsentGiven,
+            normalizedEmail,
+            normalizedName,
+            null,
+            cancellationToken);
+
+        return OperationResult<Lead>.Success(lead);
+    }
+
+    private static string? Normalize(string? value, int maxLength)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        var trimmed = value.Trim();
+        return trimmed.Length <= maxLength ? trimmed : trimmed[..maxLength];
+    }
+}
+
+public sealed class ListLeadsHandler
+{
+    private readonly ILeadRepository _repository;
+    public ListLeadsHandler(ILeadRepository repository) => _repository = repository;
+
+    public Task<IReadOnlyCollection<Lead>> HandleAsync(ListLeadsQuery query, CancellationToken cancellationToken = default)
+        => _repository.ListAsync(query, cancellationToken);
+}
+
+public sealed class GetLeadHandler
+{
+    private readonly ILeadRepository _repository;
+    public GetLeadHandler(ILeadRepository repository) => _repository = repository;
+
+    public async Task<OperationResult<Lead>> HandleAsync(GetLeadQuery query, CancellationToken cancellationToken = default)
+    {
+        var lead = await _repository.GetByIdAsync(query.TenantId, query.LeadId, cancellationToken);
+        return lead is null ? OperationResult<Lead>.NotFound() : OperationResult<Lead>.Success(lead);
+    }
+}
