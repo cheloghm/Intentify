@@ -155,6 +155,27 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
     });
   };
 
+
+  const createPromo = async (payload) =>
+    request('/promos', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+  const listPromos = async (siteId) =>
+    request(`/promos${buildQueryString({ siteId })}`);
+
+  const listPromoEntries = async (promoId, page = 1, pageSize = 50) =>
+    request(`/promos/${encodeURIComponent(promoId)}/entries${buildQueryString({ page, pageSize })}`);
+
+  const listLeads = async (siteId, page = 1, pageSize = 50) =>
+    request(`/leads${buildQueryString({ siteId, page, pageSize })}`);
+
+  const getLead = async (leadId) =>
+    request(`/leads/${encodeURIComponent(leadId)}`);
   const listEngageConversations = async (siteId) =>
     request(`/engage/conversations?siteId=${encodeURIComponent(siteId)}`);
 
@@ -181,6 +202,16 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
       indexSource: indexKnowledgeSource,
       listSources: listKnowledgeSources,
       retrieve: retrieveKnowledgeChunks,
+    },
+
+    promos: {
+      create: createPromo,
+      list: listPromos,
+      listEntries: listPromoEntries,
+    },
+    leads: {
+      list: listLeads,
+      get: getLead,
     },
     engage: {
       sendChat: sendEngageChat,

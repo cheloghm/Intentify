@@ -1,0 +1,33 @@
+using Intentify.Modules.Leads.Domain;
+
+namespace Intentify.Modules.Leads.Application;
+
+public sealed record UpsertLeadFromPromoEntryCommand(
+    Guid TenantId,
+    Guid SiteId,
+    Guid PromoEntryId,
+    Guid? VisitorId,
+    string? FirstPartyId,
+    string? SessionId,
+    string? Email,
+    string? Name,
+    bool ConsentGiven);
+
+public sealed record ListLeadsQuery(Guid TenantId, Guid? SiteId, int Page, int PageSize);
+public sealed record GetLeadQuery(Guid TenantId, Guid LeadId);
+
+public interface ILeadRepository
+{
+    Task<Lead?> GetByEmailAsync(Guid tenantId, Guid siteId, string email, CancellationToken cancellationToken = default);
+    Task<Lead?> GetByFirstPartyIdAsync(Guid tenantId, Guid siteId, string firstPartyId, CancellationToken cancellationToken = default);
+    Task<Lead?> GetByIdAsync(Guid tenantId, Guid leadId, CancellationToken cancellationToken = default);
+    Task InsertAsync(Lead lead, CancellationToken cancellationToken = default);
+    Task ReplaceAsync(Lead lead, CancellationToken cancellationToken = default);
+    Task<IReadOnlyCollection<Lead>> ListAsync(ListLeadsQuery query, CancellationToken cancellationToken = default);
+}
+
+public interface ILeadVisitorLinker
+{
+    Task<Guid?> ResolveVisitorIdAsync(Guid tenantId, Guid siteId, Guid? visitorId, string? firstPartyId, string? sessionId, CancellationToken cancellationToken = default);
+    Task EnrichVisitorIfPermittedAsync(Guid tenantId, Guid siteId, Guid? visitorId, bool consentGiven, string? email, string? displayName, string? phone, CancellationToken cancellationToken = default);
+}
