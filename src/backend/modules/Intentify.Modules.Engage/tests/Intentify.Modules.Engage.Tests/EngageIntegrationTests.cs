@@ -145,9 +145,17 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
         Assert.True(json.RootElement.GetProperty("ticketCreated").GetBoolean());
 
         var database = new MongoClient(_mongo.ConnectionString).GetDatabase(_mongo.DatabaseName);
-        var tickets = database.GetCollection<BsonEngageTicket>("EngageHandoffTickets");
-        var count = await tickets.CountDocumentsAsync(item => item.SessionId == Guid.Parse(sessionId!));
-        Assert.Equal(1, count);
+        var handoffTickets = database.GetCollection<BsonEngageTicket>("EngageHandoffTickets");
+        var handoffCount = await handoffTickets.CountDocumentsAsync(item => item.SessionId == Guid.Parse(sessionId!));
+        Assert.Equal(1, handoffCount);
+
+        var tickets = database.GetCollection<BsonTicket>("tickets");
+        var createdTicket = await tickets.Find(item => item.EngageSessionId == Guid.Parse(sessionId!)).FirstOrDefaultAsync();
+        Assert.NotNull(createdTicket);
+        Assert.Equal(site.SiteId, createdTicket!.SiteId.ToString());
+        Assert.Equal("Open", createdTicket.Status);
+        Assert.Equal("Engage handoff: LowConfidence", createdTicket.Subject);
+        Assert.Equal("can you help me", createdTicket.Description);
     }
 
     private async Task AddKnowledgeAsync(string token, string siteId, string text)
@@ -193,5 +201,14 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
     private sealed class BsonEngageTicket
     {
         public Guid SessionId { get; init; }
+    }
+
+    private sealed class BsonTicket
+    {
+        public Guid SiteId { get; init; }
+        public Guid EngageSessionId { get; init; }
+        public string Subject { get; init; } = string.Empty;
+        public string Description { get; init; } = string.Empty;
+        public string Status { get; init; } = string.Empty;
     }
 }

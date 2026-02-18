@@ -13,6 +13,7 @@
     <ProjectReference Include="..\Intentify.Modules.Engage.Domain\Intentify.Modules.Engage.Domain.csproj" />
     <ProjectReference Include="..\..\..\Intentify.Modules.Knowledge\src\Intentify.Modules.Knowledge.Application\Intentify.Modules.Knowledge.Application.csproj" />
     <ProjectReference Include="..\..\..\Intentify.Modules.Sites\src\Intentify.Modules.Sites.Application\Intentify.Modules.Sites.Application.csproj" />
+    <ProjectReference Include="..\..\..\Intentify.Modules.Tickets\src\Intentify.Modules.Tickets.Application\Intentify.Modules.Tickets.Application.csproj" />
     <ProjectReference Include="..\..\..\..\shared\Intentify.Shared.Validation\src\Intentify.Shared.Validation\Intentify.Shared.Validation.csproj" />
   </ItemGroup>
 </Project>
