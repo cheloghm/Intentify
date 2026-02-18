@@ -427,7 +427,8 @@ export const renderInstallView = (container, { apiClient, toast, query } = {}) =
   const updateSnippet = () => {
     const baseUrl = API_BASE.replace(/\/$/, '');
     const key = state.rawSiteKey ? state.rawSiteKey.trim() : '';
-    snippetValue.value = `<script async src="${baseUrl}/collector/tracker.js" data-site-key="${key}"></script>`;
+    const widgetKey = state.rawWidgetKey ? state.rawWidgetKey.trim() : '';
+    snippetValue.value = `<script async src="${baseUrl}/collector/tracker.js" data-site-key="${key}" data-widget-key="${widgetKey}"></script>`;
 
     const masked = key ? '••••••' : '••••••';
     siteKeyValue.textContent = state.revealSiteKey && key ? key : masked;

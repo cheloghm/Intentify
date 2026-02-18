@@ -14,6 +14,7 @@
     }
 
     const siteKey = script.getAttribute('data-site-key');
+    const widgetKey = script.getAttribute('data-widget-key') || '';
     if (!siteKey) {
       return;
     }
@@ -66,7 +67,7 @@
           data: data || null
         };
 
-        fetch(`${baseUrl}/collector/events`, {
+        fetch(`${baseUrl}/collector/events?widgetKey=${encodeURIComponent(widgetKey)}`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'

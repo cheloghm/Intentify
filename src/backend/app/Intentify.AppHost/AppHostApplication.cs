@@ -2,9 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using Intentify.Modules.Sites.Application;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Cors.Infrastructure;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.DependencyInjection;
@@ -18,14 +20,6 @@ namespace Intentify.AppHost;
 internal static class AppHostApplication
 {
     private const string CorsPolicyName = "IntentifyCors";
-    private const string CollectorCorsPolicyName = "CollectorCors";
-    private static readonly string[] LocalCorsFallbackOrigins =
-    [
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://localhost:8088",
-        "http://127.0.0.1:8088"
-    ];
 
     private const string MongoConnectionStringKey = "Intentify:Mongo:ConnectionString";
     private const string MongoDatabaseNameKey = "Intentify:Mongo:DatabaseName";
@@ -113,7 +107,7 @@ internal static class AppHostApplication
         }
 
         // ✅ Apply global CORS middleware
-        app.UseCors(CorsPolicyName);
+        app.UseCors();
 
         // ✅ Auth middleware (must be before endpoints)
         app.UseAuthentication();
@@ -170,29 +164,12 @@ internal static class AppHostApplication
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        var isLocalRun = builder.Environment.IsDevelopment() || IsLocalNonContainerRun(builder.Configuration);
-
-        // ✅ For local runs, ALWAYS include fallback origins (union), even if some origins are configured.
-        var origins = isLocalRun
-            ? configuredOrigins.Concat(LocalCorsFallbackOrigins)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToArray()
-            : configuredOrigins;
+        var origins = configuredOrigins;
 
         if (origins.Length == 0)
         {
             throw new InvalidOperationException(
                 "CORS is not configured. Set Intentify__Cors__AllowedOrigins (e.g. http://localhost:3000).");
-        }
-
-        if (isLocalRun && configuredOrigins.Length > 0)
-        {
-            using var loggerFactory = LoggerFactory.Create(logging => logging.AddConsole());
-            var logger = loggerFactory.CreateLogger("Intentify.AppHost.Cors");
-            logger.LogInformation(
-                "Local run detected. Merged configured CORS origins with local fallback origins. Configured: {Configured}; Effective: {Effective}",
-                string.Join(",", configuredOrigins),
-                string.Join(",", origins));
         }
 
         builder.Services.AddCors(options =>
@@ -204,15 +181,12 @@ internal static class AppHostApplication
                     .AllowAnyHeader()
                     .AllowAnyMethod();
             });
-
-            options.AddPolicy(CollectorCorsPolicyName, policy =>
-            {
-                policy
-                    .SetIsOriginAllowed(_ => true)
-                    .AllowAnyHeader()
-                    .AllowAnyMethod();
-            });
         });
+
+        builder.Services.AddSingleton<ICorsPolicyProvider>(serviceProvider =>
+            new DynamicCorsPolicyProvider(
+                serviceProvider.GetRequiredService<ISiteRepository>(),
+                origins));
     }
 
     private static void EnsureMongoConfiguration(WebApplicationBuilder builder)

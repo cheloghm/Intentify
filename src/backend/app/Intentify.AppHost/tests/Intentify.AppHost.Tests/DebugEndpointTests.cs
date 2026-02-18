@@ -120,27 +120,11 @@ public sealed class DebugEndpointTests
     }
 
     [Fact]
-    public async Task Cors_UsesLocalFallbackOrigins_ForLocalProductionRunWithoutConfiguredOrigins()
+    public async Task Cors_RequiresConfiguredOrigins_WhenDashboardOriginsMissing()
     {
-        await using var app = await BuildApp(
+        await Assert.ThrowsAsync<InvalidOperationException>(() => BuildApp(
             Environments.Production,
-            includeCorsConfiguration: false,
-            extraConfig: new Dictionary<string, string?>
-            {
-                ["ASPNETCORE_URLS"] = "http://localhost:5000"
-            });
-
-        using var request = new HttpRequestMessage(HttpMethod.Options, "/collector/events");
-        request.Headers.Add("Origin", "http://127.0.0.1:8088");
-        request.Headers.Add("Access-Control-Request-Method", "POST");
-        request.Headers.Add("Access-Control-Request-Headers", "content-type");
-
-        var response = await app.GetTestClient().SendAsync(request);
-
-        Assert.True(
-            response.Headers.TryGetValues("Access-Control-Allow-Origin", out var values) &&
-            values.Contains("http://127.0.0.1:8088"),
-            "Expected Access-Control-Allow-Origin header for local fallback origin.");
+            includeCorsConfiguration: false));
     }
 
     private async Task<WebApplication> BuildApp(

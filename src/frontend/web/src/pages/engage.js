@@ -409,18 +409,36 @@ export const renderEngageView = (container, { apiClient, toast } = {}) => {
     }
   };
 
+  const loadSiteWidgetKey = async (siteId) => {
+    if (!siteId) {
+      state.widgetKey = '';
+      widgetValue.textContent = 'select site';
+      updateInstallCard();
+      return;
+    }
+
+    try {
+      const keys = await client.sites.getKeys(siteId);
+      state.widgetKey = keys?.widgetKey || '';
+      widgetValue.textContent = state.widgetKey || 'select site';
+      updateInstallCard();
+    } catch (error) {
+      state.widgetKey = '';
+      widgetValue.textContent = 'unavailable';
+      updateInstallCard();
+      notifier.show({ message: mapApiError(error).message, variant: 'danger' });
+    }
+  };
+
   siteSelect.addEventListener('change', async () => {
     state.siteId = siteSelect.value;
-    const site = state.sites.find((item) => getSiteId(item) === state.siteId);
-    state.widgetKey = site?.widgetKey || '';
     state.revealWidgetKey = false;
     state.selectedSessionId = '';
     state.selectedMessages = [];
     state.conversations = [];
     state.sessionId = '';
     state.transcript = [];
-    widgetValue.textContent = state.widgetKey || 'select site';
-    updateInstallCard();
+    await loadSiteWidgetKey(state.siteId);
     renderTranscript();
     renderConversations();
     renderConversationMessages();
@@ -468,11 +486,9 @@ export const renderEngageView = (container, { apiClient, toast } = {}) => {
       state.sites = await client.sites.list();
       if (state.sites[0]) {
         state.siteId = getSiteId(state.sites[0]);
-        state.widgetKey = state.sites[0].widgetKey || '';
       }
       setSiteOptions();
-      widgetValue.textContent = state.widgetKey || 'select site';
-      updateInstallCard();
+      await loadSiteWidgetKey(state.siteId);
       await loadConversations();
     } catch (error) {
       notifier.show({ message: mapApiError(error).message, variant: 'danger' });
