@@ -2,7 +2,6 @@ using System.Text.Json;
 using Intentify.Modules.Collector.Application;
 using Intentify.Shared.Validation;
 using Intentify.Shared.Web;
-using Intentify.Shared.Validation;
 using Microsoft.AspNetCore.Http;
 
 namespace Intentify.Modules.Collector.Api;
@@ -35,10 +34,13 @@ internal static class CollectorEndpoints
     }
 
     public static async Task<IResult> CollectEventAsync(
-    CollectorEventRequest? request,
-    HttpContext context,
-    IngestCollectorEventHandler handler)
+        CollectorEventRequest? request,
+        string? widgetKey,
+        HttpContext context,
+        IngestCollectorEventHandler handler)
     {
+        _ = widgetKey;
+
         if (context.Request.ContentLength is > MaxContentLengthBytes)
         {
             return Results.StatusCode(StatusCodes.Status413PayloadTooLarge);

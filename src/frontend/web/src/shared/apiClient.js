@@ -81,6 +81,8 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
   const regenerateSiteKeys = async (siteId) =>
     request(`/sites/${siteId}/keys/regenerate`, { method: 'POST' });
 
+  const getSiteKeys = async (siteId) => request(`/sites/${siteId}/keys`);
+
   const buildQueryString = (params = {}) => {
     const search = new URLSearchParams();
     Object.entries(params).forEach(([key, value]) => {
@@ -143,7 +145,8 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
             message,
           };
 
-    return request('/engage/chat/send', {
+    const resolvedWidgetKey = payload.widgetKey || widgetKeyOrPayload;
+    return request(`/engage/chat/send${buildQueryString({ widgetKey: resolvedWidgetKey })}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -164,6 +167,7 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
     request,
     sites: {
       regenerateKeys: regenerateSiteKeys,
+      getKeys: getSiteKeys,
       list: listSites,
     },
     visitors: {

@@ -93,7 +93,7 @@ internal static class EngageEndpoints
     addMessage('user', message);
     input.value = '';
 
-    fetch(endpoint('/engage/chat/send'), {
+    fetch(endpoint('/engage/chat/send?widgetKey=' + encodeURIComponent(widgetKey)), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ widgetKey: widgetKey, sessionId: sessionId, message: message })
@@ -133,8 +133,14 @@ internal static class EngageEndpoints
         };
     }
 
-    public static async Task<IResult> ChatSendAsync(EngageChatSendRequest request, ChatSendHandler handler, HttpContext context)
+    public static async Task<IResult> ChatSendAsync(
+        EngageChatSendRequest request,
+        string? widgetKey,
+        ChatSendHandler handler,
+        HttpContext context)
     {
+        var resolvedWidgetKey = string.IsNullOrWhiteSpace(widgetKey) ? request.WidgetKey : widgetKey.Trim();
+
         Guid? sessionId = null;
         if (!string.IsNullOrWhiteSpace(request.SessionId))
         {
@@ -149,7 +155,7 @@ internal static class EngageEndpoints
             sessionId = parsedSessionId;
         }
 
-        var result = await handler.HandleAsync(new ChatSendCommand(request.WidgetKey, sessionId, request.Message), context.RequestAborted);
+        var result = await handler.HandleAsync(new ChatSendCommand(resolvedWidgetKey, sessionId, request.Message), context.RequestAborted);
         return result.Status switch
         {
             OperationStatus.ValidationFailed => Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(result.Errors!.Errors)),

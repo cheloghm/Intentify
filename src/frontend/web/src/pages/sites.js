@@ -153,6 +153,8 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
     originInputErrorBySiteId: {},
     savingBySiteId: {},
     errorBySiteId: {},
+    originEditingIndexBySiteId: {},
+    originEditingValueBySiteId: {},
   };
 
   const page = document.createElement('div');
@@ -532,6 +534,9 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
         }
 
         originList.forEach((origin, index) => {
+          const editingIndex = state.originEditingIndexBySiteId[siteId];
+          const isEditing = editingIndex === index;
+
           const row = document.createElement('div');
           row.style.display = 'flex';
           row.style.alignItems = 'center';
@@ -542,8 +547,61 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
           row.style.borderRadius = '6px';
 
           const text = document.createElement('span');
-          text.textContent = origin;
           text.style.fontSize = '13px';
+
+          if (isEditing) {
+            const editInput = document.createElement('input');
+            editInput.type = 'text';
+            editInput.value = state.originEditingValueBySiteId[siteId] || origin;
+            editInput.style.flex = '1';
+            editInput.style.padding = '6px 8px';
+            editInput.style.border = '1px solid #cbd5e1';
+            editInput.style.borderRadius = '6px';
+            editInput.addEventListener('input', () => {
+              state.originEditingValueBySiteId[siteId] = editInput.value;
+            });
+            text.appendChild(editInput);
+          } else {
+            text.textContent = origin;
+          }
+
+          const actions = document.createElement('div');
+          actions.style.display = 'flex';
+          actions.style.gap = '8px';
+
+          const editButton = createButton({ label: isEditing ? 'Save edit' : 'Edit' });
+          editButton.addEventListener('click', () => {
+            if (!isEditing) {
+              state.originEditingIndexBySiteId[siteId] = index;
+              state.originEditingValueBySiteId[siteId] = origin;
+              renderSites();
+              return;
+            }
+
+            const normalizedResult = normalizeOrigin(state.originEditingValueBySiteId[siteId]);
+            if (!normalizedResult.value) {
+              state.originInputErrorBySiteId[siteId] = normalizedResult.error;
+              renderSites();
+              return;
+            }
+
+            originList[index] = normalizedResult.value;
+            state.originsDraftBySiteId[siteId] = [...originList];
+            state.originEditingIndexBySiteId[siteId] = null;
+            state.originEditingValueBySiteId[siteId] = '';
+            state.originInputErrorBySiteId[siteId] = '';
+            renderSites();
+          });
+
+          if (isEditing) {
+            const cancelEditButton = createButton({ label: 'Cancel' });
+            cancelEditButton.addEventListener('click', () => {
+              state.originEditingIndexBySiteId[siteId] = null;
+              state.originEditingValueBySiteId[siteId] = '';
+              renderSites();
+            });
+            actions.appendChild(cancelEditButton);
+          }
 
           const removeButton = createButton({ label: 'Remove' });
           removeButton.addEventListener('click', () => {
@@ -552,7 +610,8 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
             renderOriginList();
           });
 
-          row.append(text, removeButton);
+          actions.append(editButton, removeButton);
+          row.append(text, actions);
           originListContainer.appendChild(row);
         });
       };

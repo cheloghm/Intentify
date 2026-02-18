@@ -103,7 +103,7 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
 
         var script = await response.Content.ReadAsStringAsync();
         Assert.Contains("data-widget-key", script);
-        Assert.Contains("/engage/chat/send", script);
+        Assert.Contains("/engage/chat/send?widgetKey=", script);
     }
 
     [Fact]
