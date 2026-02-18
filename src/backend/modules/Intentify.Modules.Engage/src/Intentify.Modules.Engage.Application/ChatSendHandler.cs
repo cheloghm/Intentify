@@ -1,6 +1,7 @@
 using Intentify.Modules.Engage.Domain;
 using Intentify.Modules.Knowledge.Application;
 using Intentify.Modules.Sites.Application;
+using Intentify.Modules.Tickets.Application;
 using Intentify.Shared.Validation;
 
 namespace Intentify.Modules.Engage.Application;
@@ -15,6 +16,7 @@ public sealed class ChatSendHandler
     private readonly IEngageBotRepository _botRepository;
     private readonly IEngageChatMessageRepository _messageRepository;
     private readonly IEngageHandoffTicketRepository _ticketRepository;
+    private readonly CreateTicketHandler _createTicketHandler;
     private readonly RetrieveTopChunksHandler _retrieveTopChunksHandler;
 
     public ChatSendHandler(
@@ -23,6 +25,7 @@ public sealed class ChatSendHandler
         IEngageBotRepository botRepository,
         IEngageChatMessageRepository messageRepository,
         IEngageHandoffTicketRepository ticketRepository,
+        CreateTicketHandler createTicketHandler,
         RetrieveTopChunksHandler retrieveTopChunksHandler)
     {
         _siteRepository = siteRepository;
@@ -30,6 +33,7 @@ public sealed class ChatSendHandler
         _botRepository = botRepository;
         _messageRepository = messageRepository;
         _ticketRepository = ticketRepository;
+        _createTicketHandler = createTicketHandler;
         _retrieveTopChunksHandler = retrieveTopChunksHandler;
     }
 
@@ -90,6 +94,17 @@ public sealed class ChatSendHandler
                 Reason = "LowConfidence",
                 CreatedAtUtc = now
             }, cancellationToken);
+
+            await _createTicketHandler.HandleAsync(
+                new CreateTicketCommand(
+                    site.TenantId,
+                    site.Id,
+                    null,
+                    session.Id,
+                    "Engage handoff: LowConfidence",
+                    command.Message,
+                    null),
+                cancellationToken);
 
             await _messageRepository.InsertAsync(new EngageChatMessage
             {

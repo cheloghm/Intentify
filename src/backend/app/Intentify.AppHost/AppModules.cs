@@ -3,6 +3,7 @@ using Intentify.Modules.Collector.Api;
 using Intentify.Modules.Engage.Api;
 using Intentify.Modules.Knowledge.Api;
 using Intentify.Modules.Sites.Api;
+using Intentify.Modules.Tickets.Api;
 using Intentify.Modules.Visitors.Api;
 using Intentify.Shared.Web;
 using Microsoft.AspNetCore.Builder;
@@ -20,7 +21,8 @@ public static class AppModuleCatalog
         new SitesModule(),
         new KnowledgeModule(),
         new EngageModule(),
-        new VisitorsModule()
+        new VisitorsModule(),
+        new TicketsModule()
     ];
 }
 
