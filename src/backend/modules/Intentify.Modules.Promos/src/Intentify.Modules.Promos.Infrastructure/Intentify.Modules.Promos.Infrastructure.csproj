@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net10.0</TargetFramework><Nullable>enable</Nullable><ImplicitUsings>enable</ImplicitUsings></PropertyGroup>
+  <ItemGroup><PackageReference Include="MongoDB.Driver" /></ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Intentify.Modules.Promos.Domain\Intentify.Modules.Promos.Domain.csproj" />
+    <ProjectReference Include="..\Intentify.Modules.Promos.Application\Intentify.Modules.Promos.Application.csproj" />
+    <ProjectReference Include="..\..\..\Intentify.Modules.Visitors\src\Intentify.Modules.Visitors.Domain\Intentify.Modules.Visitors.Domain.csproj" />
+    <ProjectReference Include="..\..\..\..\shared\Intentify.Shared.Data.Mongo\src\Intentify.Shared.Data.Mongo\Intentify.Shared.Data.Mongo.csproj" />
+  </ItemGroup>
+</Project>
