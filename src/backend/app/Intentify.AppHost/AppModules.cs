@@ -4,7 +4,6 @@ using Intentify.Modules.Engage.Api;
 using Intentify.Modules.Knowledge.Api;
 using Intentify.Modules.Leads.Api;
 using Intentify.Modules.Sites.Api;
-using Intentify.Modules.Promos.Api;
 using Intentify.Modules.Tickets.Api;
 using Intentify.Modules.Visitors.Api;
 using Intentify.Shared.Web;
@@ -24,9 +23,7 @@ public static class AppModuleCatalog
         new KnowledgeModule(),
         new EngageModule(),
         new VisitorsModule(),
-        new TicketsModule(),
-        new PromosModule(),
-        new LeadsModule()
+        new TicketsModule()
     ];
 }
 

@@ -2,7 +2,6 @@
   <PropertyGroup><TargetFramework>net10.0</TargetFramework><Nullable>enable</Nullable><ImplicitUsings>enable</ImplicitUsings></PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\Intentify.Modules.Promos.Domain\Intentify.Modules.Promos.Domain.csproj" />
-    <ProjectReference Include="..\..\..\Intentify.Modules.Leads\src\Intentify.Modules.Leads.Application\Intentify.Modules.Leads.Application.csproj" />
     <ProjectReference Include="..\..\..\..\shared\Intentify.Shared.Validation\src\Intentify.Shared.Validation\Intentify.Shared.Validation.csproj" />
   </ItemGroup>
 </Project>

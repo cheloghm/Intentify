@@ -1,7 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
 using Intentify.Modules.Promos.Domain;
-using Intentify.Modules.Leads.Application;
 using Intentify.Shared.Validation;
 
 namespace Intentify.Modules.Promos.Application;
@@ -81,15 +80,13 @@ public sealed class CreatePublicPromoEntryHandler
     private readonly IPromoEntryRepository _entryRepository;
     private readonly IPromoConsentLogRepository _consentRepository;
     private readonly IPromoVisitorLookup _visitorLookup;
-    private readonly UpsertLeadFromPromoEntryHandler _upsertLeadHandler;
 
-    public CreatePublicPromoEntryHandler(IPromoRepository promoRepository, IPromoEntryRepository entryRepository, IPromoConsentLogRepository consentRepository, IPromoVisitorLookup visitorLookup, UpsertLeadFromPromoEntryHandler upsertLeadHandler)
+    public CreatePublicPromoEntryHandler(IPromoRepository promoRepository, IPromoEntryRepository entryRepository, IPromoConsentLogRepository consentRepository, IPromoVisitorLookup visitorLookup)
     {
         _promoRepository = promoRepository;
         _entryRepository = entryRepository;
         _consentRepository = consentRepository;
         _visitorLookup = visitorLookup;
-        _upsertLeadHandler = upsertLeadHandler;
     }
 
     public async Task<OperationResult<PromoEntry>> HandleAsync(CreatePublicPromoEntryCommand command, CancellationToken cancellationToken = default)
@@ -125,17 +122,6 @@ public sealed class CreatePublicPromoEntryHandler
             ConsentStatement = command.ConsentStatement.Trim(),
             CreatedAtUtc = now
         }, cancellationToken);
-
-        await _upsertLeadHandler.HandleAsync(new UpsertLeadFromPromoEntryCommand(
-            promo.TenantId,
-            promo.SiteId,
-            entry.Id,
-            linkedVisitorId,
-            entry.FirstPartyId,
-            entry.SessionId,
-            entry.Email,
-            entry.Name,
-            command.ConsentGiven), cancellationToken);
 
         return OperationResult<PromoEntry>.Success(entry);
     }

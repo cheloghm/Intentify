@@ -170,12 +170,6 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
 
   const listPromoEntries = async (promoId, page = 1, pageSize = 50) =>
     request(`/promos/${encodeURIComponent(promoId)}/entries${buildQueryString({ page, pageSize })}`);
-
-  const listLeads = async (siteId, page = 1, pageSize = 50) =>
-    request(`/leads${buildQueryString({ siteId, page, pageSize })}`);
-
-  const getLead = async (leadId) =>
-    request(`/leads/${encodeURIComponent(leadId)}`);
   const listEngageConversations = async (siteId) =>
     request(`/engage/conversations?siteId=${encodeURIComponent(siteId)}`);
 
@@ -208,10 +202,6 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
       create: createPromo,
       list: listPromos,
       listEntries: listPromoEntries,
-    },
-    leads: {
-      list: listLeads,
-      get: getLead,
     },
     engage: {
       sendChat: sendEngageChat,
