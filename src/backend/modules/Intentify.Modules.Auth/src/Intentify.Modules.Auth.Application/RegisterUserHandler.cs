@@ -44,13 +44,14 @@ public sealed class RegisterUserHandler
             return OperationResult<AuthTokenResult>.ValidationFailed(errors);
         }
 
-        var tenant = await _tenants.GetFirstAsync(cancellationToken);
+        var domain = trimmedEmail[(trimmedEmail.IndexOf('@') + 1)..].ToLowerInvariant();
+        var tenant = await _tenants.GetByDomainAsync(domain, cancellationToken);
         if (tenant is null)
         {
             tenant = new Tenant
             {
-                Name = "Intentify",
-                Domain = "intentify.local",
+                Name = domain,
+                Domain = domain,
                 Plan = "dev",
                 Industry = "software",
                 Category = "default"

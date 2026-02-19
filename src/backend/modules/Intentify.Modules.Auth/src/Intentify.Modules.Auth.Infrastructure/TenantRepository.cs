@@ -16,10 +16,10 @@ public sealed class TenantRepository : ITenantRepository
         _ensureIndexes = EnsureIndexesAsync();
     }
 
-    public async Task<Tenant?> GetFirstAsync(CancellationToken cancellationToken = default)
+    public async Task<Tenant?> GetByDomainAsync(string domain, CancellationToken cancellationToken = default)
     {
         await _ensureIndexes;
-        return await _tenants.Find(_ => true).FirstOrDefaultAsync(cancellationToken);
+        return await _tenants.Find(tenant => tenant.Domain == domain).FirstOrDefaultAsync(cancellationToken);
     }
 
     public async Task InsertAsync(Tenant tenant, CancellationToken cancellationToken = default)
