@@ -6,10 +6,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <FrameworkReference Include="Microsoft.AspNetCore.App" />
-  </ItemGroup>
-
-  <ItemGroup>
     <ProjectReference Include="../Intentify.Modules.Auth.Domain/Intentify.Modules.Auth.Domain.csproj" />
     <ProjectReference Include="../Intentify.Modules.Auth.Application/Intentify.Modules.Auth.Application.csproj" />
     <ProjectReference Include="../Intentify.Modules.Auth.Infrastructure/Intentify.Modules.Auth.Infrastructure.csproj" />
