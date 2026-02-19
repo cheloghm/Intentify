@@ -113,10 +113,24 @@ public sealed class DebugEndpointTests
 
         var response = await app.GetTestClient().SendAsync(request);
 
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         Assert.True(
             response.Headers.TryGetValues("Access-Control-Allow-Origin", out var values) &&
             values.Contains("http://127.0.0.1:3000"),
             "Expected Access-Control-Allow-Origin header for configured frontend origin.");
+
+        using var collectorRequest = new HttpRequestMessage(HttpMethod.Options, "/collector/events");
+        collectorRequest.Headers.Add("Origin", "http://127.0.0.1:3000");
+        collectorRequest.Headers.Add("Access-Control-Request-Method", "POST");
+        collectorRequest.Headers.Add("Access-Control-Request-Headers", "content-type");
+
+        var collectorResponse = await app.GetTestClient().SendAsync(collectorRequest);
+
+        Assert.Equal(HttpStatusCode.NoContent, collectorResponse.StatusCode);
+        Assert.True(
+            collectorResponse.Headers.TryGetValues("Access-Control-Allow-Origin", out var collectorValues) &&
+            collectorValues.Contains("http://127.0.0.1:3000"),
+            "Expected Access-Control-Allow-Origin header for collector preflight from configured frontend origin.");
     }
 
     [Fact]
@@ -145,10 +159,9 @@ public sealed class DebugEndpointTests
             ["Intentify:Mongo:DatabaseName"] = _mongo.DatabaseName
         };
 
-        if (includeCorsConfiguration)
-        {
-            config["Intentify:Cors:AllowedOrigins"] = "http://127.0.0.1:3000,http://localhost:3000";
-        }
+        config["Intentify:Cors:AllowedOrigins"] = includeCorsConfiguration
+            ? "http://127.0.0.1:3000,http://localhost:3000"
+            : string.Empty;
 
         if (extraConfig is not null)
         {
