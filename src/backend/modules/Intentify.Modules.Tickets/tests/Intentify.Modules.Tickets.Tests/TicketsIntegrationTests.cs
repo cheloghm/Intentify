@@ -1,4 +1,7 @@
+using System.IdentityModel.Tokens.Jwt;
 using System.Net;
+using System.Security.Claims;
+using System.Text;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -11,12 +14,17 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
+using Microsoft.IdentityModel.Tokens;
 using Xunit;
 
 namespace Intentify.Modules.Tickets.Tests;
 
 public sealed class TicketsIntegrationTests : IAsyncLifetime
 {
+    private const string JwtIssuer = "intentify";
+    private const string JwtAudience = "intentify-users";
+    private const string JwtSigningKey = "test-signing-key-1234567890-EXTRA-KEY";
+
     private readonly MongoContainerFixture _mongo = new();
     private WebApplication? _app;
     private HttpClient? _client;
@@ -29,9 +37,9 @@ public sealed class TicketsIntegrationTests : IAsyncLifetime
         builder.WebHost.UseTestServer();
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
         {
-            ["Intentify:Jwt:Issuer"] = "intentify",
-            ["Intentify:Jwt:Audience"] = "intentify-users",
-            ["Intentify:Jwt:SigningKey"] = "test-signing-key-1234567890-EXTRA-KEY",
+            ["Intentify:Jwt:Issuer"] = JwtIssuer,
+            ["Intentify:Jwt:Audience"] = JwtAudience,
+            ["Intentify:Jwt:SigningKey"] = JwtSigningKey,
             ["Intentify:Jwt:AccessTokenMinutes"] = "30",
             ["Intentify:Mongo:ConnectionString"] = _mongo.ConnectionString,
             ["Intentify:Mongo:DatabaseName"] = _mongo.DatabaseName
@@ -55,13 +63,18 @@ public sealed class TicketsIntegrationTests : IAsyncLifetime
     [Fact]
     public async Task ListTickets_IsTenantScoped()
     {
-        var firstTenantToken = await RegisterUserAsync("tenant-a");
-        var secondTenantToken = await RegisterUserAsync("tenant-b");
+        var tenantAId = Guid.NewGuid();
+        var tenantBId = Guid.NewGuid();
+        var userAId = Guid.NewGuid();
+        var userBId = Guid.NewGuid();
 
-        var firstTicket = await CreateTicketAsync(firstTenantToken, new CreateTicketRequest(Guid.NewGuid(), null, null, "Tenant A", "Ticket A", null));
-        await CreateTicketAsync(secondTenantToken, new CreateTicketRequest(Guid.NewGuid(), null, null, "Tenant B", "Ticket B", null));
+        var tokenA = CreateJwt(userAId, tenantAId);
+        var tokenB = CreateJwt(userBId, tenantBId);
 
-        var firstTenantListResponse = await SendAuthorizedAsync(HttpMethod.Get, "/tickets?page=1&pageSize=10", firstTenantToken);
+        var firstTicket = await CreateTicketAsync(tokenA, new CreateTicketRequest(Guid.NewGuid(), null, null, "Tenant A", "Ticket A", null));
+        await CreateTicketAsync(tokenB, new CreateTicketRequest(Guid.NewGuid(), null, null, "Tenant B", "Ticket B", null));
+
+        var firstTenantListResponse = await SendAuthorizedAsync(HttpMethod.Get, "/tickets?page=1&pageSize=10", tokenA);
         Assert.Equal(HttpStatusCode.OK, firstTenantListResponse.StatusCode);
 
         using var listJson = JsonDocument.Parse(await firstTenantListResponse.Content.ReadAsStringAsync());
@@ -69,7 +82,7 @@ public sealed class TicketsIntegrationTests : IAsyncLifetime
         Assert.Single(items.EnumerateArray().Where(item => item.GetProperty("subject").GetString() == "Tenant A"));
         Assert.DoesNotContain(items.EnumerateArray(), item => item.GetProperty("subject").GetString() == "Tenant B");
 
-        var forbiddenGet = await SendAuthorizedAsync(HttpMethod.Get, $"/tickets/{firstTicket.Id}", secondTenantToken);
+        var forbiddenGet = await SendAuthorizedAsync(HttpMethod.Get, $"/tickets/{firstTicket.Id}", tokenB);
         Assert.Equal(HttpStatusCode.NotFound, forbiddenGet.StatusCode);
     }
 
@@ -111,6 +124,30 @@ public sealed class TicketsIntegrationTests : IAsyncLifetime
 
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         return (json.RootElement.GetProperty("id").GetGuid(), json.RootElement.GetProperty("subject").GetString()!);
+    }
+
+
+    private static string CreateJwt(Guid userId, Guid tenantId)
+    {
+        var now = DateTime.UtcNow;
+        var claims = new List<Claim>
+        {
+            new(JwtRegisteredClaimNames.Sub, userId.ToString("N")),
+            new("tenantId", tenantId.ToString("N"))
+        };
+
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(JwtSigningKey));
+        var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+
+        var token = new JwtSecurityToken(
+            issuer: JwtIssuer,
+            audience: JwtAudience,
+            claims: claims,
+            notBefore: now,
+            expires: now.AddMinutes(30),
+            signingCredentials: credentials);
+
+        return new JwtSecurityTokenHandler().WriteToken(token);
     }
 
     private async Task<string> RegisterUserAsync(string prefix)

@@ -107,7 +107,7 @@ internal static class AppHostApplication
         }
 
         // ✅ Apply global CORS middleware
-        app.UseCors();
+        app.UseCors(CorsPolicyName);
 
         // ✅ Auth middleware (must be before endpoints)
         app.UseAuthentication();
