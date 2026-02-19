@@ -11,10 +11,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <FrameworkReference Include="Microsoft.AspNetCore.App" />
-  </ItemGroup>
-
-  <ItemGroup>
     <InternalsVisibleTo Include="Intentify.AppHost.Tests" />
     <InternalsVisibleTo Include="Intentify.Modules.Auth.Tests" />
     <InternalsVisibleTo Include="Intentify.Modules.Collector.Tests" />
@@ -22,6 +18,7 @@
     <InternalsVisibleTo Include="Intentify.Modules.Visitors.Tests" />
     <InternalsVisibleTo Include="Intentify.Modules.Knowledge.Tests" />
     <InternalsVisibleTo Include="Intentify.Modules.Engage.Tests" />
+    <InternalsVisibleTo Include="Intentify.Modules.Leads.Tests" />
     <InternalsVisibleTo Include="Intentify.Modules.Tickets.Tests" />
   </ItemGroup>
 
@@ -31,6 +28,7 @@
     <ProjectReference Include="../../modules/Intentify.Modules.Sites/src/Intentify.Modules.Sites.Api/Intentify.Modules.Sites.Api.csproj" />
     <ProjectReference Include="../../modules/Intentify.Modules.Knowledge/src/Intentify.Modules.Knowledge.Api/Intentify.Modules.Knowledge.Api.csproj" />
     <ProjectReference Include="../../modules/Intentify.Modules.Engage/src/Intentify.Modules.Engage.Api/Intentify.Modules.Engage.Api.csproj" />
+    <ProjectReference Include="../../modules/Intentify.Modules.Leads/src/Intentify.Modules.Leads.Api/Intentify.Modules.Leads.Api.csproj" />
     <ProjectReference Include="../../modules/Intentify.Modules.Visitors/src/Intentify.Modules.Visitors.Api/Intentify.Modules.Visitors.Api.csproj" />
     <ProjectReference Include="../../modules/Intentify.Modules.Tickets/src/Intentify.Modules.Tickets.Api/Intentify.Modules.Tickets.Api.csproj" />
     <ProjectReference Include="../../shared/Intentify.Shared.Web/src/Intentify.Shared.Web/Intentify.Shared.Web.csproj" />

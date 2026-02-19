@@ -3,6 +3,7 @@ using Intentify.Modules.Tickets.Application;
 using Intentify.Modules.Tickets.Infrastructure;
 using Intentify.Shared.Web;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;

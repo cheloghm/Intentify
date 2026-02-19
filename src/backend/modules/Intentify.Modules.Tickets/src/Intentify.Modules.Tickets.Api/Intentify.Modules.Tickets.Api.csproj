@@ -6,10 +6,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <FrameworkReference Include="Microsoft.AspNetCore.App" />
-  </ItemGroup>
-
-  <ItemGroup>
     <ProjectReference Include="..\Intentify.Modules.Tickets.Domain\Intentify.Modules.Tickets.Domain.csproj" />
     <ProjectReference Include="..\Intentify.Modules.Tickets.Application\Intentify.Modules.Tickets.Application.csproj" />
     <ProjectReference Include="..\Intentify.Modules.Tickets.Infrastructure\Intentify.Modules.Tickets.Infrastructure.csproj" />
