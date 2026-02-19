@@ -17,7 +17,7 @@ using Swashbuckle.AspNetCore.SwaggerGen;
 
 namespace Intentify.AppHost;
 
-internal static class AppHostApplication
+public static class AppHostApplication
 {
     private const string CorsPolicyName = "IntentifyCors";
 
