@@ -1,6 +1,7 @@
 using Intentify.Modules.Auth.Api;
 using Intentify.Modules.Engage.Application;
 using Intentify.Modules.Engage.Infrastructure;
+using Intentify.Shared.AI;
 using Intentify.Shared.Web;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
@@ -22,6 +23,13 @@ public sealed class EngageModule : IAppModule
         services.AddSingleton<IEngageBotRepository, EngageBotRepository>();
         services.AddSingleton<IEngageChatMessageRepository, EngageChatMessageRepository>();
         services.AddSingleton<IEngageHandoffTicketRepository, EngageHandoffTicketRepository>();
+        var aiOptions = new AiOptions
+        {
+            ApiBaseUrl = configuration["Intentify:AI:ApiBaseUrl"],
+            ApiKey = configuration["Intentify:AI:ApiKey"]
+        };
+        services.AddSingleton(aiOptions);
+        services.AddSingleton<IChatCompletionClient, NullChatCompletionClient>();
         services.AddSingleton<WidgetBootstrapHandler>();
         services.AddSingleton<ChatSendHandler>();
         services.AddSingleton<ListConversationsHandler>();

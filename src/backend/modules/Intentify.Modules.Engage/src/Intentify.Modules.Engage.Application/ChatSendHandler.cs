@@ -1,7 +1,9 @@
 using Intentify.Modules.Engage.Domain;
 using Intentify.Modules.Knowledge.Application;
 using Intentify.Modules.Sites.Application;
+using Intentify.Modules.Sites.Domain;
 using Intentify.Modules.Tickets.Application;
+using Intentify.Shared.AI;
 using Intentify.Shared.Validation;
 
 namespace Intentify.Modules.Engage.Application;
@@ -18,6 +20,7 @@ public sealed class ChatSendHandler
     private readonly IEngageHandoffTicketRepository _ticketRepository;
     private readonly CreateTicketHandler _createTicketHandler;
     private readonly RetrieveTopChunksHandler _retrieveTopChunksHandler;
+    private readonly IChatCompletionClient _chatCompletionClient;
 
     public ChatSendHandler(
         ISiteRepository siteRepository,
@@ -26,7 +29,8 @@ public sealed class ChatSendHandler
         IEngageChatMessageRepository messageRepository,
         IEngageHandoffTicketRepository ticketRepository,
         CreateTicketHandler createTicketHandler,
-        RetrieveTopChunksHandler retrieveTopChunksHandler)
+        RetrieveTopChunksHandler retrieveTopChunksHandler,
+        IChatCompletionClient chatCompletionClient)
     {
         _siteRepository = siteRepository;
         _sessionRepository = sessionRepository;
@@ -35,6 +39,7 @@ public sealed class ChatSendHandler
         _ticketRepository = ticketRepository;
         _createTicketHandler = createTicketHandler;
         _retrieveTopChunksHandler = retrieveTopChunksHandler;
+        _chatCompletionClient = chatCompletionClient;
     }
 
     public async Task<OperationResult<ChatSendResult>> HandleAsync(ChatSendCommand command, CancellationToken cancellationToken = default)
@@ -84,47 +89,20 @@ public sealed class ChatSendHandler
         var isLowConfidence = retrieved.Count == 0 || topScore < TopChunkScoreThreshold || confidence < LowConfidenceThreshold;
         if (isLowConfidence)
         {
-            var fallbackResponse = "Thanks — we’ll get back to you shortly.";
-            await _ticketRepository.InsertAsync(new EngageHandoffTicket
-            {
-                TenantId = site.TenantId,
-                SiteId = site.Id,
-                SessionId = session.Id,
-                UserMessage = command.Message,
-                Reason = "LowConfidence",
-                CreatedAtUtc = now
-            }, cancellationToken);
-
-            await _createTicketHandler.HandleAsync(
-                new CreateTicketCommand(
-                    site.TenantId,
-                    site.Id,
-                    null,
-                    session.Id,
-                    "Engage handoff: LowConfidence",
-                    command.Message,
-                    null),
-                cancellationToken);
-
-            await _messageRepository.InsertAsync(new EngageChatMessage
-            {
-                SessionId = session.Id,
-                Role = "assistant",
-                Content = fallbackResponse,
-                CreatedAtUtc = now,
-                Confidence = confidence
-            }, cancellationToken);
-
-            await _sessionRepository.TouchAsync(session.Id, now, cancellationToken);
-
-            return OperationResult<ChatSendResult>.Success(new ChatSendResult(session.Id, fallbackResponse, confidence, true, []));
+            return await CreateFallbackResponseAsync(site, session, command.Message, confidence, now, "LowConfidence", cancellationToken);
         }
 
         var citations = retrieved
             .Select(item => new EngageCitationResult(item.SourceId, item.ChunkId, item.ChunkIndex))
             .ToArray();
 
-        var response = BuildGroundedResponse(retrieved);
+        var completion = await _chatCompletionClient.CompleteAsync(BuildPrompt(command.Message, retrieved), cancellationToken);
+        if (!completion.IsSuccess || string.IsNullOrWhiteSpace(completion.Value))
+        {
+            return await CreateFallbackResponseAsync(site, session, command.Message, confidence, now, "AiUnavailable", cancellationToken);
+        }
+
+        var response = completion.Value.Trim();
         await _messageRepository.InsertAsync(new EngageChatMessage
         {
             SessionId = session.Id,
@@ -155,14 +133,59 @@ public sealed class ChatSendHandler
         return Math.Min(1m, topScore / 4m);
     }
 
-    private static string BuildGroundedResponse(IReadOnlyCollection<RetrievedChunkResult> chunks)
+    private static string BuildPrompt(string message, IReadOnlyCollection<RetrievedChunkResult> chunks)
     {
-        var excerpts = chunks
-            .Take(2)
-            .Select(item => item.Content.Trim())
-            .Where(item => !string.IsNullOrWhiteSpace(item));
+        var context = string.Join("\n", chunks
+            .Take(3)
+            .Select(item => $"- {item.Content.Trim()}"));
 
-        return $"Based on your knowledge base: {string.Join(" ", excerpts)}";
+        return $"Use only the knowledge context below to answer the user question. If context is insufficient, say so briefly.\nKnowledge context:\n{context}\n\nUser question: {message}";
+    }
+
+    private async Task<OperationResult<ChatSendResult>> CreateFallbackResponseAsync(
+        Site site,
+        EngageChatSession session,
+        string userMessage,
+        decimal confidence,
+        DateTime now,
+        string reason,
+        CancellationToken cancellationToken)
+    {
+        var fallbackResponse = "Thanks — we’ll get back to you shortly.";
+
+        await _ticketRepository.InsertAsync(new EngageHandoffTicket
+        {
+            TenantId = site.TenantId,
+            SiteId = site.Id,
+            SessionId = session.Id,
+            UserMessage = userMessage,
+            Reason = reason,
+            CreatedAtUtc = now
+        }, cancellationToken);
+
+        await _createTicketHandler.HandleAsync(
+            new CreateTicketCommand(
+                site.TenantId,
+                site.Id,
+                null,
+                session.Id,
+                $"Engage handoff: {reason}",
+                userMessage,
+                null),
+            cancellationToken);
+
+        await _messageRepository.InsertAsync(new EngageChatMessage
+        {
+            SessionId = session.Id,
+            Role = "assistant",
+            Content = fallbackResponse,
+            CreatedAtUtc = now,
+            Confidence = confidence
+        }, cancellationToken);
+
+        await _sessionRepository.TouchAsync(session.Id, now, cancellationToken);
+
+        return OperationResult<ChatSendResult>.Success(new ChatSendResult(session.Id, fallbackResponse, confidence, true, []));
     }
 
     private async Task<EngageChatSession> ResolveSessionAsync(
