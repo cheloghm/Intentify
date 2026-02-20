@@ -56,6 +56,15 @@ internal sealed class DynamicCorsPolicyProvider : ICorsPolicyProvider
         var widgetKey = context.Request.Query["widgetKey"].ToString();
         if (!string.IsNullOrWhiteSpace(widgetKey))
         {
+            if (_dashboardOrigins.Contains(requestOrigin, StringComparer.OrdinalIgnoreCase))
+            {
+                return new CorsPolicyBuilder()
+                    .WithOrigins(requestOrigin)
+                    .AllowAnyHeader()
+                    .AllowAnyMethod()
+                    .Build();
+            }
+
             var site = await _siteRepository.GetByWidgetKeyAsync(widgetKey.Trim(), context.RequestAborted);
             var allowedOrigins = site?.AllowedOrigins
                 .Select(NormalizeOrigin)
