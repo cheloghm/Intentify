@@ -1,8 +1,6 @@
-using Intentify.Modules.Knowledge.Application;
-
 namespace Intentify.Modules.Knowledge.Infrastructure;
 
-public sealed class OpenSearchOptions : IOpenSearchOptions
+public sealed class OpenSearchOptions
 {
     public const string ConfigurationSection = "Intentify:OpenSearch";
 
