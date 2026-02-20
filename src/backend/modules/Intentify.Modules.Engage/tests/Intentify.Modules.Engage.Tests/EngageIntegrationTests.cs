@@ -158,6 +158,27 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
         Assert.Equal("can you help me", createdTicket.Description);
     }
 
+    [Fact]
+    public async Task ChatSend_AcceptsWidgetKeyFromQuery_AndRequiresWidgetKeyWhenMissingFromBoth()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var withQueryResponse = await _client!.PostAsJsonAsync($"/engage/chat/send?widgetKey={Uri.EscapeDataString(site.WidgetKey)}", new
+        {
+            message = "hello from query"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, withQueryResponse.StatusCode);
+
+        var withoutWidgetKeyResponse = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            message = "hello without key"
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, withoutWidgetKeyResponse.StatusCode);
+    }
+
     private async Task AddKnowledgeAsync(string token, string siteId, string text)
     {
         var createResponse = await SendAuthorizedAsync(HttpMethod.Post, "/knowledge/sources", token, JsonContent.Create(new
