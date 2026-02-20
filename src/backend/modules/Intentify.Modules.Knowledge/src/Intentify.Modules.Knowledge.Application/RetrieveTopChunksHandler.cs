@@ -7,20 +7,64 @@ public sealed class RetrieveTopChunksHandler
 {
     private readonly IKnowledgeChunkRepository _chunkRepository;
     private readonly IKnowledgeSourceRepository _sourceRepository;
+    private readonly IOpenSearchOptions? _openSearchOptions;
+    private readonly IOpenSearchKnowledgeClient? _openSearchClient;
     private readonly ILogger<RetrieveTopChunksHandler> _logger;
 
     public RetrieveTopChunksHandler(
         IKnowledgeChunkRepository chunkRepository,
         IKnowledgeSourceRepository sourceRepository,
-        ILogger<RetrieveTopChunksHandler> logger)
+        ILogger<RetrieveTopChunksHandler> logger,
+        IOpenSearchOptions? openSearchOptions = null,
+        IOpenSearchKnowledgeClient? openSearchClient = null)
     {
         _chunkRepository = chunkRepository;
         _sourceRepository = sourceRepository;
         _logger = logger;
+        _openSearchOptions = openSearchOptions;
+        _openSearchClient = openSearchClient;
     }
 
     public async Task<IReadOnlyCollection<RetrievedChunkResult>> HandleAsync(RetrieveTopChunksQuery query, CancellationToken cancellationToken = default)
     {
+        var terms = Tokenize(query.Query)
+            .Distinct()
+            .ToArray();
+
+        if (_openSearchOptions?.Enabled == true && _openSearchClient is not null)
+        {
+            var openSearchResults = await _openSearchClient.SearchTopChunksAsync(
+                query.TenantId,
+                query.SiteId,
+                query.BotId,
+                query.Query,
+                query.TopK,
+                cancellationToken);
+
+            var retrievedFromOpenSearch = openSearchResults
+                .Select(item => new RetrievedChunkResult(
+                    item.ChunkId,
+                    item.SourceId,
+                    item.ChunkIndex,
+                    item.Content,
+                    Math.Max(1, ScoreChunk(item.Content, terms))))
+                .OrderByDescending(item => item.Score)
+                .ThenBy(item => item.ChunkIndex)
+                .Take(query.TopK)
+                .ToArray();
+
+            var topScore = retrievedFromOpenSearch.Length == 0 ? 0 : retrievedFromOpenSearch.Max(item => item.Score);
+            _logger.LogInformation(
+                "Knowledge retrieval (OpenSearch) returned {ReturnedCount} matches with top score {TopScore} for tenant {TenantId}, site {SiteId}, bot {BotId}.",
+                retrievedFromOpenSearch.Length,
+                topScore,
+                query.TenantId,
+                query.SiteId,
+                query.BotId);
+
+            return retrievedFromOpenSearch;
+        }
+
         var sources = await _sourceRepository.ListSourcesAsync(query.TenantId, query.SiteId, cancellationToken);
         var allowedSourceIds = query.BotId.HasValue
             ? sources
@@ -30,9 +74,6 @@ public sealed class RetrieveTopChunksHandler
             : sources.Select(item => item.Id).ToHashSet();
 
         var chunks = await _chunkRepository.ListBySiteAsync(query.TenantId, query.SiteId, cancellationToken);
-        var terms = Tokenize(query.Query)
-            .Distinct()
-            .ToArray();
 
         var retrieved = chunks
             .Where(chunk => allowedSourceIds.Contains(chunk.SourceId))
@@ -48,11 +89,13 @@ public sealed class RetrieveTopChunksHandler
             .Take(query.TopK)
             .ToArray();
 
+        var mongoTopScore = retrieved.Length == 0 ? 0 : retrieved.Max(item => item.Score);
         _logger.LogInformation(
-            "Knowledge retrieval evaluated {ChunkCount} chunks across {AllowedSourceCount} allowed sources and returned {ResultCount} matches for tenant {TenantId}, site {SiteId}, bot {BotId}.",
+            "Knowledge retrieval (Mongo fallback) evaluated {ChunkCount} chunks across {AllowedSourceCount} allowed sources and returned {ReturnedCount} matches with top score {TopScore} for tenant {TenantId}, site {SiteId}, bot {BotId}.",
             chunks.Count,
             allowedSourceIds.Count,
             retrieved.Length,
+            mongoTopScore,
             query.TenantId,
             query.SiteId,
             query.BotId);
