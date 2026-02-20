@@ -5,11 +5,15 @@ using System.Text.Json;
 using Intentify.AppHost;
 using Intentify.Modules.Auth.Api;
 using Intentify.Modules.Sites.Api;
+using Intentify.Shared.AI;
+using Intentify.Shared.Abstractions;
 using Intentify.Shared.Testing;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using MongoDB.Driver;
 using Xunit;
@@ -140,6 +144,59 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ChatSend_WithKnowledge_AndAiAvailable_ReturnsGroundedAnswer()
+    {
+        var builder = AppHostApplication.CreateBuilder([], Environments.Development);
+        builder.WebHost.UseTestServer();
+        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Intentify:Jwt:Issuer"] = "intentify",
+            ["Intentify:Jwt:Audience"] = "intentify-users",
+            ["Intentify:Jwt:SigningKey"] = "test-signing-key-1234567890-EXTRA-KEY",
+            ["Intentify:Jwt:AccessTokenMinutes"] = "30",
+            ["Intentify:Mongo:ConnectionString"] = _mongo.ConnectionString,
+            ["Intentify:Mongo:DatabaseName"] = _mongo.DatabaseName
+        });
+
+        builder.WebHost.ConfigureTestServices(services =>
+        {
+            services.RemoveAll<IChatCompletionClient>();
+            services.AddSingleton<IChatCompletionClient>(new FakeChatCompletionClient("Return policy is 30 days with original receipt."));
+        });
+
+        await using var app = AppHostApplication.Build(builder);
+        await app.StartAsync();
+        using var client = app.GetTestClient();
+
+        var token = await RegisterUserAsync(client);
+        var site = await CreateSiteAsync(client, token);
+        await AddKnowledgeAsync(client, token, site.SiteId, "Return policy is 30 days with original receipt.");
+
+        var response = await client.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "what is your return policy?"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var sessionId = Guid.Parse(json.RootElement.GetProperty("sessionId").GetString()!);
+        Assert.Equal("Return policy is 30 days with original receipt.", json.RootElement.GetProperty("response").GetString());
+        Assert.False(json.RootElement.GetProperty("ticketCreated").GetBoolean());
+        Assert.True(json.RootElement.GetProperty("confidence").GetDecimal() >= 0.5m);
+        Assert.True(json.RootElement.GetProperty("sources").GetArrayLength() > 0);
+
+        var database = new MongoClient(_mongo.ConnectionString).GetDatabase(_mongo.DatabaseName);
+        var handoffTickets = database.GetCollection<BsonEngageTicket>("EngageHandoffTickets");
+        var handoffCount = await handoffTickets.CountDocumentsAsync(item => item.SessionId == sessionId);
+        Assert.Equal(0, handoffCount);
+
+        var tickets = database.GetCollection<BsonTicket>("tickets");
+        var createdTicket = await tickets.Find(item => item.EngageSessionId == sessionId).FirstOrDefaultAsync();
+        Assert.Null(createdTicket);
+    }
+
+    [Fact]
     public async Task ChatSend_WithoutKnowledge_CreatesLowConfidenceTicket()
     {
         var token = await RegisterUserAsync();
@@ -207,6 +264,21 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
         await SendAuthorizedAsync(HttpMethod.Post, $"/knowledge/sources/{sourceId}/index", token);
     }
 
+    private static async Task AddKnowledgeAsync(HttpClient client, string token, string siteId, string text)
+    {
+        var createResponse = await SendAuthorizedAsync(client, HttpMethod.Post, "/knowledge/sources", token, JsonContent.Create(new
+        {
+            siteId,
+            type = "Text",
+            name = "faq",
+            text
+        }));
+
+        using var createdJson = JsonDocument.Parse(await createResponse.Content.ReadAsStringAsync());
+        var sourceId = createdJson.RootElement.GetProperty("sourceId").GetString();
+        await SendAuthorizedAsync(client, HttpMethod.Post, $"/knowledge/sources/{sourceId}/index", token);
+    }
+
     private async Task<CreateSiteResponse> CreateSiteAsync(string accessToken)
     {
         var domain = $"engage-{Guid.NewGuid():N}.intentify.local";
@@ -232,6 +304,31 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
         return await _client!.SendAsync(request);
     }
 
+    private static async Task<CreateSiteResponse> CreateSiteAsync(HttpClient client, string accessToken)
+    {
+        var domain = $"engage-{Guid.NewGuid():N}.intentify.local";
+        var response = await SendAuthorizedAsync(client, HttpMethod.Post, "/sites", accessToken, JsonContent.Create(new CreateSiteRequest(domain)));
+        var payload = await response.Content.ReadFromJsonAsync<CreateSiteResponse>();
+        return payload!;
+    }
+
+    private static async Task<string> RegisterUserAsync(HttpClient client)
+    {
+        var email = $"engage-{Guid.NewGuid():N}@intentify.local";
+        var response = await client.PostAsJsonAsync("/auth/register", new RegisterRequest("Engage Tester", email, "password-123"));
+        var payload = await response.Content.ReadFromJsonAsync<LoginResponse>();
+        return payload!.AccessToken;
+    }
+
+    private static async Task<HttpResponseMessage> SendAuthorizedAsync(HttpClient client, HttpMethod method, string url, string accessToken, HttpContent? content = null)
+    {
+        using var request = new HttpRequestMessage(method, url);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        request.Content = content;
+
+        return await client.SendAsync(request);
+    }
+
     private sealed class BsonEngageTicket
     {
         public Guid SessionId { get; init; }
@@ -244,5 +341,20 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
         public string Subject { get; init; } = string.Empty;
         public string Description { get; init; } = string.Empty;
         public string Status { get; init; } = string.Empty;
+    }
+
+    private sealed class FakeChatCompletionClient : IChatCompletionClient
+    {
+        private readonly string _response;
+
+        public FakeChatCompletionClient(string response)
+        {
+            _response = response;
+        }
+
+        public Task<Result<string>> CompleteAsync(string prompt, CancellationToken ct)
+        {
+            return Task.FromResult(Result<string>.Success(_response));
+        }
     }
 }
