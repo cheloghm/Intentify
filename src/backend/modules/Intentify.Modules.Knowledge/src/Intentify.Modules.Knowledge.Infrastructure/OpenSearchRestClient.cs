@@ -3,7 +3,6 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
-using Intentify.Modules.Knowledge.Application;
 using Microsoft.Extensions.Logging;
 
 namespace Intentify.Modules.Knowledge.Infrastructure;
@@ -54,7 +53,6 @@ internal sealed class OpenSearchRestClient : IOpenSearchKnowledgeClient
                     tenantId = new { type = "keyword" },
                     siteId = new { type = "keyword" },
                     botId = new { type = "keyword" },
-                    sourceId = new { type = "keyword" },
                     chunkId = new { type = "keyword" },
                     chunkIndex = new { type = "integer" },
                     content = new { type = "text" }
@@ -80,7 +78,7 @@ internal sealed class OpenSearchRestClient : IOpenSearchKnowledgeClient
         Guid tenantId,
         Guid siteId,
         Guid? botId,
-        IReadOnlyCollection<Intentify.Modules.Knowledge.Application.OpenSearchChunkDocument> chunkDocs,
+        IReadOnlyCollection<OpenSearchChunkDocument> chunkDocs,
         CancellationToken cancellationToken = default)
     {
         if (!_options.Enabled || chunkDocs.Count == 0)
@@ -120,7 +118,7 @@ internal sealed class OpenSearchRestClient : IOpenSearchKnowledgeClient
             chunkDocs.Count);
     }
 
-    public async Task<IReadOnlyCollection<Intentify.Modules.Knowledge.Application.OpenSearchChunkDocument>> SearchTopChunksAsync(
+    public async Task<IReadOnlyCollection<OpenSearchChunkDocument>> SearchTopChunksAsync(
         Guid tenantId,
         Guid siteId,
         Guid? botId,
@@ -145,9 +143,14 @@ internal sealed class OpenSearchRestClient : IOpenSearchKnowledgeClient
         {
             mustClauses.Add(new
             {
-                terms = new Dictionary<string, string[]>
+                @bool = new
                 {
-                    ["botId"] = [botId.Value.ToString("D"), Guid.Empty.ToString("D")]
+                    should = new object[]
+                    {
+                        new { term = new Dictionary<string, string> { ["botId"] = botId.Value.ToString("D") } },
+                        new { bool = new { must_not = new { exists = new { field = "botId" } } } }
+                    },
+                    minimum_should_match = 1
                 }
             });
         }
@@ -198,7 +201,7 @@ internal sealed class OpenSearchRestClient : IOpenSearchKnowledgeClient
             return [];
         }
 
-        var results = new List<Intentify.Modules.Knowledge.Application.OpenSearchChunkDocument>();
+        var results = new List<OpenSearchChunkDocument>();
         foreach (var hit in innerHitsElement.EnumerateArray())
         {
             if (!hit.TryGetProperty("_source", out var source))
@@ -206,15 +209,11 @@ internal sealed class OpenSearchRestClient : IOpenSearchKnowledgeClient
                 continue;
             }
 
-            var sourceId = source.TryGetProperty("sourceId", out var sourceIdElement) && Guid.TryParse(sourceIdElement.GetString(), out var parsedSourceId)
-                ? parsedSourceId
-                : Guid.Empty;
-
             var chunkId = source.TryGetProperty("chunkId", out var chunkIdElement) && Guid.TryParse(chunkIdElement.GetString(), out var parsedChunkId)
                 ? parsedChunkId
                 : Guid.Empty;
 
-            if (sourceId == Guid.Empty || chunkId == Guid.Empty)
+            if (chunkId == Guid.Empty)
             {
                 continue;
             }
@@ -227,11 +226,7 @@ internal sealed class OpenSearchRestClient : IOpenSearchKnowledgeClient
                 ? contentElement.GetString() ?? string.Empty
                 : string.Empty;
 
-            var parsedBotId = source.TryGetProperty("botId", out var botIdElement) && Guid.TryParse(botIdElement.GetString(), out var botId)
-                ? botId
-                : Guid.Empty;
-
-            results.Add(new Intentify.Modules.Knowledge.Application.OpenSearchChunkDocument(sourceId, chunkId, chunkIndex, content, parsedBotId));
+            results.Add(new OpenSearchChunkDocument(chunkId, chunkIndex, content));
         }
 
         _logger.LogInformation(
@@ -249,7 +244,7 @@ internal sealed class OpenSearchRestClient : IOpenSearchKnowledgeClient
         Guid tenantId,
         Guid siteId,
         Guid? botId,
-        IReadOnlyCollection<Intentify.Modules.Knowledge.Application.OpenSearchChunkDocument> chunkDocs)
+        IReadOnlyCollection<OpenSearchChunkDocument> chunkDocs)
     {
         var builder = new StringBuilder();
 
@@ -268,8 +263,7 @@ internal sealed class OpenSearchRestClient : IOpenSearchKnowledgeClient
             {
                 tenantId = tenantId.ToString("D"),
                 siteId = siteId.ToString("D"),
-                botId = (botId ?? Guid.Empty).ToString("D"),
-                sourceId = doc.SourceId.ToString("D"),
+                botId = botId?.ToString("D"),
                 chunkId = doc.ChunkId.ToString("D"),
                 chunkIndex = doc.ChunkIndex,
                 content = doc.Content
