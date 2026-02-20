@@ -77,6 +77,43 @@ public sealed class KnowledgeApplicationTests
     }
 
     [Fact]
+    public async Task RetrieveTopChunks_UsesOpenSearch_WhenEnabled()
+    {
+        var tenantId = Guid.NewGuid();
+        var siteId = Guid.NewGuid();
+        var botId = Guid.NewGuid();
+        var sourceId = Guid.NewGuid();
+        var chunkId = Guid.NewGuid();
+        var sourceRepo = new CountingSourceRepository();
+        var chunkRepo = new CountingChunkRepository();
+        var openSearchClient = new RecordingOpenSearchKnowledgeClient([
+            new OpenSearchChunkDocument(sourceId, chunkId, 2, "open search alpha answer", botId)
+        ]);
+
+        var handler = new RetrieveTopChunksHandler(
+            chunkRepo,
+            sourceRepo,
+            NullLogger<RetrieveTopChunksHandler>.Instance,
+            new EnabledOpenSearchOptions(),
+            openSearchClient);
+
+        var results = await handler.HandleAsync(new RetrieveTopChunksQuery(tenantId, siteId, "alpha", 3, botId));
+
+        Assert.Single(results);
+        Assert.Equal(chunkId, results.First().ChunkId);
+        Assert.Equal(sourceId, results.First().SourceId);
+        Assert.Equal(0, sourceRepo.ListSourcesCallCount);
+        Assert.Equal(0, chunkRepo.ListBySiteCallCount);
+
+        Assert.NotNull(openSearchClient.LastSearch);
+        Assert.Equal(tenantId, openSearchClient.LastSearch!.TenantId);
+        Assert.Equal(siteId, openSearchClient.LastSearch.SiteId);
+        Assert.Equal(botId, openSearchClient.LastSearch.BotId);
+        Assert.Equal("alpha", openSearchClient.LastSearch.Query);
+        Assert.Equal(3, openSearchClient.LastSearch.TopK);
+    }
+
+    [Fact]
     public async Task TextExtraction_ReturnsInput()
     {
         var extractor = new KnowledgeTextExtractor(new FakeFactory(_ => new HttpResponseMessage(HttpStatusCode.OK)));
@@ -114,6 +151,66 @@ public sealed class KnowledgeApplicationTests
         Assert.Equal(5, chunks.Count);
         Assert.Equal(chunks, chunker.Chunk(input, 50));
     }
+}
+
+internal sealed class EnabledOpenSearchOptions : IOpenSearchOptions
+{
+    public bool Enabled => true;
+}
+
+internal sealed class CountingSourceRepository : IKnowledgeSourceRepository
+{
+    public int ListSourcesCallCount { get; private set; }
+
+    public Task InsertSourceAsync(KnowledgeSource source, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public Task<KnowledgeSource?> GetSourceByIdAsync(Guid tenantId, Guid sourceId, CancellationToken cancellationToken = default) => Task.FromResult<KnowledgeSource?>(null);
+
+    public Task<IReadOnlyCollection<KnowledgeSource>> ListSourcesAsync(Guid tenantId, Guid siteId, CancellationToken cancellationToken = default)
+    {
+        ListSourcesCallCount++;
+        return Task.FromResult<IReadOnlyCollection<KnowledgeSource>>([]);
+    }
+
+    public Task UpdateStatusAsync(Guid tenantId, Guid sourceId, IndexStatus status, string? failureReason, DateTime? indexedAtUtc, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public Task ReplaceSourceContentAsync(Guid tenantId, Guid sourceId, byte[] pdfBytes, IndexStatus status, DateTime updatedAtUtc, CancellationToken cancellationToken = default) => Task.CompletedTask;
+}
+
+internal sealed class CountingChunkRepository : IKnowledgeChunkRepository
+{
+    public int ListBySiteCallCount { get; private set; }
+
+    public Task UpsertChunksAsync(Guid tenantId, Guid sourceId, IReadOnlyCollection<KnowledgeChunk> chunks, CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+    public Task<IReadOnlyCollection<KnowledgeChunk>> ListBySiteAsync(Guid tenantId, Guid siteId, CancellationToken cancellationToken = default)
+    {
+        ListBySiteCallCount++;
+        return Task.FromResult<IReadOnlyCollection<KnowledgeChunk>>([]);
+    }
+}
+
+internal sealed class RecordingOpenSearchKnowledgeClient : IOpenSearchKnowledgeClient
+{
+    private readonly IReadOnlyCollection<OpenSearchChunkDocument> _results;
+
+    public RecordingOpenSearchKnowledgeClient(IReadOnlyCollection<OpenSearchChunkDocument> results)
+    {
+        _results = results;
+    }
+
+    public SearchCall? LastSearch { get; private set; }
+
+    public Task EnsureIndexExistsAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+    public Task BulkUpsertChunksAsync(Guid tenantId, Guid siteId, Guid? botId, IReadOnlyCollection<OpenSearchChunkDocument> chunkDocs, CancellationToken cancellationToken = default)
+        => Task.CompletedTask;
+
+    public Task<IReadOnlyCollection<OpenSearchChunkDocument>> SearchTopChunksAsync(Guid tenantId, Guid siteId, Guid? botId, string query, int topK, CancellationToken cancellationToken = default)
+    {
+        LastSearch = new SearchCall(tenantId, siteId, botId, query, topK);
+        return Task.FromResult(_results);
+    }
+
+    internal sealed record SearchCall(Guid TenantId, Guid SiteId, Guid? BotId, string Query, int TopK);
 }
 
 public sealed class IndexingStatusTransitionTests
