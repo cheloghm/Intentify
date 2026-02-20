@@ -107,7 +107,7 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task ChatSend_WithKnowledge_ReturnsGroundedAnswerAndCitations()
+    public async Task ChatSend_WithKnowledge_WhenAiNotConfigured_ReturnsFallback_AndCreatesTicket()
     {
         var token = await RegisterUserAsync();
         var site = await CreateSiteAsync(token);
@@ -122,8 +122,21 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        Assert.Contains("30 days", json.RootElement.GetProperty("response").GetString(), StringComparison.OrdinalIgnoreCase);
-        Assert.True(json.RootElement.GetProperty("sources").GetArrayLength() > 0);
+        var sessionId = json.RootElement.GetProperty("sessionId").GetString();
+        Assert.Equal("Thanks — we’ll get back to you shortly.", json.RootElement.GetProperty("response").GetString());
+        Assert.True(json.RootElement.GetProperty("ticketCreated").GetBoolean());
+
+        var database = new MongoClient(_mongo.ConnectionString).GetDatabase(_mongo.DatabaseName);
+        var handoffTickets = database.GetCollection<BsonEngageTicket>("EngageHandoffTickets");
+        var handoffCount = await handoffTickets.CountDocumentsAsync(item => item.SessionId == Guid.Parse(sessionId!));
+        Assert.Equal(1, handoffCount);
+
+        var tickets = database.GetCollection<BsonTicket>("tickets");
+        var createdTicket = await tickets.Find(item => item.EngageSessionId == Guid.Parse(sessionId!)).FirstOrDefaultAsync();
+        Assert.NotNull(createdTicket);
+        Assert.Equal(site.SiteId, createdTicket!.SiteId.ToString());
+        Assert.Equal("Engage handoff: AiUnavailable", createdTicket.Subject);
+        Assert.Equal("what is your return policy?", createdTicket.Description);
     }
 
     [Fact]
@@ -156,6 +169,27 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
         Assert.Equal("Open", createdTicket.Status);
         Assert.Equal("Engage handoff: LowConfidence", createdTicket.Subject);
         Assert.Equal("can you help me", createdTicket.Description);
+    }
+
+    [Fact]
+    public async Task ChatSend_AcceptsWidgetKeyFromQuery_AndRequiresWidgetKeyWhenMissingFromBoth()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var withQueryResponse = await _client!.PostAsJsonAsync($"/engage/chat/send?widgetKey={Uri.EscapeDataString(site.WidgetKey)}", new
+        {
+            message = "hello from query"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, withQueryResponse.StatusCode);
+
+        var withoutWidgetKeyResponse = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            message = "hello without key"
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, withoutWidgetKeyResponse.StatusCode);
     }
 
     private async Task AddKnowledgeAsync(string token, string siteId, string text)
