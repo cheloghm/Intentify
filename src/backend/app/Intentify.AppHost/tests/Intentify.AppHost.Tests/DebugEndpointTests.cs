@@ -5,12 +5,15 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Threading.Tasks;
 using Intentify.AppHost;
+using Intentify.Modules.Sites.Application;
+using Intentify.Modules.Sites.Domain;
 using Intentify.Shared.Security;
 using Intentify.Shared.Testing;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Xunit;
 
@@ -131,6 +134,38 @@ public sealed class DebugEndpointTests
             collectorResponse.Headers.TryGetValues("Access-Control-Allow-Origin", out var collectorValues) &&
             collectorValues.Contains("http://127.0.0.1:3000"),
             "Expected Access-Control-Allow-Origin header for collector preflight from configured frontend origin.");
+    }
+
+
+    [Fact]
+    public async Task Cors_AllowsCollectorOrigin_FromSiteKeyPreflight()
+    {
+        await using var app = await BuildApp(Environments.Development);
+
+        var siteRepository = app.Services.GetRequiredService<ISiteRepository>();
+        var site = new Site
+        {
+            TenantId = Guid.NewGuid(),
+            Domain = "example.com",
+            AllowedOrigins = ["http://localhost:8088"],
+            SiteKey = Guid.NewGuid().ToString("N"),
+            WidgetKey = Guid.NewGuid().ToString("N")
+        };
+
+        await siteRepository.InsertAsync(site);
+
+        using var request = new HttpRequestMessage(HttpMethod.Options, $"/collector/events?siteKey={site.SiteKey}");
+        request.Headers.Add("Origin", "http://localhost:8088");
+        request.Headers.Add("Access-Control-Request-Method", "POST");
+        request.Headers.Add("Access-Control-Request-Headers", "content-type");
+
+        var response = await app.GetTestClient().SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.True(
+            response.Headers.TryGetValues("Access-Control-Allow-Origin", out var values) &&
+            values.Contains("http://localhost:8088"),
+            "Expected Access-Control-Allow-Origin header for collector preflight from allowed site origin.");
     }
 
     [Fact]

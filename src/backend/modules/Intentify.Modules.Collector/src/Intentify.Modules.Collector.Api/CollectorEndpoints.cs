@@ -35,11 +35,11 @@ internal static class CollectorEndpoints
 
     public static async Task<IResult> CollectEventAsync(
         CollectorEventRequest? request,
-        string? widgetKey,
+        string? siteKey,
         HttpContext context,
         IngestCollectorEventHandler handler)
     {
-        _ = widgetKey;
+        _ = siteKey;
 
         if (context.Request.ContentLength is > MaxContentLengthBytes)
         {
