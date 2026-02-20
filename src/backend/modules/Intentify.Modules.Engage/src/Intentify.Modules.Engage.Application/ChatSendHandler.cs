@@ -12,6 +12,19 @@ public sealed class ChatSendHandler
 {
     public const decimal LowConfidenceThreshold = 0.50m;
     public const int TopChunkScoreThreshold = 2;
+    private static readonly string[] HumanFollowUpKeywords =
+    [
+        "broken",
+        "error",
+        "refund",
+        "complaint",
+        "quote",
+        "call",
+        "email",
+        "speak to support",
+        "talk to support",
+        "human"
+    ];
 
     private readonly ISiteRepository _siteRepository;
     private readonly IEngageChatSessionRepository _sessionRepository;
@@ -87,9 +100,11 @@ public sealed class ChatSendHandler
         var confidence = ComputeConfidence(retrieved.Count > 0, topScore);
 
         var isLowConfidence = retrieved.Count == 0 || topScore < TopChunkScoreThreshold || confidence < LowConfidenceThreshold;
+        var needsHumanFollowUp = NeedsHumanFollowUp(command.Message);
         if (isLowConfidence)
         {
-            return await CreateFallbackResponseAsync(site, session, command.Message, confidence, now, "LowConfidence", cancellationToken);
+            var reason = needsHumanFollowUp ? "NeedsHumanFollowUp" : "LowConfidence";
+            return await CreateFallbackResponseAsync(site, session, command.Message, now, reason, cancellationToken);
         }
 
         var citations = retrieved
@@ -99,7 +114,8 @@ public sealed class ChatSendHandler
         var completion = await _chatCompletionClient.CompleteAsync(BuildPrompt(command.Message, retrieved), cancellationToken);
         if (!completion.IsSuccess || string.IsNullOrWhiteSpace(completion.Value))
         {
-            return await CreateFallbackResponseAsync(site, session, command.Message, confidence, now, "AiUnavailable", cancellationToken);
+            var reason = needsHumanFollowUp ? "NeedsHumanFollowUp" : "AiUnavailable";
+            return await CreateFallbackResponseAsync(site, session, command.Message, now, reason, cancellationToken);
         }
 
         var response = completion.Value.Trim();
@@ -146,11 +162,11 @@ public sealed class ChatSendHandler
         Site site,
         EngageChatSession session,
         string userMessage,
-        decimal confidence,
         DateTime now,
         string reason,
         CancellationToken cancellationToken)
     {
+        const decimal fallbackConfidence = 0m;
         var fallbackResponse = "Thanks — we’ll get back to you shortly.";
 
         await _ticketRepository.InsertAsync(new EngageHandoffTicket
@@ -180,12 +196,23 @@ public sealed class ChatSendHandler
             Role = "assistant",
             Content = fallbackResponse,
             CreatedAtUtc = now,
-            Confidence = confidence
+            Confidence = fallbackConfidence
         }, cancellationToken);
 
         await _sessionRepository.TouchAsync(session.Id, now, cancellationToken);
 
-        return OperationResult<ChatSendResult>.Success(new ChatSendResult(session.Id, fallbackResponse, confidence, true, []));
+        return OperationResult<ChatSendResult>.Success(new ChatSendResult(session.Id, fallbackResponse, fallbackConfidence, true, []));
+    }
+
+    private static bool NeedsHumanFollowUp(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return false;
+        }
+
+        return HumanFollowUpKeywords.Any(keyword =>
+            message.Contains(keyword, StringComparison.OrdinalIgnoreCase));
     }
 
     private async Task<EngageChatSession> ResolveSessionAsync(

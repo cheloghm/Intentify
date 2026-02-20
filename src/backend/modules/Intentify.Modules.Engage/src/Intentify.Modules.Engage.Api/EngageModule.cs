@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Intentify.Modules.Engage.Api;
 
@@ -28,8 +29,27 @@ public sealed class EngageModule : IAppModule
             ApiBaseUrl = configuration["Intentify:AI:ApiBaseUrl"],
             ApiKey = configuration["Intentify:AI:ApiKey"]
         };
-        services.AddSingleton(aiOptions);
-        services.AddSingleton<IChatCompletionClient, NullChatCompletionClient>();
+        services.TryAddSingleton(aiOptions);
+        services.AddHttpClient(HttpChatCompletionClient.ClientName, (serviceProvider, client) =>
+        {
+            var options = serviceProvider.GetRequiredService<AiOptions>();
+            client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds > 0 ? options.TimeoutSeconds : 30);
+
+            if (Uri.TryCreate(options.ApiBaseUrl, UriKind.Absolute, out var apiBaseUri))
+            {
+                client.BaseAddress = apiBaseUri;
+            }
+        });
+        services.TryAddSingleton<IChatCompletionClient>(serviceProvider =>
+        {
+            var options = serviceProvider.GetRequiredService<AiOptions>();
+            if (!string.IsNullOrWhiteSpace(options.ApiBaseUrl) && !string.IsNullOrWhiteSpace(options.ApiKey))
+            {
+                return new HttpChatCompletionClient(options, serviceProvider.GetRequiredService<IHttpClientFactory>());
+            }
+
+            return new NullChatCompletionClient(options);
+        });
         services.AddSingleton<WidgetBootstrapHandler>();
         services.AddSingleton<ChatSendHandler>();
         services.AddSingleton<ListConversationsHandler>();
