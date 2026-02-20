@@ -1,14 +1,22 @@
+using System.Text;
+using Microsoft.Extensions.Logging;
+
 namespace Intentify.Modules.Knowledge.Application;
 
 public sealed class RetrieveTopChunksHandler
 {
     private readonly IKnowledgeChunkRepository _chunkRepository;
     private readonly IKnowledgeSourceRepository _sourceRepository;
+    private readonly ILogger<RetrieveTopChunksHandler> _logger;
 
-    public RetrieveTopChunksHandler(IKnowledgeChunkRepository chunkRepository, IKnowledgeSourceRepository sourceRepository)
+    public RetrieveTopChunksHandler(
+        IKnowledgeChunkRepository chunkRepository,
+        IKnowledgeSourceRepository sourceRepository,
+        ILogger<RetrieveTopChunksHandler> logger)
     {
         _chunkRepository = chunkRepository;
         _sourceRepository = sourceRepository;
+        _logger = logger;
     }
 
     public async Task<IReadOnlyCollection<RetrievedChunkResult>> HandleAsync(RetrieveTopChunksQuery query, CancellationToken cancellationToken = default)
@@ -22,13 +30,11 @@ public sealed class RetrieveTopChunksHandler
             : sources.Select(item => item.Id).ToHashSet();
 
         var chunks = await _chunkRepository.ListBySiteAsync(query.TenantId, query.SiteId, cancellationToken);
-        var terms = query.Query
-            .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(item => item.ToLowerInvariant())
+        var terms = Tokenize(query.Query)
             .Distinct()
             .ToArray();
 
-        return chunks
+        var retrieved = chunks
             .Where(chunk => allowedSourceIds.Contains(chunk.SourceId))
             .Select(chunk => new RetrievedChunkResult(
                 chunk.Id,
@@ -41,6 +47,43 @@ public sealed class RetrieveTopChunksHandler
             .ThenBy(item => item.ChunkIndex)
             .Take(query.TopK)
             .ToArray();
+
+        _logger.LogInformation(
+            "Knowledge retrieval evaluated {ChunkCount} chunks across {AllowedSourceCount} allowed sources and returned {ResultCount} matches for tenant {TenantId}, site {SiteId}, bot {BotId}.",
+            chunks.Count,
+            allowedSourceIds.Count,
+            retrieved.Length,
+            query.TenantId,
+            query.SiteId,
+            query.BotId);
+
+        return retrieved;
+    }
+
+    private static IEnumerable<string> Tokenize(string input)
+    {
+        var buffer = new StringBuilder();
+        foreach (var character in input)
+        {
+            if (char.IsLetterOrDigit(character))
+            {
+                buffer.Append(char.ToLowerInvariant(character));
+                continue;
+            }
+
+            if (buffer.Length <= 0)
+            {
+                continue;
+            }
+
+            yield return buffer.ToString();
+            buffer.Clear();
+        }
+
+        if (buffer.Length > 0)
+        {
+            yield return buffer.ToString();
+        }
     }
 
     private static int ScoreChunk(string content, IReadOnlyCollection<string> terms)

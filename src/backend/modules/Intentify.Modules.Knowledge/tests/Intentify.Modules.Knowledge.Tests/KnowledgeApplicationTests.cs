@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http;
+using Microsoft.Extensions.Logging.Abstractions;
 using Intentify.Modules.Knowledge.Application;
 using Intentify.Modules.Knowledge.Domain;
 using Xunit;
@@ -45,11 +46,34 @@ public sealed class KnowledgeApplicationTests
             new KnowledgeChunk { Id = Guid.NewGuid(), TenantId = tenantId, SiteId = siteId, SourceId = otherSourceId, ChunkIndex = 2, Content = "alpha other", CreatedAtUtc = DateTime.UtcNow }
         ]);
 
-        var handler = new RetrieveTopChunksHandler(chunkRepo, sourceRepo);
+        var handler = new RetrieveTopChunksHandler(chunkRepo, sourceRepo, NullLogger<RetrieveTopChunksHandler>.Instance);
         var results = await handler.HandleAsync(new RetrieveTopChunksQuery(tenantId, siteId, "alpha", 5, matchingBotId));
 
         Assert.Equal(2, results.Count);
         Assert.DoesNotContain(results, item => item.SourceId == otherSourceId);
+    }
+
+
+
+    [Fact]
+    public async Task RetrieveTopChunks_NormalizesPunctuationInQueryTerms()
+    {
+        var tenantId = Guid.NewGuid();
+        var siteId = Guid.NewGuid();
+        var sourceId = Guid.NewGuid();
+
+        var sourceRepo = new RetrievalSourceRepository([
+            new KnowledgeSource { Id = sourceId, TenantId = tenantId, SiteId = siteId, BotId = Guid.Empty }
+        ]);
+
+        var chunkRepo = new RetrievalChunkRepository([
+            new KnowledgeChunk { Id = Guid.NewGuid(), TenantId = tenantId, SiteId = siteId, SourceId = sourceId, ChunkIndex = 0, Content = "Returns are accepted in 30 days", CreatedAtUtc = DateTime.UtcNow }
+        ]);
+
+        var handler = new RetrieveTopChunksHandler(chunkRepo, sourceRepo, NullLogger<RetrieveTopChunksHandler>.Instance);
+        var results = await handler.HandleAsync(new RetrieveTopChunksQuery(tenantId, siteId, "returns?", 5));
+
+        Assert.Single(results);
     }
 
     [Fact]
