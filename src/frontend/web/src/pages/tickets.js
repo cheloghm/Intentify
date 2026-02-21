@@ -4,6 +4,7 @@ import { createApiClient, mapApiError } from '../shared/apiClient.js';
 const getSiteId = (site) => site?.siteId || site?.id || '';
 const SELECTED_SITE_STORAGE_KEY = 'intentify.selectedSiteId';
 const DEFAULT_PAGE_SIZE = 20;
+const TICKET_STATUSES = ['Open', 'InProgress', 'Resolved', 'Closed'];
 
 const formatDate = (value) => {
   if (!value) {
@@ -125,6 +126,139 @@ export const renderTicketsView = async (container, { apiClient, toast, query } =
 
   pagination.append(prevButton, pageInfo, nextButton);
 
+  const existingModalOverlay = document.getElementById('tickets-modal-overlay');
+  if (existingModalOverlay) {
+    existingModalOverlay.remove();
+  }
+
+  const modalState = {
+    ticketId: '',
+    ticket: null,
+    notes: [],
+    loading: false,
+  };
+
+  const modalOverlay = document.createElement('div');
+  modalOverlay.id = 'tickets-modal-overlay';
+  modalOverlay.style.position = 'fixed';
+  modalOverlay.style.inset = '0';
+  modalOverlay.style.background = 'rgba(15, 23, 42, 0.55)';
+  modalOverlay.style.display = 'none';
+  modalOverlay.style.alignItems = 'center';
+  modalOverlay.style.justifyContent = 'center';
+  modalOverlay.style.zIndex = '999999';
+  modalOverlay.style.padding = '20px';
+
+  const modal = document.createElement('div');
+  modal.style.width = '100%';
+  modal.style.maxWidth = '760px';
+  modal.style.maxHeight = '85vh';
+  modal.style.background = '#ffffff';
+  modal.style.borderRadius = '12px';
+  modal.style.border = '1px solid #e2e8f0';
+  modal.style.display = 'flex';
+  modal.style.flexDirection = 'column';
+  modal.style.overflow = 'hidden';
+
+  const modalHeader = document.createElement('div');
+  modalHeader.style.display = 'flex';
+  modalHeader.style.alignItems = 'center';
+  modalHeader.style.justifyContent = 'space-between';
+  modalHeader.style.gap = '8px';
+  modalHeader.style.padding = '12px 14px';
+  modalHeader.style.borderBottom = '1px solid #e2e8f0';
+
+  const modalTitle = document.createElement('div');
+  modalTitle.style.fontWeight = '600';
+  modalTitle.style.color = '#0f172a';
+  modalTitle.textContent = 'Ticket details';
+
+  const closeModalButton = document.createElement('button');
+  closeModalButton.type = 'button';
+  closeModalButton.textContent = 'Close';
+
+  const modalBody = document.createElement('div');
+  modalBody.style.padding = '12px 14px';
+  modalBody.style.overflowY = 'auto';
+  modalBody.style.display = 'flex';
+  modalBody.style.flexDirection = 'column';
+  modalBody.style.gap = '12px';
+
+  const modalInlineError = document.createElement('div');
+  modalInlineError.style.display = 'none';
+  modalInlineError.style.color = '#b91c1c';
+  modalInlineError.style.fontSize = '13px';
+
+  const ticketDetails = document.createElement('div');
+  ticketDetails.style.display = 'grid';
+  ticketDetails.style.gridTemplateColumns = 'minmax(160px, 220px) 1fr';
+  ticketDetails.style.gap = '6px 10px';
+
+  const statusControls = document.createElement('div');
+  statusControls.style.display = 'flex';
+  statusControls.style.gap = '8px';
+  statusControls.style.alignItems = 'center';
+  statusControls.style.flexWrap = 'wrap';
+
+  const statusSelect = document.createElement('select');
+  statusSelect.style.padding = '8px 10px';
+  statusSelect.style.borderRadius = '6px';
+  statusSelect.style.border = '1px solid #cbd5e1';
+  TICKET_STATUSES.forEach((status) => {
+    const option = document.createElement('option');
+    option.value = status;
+    option.textContent = status;
+    statusSelect.appendChild(option);
+  });
+
+  const updateStatusButton = document.createElement('button');
+  updateStatusButton.type = 'button';
+  updateStatusButton.textContent = 'Update status';
+  updateStatusButton.style.padding = '8px 12px';
+  updateStatusButton.style.border = '1px solid #cbd5e1';
+  updateStatusButton.style.borderRadius = '6px';
+  updateStatusButton.style.background = '#fff';
+
+  statusControls.append(statusSelect, updateStatusButton);
+
+  const notesTitle = document.createElement('div');
+  notesTitle.textContent = 'Notes';
+  notesTitle.style.fontWeight = '600';
+
+  const notesList = document.createElement('div');
+  notesList.style.display = 'flex';
+  notesList.style.flexDirection = 'column';
+  notesList.style.gap = '8px';
+
+  const addNoteControls = document.createElement('div');
+  addNoteControls.style.display = 'flex';
+  addNoteControls.style.flexDirection = 'column';
+  addNoteControls.style.gap = '8px';
+
+  const noteTextarea = document.createElement('textarea');
+  noteTextarea.rows = 3;
+  noteTextarea.placeholder = 'Add a note';
+  noteTextarea.style.padding = '8px 10px';
+  noteTextarea.style.borderRadius = '6px';
+  noteTextarea.style.border = '1px solid #cbd5e1';
+
+  const addNoteButton = document.createElement('button');
+  addNoteButton.type = 'button';
+  addNoteButton.textContent = 'Add note';
+  addNoteButton.style.padding = '8px 12px';
+  addNoteButton.style.border = '1px solid #cbd5e1';
+  addNoteButton.style.borderRadius = '6px';
+  addNoteButton.style.background = '#fff';
+  addNoteButton.style.alignSelf = 'flex-start';
+
+  addNoteControls.append(noteTextarea, addNoteButton);
+
+  modalHeader.append(modalTitle, closeModalButton);
+  modalBody.append(modalInlineError, ticketDetails, statusControls, notesTitle, notesList, addNoteControls);
+  modal.append(modalHeader, modalBody);
+  modalOverlay.appendChild(modal);
+  document.body.appendChild(modalOverlay);
+
   const updateHash = () => {
     const params = new URLSearchParams();
     if (state.siteId) {
@@ -158,6 +292,203 @@ export const renderTicketsView = async (container, { apiClient, toast, query } =
 
     siteSelect.value = state.siteId || '';
   };
+
+  const setModalError = (message) => {
+    modalInlineError.textContent = message || '';
+    modalInlineError.style.display = message ? 'block' : 'none';
+  };
+
+  const renderTicketDetails = () => {
+    ticketDetails.innerHTML = '';
+
+    if (modalState.loading) {
+      const loading = document.createElement('div');
+      loading.textContent = 'Loading ticket details...';
+      loading.style.color = '#64748b';
+      ticketDetails.appendChild(loading);
+      statusSelect.disabled = true;
+      updateStatusButton.disabled = true;
+      addNoteButton.disabled = true;
+      noteTextarea.disabled = true;
+      notesList.innerHTML = '';
+      return;
+    }
+
+    const ticket = modalState.ticket;
+    if (!ticket) {
+      const empty = document.createElement('div');
+      empty.textContent = 'Ticket details unavailable.';
+      empty.style.color = '#64748b';
+      ticketDetails.appendChild(empty);
+      return;
+    }
+
+    statusSelect.disabled = false;
+    updateStatusButton.disabled = false;
+    addNoteButton.disabled = false;
+    noteTextarea.disabled = false;
+    statusSelect.value = ticket.status || 'Open';
+
+    const fields = [
+      ['Subject', ticket.subject || '—'],
+      ['Status', ticket.status || '—'],
+      ['Description', ticket.description || '—'],
+      ['Created', formatDate(ticket.createdAtUtc)],
+      ['Updated', formatDate(ticket.updatedAtUtc)],
+      ['Site ID', ticket.siteId || '—'],
+      ['Visitor ID', ticket.visitorId || '—'],
+      ['Engage Session ID', ticket.engageSessionId || '—'],
+      ['Assigned To User ID', ticket.assignedToUserId || '—'],
+    ];
+
+    fields.forEach(([label, value]) => {
+      const key = document.createElement('div');
+      key.textContent = label;
+      key.style.fontWeight = '600';
+      key.style.color = '#334155';
+
+      const val = document.createElement('div');
+      val.textContent = String(value);
+      val.style.whiteSpace = 'pre-wrap';
+
+      ticketDetails.append(key, val);
+    });
+
+    notesList.innerHTML = '';
+    if (!modalState.notes.length) {
+      const empty = document.createElement('div');
+      empty.textContent = 'No notes yet.';
+      empty.style.color = '#64748b';
+      notesList.appendChild(empty);
+      return;
+    }
+
+    modalState.notes.forEach((note) => {
+      const row = document.createElement('div');
+      row.style.border = '1px solid #e2e8f0';
+      row.style.borderRadius = '8px';
+      row.style.padding = '8px 10px';
+
+      const meta = document.createElement('div');
+      meta.textContent = `${formatDate(note.createdAtUtc)} • ${note.authorUserId || '—'}`;
+      meta.style.fontSize = '12px';
+      meta.style.color = '#64748b';
+
+      const content = document.createElement('div');
+      content.textContent = note.content || '—';
+      content.style.marginTop = '4px';
+      content.style.whiteSpace = 'pre-wrap';
+
+      row.append(meta, content);
+      notesList.appendChild(row);
+    });
+  };
+
+  const closeModal = () => {
+    modalOverlay.style.display = 'none';
+    modalState.ticketId = '';
+    setModalError('');
+  };
+
+  const loadTicketModalData = async (ticketId) => {
+    const ticketPromise = client.tickets?.getTicket
+      ? client.tickets.getTicket(ticketId)
+      : client.request(`/tickets/${encodeURIComponent(ticketId)}`);
+    const notesPromise = client.tickets?.getTicketNotes
+      ? client.tickets.getTicketNotes(ticketId)
+      : client.request(`/tickets/${encodeURIComponent(ticketId)}/notes`);
+
+    const [ticket, notes] = await Promise.all([ticketPromise, notesPromise]);
+    modalState.ticket = ticket;
+    modalState.notes = Array.isArray(notes) ? notes : [];
+  };
+
+  const openTicketModal = async (ticketId) => {
+    modalState.ticketId = ticketId;
+    modalState.ticket = null;
+    modalState.notes = [];
+    modalState.loading = true;
+    setModalError('');
+    renderTicketDetails();
+    modalOverlay.style.display = 'flex';
+
+    try {
+      await loadTicketModalData(ticketId);
+    } catch (error) {
+      setModalError(mapApiError(error).message);
+    } finally {
+      modalState.loading = false;
+      renderTicketDetails();
+    }
+  };
+
+  closeModalButton.addEventListener('click', closeModal);
+  modalOverlay.addEventListener('click', (event) => {
+    if (event.target === modalOverlay) {
+      closeModal();
+    }
+  });
+
+  addNoteButton.addEventListener('click', async () => {
+    const content = noteTextarea.value.trim();
+    if (!content || !modalState.ticketId) {
+      return;
+    }
+
+    setModalError('');
+    addNoteButton.disabled = true;
+    try {
+      if (client.tickets?.addTicketNote) {
+        await client.tickets.addTicketNote(modalState.ticketId, content);
+      } else {
+        await client.request(`/tickets/${encodeURIComponent(modalState.ticketId)}/notes`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ content }),
+        });
+      }
+      noteTextarea.value = '';
+      await loadTicketModalData(modalState.ticketId);
+      notifier.show({ message: 'Note added.', variant: 'success' });
+      renderTicketDetails();
+    } catch (error) {
+      setModalError(mapApiError(error).message);
+    } finally {
+      addNoteButton.disabled = false;
+    }
+  });
+
+  updateStatusButton.addEventListener('click', async () => {
+    if (!modalState.ticketId) {
+      return;
+    }
+
+    setModalError('');
+    updateStatusButton.disabled = true;
+    try {
+      if (client.tickets?.transitionTicketStatus) {
+        await client.tickets.transitionTicketStatus(modalState.ticketId, statusSelect.value);
+      } else {
+        await client.request(`/tickets/${encodeURIComponent(modalState.ticketId)}/status`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ status: statusSelect.value }),
+        });
+      }
+      await loadTicketModalData(modalState.ticketId);
+      notifier.show({ message: 'Ticket status updated.', variant: 'success' });
+      renderTicketDetails();
+      await loadTickets();
+    } catch (error) {
+      setModalError(mapApiError(error).message);
+    } finally {
+      updateStatusButton.disabled = false;
+    }
+  });
 
   const renderTickets = () => {
     listBody.innerHTML = '';
@@ -206,6 +537,7 @@ export const renderTicketsView = async (container, { apiClient, toast, query } =
     const tbody = document.createElement('tbody');
     state.tickets.forEach((ticket) => {
       const tr = document.createElement('tr');
+      tr.style.cursor = 'pointer';
       [
         toShortId(ticket.id),
         ticket.subject || '—',
@@ -215,6 +547,9 @@ export const renderTicketsView = async (container, { apiClient, toast, query } =
         const td = document.createElement('td');
         td.textContent = String(value);
         tr.appendChild(td);
+      });
+      tr.addEventListener('click', () => {
+        void openTicketModal(ticket.id);
       });
       tbody.appendChild(tr);
     });
