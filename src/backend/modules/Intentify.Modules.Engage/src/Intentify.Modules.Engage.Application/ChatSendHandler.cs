@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Intentify.Modules.Engage.Domain;
 using Intentify.Modules.Knowledge.Application;
 using Intentify.Modules.Sites.Application;
@@ -12,19 +13,27 @@ public sealed class ChatSendHandler
 {
     public const decimal LowConfidenceThreshold = 0.50m;
     public const int TopChunkScoreThreshold = 2;
-    private static readonly string[] HumanFollowUpKeywords =
+    private static readonly string[] HumanHelpPhrases =
     [
+        "contact form",
+        "form isn't working",
+        "form is not working",
+        "can't submit",
+        "cannot submit",
+        "doesn't submit",
         "broken",
         "error",
+        "failed",
+        "not working",
+        "doesn't work",
+        "checkout",
+        "payment",
         "refund",
-        "complaint",
-        "quote",
-        "call",
-        "email",
-        "speak to support",
-        "talk to support",
-        "human"
+        "complaint"
     ];
+
+    private const string AskForContactDetailsResponse = "Sorry about that — I’ll get someone to help. What’s your name and best email?";
+    private const string ContactDetailsReceivedResponse = "Thanks — I’ve got your details. Our team will contact you shortly.";
 
     private readonly ISiteRepository _siteRepository;
     private readonly IEngageChatSessionRepository _sessionRepository;
@@ -105,11 +114,9 @@ public sealed class ChatSendHandler
         var confidence = ComputeConfidence(retrieved.Count > 0, topScore);
 
         var isLowConfidence = retrieved.Count == 0 || topScore < TopChunkScoreThreshold || confidence < LowConfidenceThreshold;
-        var needsHumanFollowUp = NeedsHumanFollowUp(command.Message);
         if (isLowConfidence)
         {
-            var reason = needsHumanFollowUp ? "NeedsHumanFollowUp" : "LowConfidence";
-            return await CreateFallbackResponseAsync(site, session, command.Message, now, reason, cancellationToken);
+            return await CreateFallbackResponseAsync(site, session, command.Message, now, "LowConfidence", cancellationToken);
         }
 
         var citations = retrieved
@@ -119,8 +126,7 @@ public sealed class ChatSendHandler
         var completion = await _chatCompletionClient.CompleteAsync(BuildPrompt(command.Message, retrieved), cancellationToken);
         if (!completion.IsSuccess || string.IsNullOrWhiteSpace(completion.Value))
         {
-            var reason = needsHumanFollowUp ? "NeedsHumanFollowUp" : "AiUnavailable";
-            return await CreateFallbackResponseAsync(site, session, command.Message, now, reason, cancellationToken);
+            return await CreateFallbackResponseAsync(site, session, command.Message, now, "AiUnavailable", cancellationToken);
         }
 
         var response = NormalizeAiResponse(completion.Value);
@@ -237,15 +243,115 @@ User question:
         return OperationResult<ChatSendResult>.Success(new ChatSendResult(session.Id, fallbackResponse, fallbackConfidence, true, []));
     }
 
-    private static bool NeedsHumanFollowUp(string message)
+    private static bool NeedsHumanHelp(string message)
     {
         if (string.IsNullOrWhiteSpace(message))
         {
             return false;
         }
 
-        return HumanFollowUpKeywords.Any(keyword =>
-            message.Contains(keyword, StringComparison.OrdinalIgnoreCase));
+        return HumanHelpPhrases.Any(phrase =>
+            message.Contains(phrase, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool ContainsEmail(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return false;
+        }
+
+        return Regex.IsMatch(message, @"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", RegexOptions.IgnoreCase);
+    }
+
+    private async Task<bool> IsAwaitingContactDetailsAsync(Guid sessionId, CancellationToken cancellationToken)
+    {
+        var handoffs = await _ticketRepository.ListBySessionAsync(sessionId, cancellationToken);
+        if (handoffs.Count == 0)
+        {
+            return false;
+        }
+
+        var messages = await _messageRepository.ListBySessionAsync(sessionId, cancellationToken);
+        var lastAssistantMessage = messages
+            .Where(item => string.Equals(item.Role, "assistant", StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(item => item.CreatedAtUtc)
+            .Select(item => item.Content)
+            .FirstOrDefault();
+
+        return string.Equals(lastAssistantMessage, AskForContactDetailsResponse, StringComparison.Ordinal);
+    }
+
+    private async Task<OperationResult<ChatSendResult>> CreateHumanHelpResponseAsync(
+        Site site,
+        EngageChatSession session,
+        string userMessage,
+        DateTime now,
+        CancellationToken cancellationToken)
+    {
+        await _ticketRepository.InsertAsync(new EngageHandoffTicket
+        {
+            TenantId = site.TenantId,
+            SiteId = site.Id,
+            SessionId = session.Id,
+            UserMessage = userMessage,
+            Reason = "NeedsHumanHelp",
+            CreatedAtUtc = now
+        }, cancellationToken);
+
+        await _createTicketHandler.HandleAsync(
+            new CreateTicketCommand(
+                site.TenantId,
+                site.Id,
+                null,
+                session.Id,
+                "Engage handoff: NeedsHumanHelp",
+                userMessage,
+                null),
+            cancellationToken);
+
+        await _messageRepository.InsertAsync(new EngageChatMessage
+        {
+            SessionId = session.Id,
+            Role = "assistant",
+            Content = AskForContactDetailsResponse,
+            CreatedAtUtc = now,
+            Confidence = 0m
+        }, cancellationToken);
+
+        await _sessionRepository.TouchAsync(session.Id, now, cancellationToken);
+        return OperationResult<ChatSendResult>.Success(new ChatSendResult(session.Id, AskForContactDetailsResponse, 0m, true, []));
+    }
+
+    private async Task<OperationResult<ChatSendResult>> CaptureContactDetailsAsync(
+        Site site,
+        EngageChatSession session,
+        string userMessage,
+        DateTime now,
+        CancellationToken cancellationToken)
+    {
+        await _createTicketHandler.HandleAsync(
+            new CreateTicketCommand(
+                site.TenantId,
+                site.Id,
+                null,
+                session.Id,
+                "Engage handoff: ContactDetails",
+                $"Contact details provided by visitor: {userMessage}",
+                null),
+            cancellationToken);
+
+        await _messageRepository.InsertAsync(new EngageChatMessage
+        {
+            SessionId = session.Id,
+            Role = "assistant",
+            Content = ContactDetailsReceivedResponse,
+            CreatedAtUtc = now,
+            Confidence = 0m
+        }, cancellationToken);
+
+        await _sessionRepository.TouchAsync(session.Id, now, cancellationToken);
+        return OperationResult<ChatSendResult>.Success(new ChatSendResult(session.Id, ContactDetailsReceivedResponse, 0m, true, []));
     }
 
     private async Task<EngageChatSession> ResolveSessionAsync(
