@@ -148,7 +148,7 @@ internal sealed class OpenSearchRestClient : IOpenSearchKnowledgeClient
                     should = new object[]
                     {
                         new { term = new Dictionary<string, string> { ["botId"] = botId.Value.ToString("D") } },
-                        new { bool = new { must_not = new { exists = new { field = "botId" } } } }
+                        new { @bool = new { must_not = new { exists = new { field = "botId" } } } }
                     },
                     minimum_should_match = 1
                 }

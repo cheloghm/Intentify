@@ -41,11 +41,14 @@ public sealed class EngageModule : IAppModule
             }
         });
         services.TryAddSingleton<IChatCompletionClient>(serviceProvider =>
-        {
+{
             var options = serviceProvider.GetRequiredService<AiOptions>();
+
             if (!string.IsNullOrWhiteSpace(options.ApiBaseUrl) && !string.IsNullOrWhiteSpace(options.ApiKey))
             {
-                return new HttpChatCompletionClient(options, serviceProvider.GetRequiredService<IHttpClientFactory>());
+                var httpClientFactory = serviceProvider.GetRequiredService<IHttpClientFactory>();
+                var httpClient = httpClientFactory.CreateClient(HttpChatCompletionClient.ClientName);
+                return new HttpChatCompletionClient(options, httpClient);
             }
 
             return new NullChatCompletionClient(options);

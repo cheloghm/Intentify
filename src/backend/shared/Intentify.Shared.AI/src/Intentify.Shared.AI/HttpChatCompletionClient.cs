@@ -5,7 +5,7 @@ using Intentify.Shared.Abstractions;
 
 namespace Intentify.Shared.AI;
 
-public sealed class HttpChatCompletionClient(AiOptions options, IHttpClientFactory httpClientFactory) : IChatCompletionClient
+public sealed class HttpChatCompletionClient(AiOptions options, HttpClient httpClient) : IChatCompletionClient
 {
     public const string ClientName = "intentify-ai-chat";
 
@@ -18,7 +18,7 @@ public sealed class HttpChatCompletionClient(AiOptions options, IHttpClientFacto
 
         try
         {
-            var client = httpClientFactory.CreateClient(ClientName);
+            var client = httpClient;
             using var request = new HttpRequestMessage(HttpMethod.Post, "v1/chat/completions")
             {
                 Content = JsonContent.Create(new
