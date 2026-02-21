@@ -34,6 +34,7 @@ public sealed class ChatSendHandler
     private readonly CreateTicketHandler _createTicketHandler;
     private readonly RetrieveTopChunksHandler _retrieveTopChunksHandler;
     private readonly IChatCompletionClient _chatCompletionClient;
+    private readonly TimeSpan _sessionTimeout;
 
     public ChatSendHandler(
         ISiteRepository siteRepository,
@@ -43,7 +44,8 @@ public sealed class ChatSendHandler
         IEngageHandoffTicketRepository ticketRepository,
         CreateTicketHandler createTicketHandler,
         RetrieveTopChunksHandler retrieveTopChunksHandler,
-        IChatCompletionClient chatCompletionClient)
+        IChatCompletionClient chatCompletionClient,
+        int sessionTimeoutMinutes)
     {
         _siteRepository = siteRepository;
         _sessionRepository = sessionRepository;
@@ -53,6 +55,7 @@ public sealed class ChatSendHandler
         _createTicketHandler = createTicketHandler;
         _retrieveTopChunksHandler = retrieveTopChunksHandler;
         _chatCompletionClient = chatCompletionClient;
+        _sessionTimeout = TimeSpan.FromMinutes(sessionTimeoutMinutes > 0 ? sessionTimeoutMinutes : 30);
     }
 
     public async Task<OperationResult<ChatSendResult>> HandleAsync(ChatSendCommand command, CancellationToken cancellationToken = default)
@@ -91,6 +94,8 @@ public sealed class ChatSendHandler
             Content = command.Message,
             CreatedAtUtc = now
         }, cancellationToken);
+
+        await _sessionRepository.TouchAsync(session.Id, now, cancellationToken);
 
         var retrieved = await _retrieveTopChunksHandler.HandleAsync(
             new RetrieveTopChunksQuery(site.TenantId, site.Id, command.Message, 3, bot.BotId),
@@ -229,7 +234,11 @@ public sealed class ChatSendHandler
             var existing = await _sessionRepository.GetByIdAsync(sessionId.Value, cancellationToken);
             if (existing is not null && existing.TenantId == tenantId && existing.SiteId == siteId && existing.BotId == botId)
             {
-                return existing;
+                var idleFor = now - existing.UpdatedAtUtc;
+                if (idleFor <= _sessionTimeout)
+                {
+                    return existing;
+                }
             }
         }
 
