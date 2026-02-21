@@ -54,19 +54,7 @@ public sealed class EngageChatSessionRepository : IEngageChatSessionRepository
 
     public async Task<IReadOnlyCollection<EngageChatSession>> ListBySiteAsync(Guid tenantId, Guid siteId, CancellationToken cancellationToken = default)
     {
-        await _ensureIndexes;
-        var normalized = collectorSessionId.Trim();
-        if (string.IsNullOrWhiteSpace(normalized))
-        {
-            return;
-        }
-
-        var filter = Builders<EngageChatSession>.Filter.Eq(item => item.Id, sessionId)
-            & (Builders<EngageChatSession>.Filter.Eq(item => item.CollectorSessionId, null)
-               | Builders<EngageChatSession>.Filter.Eq(item => item.CollectorSessionId, string.Empty));
-
-        var update = Builders<EngageChatSession>.Update.Set(item => item.CollectorSessionId, normalized);
-        await _sessions.UpdateOneAsync(filter, update, cancellationToken: cancellationToken);
+        return await ListBySiteAsync(tenantId, siteId, collectorSessionId: null, cancellationToken);
     }
 
     public async Task<IReadOnlyCollection<EngageChatSession>> ListBySiteAsync(Guid tenantId, Guid siteId, string? collectorSessionId = null, CancellationToken cancellationToken = default)
