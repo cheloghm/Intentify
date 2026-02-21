@@ -33,7 +33,7 @@ internal static class EngageEndpoints
 
   function endpoint(path) { return baseUrl + path; }
 
-  function getCookie(name) {
+  function readCookie(name) {
     var escapedName = name.replace(/[-[\]{}()*+?.,\^$|#\s]/g, '\\$&');
     var match = document.cookie.match(new RegExp('(?:^|; )' + escapedName + '=([^;]*)'));
     if (!match) {
@@ -141,7 +141,7 @@ internal static class EngageEndpoints
     fetch(endpoint('/engage/chat/send?widgetKey=' + encodeURIComponent(widgetKey)), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ widgetKey: widgetKey, sessionId: sessionId, message: message, collectorSessionId: getCookie("intentify_sid") })
+      body: JSON.stringify({ widgetKey: widgetKey, sessionId: sessionId, message: message, collectorSessionId: readCookie('intentify_sid') })
     })
       .then(function(response) {
         if (!response.ok) {
@@ -237,64 +237,6 @@ internal static class EngageEndpoints
                 result.Value.TicketCreated,
                 result.Value.Sources.Select(item => new EngageCitationResponse(item.SourceId.ToString("N"), item.ChunkId.ToString("N"), item.ChunkIndex)).ToArray()))
         };
-    }
-
-
-    public static async Task<IResult> GetBotAsync(string? siteId, HttpContext context, IEngageBotRepository botRepository)
-    {
-        if (string.IsNullOrWhiteSpace(siteId) || !Guid.TryParse(siteId, out var parsedSiteId))
-        {
-            return Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(new Dictionary<string, string[]>
-            {
-                ["siteId"] = ["Site id is invalid."]
-            }));
-        }
-
-        var tenantId = TryGetTenantId(context.User);
-        if (tenantId is null)
-        {
-            return Results.Unauthorized();
-        }
-
-        var bot = await botRepository.GetOrCreateForSiteAsync(tenantId.Value, parsedSiteId, context.RequestAborted);
-        var name = string.IsNullOrWhiteSpace(bot.Name) ? bot.DisplayName : bot.Name;
-        return Results.Ok(new EngageBotResponse(parsedSiteId.ToString("N"), name ?? "Assistant"));
-    }
-
-    public static async Task<IResult> UpdateBotAsync(string? siteId, UpdateEngageBotRequest request, HttpContext context, IEngageBotRepository botRepository)
-    {
-        if (string.IsNullOrWhiteSpace(siteId) || !Guid.TryParse(siteId, out var parsedSiteId))
-        {
-            return Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(new Dictionary<string, string[]>
-            {
-                ["siteId"] = ["Site id is invalid."]
-            }));
-        }
-
-        var name = request?.Name?.Trim() ?? string.Empty;
-        if (string.IsNullOrWhiteSpace(name) || name.Length is < 1 or > 50)
-        {
-            return Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(new Dictionary<string, string[]>
-            {
-                ["name"] = ["Name must be between 1 and 50 characters."]
-            }));
-        }
-
-        var tenantId = TryGetTenantId(context.User);
-        if (tenantId is null)
-        {
-            return Results.Unauthorized();
-        }
-
-        await botRepository.GetOrCreateForSiteAsync(tenantId.Value, parsedSiteId, context.RequestAborted);
-        var updated = await botRepository.UpdateNameAsync(tenantId.Value, parsedSiteId, name, context.RequestAborted);
-        if (updated is null)
-        {
-            return Results.NotFound();
-        }
-
-        var resolvedName = string.IsNullOrWhiteSpace(updated.Name) ? updated.DisplayName : updated.Name;
-        return Results.Ok(new EngageBotResponse(parsedSiteId.ToString("N"), resolvedName ?? "Assistant"));
     }
 
     public static async Task<IResult> ListConversationsAsync(string? siteId, string? collectorSessionId, HttpContext context, ListConversationsHandler handler)
