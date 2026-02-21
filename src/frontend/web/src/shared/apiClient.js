@@ -190,6 +190,9 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
       body: JSON.stringify({ name }),
     });
 
+  const listTickets = async ({ siteId, page = 1, pageSize = 50 } = {}) =>
+    request(`/tickets${buildQueryString({ siteId, page, pageSize })}`);
+
   return {
     request,
     sites: {
@@ -222,6 +225,9 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
       getConversationMessages: getEngageConversationMessages,
       getBot: getEngageBot,
       updateBot: updateEngageBot,
+    },
+    tickets: {
+      listTickets,
     },
   };
 };

@@ -372,11 +372,10 @@ export const renderEngageView = (container, { apiClient, toast } = {}) => {
   modalActions.style.alignItems = 'center';
   modalActions.style.gap = '8px';
 
-  const jumpOldestButton = createButton({ label: 'Oldest' });
-  const jumpLatestButton = createButton({ label: 'Latest' });
+  const jumpLatestButton = createButton({ label: 'Jump to latest' });
   const closeModalButton = createButton({ label: 'Close' });
 
-  modalActions.append(jumpOldestButton, jumpLatestButton, closeModalButton);
+  modalActions.append(jumpLatestButton, closeModalButton);
   modalHeader.append(modalTitle, modalActions);
 
   const modalMessages = document.createElement('div');
@@ -482,14 +481,21 @@ const label = document.createElement('div');
     }
 
     state.selectedMessages.forEach((message) => {
+      const isUser = message.role === 'user';
       const row = document.createElement('div');
-      row.style.border = '1px solid #e2e8f0';
-      row.style.borderRadius = '8px';
-      row.style.padding = '10px 12px';
-      row.style.background = '#ffffff';
+      row.style.display = 'flex';
+      row.style.justifyContent = isUser ? 'flex-end' : 'flex-start';
+
+      const bubble = document.createElement('div');
+      bubble.style.maxWidth = '82%';
+      bubble.style.padding = '10px 12px';
+      bubble.style.borderRadius = '10px';
+      bubble.style.background = isUser ? '#dbeafe' : '#f1f5f9';
+      bubble.style.color = '#0f172a';
+      bubble.style.border = isUser ? '1px solid #bfdbfe' : '1px solid #e2e8f0';
 
       const meta = document.createElement('div');
-      const roleLabel = message.role === 'assistant' ? (state.botName || 'Assistant') : message.role;
+      const roleLabel = isUser ? 'You' : (state.botName || 'Assistant');
       meta.textContent = `${roleLabel} • ${new Date(message.createdAtUtc).toLocaleString()}`;
       meta.style.fontSize = '12px';
       meta.style.color = '#64748b';
@@ -499,7 +505,8 @@ const label = document.createElement('div');
       content.style.marginTop = '6px';
       content.style.whiteSpace = 'pre-wrap';
 
-      row.append(meta, content);
+      bubble.append(meta, content);
+      row.appendChild(bubble);
       modalMessages.appendChild(row);
     });
   };
@@ -518,10 +525,6 @@ const label = document.createElement('div');
     if (event.target === modalOverlay) {
       closeModal();
     }
-  });
-
-  jumpOldestButton.addEventListener('click', () => {
-    modalMessages.scrollTop = 0;
   });
 
   jumpLatestButton.addEventListener('click', () => {
