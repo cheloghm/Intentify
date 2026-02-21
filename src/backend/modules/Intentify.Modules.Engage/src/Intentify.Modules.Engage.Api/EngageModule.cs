@@ -1,6 +1,9 @@
 using Intentify.Modules.Auth.Api;
 using Intentify.Modules.Engage.Application;
 using Intentify.Modules.Engage.Infrastructure;
+using Intentify.Modules.Tickets.Application;
+using Intentify.Modules.Sites.Application;
+using Intentify.Modules.Knowledge.Application;
 using Intentify.Shared.AI;
 using Intentify.Shared.Web;
 using Microsoft.AspNetCore.Builder;
@@ -54,7 +57,20 @@ public sealed class EngageModule : IAppModule
             return new NullChatCompletionClient(options);
         });
         services.AddSingleton<WidgetBootstrapHandler>();
-        services.AddSingleton<ChatSendHandler>();
+        services.AddSingleton(serviceProvider =>
+        {
+            var sessionTimeoutMinutes = configuration.GetValue<int?>("Intentify:Engage:SessionTimeoutMinutes") ?? 30;
+            return new ChatSendHandler(
+                serviceProvider.GetRequiredService<ISiteRepository>(),
+                serviceProvider.GetRequiredService<IEngageChatSessionRepository>(),
+                serviceProvider.GetRequiredService<IEngageBotRepository>(),
+                serviceProvider.GetRequiredService<IEngageChatMessageRepository>(),
+                serviceProvider.GetRequiredService<IEngageHandoffTicketRepository>(),
+                serviceProvider.GetRequiredService<CreateTicketHandler>(),
+                serviceProvider.GetRequiredService<RetrieveTopChunksHandler>(),
+                serviceProvider.GetRequiredService<IChatCompletionClient>(),
+                sessionTimeoutMinutes);
+        });
         services.AddSingleton<ListConversationsHandler>();
         services.AddSingleton<GetConversationMessagesHandler>();
     }

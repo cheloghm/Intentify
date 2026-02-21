@@ -9,4 +9,6 @@ public sealed class EngageBot
     public Guid TenantId { get; init; }
 
     public Guid SiteId { get; init; }
+
+    public string DisplayName { get; set; } = "Assistant";
 }

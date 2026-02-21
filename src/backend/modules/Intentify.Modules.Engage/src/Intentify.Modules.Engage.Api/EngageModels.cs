@@ -1,6 +1,6 @@
 namespace Intentify.Modules.Engage.Api;
 
-public sealed record WidgetBootstrapResponse(string SiteId, string Domain);
+public sealed record WidgetBootstrapResponse(string SiteId, string Domain, string DisplayName);
 
 public sealed record EngageChatSendRequest(string WidgetKey, string? SessionId, string Message);
 

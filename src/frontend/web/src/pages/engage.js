@@ -18,6 +18,69 @@ const createButton = ({ label, variant = 'default', type = 'button' } = {}) => {
 
 const getSiteId = (site) => site?.siteId || site?.id || '';
 
+const conversationTimestampFields = [
+  'lastActivityAtUtc',
+  'lastActivityAt',
+  'updatedAtUtc',
+  'updatedAt',
+  'createdAtUtc',
+  'createdAt',
+];
+
+const getConversationTimestamp = (conversation) => {
+  for (const field of conversationTimestampFields) {
+    const rawValue = conversation?.[field];
+    if (!rawValue) {
+      continue;
+    }
+
+    const value = new Date(rawValue).getTime();
+    if (!Number.isNaN(value)) {
+      return value;
+    }
+  }
+
+  return null;
+};
+
+const sortConversationsNewestFirst = (conversations) => {
+  if (!Array.isArray(conversations) || !conversations.length) {
+    return [];
+  }
+
+  const hasSortableTimestamp = conversations.some((conversation) =>
+    conversationTimestampFields.some((field) => {
+      const rawValue = conversation?.[field];
+      if (!rawValue) {
+        return false;
+      }
+
+      return !Number.isNaN(new Date(rawValue).getTime());
+    })
+  );
+
+  if (!hasSortableTimestamp) {
+    return conversations;
+  }
+
+  return [...conversations].sort((left, right) => {
+    const rightTimestamp = getConversationTimestamp(right);
+    const leftTimestamp = getConversationTimestamp(left);
+
+    if (rightTimestamp === null && leftTimestamp === null) {
+      return 0;
+    }
+    if (rightTimestamp === null) {
+      return 1;
+    }
+    if (leftTimestamp === null) {
+      return -1;
+    }
+
+    return rightTimestamp - leftTimestamp;
+  });
+};
+
 const copyToClipboardRobust = async (value) => {
   if (navigator.clipboard?.writeText) {
     try {
@@ -235,8 +298,8 @@ export const renderEngageView = (container, { apiClient, toast } = {}) => {
   chatBody.append(transcript, chatForm);
 
   const conversationsBody = document.createElement('div');
-  conversationsBody.style.display = 'grid';
-  conversationsBody.style.gridTemplateColumns = '280px 1fr';
+  conversationsBody.style.display = 'flex';
+  conversationsBody.style.flexDirection = 'column';
   conversationsBody.style.gap = '12px';
 
   const sessionsList = document.createElement('div');
@@ -244,12 +307,64 @@ export const renderEngageView = (container, { apiClient, toast } = {}) => {
   sessionsList.style.flexDirection = 'column';
   sessionsList.style.gap = '8px';
 
-  const messagesPanel = document.createElement('div');
-  messagesPanel.style.display = 'flex';
-  messagesPanel.style.flexDirection = 'column';
-  messagesPanel.style.gap = '8px';
+  conversationsBody.appendChild(sessionsList);
 
-  conversationsBody.append(sessionsList, messagesPanel);
+  const modalOverlay = document.createElement('div');
+  modalOverlay.style.position = 'fixed';
+  modalOverlay.style.inset = '0';
+  modalOverlay.style.background = 'rgba(15, 23, 42, 0.55)';
+  modalOverlay.style.display = 'none';
+  modalOverlay.style.alignItems = 'center';
+  modalOverlay.style.justifyContent = 'center';
+  modalOverlay.style.zIndex = '999999';
+  modalOverlay.style.padding = '20px';
+
+  const modal = document.createElement('div');
+  modal.style.width = '100%';
+  modal.style.maxWidth = '760px';
+  modal.style.maxHeight = '85vh';
+  modal.style.background = '#ffffff';
+  modal.style.borderRadius = '12px';
+  modal.style.border = '1px solid #e2e8f0';
+  modal.style.display = 'flex';
+  modal.style.flexDirection = 'column';
+  modal.style.overflow = 'hidden';
+
+  const modalHeader = document.createElement('div');
+  modalHeader.style.display = 'flex';
+  modalHeader.style.alignItems = 'center';
+  modalHeader.style.justifyContent = 'space-between';
+  modalHeader.style.gap = '8px';
+  modalHeader.style.padding = '12px 14px';
+  modalHeader.style.borderBottom = '1px solid #e2e8f0';
+
+  const modalTitle = document.createElement('div');
+  modalTitle.style.fontWeight = '600';
+  modalTitle.style.color = '#0f172a';
+  modalTitle.textContent = 'Conversation';
+
+  const modalActions = document.createElement('div');
+  modalActions.style.display = 'flex';
+  modalActions.style.alignItems = 'center';
+  modalActions.style.gap = '8px';
+
+  const jumpOldestButton = createButton({ label: 'Jump to oldest' });
+  const jumpLatestButton = createButton({ label: 'Jump to latest' });
+  const closeModalButton = createButton({ label: 'Close' });
+
+  modalActions.append(jumpOldestButton, jumpLatestButton, closeModalButton);
+  modalHeader.append(modalTitle, modalActions);
+
+  const modalMessages = document.createElement('div');
+  modalMessages.style.padding = '12px 14px';
+  modalMessages.style.overflowY = 'auto';
+  modalMessages.style.display = 'flex';
+  modalMessages.style.flexDirection = 'column';
+  modalMessages.style.gap = '8px';
+
+  modal.append(modalHeader, modalMessages);
+  modalOverlay.appendChild(modal);
+  document.body.appendChild(modalOverlay);
 
   const setSiteOptions = () => {
     siteSelect.innerHTML = '';
@@ -310,28 +425,25 @@ export const renderEngageView = (container, { apiClient, toast } = {}) => {
         button.style.borderColor = '#bfdbfe';
       }
       button.addEventListener('click', async () => {
-      state.selectedSessionId = conversation.sessionId;
-      await loadConversationMessages();
+        state.selectedSessionId = conversation.sessionId;
+        await loadConversationMessages({ openModal: true });
       });
       sessionsList.appendChild(button);
     });
   };
 
-  const renderConversationMessages = () => {
-    messagesPanel.innerHTML = '';
-    if (!state.selectedSessionId) {
-      const empty = document.createElement('div');
-      empty.textContent = 'Select a conversation to view messages.';
-      empty.style.color = '#64748b';
-      messagesPanel.appendChild(empty);
-      return;
-    }
+  const renderConversationMessagesModal = () => {
+    modalMessages.innerHTML = '';
+
+    modalTitle.textContent = state.selectedSessionId
+      ? `Conversation ${state.selectedSessionId}`
+      : 'Conversation';
 
     if (!state.selectedMessages.length) {
       const empty = document.createElement('div');
       empty.textContent = 'No messages for this session.';
       empty.style.color = '#64748b';
-      messagesPanel.appendChild(empty);
+      modalMessages.appendChild(empty);
       return;
     }
 
@@ -353,22 +465,48 @@ export const renderEngageView = (container, { apiClient, toast } = {}) => {
       content.style.whiteSpace = 'pre-wrap';
 
       row.append(meta, content);
-      messagesPanel.appendChild(row);
+      modalMessages.appendChild(row);
     });
   };
+
+  const closeModal = () => {
+    modalOverlay.style.display = 'none';
+  };
+
+  const openModal = () => {
+    modalOverlay.style.display = 'flex';
+    modalMessages.scrollTop = modalMessages.scrollHeight;
+  };
+
+  closeModalButton.addEventListener('click', closeModal);
+  modalOverlay.addEventListener('click', (event) => {
+    if (event.target === modalOverlay) {
+      closeModal();
+    }
+  });
+
+  jumpOldestButton.addEventListener('click', () => {
+    modalMessages.scrollTop = 0;
+  });
+
+  jumpLatestButton.addEventListener('click', () => {
+    modalMessages.scrollTop = modalMessages.scrollHeight;
+  });
 
   const loadConversations = async () => {
     if (!state.siteId) {
       state.conversations = [];
       state.selectedSessionId = '';
       state.selectedMessages = [];
+      closeModal();
       renderConversations();
-      renderConversationMessages();
       return;
     }
 
     try {
-      state.conversations = await client.engage.getConversations(state.siteId);
+      state.conversations = sortConversationsNewestFirst(
+        await client.engage.getConversations(state.siteId)
+      );
       const selectedExists = state.conversations.some(
         (conversation) => conversation.sessionId === state.selectedSessionId
       );
@@ -383,27 +521,30 @@ export const renderEngageView = (container, { apiClient, toast } = {}) => {
         await loadConversationMessages();
       } else {
         state.selectedMessages = [];
-        renderConversationMessages();
       }
     } catch (error) {
       notifier.show({ message: mapApiError(error).message, variant: 'danger' });
     }
   };
 
-  const loadConversationMessages = async () => {
+  const loadConversationMessages = async ({ openModal: shouldOpenModal = false } = {}) => {
     if (!state.siteId || !state.selectedSessionId) {
       state.selectedMessages = [];
-      renderConversationMessages();
       return;
     }
 
     try {
-      state.selectedMessages = await client.engage.getConversationMessages(
-        state.selectedSessionId,
-        state.siteId
+      state.selectedMessages = (
+        await client.engage.getConversationMessages(state.selectedSessionId, state.siteId)
+      ).sort(
+        (left, right) =>
+          new Date(left.createdAtUtc).getTime() - new Date(right.createdAtUtc).getTime()
       );
       renderConversations();
-      renderConversationMessages();
+      renderConversationMessagesModal();
+      if (shouldOpenModal) {
+        openModal();
+      }
     } catch (error) {
       notifier.show({ message: mapApiError(error).message, variant: 'danger' });
     }
@@ -438,10 +579,10 @@ export const renderEngageView = (container, { apiClient, toast } = {}) => {
     state.conversations = [];
     state.sessionId = '';
     state.transcript = [];
+    closeModal();
     await loadSiteWidgetKey(state.siteId);
     renderTranscript();
     renderConversations();
-    renderConversationMessages();
     await loadConversations();
   });
 
@@ -507,7 +648,6 @@ export const renderEngageView = (container, { apiClient, toast } = {}) => {
 
   renderTranscript();
   renderConversations();
-  renderConversationMessages();
   updateInstallCard();
   void loadSites();
 };
