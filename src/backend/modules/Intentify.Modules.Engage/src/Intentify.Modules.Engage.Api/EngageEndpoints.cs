@@ -225,7 +225,11 @@ internal static class EngageEndpoints
             sessionId = parsedSessionId;
         }
 
-        var result = await handler.HandleAsync(new ChatSendCommand(resolvedWidgetKey, sessionId, request.Message, request.CollectorSessionId), context.RequestAborted);
+        var resolvedCollectorSessionId = string.IsNullOrWhiteSpace(request.CollectorSessionId)
+            ? context.Request.Cookies["intentify_sid"]
+            : request.CollectorSessionId;
+
+        var result = await handler.HandleAsync(new ChatSendCommand(resolvedWidgetKey, sessionId, request.Message, resolvedCollectorSessionId), context.RequestAborted);
         return result.Status switch
         {
             OperationStatus.ValidationFailed => Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(result.Errors!.Errors)),

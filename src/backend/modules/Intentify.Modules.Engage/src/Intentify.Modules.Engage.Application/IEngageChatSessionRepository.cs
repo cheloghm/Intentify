@@ -8,5 +8,5 @@ public interface IEngageChatSessionRepository
     Task InsertAsync(EngageChatSession session, CancellationToken cancellationToken = default);
     Task TouchAsync(Guid sessionId, DateTime timestampUtc, CancellationToken cancellationToken = default);
     Task SetCollectorSessionIdIfEmptyAsync(Guid sessionId, string collectorSessionId, CancellationToken cancellationToken = default);
-    Task<IReadOnlyCollection<EngageChatSession>> ListBySiteAsync(Guid tenantId, Guid siteId, string? collectorSessionId = null, CancellationToken cancellationToken = default);
+    Task<IReadOnlyCollection<EngageChatSession>> ListBySiteAsync(Guid tenantId, Guid siteId, string? collectorSessionId, CancellationToken cancellationToken = default);
 }

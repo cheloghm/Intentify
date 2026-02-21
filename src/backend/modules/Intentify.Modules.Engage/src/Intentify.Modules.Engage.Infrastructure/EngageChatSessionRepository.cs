@@ -52,12 +52,7 @@ public sealed class EngageChatSessionRepository : IEngageChatSessionRepository
         await _sessions.UpdateOneAsync(filter, update, cancellationToken: cancellationToken);
     }
 
-    public async Task<IReadOnlyCollection<EngageChatSession>> ListBySiteAsync(Guid tenantId, Guid siteId, CancellationToken cancellationToken = default)
-    {
-        return await ListBySiteAsync(tenantId, siteId, collectorSessionId: null, cancellationToken);
-    }
-
-    public async Task<IReadOnlyCollection<EngageChatSession>> ListBySiteAsync(Guid tenantId, Guid siteId, string? collectorSessionId = null, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyCollection<EngageChatSession>> ListBySiteAsync(Guid tenantId, Guid siteId, string? collectorSessionId, CancellationToken cancellationToken = default)
     {
         await _ensureIndexes;
 
