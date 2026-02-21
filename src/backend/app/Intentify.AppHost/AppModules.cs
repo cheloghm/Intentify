@@ -21,6 +21,7 @@ public static class AppModuleCatalog
         new CollectorModule(),
         new SitesModule(),
         new KnowledgeModule(),
+        new LeadsModule(),
         new EngageModule(),
         new VisitorsModule(),
         new TicketsModule()

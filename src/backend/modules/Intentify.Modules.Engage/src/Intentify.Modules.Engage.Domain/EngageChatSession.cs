@@ -12,6 +12,8 @@ public sealed class EngageChatSession
 
     public string WidgetKey { get; init; } = string.Empty;
 
+    public string? CollectorSessionId { get; init; }
+
     public DateTime CreatedAtUtc { get; init; }
 
     public DateTime UpdatedAtUtc { get; set; }
