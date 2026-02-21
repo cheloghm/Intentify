@@ -71,6 +71,8 @@ public sealed class EngageModule : IAppModule
                 serviceProvider.GetRequiredService<IChatCompletionClient>(),
                 sessionTimeoutMinutes);
         });
+        services.AddSingleton<GetEngageBotHandler>();
+        services.AddSingleton<UpdateEngageBotHandler>();
         services.AddSingleton<ListConversationsHandler>();
         services.AddSingleton<GetConversationMessagesHandler>();
     }
