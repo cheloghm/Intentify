@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Intentify.Modules.Engage.Application;
+using Intentify.Modules.Sites.Application;
 using Intentify.Shared.Validation;
 using Intentify.Shared.Web;
 using Microsoft.AspNetCore.Http;
@@ -28,6 +29,7 @@ internal static class EngageEndpoints
 
   var storageKey = 'intentify_engage_session_' + widgetKey;
   var sessionId = localStorage.getItem(storageKey) || '';
+  var assistantName = 'Assistant';
 
   function endpoint(path) { return baseUrl + path; }
 
@@ -64,8 +66,30 @@ internal static class EngageEndpoints
 
   function addMessage(role, text) {
     var row = document.createElement('div');
+    row.style.display = 'flex';
     row.style.marginBottom = '8px';
-    row.innerHTML = '<strong>' + (role === 'user' ? 'You' : 'Bot') + ':</strong> ' + text;
+    row.style.justifyContent = role === 'user' ? 'flex-end' : 'flex-start';
+
+    var bubble = document.createElement('div');
+    bubble.style.maxWidth = '85%';
+    bubble.style.padding = '8px 10px';
+    bubble.style.borderRadius = '10px';
+    bubble.style.whiteSpace = 'pre-wrap';
+    bubble.style.background = role === 'user' ? '#dbeafe' : '#f3f4f6';
+    bubble.style.color = '#111827';
+
+    var label = document.createElement('div');
+    label.style.fontSize = '11px';
+    label.style.fontWeight = '600';
+    label.style.marginBottom = '4px';
+    label.textContent = role === 'user' ? 'You' : assistantName;
+
+    var content = document.createElement('div');
+    content.textContent = text;
+
+    bubble.appendChild(label);
+    bubble.appendChild(content);
+    row.appendChild(bubble);
     messages.appendChild(row);
     messages.scrollTop = messages.scrollHeight;
   }
@@ -82,7 +106,14 @@ internal static class EngageEndpoints
     }
   });
 
-  fetch(endpoint('/engage/widget/bootstrap?widgetKey=' + encodeURIComponent(widgetKey))).catch(function(){});
+  fetch(endpoint('/engage/widget/bootstrap?widgetKey=' + encodeURIComponent(widgetKey)))
+    .then(function(response) { return response.ok ? response.json() : null; })
+    .then(function(payload) {
+      if (payload && payload.displayName) {
+        assistantName = payload.displayName;
+      }
+    })
+    .catch(function(){});
 
   function sendMessage() {
     var message = input.value.trim();
@@ -122,15 +153,37 @@ internal static class EngageEndpoints
         return Results.Text(script, "application/javascript");
     }
 
-    public static async Task<IResult> WidgetBootstrapAsync(string widgetKey, WidgetBootstrapHandler handler, HttpContext context)
+    public static async Task<IResult> WidgetBootstrapAsync(string widgetKey, WidgetBootstrapHandler handler, IEngageBotRepository botRepository, ISiteRepository siteRepository, HttpContext context)
     {
         var result = await handler.HandleAsync(new WidgetBootstrapQuery(widgetKey), context.RequestAborted);
         return result.Status switch
         {
             OperationStatus.ValidationFailed => Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(result.Errors!.Errors)),
             OperationStatus.NotFound => Results.NotFound(),
-            _ => Results.Ok(new WidgetBootstrapResponse(result.Value!.SiteId.ToString("N"), result.Value.Domain))
+            _ => await BuildWidgetBootstrapOkAsync(result.Value!, widgetKey, botRepository, siteRepository, context)
         };
+    }
+
+    private static async Task<IResult> BuildWidgetBootstrapOkAsync(
+        WidgetBootstrapResult result,
+        string widgetKey,
+        IEngageBotRepository botRepository,
+        ISiteRepository siteRepository,
+        HttpContext context)
+    {
+        var site = await siteRepository.GetByWidgetKeyAsync(widgetKey, context.RequestAborted);
+        var displayName = "Assistant";
+
+        if (site is not null)
+        {
+            var bot = await botRepository.GetOrCreateForSiteAsync(site.TenantId, site.Id, context.RequestAborted);
+            if (!string.IsNullOrWhiteSpace(bot.DisplayName))
+            {
+                displayName = bot.DisplayName;
+            }
+        }
+
+        return Results.Ok(new WidgetBootstrapResponse(result.SiteId.ToString("N"), result.Domain, displayName));
     }
 
     public static async Task<IResult> ChatSendAsync(

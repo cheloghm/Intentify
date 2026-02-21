@@ -23,13 +23,22 @@ public sealed class EngageBotRepository : IEngageBotRepository
         var existing = await GetBySiteAsync(tenantId, siteId, cancellationToken);
         if (existing is not null)
         {
+            if (string.IsNullOrWhiteSpace(existing.DisplayName))
+            {
+                var displayName = "Assistant";
+                var update = Builders<EngageBot>.Update.Set(item => item.DisplayName, displayName);
+                await _bots.UpdateOneAsync(item => item.Id == existing.Id, update, cancellationToken: cancellationToken);
+                existing.DisplayName = displayName;
+            }
+
             return existing;
         }
 
         var created = new EngageBot
         {
             TenantId = tenantId,
-            SiteId = siteId
+            SiteId = siteId,
+            DisplayName = "Assistant"
         };
 
         await _bots.InsertOneAsync(created, cancellationToken: cancellationToken);
