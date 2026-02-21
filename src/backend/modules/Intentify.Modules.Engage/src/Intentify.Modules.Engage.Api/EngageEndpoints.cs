@@ -33,7 +33,7 @@ internal static class EngageEndpoints
 
   function endpoint(path) { return baseUrl + path; }
 
-  function getCookie(name) {
+  function readCookie(name) {
     var escapedName = name.replace(/[-[\]{}()*+?.,\^$|#\s]/g, '\\$&');
     var match = document.cookie.match(new RegExp('(?:^|; )' + escapedName + '=([^;]*)'));
     if (!match) {
@@ -141,7 +141,7 @@ internal static class EngageEndpoints
     fetch(endpoint('/engage/chat/send?widgetKey=' + encodeURIComponent(widgetKey)), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ widgetKey: widgetKey, sessionId: sessionId, message: message, collectorSessionId: getCookie("intentify_sid") })
+      body: JSON.stringify({ widgetKey: widgetKey, sessionId: sessionId, message: message, collectorSessionId: readCookie('intentify_sid') })
     })
       .then(function(response) {
         if (!response.ok) {
