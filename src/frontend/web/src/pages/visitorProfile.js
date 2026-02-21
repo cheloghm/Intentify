@@ -4,16 +4,9 @@ import { createApiClient, mapApiError } from '../shared/apiClient.js';
 const SELECTED_SITE_STORAGE_KEY = 'intentify.selectedSiteId';
 
 const formatDate = (value) => {
-  if (!value) {
-    return '—';
-  }
-
+  if (!value) return '—';
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return '—';
-  }
-
-  return date.toLocaleString();
+  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString();
 };
 
 const createSummaryValue = (label, value) => {
@@ -40,99 +33,81 @@ const createSummaryValue = (label, value) => {
 
 const mapPath = (timelineItem) => {
   const url = timelineItem?.url;
-  if (!url) {
-    return '—';
-  }
-
+  if (!url) return '—';
   try {
     const parsedUrl = new URL(url);
-    const path = parsedUrl.pathname || '/';
-    const search = parsedUrl.search || '';
-    const hash = parsedUrl.hash || '';
-    const combined = `${path}${search}${hash}`;
-    return combined || url;
-  } catch (error) {
+    return `${parsedUrl.pathname || '/'}${parsedUrl.search || ''}${parsedUrl.hash || ''}` || url;
+  } catch {
     return url;
   }
 };
 
 const mapReferrer = (timelineItem) => {
   const referrer = timelineItem?.referrer;
-  if (!referrer) {
-    return 'Direct / None';
-  }
-
+  if (!referrer) return 'Direct / None';
   try {
     return new URL(referrer).hostname || referrer;
-  } catch (error) {
+  } catch {
     return referrer;
   }
 };
 
-const sortByOccurredDesc = (items) => {
-  return [...items].sort((left, right) => {
-    const leftMs = new Date(left?.occurredAtUtc || 0).getTime();
-    const rightMs = new Date(right?.occurredAtUtc || 0).getTime();
-    return rightMs - leftMs;
-  });
-};
+const sortByOccurredDesc = (items) =>
+  [...items].sort((left, right) => new Date(right?.occurredAtUtc || 0).getTime() - new Date(left?.occurredAtUtc || 0).getTime());
 
 const getEventData = (timelineItem) => {
   const raw = timelineItem?.metadataSummary ?? timelineItem?.data;
-  if (!raw) {
-    return null;
-  }
-
+  if (!raw) return null;
   if (typeof raw === 'string') {
     try {
       const parsed = JSON.parse(raw);
       return parsed && typeof parsed === 'object' ? parsed : null;
-    } catch (error) {
+    } catch {
       return null;
     }
   }
-
   return typeof raw === 'object' ? raw : null;
 };
 
-const parseNumber = (value) => {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return value;
-  }
+const getCollectorSessionId = (timelineItem) => {
+  const data = getEventData(timelineItem);
+  const candidates = [
+    timelineItem?.sessionId,
+    timelineItem?.SessionId,
+    timelineItem?.metadataSummary?.sessionId,
+    timelineItem?.metadataSummary?.SessionId,
+    data?.sessionId,
+    data?.SessionId,
+  ];
 
+  const match = candidates.find((value) => typeof value === 'string' && value.trim());
+  return match ? match.trim() : 'sessionless';
+};
+
+const parseNumber = (value) => {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
   if (typeof value === 'string') {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : null;
   }
-
   return null;
 };
 
 const formatDuration = (secondsValue) => {
   const seconds = parseNumber(secondsValue);
-  if (seconds === null) {
-    return '—';
-  }
-
+  if (seconds === null) return '—';
   const totalSeconds = Math.max(0, Math.round(seconds));
-  const minutes = Math.floor(totalSeconds / 60);
-  const remainingSeconds = totalSeconds % 60;
-  return `${minutes}m ${remainingSeconds}s`;
+  return `${Math.floor(totalSeconds / 60)}m ${totalSeconds % 60}s`;
 };
 
 const getTimelineDetails = (item) => {
   const data = getEventData(item);
-  if (!data) {
-    return '—';
-  }
+  if (!data) return '—';
 
   const type = String(item?.type || '').toLowerCase();
   if (type === 'time_on_page') {
     const duration = formatDuration(data.seconds);
-    if (duration === '—') {
-      return '—';
-    }
-
+    if (duration === '—') return '—';
     const reason = typeof data.reason === 'string' ? data.reason.trim() : '';
     return reason ? `${duration} (${reason})` : duration;
   }
@@ -142,17 +117,13 @@ const getTimelineDetails = (item) => {
     return percent === null ? '—' : `${Math.round(percent)}%`;
   }
 
-  if (type === 'pageview') {
-    return data.title || data.pageTitle || '—';
-  }
+  if (type === 'pageview') return data.title || data.pageTitle || '—';
 
   if (type === 'click' || type === 'outbound_click') {
     const text = typeof data.text === 'string' ? data.text.trim() : '';
     const id = typeof data.id === 'string' ? data.id.trim() : '';
     const tag = typeof data.tag === 'string' ? data.tag.trim() : '';
-    if (text && id) {
-      return `${text} (#${id})`;
-    }
+    if (text && id) return `${text} (#${id})`;
     return text || (id ? `#${id}` : '') || data.href || tag || '—';
   }
 
@@ -161,10 +132,7 @@ const getTimelineDetails = (item) => {
 
 const getTimeOnSite = (events = []) => {
   const totalSeconds = events.reduce((sum, item) => {
-    if (String(item?.type || '').toLowerCase() !== 'time_on_page') {
-      return sum;
-    }
-
+    if (String(item?.type || '').toLowerCase() !== 'time_on_page') return sum;
     const data = getEventData(item);
     const seconds = parseNumber(data?.seconds ?? data?.durationSeconds ?? data?.duration ?? item?.seconds);
     return seconds === null ? sum : sum + seconds;
@@ -180,10 +148,11 @@ export const renderVisitorProfileView = async (
   const client = apiClient || createApiClient();
   const notifier = toast || createToastManager();
   const visitorId = params.visitorId;
+
   let selectedSiteId = '';
   try {
     selectedSiteId = localStorage.getItem(SELECTED_SITE_STORAGE_KEY) || '';
-  } catch (error) {
+  } catch {
     selectedSiteId = '';
   }
   const siteId = query.siteId || selectedSiteId || '';
@@ -216,6 +185,11 @@ export const renderVisitorProfileView = async (
   summaryGrid.style.gridTemplateColumns = 'repeat(3, minmax(0, 1fr))';
   summaryGrid.style.gap = '10px';
 
+  const sessionList = document.createElement('div');
+  sessionList.style.display = 'flex';
+  sessionList.style.gap = '8px';
+  sessionList.style.flexWrap = 'wrap';
+
   const timelineBody = document.createElement('div');
   timelineBody.style.display = 'flex';
   timelineBody.style.flexDirection = 'column';
@@ -241,28 +215,92 @@ export const renderVisitorProfileView = async (
 
   timelineControls.append(typeFilter, searchInput);
 
+  const conversationsBody = document.createElement('div');
+  conversationsBody.style.display = 'flex';
+  conversationsBody.style.flexDirection = 'column';
+  conversationsBody.style.gap = '8px';
+
   const state = {
     events: [],
+    sessions: [],
+    selectedCollectorSessionId: '',
     typeFilter: 'all',
     search: '',
+    conversations: [],
+    selectedConversationId: '',
+    selectedMessages: [],
   };
 
-  const fillSummary = (events = []) => {
-    const sessionsFromTimeline = new Set(
-      events.map((item) => item?.metadataSummary?.sessionId).filter(Boolean)
-    ).size;
+  const modalOverlay = document.createElement('div');
+  modalOverlay.style.position = 'fixed';
+  modalOverlay.style.inset = '0';
+  modalOverlay.style.background = 'rgba(15, 23, 42, 0.55)';
+  modalOverlay.style.display = 'none';
+  modalOverlay.style.alignItems = 'center';
+  modalOverlay.style.justifyContent = 'center';
+  modalOverlay.style.zIndex = '999999';
+  modalOverlay.style.padding = '20px';
 
+  const modal = document.createElement('div');
+  modal.style.width = '100%';
+  modal.style.maxWidth = '760px';
+  modal.style.maxHeight = '85vh';
+  modal.style.background = '#ffffff';
+  modal.style.borderRadius = '12px';
+  modal.style.border = '1px solid #e2e8f0';
+  modal.style.display = 'flex';
+  modal.style.flexDirection = 'column';
+  modal.style.overflow = 'hidden';
+
+  const modalHeader = document.createElement('div');
+  modalHeader.style.display = 'flex';
+  modalHeader.style.justifyContent = 'space-between';
+  modalHeader.style.padding = '12px 14px';
+  modalHeader.style.borderBottom = '1px solid #e2e8f0';
+  const modalTitle = document.createElement('div');
+  modalTitle.style.fontWeight = '600';
+  modalTitle.textContent = 'Conversation';
+  const closeModalButton = document.createElement('button');
+  closeModalButton.type = 'button';
+  closeModalButton.textContent = 'Close';
+  const modalMessages = document.createElement('div');
+  modalMessages.style.padding = '12px 14px';
+  modalMessages.style.overflowY = 'auto';
+  modalMessages.style.display = 'flex';
+  modalMessages.style.flexDirection = 'column';
+  modalMessages.style.gap = '8px';
+  modalHeader.append(modalTitle, closeModalButton);
+  modal.append(modalHeader, modalMessages);
+  modalOverlay.appendChild(modal);
+  document.body.appendChild(modalOverlay);
+
+  const closeModal = () => {
+    modalOverlay.style.display = 'none';
+  };
+
+  closeModalButton.addEventListener('click', closeModal);
+  modalOverlay.addEventListener('click', (event) => {
+    if (event.target === modalOverlay) closeModal();
+  });
+
+  const fillSummary = (events = []) => {
+    const sessionCount = state.sessions.length;
     const pagesVisited = query.totalPagesVisited || events.length || '—';
 
     summaryGrid.innerHTML = '';
     summaryGrid.append(
       createSummaryValue('Last seen', formatDate(query.lastSeenAtUtc || events[0]?.occurredAtUtc)),
-      createSummaryValue('Sessions count', query.sessionsCount || (sessionsFromTimeline || '—')),
+      createSummaryValue('Sessions count', query.sessionsCount || (sessionCount || '—')),
       createSummaryValue('Pages visited', String(pagesVisited)),
       createSummaryValue('Time on site', getTimeOnSite(events)),
       createSummaryValue('Engagement score', query.lastSessionEngagementScore || '—'),
       createSummaryValue('Recent events', String(events.length))
     );
+  };
+
+  const getEventsForSelectedSession = () => {
+    if (!state.selectedCollectorSessionId) return state.events;
+    return state.events.filter((item) => getCollectorSessionId(item) === state.selectedCollectorSessionId);
   };
 
   const renderTimeline = (items = []) => {
@@ -292,20 +330,11 @@ export const renderVisitorProfileView = async (
     const tbody = document.createElement('tbody');
     items.forEach((item) => {
       const tr = document.createElement('tr');
-      const values = [
-        formatDate(item.occurredAtUtc),
-        item.type || '—',
-        mapPath(item),
-        mapReferrer(item),
-        getTimelineDetails(item),
-      ];
-
-      values.forEach((value) => {
+      [formatDate(item.occurredAtUtc), item.type || '—', mapPath(item), mapReferrer(item), getTimelineDetails(item)].forEach((value) => {
         const td = document.createElement('td');
         td.textContent = value;
         tr.appendChild(td);
       });
-
       tbody.appendChild(tr);
     });
 
@@ -313,54 +342,115 @@ export const renderVisitorProfileView = async (
     timelineBody.appendChild(table);
   };
 
-  const summaryCard = createCard({
-    title: 'Summary',
-    body: summaryGrid,
-  });
+  const renderConversationModal = () => {
+    modalMessages.innerHTML = '';
+    modalTitle.textContent = state.selectedConversationId ? `Conversation ${state.selectedConversationId}` : 'Conversation';
 
-  const timelineCard = createCard({
-    title: 'Timeline',
-    body: (() => {
-      const wrapper = document.createElement('div');
-      wrapper.style.display = 'flex';
-      wrapper.style.flexDirection = 'column';
-      wrapper.style.gap = '10px';
-      wrapper.append(timelineControls, timelineBody);
-      return wrapper;
-    })(),
-  });
+    if (!state.selectedMessages.length) {
+      const empty = document.createElement('div');
+      empty.textContent = 'No messages for this conversation.';
+      empty.style.color = '#64748b';
+      modalMessages.appendChild(empty);
+      return;
+    }
 
-  const getFilteredTimeline = () => {
-    const searchTerm = state.search.trim().toLowerCase();
-    return state.events.filter((item) => {
-      const itemType = String(item?.type || '').toLowerCase();
-      if (state.typeFilter !== 'all' && itemType !== state.typeFilter) {
-        return false;
-      }
+    state.selectedMessages.forEach((message) => {
+      const row = document.createElement('div');
+      row.style.border = '1px solid #e2e8f0';
+      row.style.borderRadius = '8px';
+      row.style.padding = '10px 12px';
 
-      if (!searchTerm) {
-        return true;
-      }
+      const meta = document.createElement('div');
+      meta.textContent = `${message.role} • ${formatDate(message.createdAtUtc)}`;
+      meta.style.fontSize = '12px';
+      meta.style.color = '#64748b';
 
-      const haystack = `${mapPath(item)} ${getTimelineDetails(item)}`.toLowerCase();
-      return haystack.includes(searchTerm);
+      const content = document.createElement('div');
+      content.textContent = message.content || '—';
+      content.style.marginTop = '6px';
+      content.style.whiteSpace = 'pre-wrap';
+
+      row.append(meta, content);
+      modalMessages.appendChild(row);
     });
   };
 
-  const refreshTimeline = () => {
-    renderTimeline(getFilteredTimeline());
+  const loadConversationMessages = async (conversationId) => {
+    if (!conversationId || !siteId) return;
+    try {
+      state.selectedConversationId = conversationId;
+      state.selectedMessages = await client.engage.getConversationMessages(conversationId, siteId);
+      renderConversationModal();
+      modalOverlay.style.display = 'flex';
+    } catch (error) {
+      notifier.show({ message: mapApiError(error).message, variant: 'danger' });
+    }
+  };
+
+  const renderConversations = () => {
+    conversationsBody.innerHTML = '';
+
+    if (!state.selectedCollectorSessionId) {
+      const empty = document.createElement('div');
+      empty.textContent = 'Select a visitor session to view matching Engage chats.';
+      empty.style.color = '#64748b';
+      conversationsBody.appendChild(empty);
+      return;
+    }
+
+    if (!state.conversations.length) {
+      const empty = document.createElement('div');
+      empty.textContent = 'No Engage conversations for this visitor session.';
+      empty.style.color = '#64748b';
+      conversationsBody.appendChild(empty);
+      return;
+    }
+
+    state.conversations.forEach((conversation) => {
+      const row = document.createElement('div');
+      row.style.display = 'flex';
+      row.style.justifyContent = 'space-between';
+      row.style.alignItems = 'center';
+      row.style.border = '1px solid #e2e8f0';
+      row.style.borderRadius = '8px';
+      row.style.padding = '8px 10px';
+
+      const label = document.createElement('div');
+      label.textContent = conversation.sessionId || '—';
+      label.style.fontFamily = 'ui-monospace, SFMono-Regular, Menlo, monospace';
+      label.style.fontSize = '12px';
+
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = 'Open';
+      button.addEventListener('click', () => loadConversationMessages(conversation.sessionId));
+
+      row.append(label, button);
+      conversationsBody.appendChild(row);
+    });
+  };
+
+  const loadConversationsForSelectedSession = async () => {
+    if (!siteId || !state.selectedCollectorSessionId) {
+      state.conversations = [];
+      renderConversations();
+      return;
+    }
+
+    try {
+      state.conversations = await client.engage.getConversations(siteId, state.selectedCollectorSessionId);
+      renderConversations();
+    } catch (error) {
+      state.conversations = [];
+      renderConversations();
+      notifier.show({ message: mapApiError(error).message, variant: 'danger' });
+    }
   };
 
   const setTypeOptions = (events = []) => {
-    const typeValues = Array.from(
-      new Set(
-        events
-          .map((item) => String(item?.type || '').toLowerCase())
-          .filter(Boolean)
-      )
-    ).sort();
-
+    const typeValues = Array.from(new Set(events.map((item) => String(item?.type || '').toLowerCase()).filter(Boolean))).sort();
     typeFilter.innerHTML = '';
+
     const allOption = document.createElement('option');
     allOption.value = 'all';
     allOption.textContent = 'All event types';
@@ -376,6 +466,65 @@ export const renderVisitorProfileView = async (
     typeFilter.value = state.typeFilter;
   };
 
+  const getFilteredTimeline = () => {
+    const searchTerm = state.search.trim().toLowerCase();
+    return getEventsForSelectedSession().filter((item) => {
+      const itemType = String(item?.type || '').toLowerCase();
+      if (state.typeFilter !== 'all' && itemType !== state.typeFilter) return false;
+      if (!searchTerm) return true;
+      return `${mapPath(item)} ${getTimelineDetails(item)}`.toLowerCase().includes(searchTerm);
+    });
+  };
+
+  const refreshTimeline = () => {
+    const selectedEvents = getEventsForSelectedSession();
+    setTypeOptions(selectedEvents);
+    renderTimeline(getFilteredTimeline());
+  };
+
+  const renderSessionList = () => {
+    sessionList.innerHTML = '';
+    if (!state.sessions.length) {
+      const empty = document.createElement('div');
+      empty.textContent = 'No visitor sessions found.';
+      empty.style.color = '#64748b';
+      sessionList.appendChild(empty);
+      return;
+    }
+
+    state.sessions.forEach((session) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = `${session.sessionId} • ${formatDate(session.lastOccurredAtUtc)}`;
+      button.style.padding = '6px 10px';
+      button.style.borderRadius = '999px';
+      button.style.border = '1px solid #cbd5e1';
+      button.style.background = state.selectedCollectorSessionId === session.sessionId ? '#dbeafe' : '#ffffff';
+      button.addEventListener('click', async () => {
+        state.selectedCollectorSessionId = session.sessionId;
+        refreshTimeline();
+        await loadConversationsForSelectedSession();
+      });
+      sessionList.appendChild(button);
+    });
+  };
+
+  const summaryCard = createCard({ title: 'Summary', body: summaryGrid });
+
+  const timelineCard = createCard({
+    title: 'Timeline by session',
+    body: (() => {
+      const wrapper = document.createElement('div');
+      wrapper.style.display = 'flex';
+      wrapper.style.flexDirection = 'column';
+      wrapper.style.gap = '10px';
+      wrapper.append(sessionList, timelineControls, timelineBody);
+      return wrapper;
+    })(),
+  });
+
+  const conversationsCard = createCard({ title: 'Engage conversations', body: conversationsBody });
+
   typeFilter.addEventListener('change', () => {
     state.typeFilter = typeFilter.value;
     refreshTimeline();
@@ -386,12 +535,13 @@ export const renderVisitorProfileView = async (
     refreshTimeline();
   });
 
-  page.append(backLink, header, summaryCard, timelineCard);
+  page.append(backLink, header, summaryCard, timelineCard, conversationsCard);
   container.appendChild(page);
 
   if (!visitorId || !siteId) {
     fillSummary();
     renderTimeline();
+    renderConversations();
     return;
   }
 
@@ -400,21 +550,42 @@ export const renderVisitorProfileView = async (
   try {
     const timeline = client.visitors?.timeline
       ? await client.visitors.timeline(visitorId, 200, siteId)
-      : await client.request(
-          `/visitors/${visitorId}/timeline?siteId=${encodeURIComponent(siteId)}&limit=200`
-        );
+      : await client.request(`/visitors/${visitorId}/timeline?siteId=${encodeURIComponent(siteId)}&limit=200`);
 
     const sortedTimeline = Array.isArray(timeline) ? sortByOccurredDesc(timeline) : [];
     state.events = sortedTimeline;
-    setTypeOptions(sortedTimeline);
+
+    const grouped = new Map();
+    sortedTimeline.forEach((item) => {
+      const sessionId = getCollectorSessionId(item);
+      const existing = grouped.get(sessionId);
+      if (!existing) {
+        grouped.set(sessionId, { sessionId, events: [item], lastOccurredAtUtc: item?.occurredAtUtc });
+      } else {
+        existing.events.push(item);
+      }
+    });
+
+    state.sessions = Array.from(grouped.values()).sort(
+      (left, right) => new Date(right.lastOccurredAtUtc || 0).getTime() - new Date(left.lastOccurredAtUtc || 0).getTime()
+    );
+
+    state.selectedCollectorSessionId = state.sessions[0]?.sessionId || '';
+
     fillSummary(sortedTimeline);
+    renderSessionList();
     refreshTimeline();
+    await loadConversationsForSelectedSession();
   } catch (error) {
     const uiError = mapApiError(error);
     notifier.show({ message: uiError.message, variant: 'danger' });
     state.events = [];
-    setTypeOptions([]);
+    state.sessions = [];
+    state.conversations = [];
     fillSummary();
-    refreshTimeline();
+    renderSessionList();
+    setTypeOptions([]);
+    renderTimeline();
+    renderConversations();
   }
 };

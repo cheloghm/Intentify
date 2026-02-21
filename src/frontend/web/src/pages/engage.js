@@ -19,12 +19,12 @@ const createButton = ({ label, variant = 'default', type = 'button' } = {}) => {
 const getSiteId = (site) => site?.siteId || site?.id || '';
 
 const conversationTimestampFields = [
-  'lastActivityAtUtc',
-  'lastActivityAt',
   'updatedAtUtc',
   'updatedAt',
   'createdAtUtc',
   'createdAt',
+  'lastActivityAtUtc',
+  'lastActivityAt',
 ];
 
 const getConversationTimestamp = (conversation) => {
@@ -348,8 +348,8 @@ export const renderEngageView = (container, { apiClient, toast } = {}) => {
   modalActions.style.alignItems = 'center';
   modalActions.style.gap = '8px';
 
-  const jumpOldestButton = createButton({ label: 'Jump to oldest' });
-  const jumpLatestButton = createButton({ label: 'Jump to latest' });
+  const jumpOldestButton = createButton({ label: 'Oldest' });
+  const jumpLatestButton = createButton({ label: 'Latest' });
   const closeModalButton = createButton({ label: 'Close' });
 
   modalActions.append(jumpOldestButton, jumpLatestButton, closeModalButton);

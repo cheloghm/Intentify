@@ -11,7 +11,7 @@ public sealed class ListConversationsHandler
 
     public async Task<IReadOnlyCollection<ConversationSummaryResult>> HandleAsync(ListConversationsQuery query, CancellationToken cancellationToken = default)
     {
-        var sessions = await _sessionRepository.ListBySiteAsync(query.TenantId, query.SiteId, cancellationToken);
+        var sessions = await _sessionRepository.ListBySiteAsync(query.TenantId, query.SiteId, query.CollectorSessionId, cancellationToken);
         return sessions
             .OrderByDescending(item => item.UpdatedAtUtc)
             .Select(item => new ConversationSummaryResult(item.Id, item.CreatedAtUtc, item.UpdatedAtUtc))
