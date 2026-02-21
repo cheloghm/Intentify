@@ -8,6 +8,8 @@ import { renderVisitorProfileView } from '../pages/visitorProfile.js';
 import { renderKnowledgeView } from '../pages/knowledge.js';
 import { renderEngageView } from '../pages/engage.js';
 import { renderPromosView } from '../pages/promos.js';
+import { renderLeadsView } from '../pages/leads.js';
+import { renderTicketsView } from '../pages/tickets.js';
 
 const app = document.getElementById('app');
 const toast = createToastManager();
@@ -137,6 +139,8 @@ const createNavbar = ({ isAuthenticated }) => {
     links.appendChild(createNavLink({ label: 'Knowledge', href: '#/knowledge' }));
     links.appendChild(createNavLink({ label: 'Engage', href: '#/engage' }));
     links.appendChild(createNavLink({ label: 'Promos', href: '#/promos' }));
+    links.appendChild(createNavLink({ label: 'Leads', href: '#/leads' }));
+    links.appendChild(createNavLink({ label: 'Tickets', href: '#/tickets' }));
     const logoutButton = document.createElement('button');
     logoutButton.type = 'button';
     logoutButton.textContent = 'Logout';
@@ -521,6 +525,8 @@ const routes = {
   '/knowledge': renderKnowledgeView,
   '/engage': renderEngageView,
   '/promos': renderPromosView,
+  '/leads': renderLeadsView,
+  '/tickets': renderTicketsView,
 };
 
 const getRouteFromHash = () => {
@@ -558,7 +564,7 @@ const renderApp = () => {
   const { path: route, query, params } = getRouteFromHash();
   const isAuthenticated = Boolean(getToken());
 
-  if ((route === '/dashboard' || route === '/sites' || route === '/install' || route === '/visitors' || route === '/visitors/:visitorId' || route === '/knowledge' || route === '/engage' || route === '/promos') && !isAuthenticated) {
+  if ((route === '/dashboard' || route === '/sites' || route === '/install' || route === '/visitors' || route === '/visitors/:visitorId' || route === '/knowledge' || route === '/engage' || route === '/promos' || route === '/leads' || route === '/tickets') && !isAuthenticated) {
     window.location.hash = '#/login';
     return;
   }
