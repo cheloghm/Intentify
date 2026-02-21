@@ -106,16 +106,6 @@ public sealed class ChatSendHandler
 
         await _sessionRepository.TouchAsync(session.Id, now, cancellationToken);
 
-        if (NeedsHumanHelp(command.Message))
-        {
-            return await CreateHumanHelpResponseAsync(site, session, command.Message, now, cancellationToken);
-        }
-
-        if (ContainsEmail(command.Message) && await IsAwaitingContactDetailsAsync(session.Id, cancellationToken))
-        {
-            return await CaptureContactDetailsAsync(site, session, command.Message, now, cancellationToken);
-        }
-
         var retrieved = await _retrieveTopChunksHandler.HandleAsync(
             new RetrieveTopChunksQuery(site.TenantId, site.Id, command.Message, 3, bot.BotId),
             cancellationToken);
