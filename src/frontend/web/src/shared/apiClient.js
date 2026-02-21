@@ -170,8 +170,8 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
 
   const listPromoEntries = async (promoId, page = 1, pageSize = 50) =>
     request(`/promos/${encodeURIComponent(promoId)}/entries${buildQueryString({ page, pageSize })}`);
-  const listEngageConversations = async (siteId) =>
-    request(`/engage/conversations?siteId=${encodeURIComponent(siteId)}`);
+  const listEngageConversations = async (siteId, collectorSessionId) =>
+    request(`/engage/conversations${buildQueryString({ siteId, collectorSessionId })}`);
 
   const getEngageConversationMessages = async (sessionId, siteId) =>
     request(
