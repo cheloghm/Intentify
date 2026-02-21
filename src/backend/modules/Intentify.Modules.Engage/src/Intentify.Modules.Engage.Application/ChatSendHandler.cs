@@ -94,7 +94,7 @@ public sealed class ChatSendHandler
 
         var now = DateTime.UtcNow;
         var bot = await _botRepository.GetOrCreateForSiteAsync(site.TenantId, site.Id, cancellationToken);
-        var session = await ResolveSessionAsync(site.TenantId, site.Id, bot.BotId, command.WidgetKey, command.SessionId, now, cancellationToken);
+        var session = await ResolveSessionAsync(site.TenantId, site.Id, bot.BotId, command.WidgetKey, command.SessionId, command.CollectorSessionId, now, cancellationToken);
 
         await _messageRepository.InsertAsync(new EngageChatMessage
         {
@@ -360,6 +360,7 @@ User question:
         Guid botId,
         string widgetKey,
         Guid? sessionId,
+        string? collectorSessionId,
         DateTime now,
         CancellationToken cancellationToken)
     {
@@ -371,6 +372,12 @@ User question:
                 var idleFor = now - existing.UpdatedAtUtc;
                 if (idleFor <= _sessionTimeout)
                 {
+                    if (!string.IsNullOrWhiteSpace(collectorSessionId)
+                        && string.IsNullOrWhiteSpace(existing.CollectorSessionId))
+                    {
+                        await _sessionRepository.SetCollectorSessionIdIfEmptyAsync(existing.Id, collectorSessionId, cancellationToken);
+                    }
+
                     return existing;
                 }
             }
@@ -382,6 +389,7 @@ User question:
             SiteId = siteId,
             BotId = botId,
             WidgetKey = widgetKey,
+            CollectorSessionId = string.IsNullOrWhiteSpace(collectorSessionId) ? null : collectorSessionId.Trim(),
             CreatedAtUtc = now,
             UpdatedAtUtc = now
         };
