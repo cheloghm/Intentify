@@ -6,4 +6,5 @@ public interface IEngageBotRepository
 {
     Task<EngageBot> GetOrCreateForSiteAsync(Guid tenantId, Guid siteId, CancellationToken cancellationToken = default);
     Task<EngageBot?> GetBySiteAsync(Guid tenantId, Guid siteId, CancellationToken cancellationToken = default);
+    Task<EngageBot?> UpdateNameAsync(Guid tenantId, Guid siteId, string name, CancellationToken cancellationToken = default);
 }

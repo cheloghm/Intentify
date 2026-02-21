@@ -131,6 +131,33 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task BotEndpoints_CanReadAndUpdateName()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var getResponse = await SendAuthorizedAsync(HttpMethod.Get, $"/engage/bot?siteId={site.SiteId}", token);
+        Assert.Equal(HttpStatusCode.OK, getResponse.StatusCode);
+
+        var putResponse = await SendAuthorizedAsync(
+            HttpMethod.Put,
+            $"/engage/bot?siteId={site.SiteId}",
+            token,
+            JsonContent.Create(new { name = "Forti" }));
+
+        Assert.Equal(HttpStatusCode.OK, putResponse.StatusCode);
+
+        using var putJson = JsonDocument.Parse(await putResponse.Content.ReadAsStringAsync());
+        Assert.Equal("Forti", putJson.RootElement.GetProperty("name").GetString());
+
+        var database = new MongoClient(_mongo.ConnectionString).GetDatabase(_mongo.DatabaseName);
+        var bots = database.GetCollection<BsonEngageBot>("EngageBots");
+        var persisted = await bots.Find(item => item.SiteId == Guid.Parse(site.SiteId)).FirstOrDefaultAsync();
+        Assert.NotNull(persisted);
+        Assert.Equal("Forti", persisted!.Name);
+    }
+
+    [Fact]
     public async Task WidgetScript_ReturnsJavascript()
     {
         var response = await _client!.GetAsync("/engage/widget.js");
@@ -526,6 +553,12 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
         public string? CollectorSessionId { get; init; }
         public DateTime CreatedAtUtc { get; init; }
         public DateTime UpdatedAtUtc { get; init; }
+    }
+
+    private sealed class BsonEngageBot
+    {
+        public Guid SiteId { get; init; }
+        public string Name { get; init; } = string.Empty;
     }
 
     private sealed class BsonEngageTicket

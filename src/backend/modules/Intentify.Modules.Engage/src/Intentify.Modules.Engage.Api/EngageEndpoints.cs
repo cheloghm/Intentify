@@ -123,8 +123,8 @@ internal static class EngageEndpoints
   fetch(endpoint('/engage/widget/bootstrap?widgetKey=' + encodeURIComponent(widgetKey)))
     .then(function(response) { return response.ok ? response.json() : null; })
     .then(function(payload) {
-      if (payload && payload.displayName) {
-        assistantName = payload.displayName;
+      if (payload && (payload.botName || payload.displayName)) {
+        assistantName = payload.botName || payload.displayName;
       }
     })
     .catch(function(){});
@@ -187,17 +187,20 @@ internal static class EngageEndpoints
     {
         var site = await siteRepository.GetByWidgetKeyAsync(widgetKey, context.RequestAborted);
         var displayName = "Assistant";
+        var botName = "Assistant";
 
         if (site is not null)
         {
             var bot = await botRepository.GetOrCreateForSiteAsync(site.TenantId, site.Id, context.RequestAborted);
-            if (!string.IsNullOrWhiteSpace(bot.DisplayName))
+            var resolvedName = string.IsNullOrWhiteSpace(bot.Name) ? bot.DisplayName : bot.Name;
+            if (!string.IsNullOrWhiteSpace(resolvedName))
             {
-                displayName = bot.DisplayName;
+                displayName = resolvedName;
+                botName = resolvedName;
             }
         }
 
-        return Results.Ok(new WidgetBootstrapResponse(result.SiteId.ToString("N"), result.Domain, displayName));
+        return Results.Ok(new WidgetBootstrapResponse(result.SiteId.ToString("N"), result.Domain, displayName, botName));
     }
 
     public static async Task<IResult> ChatSendAsync(

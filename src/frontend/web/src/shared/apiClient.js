@@ -178,6 +178,18 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
       `/engage/conversations/${encodeURIComponent(sessionId)}/messages?siteId=${encodeURIComponent(siteId)}`
     );
 
+  const getEngageBot = async (siteId) =>
+    request(`/engage/bot${buildQueryString({ siteId })}`);
+
+  const updateEngageBot = async (siteId, name) =>
+    request(`/engage/bot${buildQueryString({ siteId })}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ name }),
+    });
+
   return {
     request,
     sites: {
@@ -208,6 +220,8 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
       getConversations: listEngageConversations,
       listConversations: listEngageConversations,
       getConversationMessages: getEngageConversationMessages,
+      getBot: getEngageBot,
+      updateBot: updateEngageBot,
     },
   };
 };

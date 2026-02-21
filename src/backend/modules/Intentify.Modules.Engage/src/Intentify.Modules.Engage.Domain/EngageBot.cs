@@ -11,4 +11,6 @@ public sealed class EngageBot
     public Guid SiteId { get; init; }
 
     public string DisplayName { get; set; } = "Assistant";
+
+    public string? Name { get; set; }
 }

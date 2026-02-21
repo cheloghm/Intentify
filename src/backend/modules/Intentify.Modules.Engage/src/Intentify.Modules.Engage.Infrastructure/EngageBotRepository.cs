@@ -23,12 +23,21 @@ public sealed class EngageBotRepository : IEngageBotRepository
         var existing = await GetBySiteAsync(tenantId, siteId, cancellationToken);
         if (existing is not null)
         {
-            if (string.IsNullOrWhiteSpace(existing.DisplayName))
+            var resolvedName = string.IsNullOrWhiteSpace(existing.Name) ? existing.DisplayName : existing.Name;
+            if (string.IsNullOrWhiteSpace(resolvedName))
             {
-                var displayName = "Assistant";
-                var update = Builders<EngageBot>.Update.Set(item => item.DisplayName, displayName);
+                resolvedName = "Assistant";
+            }
+
+            if (!string.Equals(existing.DisplayName, resolvedName, StringComparison.Ordinal)
+                || !string.Equals(existing.Name, resolvedName, StringComparison.Ordinal))
+            {
+                var update = Builders<EngageBot>.Update
+                    .Set(item => item.DisplayName, resolvedName)
+                    .Set(item => item.Name, resolvedName);
                 await _bots.UpdateOneAsync(item => item.Id == existing.Id, update, cancellationToken: cancellationToken);
-                existing.DisplayName = displayName;
+                existing.DisplayName = resolvedName;
+                existing.Name = resolvedName;
             }
 
             return existing;
@@ -38,7 +47,8 @@ public sealed class EngageBotRepository : IEngageBotRepository
         {
             TenantId = tenantId,
             SiteId = siteId,
-            DisplayName = "Assistant"
+            DisplayName = "Assistant",
+            Name = "Assistant"
         };
 
         await _bots.InsertOneAsync(created, cancellationToken: cancellationToken);
@@ -51,6 +61,23 @@ public sealed class EngageBotRepository : IEngageBotRepository
         return await _bots.Find(item => item.TenantId == tenantId && item.SiteId == siteId)
             .FirstOrDefaultAsync(cancellationToken);
     }
+
+    public async Task<EngageBot?> UpdateNameAsync(Guid tenantId, Guid siteId, string name, CancellationToken cancellationToken = default)
+    {
+        await _ensureIndexes;
+
+        var normalized = name.Trim();
+        var update = Builders<EngageBot>.Update
+            .Set(item => item.Name, normalized)
+            .Set(item => item.DisplayName, normalized);
+
+        return await _bots.FindOneAndUpdateAsync(
+            item => item.TenantId == tenantId && item.SiteId == siteId,
+            update,
+            new FindOneAndUpdateOptions<EngageBot> { ReturnDocument = ReturnDocument.After },
+            cancellationToken);
+    }
+
 
     private Task EnsureIndexesAsync()
     {

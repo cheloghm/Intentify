@@ -120,6 +120,7 @@ export const renderEngageView = (container, { apiClient, toast } = {}) => {
     selectedSessionId: '',
     selectedMessages: [],
     revealWidgetKey: false,
+    botName: 'Assistant',
   };
 
   const page = document.createElement('div');
@@ -176,7 +177,30 @@ export const renderEngageView = (container, { apiClient, toast } = {}) => {
   widgetValue.textContent = 'select site';
   widgetWrap.append(widgetLabel, widgetValue);
 
-  configBody.append(siteField, widgetWrap);
+
+  const botNameField = document.createElement('label');
+  botNameField.style.display = 'flex';
+  botNameField.style.flexDirection = 'column';
+  botNameField.style.gap = '6px';
+
+  const botNameLabel = document.createElement('span');
+  botNameLabel.textContent = 'Bot name';
+  botNameLabel.style.fontSize = '13px';
+
+  const botNameInput = document.createElement('input');
+  botNameInput.type = 'text';
+  botNameInput.placeholder = 'Assistant';
+  botNameInput.maxLength = 50;
+  botNameInput.style.padding = '8px 10px';
+  botNameInput.style.borderRadius = '6px';
+  botNameInput.style.border = '1px solid #cbd5e1';
+
+  const saveBotNameButton = createButton({ label: 'Save name', variant: 'primary' });
+  saveBotNameButton.style.width = 'fit-content';
+
+  botNameField.append(botNameLabel, botNameInput, saveBotNameButton);
+
+  configBody.append(siteField, widgetWrap, botNameField);
 
   const installBody = document.createElement('div');
   installBody.style.display = 'flex';
@@ -402,7 +426,17 @@ export const renderEngageView = (container, { apiClient, toast } = {}) => {
       bubble.style.background = entry.role === 'user' ? '#dbeafe' : '#f1f5f9';
       bubble.style.color = '#0f172a';
       bubble.style.whiteSpace = 'pre-wrap';
-      bubble.textContent = entry.content;
+const label = document.createElement('div');
+      label.style.fontSize = '11px';
+      label.style.fontWeight = '600';
+      label.style.marginBottom = '4px';
+      label.textContent = entry.role === 'user' ? 'You' : (state.botName || 'Assistant');
+
+      const content = document.createElement('div');
+      content.textContent = entry.content;
+      content.style.whiteSpace = 'pre-wrap';
+
+      bubble.append(label, content);
       transcript.appendChild(bubble);
     });
   };
@@ -455,7 +489,8 @@ export const renderEngageView = (container, { apiClient, toast } = {}) => {
       row.style.background = '#ffffff';
 
       const meta = document.createElement('div');
-      meta.textContent = `${message.role} • ${new Date(message.createdAtUtc).toLocaleString()}`;
+      const roleLabel = message.role === 'assistant' ? (state.botName || 'Assistant') : message.role;
+      meta.textContent = `${roleLabel} • ${new Date(message.createdAtUtc).toLocaleString()}`;
       meta.style.fontSize = '12px';
       meta.style.color = '#64748b';
 
@@ -571,6 +606,53 @@ export const renderEngageView = (container, { apiClient, toast } = {}) => {
     }
   };
 
+
+  const loadBotName = async (siteId) => {
+    if (!siteId) {
+      state.botName = 'Assistant';
+      botNameInput.value = '';
+      renderTranscript();
+      return;
+    }
+
+    try {
+      const bot = await client.engage.getBot(siteId);
+      state.botName = bot?.name || 'Assistant';
+      botNameInput.value = state.botName;
+      renderTranscript();
+    } catch (error) {
+      state.botName = 'Assistant';
+      botNameInput.value = '';
+      notifier.show({ message: mapApiError(error).message, variant: 'danger' });
+    }
+  };
+
+  saveBotNameButton.addEventListener('click', async () => {
+    if (!state.siteId) {
+      notifier.show({ message: 'Select a site first.', variant: 'warning' });
+      return;
+    }
+
+    const name = botNameInput.value.trim();
+    if (name.length < 1 || name.length > 50) {
+      notifier.show({ message: 'Bot name must be 1-50 characters.', variant: 'warning' });
+      return;
+    }
+
+    saveBotNameButton.disabled = true;
+    try {
+      const updated = await client.engage.updateBot(state.siteId, name);
+      state.botName = updated?.name || name;
+      botNameInput.value = state.botName;
+      notifier.show({ message: 'Bot name saved.', variant: 'success' });
+      renderTranscript();
+    } catch (error) {
+      notifier.show({ message: mapApiError(error).message, variant: 'danger' });
+    } finally {
+      saveBotNameButton.disabled = false;
+    }
+  });
+
   siteSelect.addEventListener('change', async () => {
     state.siteId = siteSelect.value;
     state.revealWidgetKey = false;
@@ -581,6 +663,7 @@ export const renderEngageView = (container, { apiClient, toast } = {}) => {
     state.transcript = [];
     closeModal();
     await loadSiteWidgetKey(state.siteId);
+    await loadBotName(state.siteId);
     renderTranscript();
     renderConversations();
     await loadConversations();
@@ -630,6 +713,7 @@ export const renderEngageView = (container, { apiClient, toast } = {}) => {
       }
       setSiteOptions();
       await loadSiteWidgetKey(state.siteId);
+      await loadBotName(state.siteId);
       await loadConversations();
     } catch (error) {
       notifier.show({ message: mapApiError(error).message, variant: 'danger' });
