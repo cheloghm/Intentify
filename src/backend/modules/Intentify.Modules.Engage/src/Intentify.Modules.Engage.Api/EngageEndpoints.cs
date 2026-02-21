@@ -225,7 +225,11 @@ internal static class EngageEndpoints
             sessionId = parsedSessionId;
         }
 
-        var result = await handler.HandleAsync(new ChatSendCommand(resolvedWidgetKey, sessionId, request.Message, request.CollectorSessionId), context.RequestAborted);
+        var resolvedCollectorSessionId = string.IsNullOrWhiteSpace(request.CollectorSessionId)
+            ? context.Request.Cookies["intentify_sid"]
+            : request.CollectorSessionId;
+
+        var result = await handler.HandleAsync(new ChatSendCommand(resolvedWidgetKey, sessionId, request.Message, resolvedCollectorSessionId), context.RequestAborted);
         return result.Status switch
         {
             OperationStatus.ValidationFailed => Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(result.Errors!.Errors)),
@@ -236,6 +240,72 @@ internal static class EngageEndpoints
                 result.Value.Confidence,
                 result.Value.TicketCreated,
                 result.Value.Sources.Select(item => new EngageCitationResponse(item.SourceId.ToString("N"), item.ChunkId.ToString("N"), item.ChunkIndex)).ToArray()))
+        };
+    }
+
+
+    public static async Task<IResult> GetBotAsync(string? siteId, HttpContext context, GetEngageBotHandler handler)
+    {
+        if (string.IsNullOrWhiteSpace(siteId))
+        {
+            return Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(new Dictionary<string, string[]>
+            {
+                ["siteId"] = ["Site id is required."]
+            }));
+        }
+
+        if (!Guid.TryParse(siteId, out var parsedSiteId))
+        {
+            return Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(new Dictionary<string, string[]>
+            {
+                ["siteId"] = ["Site id is invalid."]
+            }));
+        }
+
+        var tenantId = TryGetTenantId(context.User);
+        if (tenantId is null)
+        {
+            return Results.Unauthorized();
+        }
+
+        var result = await handler.HandleAsync(new GetEngageBotQuery(tenantId.Value, parsedSiteId), context.RequestAborted);
+        return result.Status switch
+        {
+            OperationStatus.NotFound => Results.NotFound(),
+            _ => Results.Ok(new EngageBotResponse(result.Value!.BotId.ToString("N"), result.Value.Name))
+        };
+    }
+
+    public static async Task<IResult> UpdateBotAsync(string? siteId, UpdateEngageBotRequest request, HttpContext context, UpdateEngageBotHandler handler)
+    {
+        if (string.IsNullOrWhiteSpace(siteId))
+        {
+            return Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(new Dictionary<string, string[]>
+            {
+                ["siteId"] = ["Site id is required."]
+            }));
+        }
+
+        if (!Guid.TryParse(siteId, out var parsedSiteId))
+        {
+            return Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(new Dictionary<string, string[]>
+            {
+                ["siteId"] = ["Site id is invalid."]
+            }));
+        }
+
+        var tenantId = TryGetTenantId(context.User);
+        if (tenantId is null)
+        {
+            return Results.Unauthorized();
+        }
+
+        var result = await handler.HandleAsync(new UpdateEngageBotCommand(tenantId.Value, parsedSiteId, request.Name), context.RequestAborted);
+        return result.Status switch
+        {
+            OperationStatus.ValidationFailed => Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(result.Errors!.Errors)),
+            OperationStatus.NotFound => Results.NotFound(),
+            _ => Results.Ok(new EngageBotResponse(result.Value!.BotId.ToString("N"), result.Value.Name))
         };
     }
 
