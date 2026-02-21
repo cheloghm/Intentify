@@ -249,6 +249,72 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.BadRequest, withoutWidgetKeyResponse.StatusCode);
     }
 
+    [Fact]
+    public async Task ChatSend_ReusesSession_WhenStillActive()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var firstResponse = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "first"
+        });
+
+        using var firstJson = JsonDocument.Parse(await firstResponse.Content.ReadAsStringAsync());
+        var firstSessionId = firstJson.RootElement.GetProperty("sessionId").GetString();
+
+        var secondResponse = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            sessionId = firstSessionId,
+            message = "second"
+        });
+
+        using var secondJson = JsonDocument.Parse(await secondResponse.Content.ReadAsStringAsync());
+        var secondSessionId = secondJson.RootElement.GetProperty("sessionId").GetString();
+
+        Assert.Equal(HttpStatusCode.OK, firstResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, secondResponse.StatusCode);
+        Assert.Equal(firstSessionId, secondSessionId);
+    }
+
+    [Fact]
+    public async Task ChatSend_CreatesNewSession_WhenExistingSessionIsExpired()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var firstResponse = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "first"
+        });
+
+        using var firstJson = JsonDocument.Parse(await firstResponse.Content.ReadAsStringAsync());
+        var firstSessionId = firstJson.RootElement.GetProperty("sessionId").GetString();
+
+        var database = new MongoClient(_mongo.ConnectionString).GetDatabase(_mongo.DatabaseName);
+        var sessions = database.GetCollection<BsonEngageSession>("EngageChatSessions");
+        var firstSessionGuid = Guid.Parse(firstSessionId!);
+        var update = Builders<BsonEngageSession>.Update.Set(item => item.UpdatedAtUtc, DateTime.UtcNow.AddMinutes(-31));
+        await sessions.UpdateOneAsync(item => item.Id == firstSessionGuid, update);
+
+        var secondResponse = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            sessionId = firstSessionId,
+            message = "second"
+        });
+
+        using var secondJson = JsonDocument.Parse(await secondResponse.Content.ReadAsStringAsync());
+        var secondSessionId = secondJson.RootElement.GetProperty("sessionId").GetString();
+
+        Assert.Equal(HttpStatusCode.OK, firstResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, secondResponse.StatusCode);
+        Assert.NotEqual(firstSessionId, secondSessionId);
+    }
+
     private async Task AddKnowledgeAsync(string token, string siteId, string text)
     {
         var createResponse = await SendAuthorizedAsync(HttpMethod.Post, "/knowledge/sources", token, JsonContent.Create(new
@@ -327,6 +393,12 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
         request.Content = content;
 
         return await client.SendAsync(request);
+    }
+
+    private sealed class BsonEngageSession
+    {
+        public Guid Id { get; init; }
+        public DateTime UpdatedAtUtc { get; init; }
     }
 
     private sealed class BsonEngageTicket
