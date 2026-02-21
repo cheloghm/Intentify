@@ -33,6 +33,20 @@ internal static class EngageEndpoints
 
   function endpoint(path) { return baseUrl + path; }
 
+  function readCookie(name) {
+    var escapedName = name.replace(/[-[\]{}()*+?.,\^$|#\s]/g, '\\$&');
+    var match = document.cookie.match(new RegExp('(?:^|; )' + escapedName + '=([^;]*)'));
+    if (!match) {
+      return null;
+    }
+
+    try {
+      return decodeURIComponent(match[1]);
+    } catch (e) {
+      return match[1];
+    }
+  }
+
   var toggleButton = document.createElement('button');
   toggleButton.type = 'button';
   toggleButton.textContent = 'Chat';
@@ -127,7 +141,7 @@ internal static class EngageEndpoints
     fetch(endpoint('/engage/chat/send?widgetKey=' + encodeURIComponent(widgetKey)), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ widgetKey: widgetKey, sessionId: sessionId, message: message })
+      body: JSON.stringify({ widgetKey: widgetKey, sessionId: sessionId, message: message, collectorSessionId: readCookie('intentify_sid') })
     })
       .then(function(response) {
         if (!response.ok) {
@@ -208,7 +222,7 @@ internal static class EngageEndpoints
             sessionId = parsedSessionId;
         }
 
-        var result = await handler.HandleAsync(new ChatSendCommand(resolvedWidgetKey, sessionId, request.Message), context.RequestAborted);
+        var result = await handler.HandleAsync(new ChatSendCommand(resolvedWidgetKey, sessionId, request.Message, request.CollectorSessionId), context.RequestAborted);
         return result.Status switch
         {
             OperationStatus.ValidationFailed => Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(result.Errors!.Errors)),
