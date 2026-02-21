@@ -55,7 +55,33 @@ public sealed class EngageChatSessionRepository : IEngageChatSessionRepository
     public async Task<IReadOnlyCollection<EngageChatSession>> ListBySiteAsync(Guid tenantId, Guid siteId, CancellationToken cancellationToken = default)
     {
         await _ensureIndexes;
-        var results = await _sessions.Find(item => item.TenantId == tenantId && item.SiteId == siteId)
+        var normalized = collectorSessionId.Trim();
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return;
+        }
+
+        var filter = Builders<EngageChatSession>.Filter.Eq(item => item.Id, sessionId)
+            & (Builders<EngageChatSession>.Filter.Eq(item => item.CollectorSessionId, null)
+               | Builders<EngageChatSession>.Filter.Eq(item => item.CollectorSessionId, string.Empty));
+
+        var update = Builders<EngageChatSession>.Update.Set(item => item.CollectorSessionId, normalized);
+        await _sessions.UpdateOneAsync(filter, update, cancellationToken: cancellationToken);
+    }
+
+    public async Task<IReadOnlyCollection<EngageChatSession>> ListBySiteAsync(Guid tenantId, Guid siteId, string? collectorSessionId = null, CancellationToken cancellationToken = default)
+    {
+        await _ensureIndexes;
+
+        var filter = Builders<EngageChatSession>.Filter.Eq(item => item.TenantId, tenantId)
+            & Builders<EngageChatSession>.Filter.Eq(item => item.SiteId, siteId);
+
+        if (!string.IsNullOrWhiteSpace(collectorSessionId))
+        {
+            filter &= Builders<EngageChatSession>.Filter.Eq(item => item.CollectorSessionId, collectorSessionId.Trim());
+        }
+
+        var results = await _sessions.Find(filter)
             .SortByDescending(item => item.UpdatedAtUtc)
             .ToListAsync(cancellationToken);
         return results;

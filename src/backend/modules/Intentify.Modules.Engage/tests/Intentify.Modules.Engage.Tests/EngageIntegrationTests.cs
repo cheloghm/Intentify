@@ -75,6 +75,38 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Conversations_CanFilterByCollectorSessionId()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "first",
+            collectorSessionId = "collector-one"
+        });
+
+        await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "second",
+            collectorSessionId = "collector-two"
+        });
+
+        var response = await SendAuthorizedAsync(
+            HttpMethod.Get,
+            $"/engage/conversations?siteId={site.SiteId}&collectorSessionId=collector-one",
+            token);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal(JsonValueKind.Array, json.RootElement.ValueKind);
+        Assert.Single(json.RootElement.EnumerateArray());
+    }
+
+    [Fact]
     public async Task ConversationMessages_ReturnNotFound_WhenSiteDoesNotMatchSession()
     {
         var token = await RegisterUserAsync();

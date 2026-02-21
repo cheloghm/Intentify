@@ -10,7 +10,7 @@ public sealed record EngageCitationResult(Guid SourceId, Guid ChunkId, int Chunk
 
 public sealed record ChatSendResult(Guid SessionId, string Response, decimal Confidence, bool TicketCreated, IReadOnlyCollection<EngageCitationResult> Sources);
 
-public sealed record ListConversationsQuery(Guid TenantId, Guid SiteId);
+public sealed record ListConversationsQuery(Guid TenantId, Guid SiteId, string? CollectorSessionId);
 
 public sealed record ConversationSummaryResult(Guid SessionId, DateTime CreatedAtUtc, DateTime UpdatedAtUtc);
 

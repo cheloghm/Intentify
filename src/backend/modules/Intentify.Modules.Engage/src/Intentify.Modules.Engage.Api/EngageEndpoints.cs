@@ -236,7 +236,7 @@ internal static class EngageEndpoints
         };
     }
 
-    public static async Task<IResult> ListConversationsAsync(string? siteId, HttpContext context, ListConversationsHandler handler)
+    public static async Task<IResult> ListConversationsAsync(string? siteId, string? collectorSessionId, HttpContext context, ListConversationsHandler handler)
     {
         if (string.IsNullOrWhiteSpace(siteId))
         {
@@ -260,7 +260,7 @@ internal static class EngageEndpoints
             return Results.Unauthorized();
         }
 
-        var results = await handler.HandleAsync(new ListConversationsQuery(tenantId.Value, parsedSiteId), context.RequestAborted);
+        var results = await handler.HandleAsync(new ListConversationsQuery(tenantId.Value, parsedSiteId, collectorSessionId), context.RequestAborted);
         return Results.Ok(results.Select(item => new ConversationSummaryResponse(item.SessionId.ToString("N"), item.CreatedAtUtc, item.UpdatedAtUtc)).ToArray());
     }
 
