@@ -18,7 +18,14 @@ const createButton = ({ label, variant = 'default', type = 'button' } = {}) => {
 
 const getSiteId = (site) => site?.siteId || site?.id || '';
 
-const conversationTimestampFields = ['updatedAtUtc', 'updatedAt', 'createdAtUtc', 'createdAt'];
+const conversationTimestampFields = [
+  'lastActivityAtUtc',
+  'lastActivityAt',
+  'updatedAtUtc',
+  'updatedAt',
+  'createdAtUtc',
+  'createdAt',
+];
 
 const getConversationTimestamp = (conversation) => {
   for (const field of conversationTimestampFields) {
@@ -27,9 +34,9 @@ const getConversationTimestamp = (conversation) => {
       continue;
     }
 
-    const timestamp = new Date(rawValue).getTime();
-    if (!Number.isNaN(timestamp)) {
-      return timestamp;
+    const value = new Date(rawValue).getTime();
+    if (!Number.isNaN(value)) {
+      return value;
     }
   }
 
@@ -41,6 +48,21 @@ const sortConversationsNewestFirst = (conversations) => {
     return [];
   }
 
+  const hasSortableTimestamp = conversations.some((conversation) =>
+    conversationTimestampFields.some((field) => {
+      const rawValue = conversation?.[field];
+      if (!rawValue) {
+        return false;
+      }
+
+      return !Number.isNaN(new Date(rawValue).getTime());
+    })
+  );
+
+  if (!hasSortableTimestamp) {
+    return conversations;
+  }
+
   return [...conversations].sort((left, right) => {
     const rightTimestamp = getConversationTimestamp(right);
     const leftTimestamp = getConversationTimestamp(left);
@@ -48,11 +70,9 @@ const sortConversationsNewestFirst = (conversations) => {
     if (rightTimestamp === null && leftTimestamp === null) {
       return 0;
     }
-
     if (rightTimestamp === null) {
       return 1;
     }
-
     if (leftTimestamp === null) {
       return -1;
     }
