@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
 using Intentify.AppHost;
 using Intentify.Modules.Auth.Api;
@@ -309,6 +310,37 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
     }
 
 
+    [Fact]
+    public async Task ChatSend_PersistsCollectorSessionId_FromCookie_WhenRequestFieldMissing()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        const string collectorSessionId = "intentify_sid_cookie123";
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/engage/chat/send");
+        request.Headers.Add("Cookie", $"intentify_sid={collectorSessionId}");
+        request.Content = new StringContent(
+            JsonSerializer.Serialize(new
+            {
+                widgetKey = site.WidgetKey,
+                message = "hello"
+            }),
+            Encoding.UTF8,
+            "application/json");
+
+        var response = await _client!.SendAsync(request);
+
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var sessionId = Guid.Parse(json.RootElement.GetProperty("sessionId").GetString()!);
+
+        var database = new MongoClient(_mongo.ConnectionString).GetDatabase(_mongo.DatabaseName);
+        var sessions = database.GetCollection<BsonEngageSession>("EngageChatSessions");
+        var session = await sessions.Find(item => item.Id == sessionId).FirstOrDefaultAsync();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(session);
+        Assert.Equal(collectorSessionId, session!.CollectorSessionId);
+    }
 
     [Fact]
     public async Task ChatSend_PersistsCollectorSessionId_FromRequest()
