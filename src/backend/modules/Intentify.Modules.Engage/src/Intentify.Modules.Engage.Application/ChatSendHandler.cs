@@ -34,6 +34,9 @@ public sealed class ChatSendHandler
 
     private const string AskForContactDetailsResponse = "Sorry about that — I’ll get someone to help. What’s your name and best email?";
     private const string ContactDetailsReceivedResponse = "Thanks — I’ve got your details. Our team will contact you shortly.";
+    private const string GreetingResponse = "Hi! How can I help you today?";
+    private const string AckResponse = "Got it — what would you like to know or do next?";
+    private const string LowConfidenceClarificationResponse = "I don’t have that information in our knowledge base yet. If you tell me a bit more, I can help refine the question — or I can create a ticket for our team to follow up.";
 
     private readonly ISiteRepository _siteRepository;
     private readonly IEngageChatSessionRepository _sessionRepository;
@@ -106,6 +109,24 @@ public sealed class ChatSendHandler
 
         await _sessionRepository.TouchAsync(session.Id, now, cancellationToken);
 
+        var recentMessages = await _messageRepository.ListBySessionAsync(session.Id, cancellationToken);
+
+        if (TryBuildSmalltalkResponse(command.Message, recentMessages, out var smalltalkResponse))
+        {
+            await _messageRepository.InsertAsync(new EngageChatMessage
+            {
+                SessionId = session.Id,
+                Role = "assistant",
+                Content = smalltalkResponse,
+                CreatedAtUtc = now,
+                Confidence = 1m
+            }, cancellationToken);
+
+            await _sessionRepository.TouchAsync(session.Id, now, cancellationToken);
+
+            return OperationResult<ChatSendResult>.Success(new ChatSendResult(session.Id, smalltalkResponse, 1m, false, []));
+        }
+
         var retrieved = await _retrieveTopChunksHandler.HandleAsync(
             new RetrieveTopChunksQuery(site.TenantId, site.Id, command.Message, 3, bot.BotId),
             cancellationToken);
@@ -116,14 +137,31 @@ public sealed class ChatSendHandler
         var isLowConfidence = retrieved.Count == 0 || topScore < TopChunkScoreThreshold || confidence < LowConfidenceThreshold;
         if (isLowConfidence)
         {
-            return await CreateFallbackResponseAsync(site, session, command.Message, now, "LowConfidence", cancellationToken);
+            var shouldCreateTicket = IsRealQuestion(command.Message);
+            if (shouldCreateTicket)
+            {
+                return await CreateFallbackResponseAsync(site, session, command.Message, now, "LowConfidence", cancellationToken);
+            }
+
+            await _messageRepository.InsertAsync(new EngageChatMessage
+            {
+                SessionId = session.Id,
+                Role = "assistant",
+                Content = LowConfidenceClarificationResponse,
+                CreatedAtUtc = now,
+                Confidence = 0m
+            }, cancellationToken);
+
+            await _sessionRepository.TouchAsync(session.Id, now, cancellationToken);
+
+            return OperationResult<ChatSendResult>.Success(new ChatSendResult(session.Id, LowConfidenceClarificationResponse, 0m, false, []));
         }
 
         var citations = retrieved
             .Select(item => new EngageCitationResult(item.SourceId, item.ChunkId, item.ChunkIndex))
             .ToArray();
 
-        var completion = await _chatCompletionClient.CompleteAsync(BuildPrompt(command.Message, retrieved), cancellationToken);
+        var completion = await _chatCompletionClient.CompleteAsync(BuildPrompt(command.Message, retrieved, recentMessages), cancellationToken);
         if (!completion.IsSuccess || string.IsNullOrWhiteSpace(completion.Value))
         {
             return await CreateFallbackResponseAsync(site, session, command.Message, now, "AiUnavailable", cancellationToken);
@@ -160,11 +198,15 @@ public sealed class ChatSendHandler
         return Math.Min(1m, topScore / 4m);
     }
 
-    private static string BuildPrompt(string message, IReadOnlyCollection<RetrievedChunkResult> chunks)
+    private static string BuildPrompt(string message, IReadOnlyCollection<RetrievedChunkResult> chunks, IReadOnlyCollection<EngageChatMessage> messages)
     {
         var context = string.Join("\n", chunks
             .Take(3)
             .Select((item, index) => $"[{index + 1}] {item.Content.Trim()}"));
+
+        var transcript = string.Join("\n", messages
+            .TakeLast(30)
+            .Select(item => $"{(string.Equals(item.Role, "assistant", StringComparison.OrdinalIgnoreCase) ? "Assistant" : "User")}: {item.Content.Trim()}"));
 
         return $"""
 You are an Engage support assistant.
@@ -179,9 +221,70 @@ Use only the knowledge context to answer the user's question in plain English.
 Knowledge context:
 {context}
 
+Conversation transcript (oldest to newest):
+{transcript}
+
 User question:
 {message}
 """;
+    }
+
+    private static bool TryBuildSmalltalkResponse(string message, IReadOnlyCollection<EngageChatMessage> messages, out string response)
+    {
+        var normalized = message.Trim().ToLowerInvariant();
+        var isGreeting = normalized is "hi" or "hello" or "hey";
+        var isAcknowledgement = normalized is "yes" or "no" or "ok" or "okay" or "thanks" or "thank you" or "sure";
+        var isVeryShortNonQuestion = normalized.Length > 0 && normalized.Length <= 5 && !normalized.Contains('?');
+        var priorAssistantAskedQuestion = messages
+            .Reverse()
+            .Skip(1)
+            .FirstOrDefault(item => string.Equals(item.Role, "assistant", StringComparison.OrdinalIgnoreCase))
+            ?.Content.TrimEnd().EndsWith("?", StringComparison.Ordinal) == true;
+
+        if (priorAssistantAskedQuestion && isAcknowledgement)
+        {
+            response = string.Empty;
+            return false;
+        }
+
+        if (!isGreeting && !isAcknowledgement && !isVeryShortNonQuestion)
+        {
+            response = string.Empty;
+            return false;
+        }
+
+        response = isGreeting ? GreetingResponse : AckResponse;
+        return true;
+    }
+
+    private static bool IsRealQuestion(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return false;
+        }
+
+        var normalized = message.Trim().ToLowerInvariant();
+        if (normalized.EndsWith("?", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        return normalized.StartsWith("who ", StringComparison.Ordinal)
+            || normalized.StartsWith("what ", StringComparison.Ordinal)
+            || normalized.StartsWith("when ", StringComparison.Ordinal)
+            || normalized.StartsWith("where ", StringComparison.Ordinal)
+            || normalized.StartsWith("why ", StringComparison.Ordinal)
+            || normalized.StartsWith("how ", StringComparison.Ordinal)
+            || normalized.StartsWith("can ", StringComparison.Ordinal)
+            || normalized.StartsWith("could ", StringComparison.Ordinal)
+            || normalized.StartsWith("do ", StringComparison.Ordinal)
+            || normalized.StartsWith("does ", StringComparison.Ordinal)
+            || normalized.StartsWith("is ", StringComparison.Ordinal)
+            || normalized.StartsWith("are ", StringComparison.Ordinal)
+            || normalized.StartsWith("did ", StringComparison.Ordinal)
+            || normalized.StartsWith("will ", StringComparison.Ordinal)
+            || normalized.StartsWith("would ", StringComparison.Ordinal);
     }
 
     private static string NormalizeAiResponse(string response)
