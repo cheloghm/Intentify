@@ -315,6 +315,33 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
         Assert.NotEqual(firstSessionId, secondSessionId);
     }
 
+
+    [Fact]
+    public async Task ChatSession_PersistsCollectorSessionId()
+    {
+        var database = new MongoClient(_mongo.ConnectionString).GetDatabase(_mongo.DatabaseName);
+        var sessions = database.GetCollection<BsonEngageSession>("EngageChatSessions");
+
+        var session = new BsonEngageSession
+        {
+            Id = Guid.NewGuid(),
+            TenantId = Guid.NewGuid(),
+            SiteId = Guid.NewGuid(),
+            BotId = Guid.NewGuid(),
+            WidgetKey = "widget-key",
+            CollectorSessionId = "intentify-session-123",
+            CreatedAtUtc = DateTime.UtcNow,
+            UpdatedAtUtc = DateTime.UtcNow
+        };
+
+        await sessions.InsertOneAsync(session);
+
+        var persisted = await sessions.Find(item => item.Id == session.Id).FirstOrDefaultAsync();
+
+        Assert.NotNull(persisted);
+        Assert.Equal(session.CollectorSessionId, persisted!.CollectorSessionId);
+    }
+
     private async Task AddKnowledgeAsync(string token, string siteId, string text)
     {
         var createResponse = await SendAuthorizedAsync(HttpMethod.Post, "/knowledge/sources", token, JsonContent.Create(new
@@ -398,6 +425,12 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
     private sealed class BsonEngageSession
     {
         public Guid Id { get; init; }
+        public Guid TenantId { get; init; }
+        public Guid SiteId { get; init; }
+        public Guid BotId { get; init; }
+        public string WidgetKey { get; init; } = string.Empty;
+        public string? CollectorSessionId { get; init; }
+        public DateTime CreatedAtUtc { get; init; }
         public DateTime UpdatedAtUtc { get; init; }
     }
 
