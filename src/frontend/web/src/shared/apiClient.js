@@ -193,6 +193,30 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
   const listTickets = async ({ siteId, page = 1, pageSize = 50 } = {}) =>
     request(`/tickets${buildQueryString({ siteId, page, pageSize })}`);
 
+  const getTicket = async (ticketId) =>
+    request(`/tickets/${encodeURIComponent(ticketId)}`);
+
+  const getTicketNotes = async (ticketId) =>
+    request(`/tickets/${encodeURIComponent(ticketId)}/notes`);
+
+  const addTicketNote = async (ticketId, content) =>
+    request(`/tickets/${encodeURIComponent(ticketId)}/notes`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ content }),
+    });
+
+  const transitionTicketStatus = async (ticketId, status) =>
+    request(`/tickets/${encodeURIComponent(ticketId)}/status`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ status }),
+    });
+
   return {
     request,
     sites: {
@@ -228,6 +252,10 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
     },
     tickets: {
       listTickets,
+      getTicket,
+      getTicketNotes,
+      addTicketNote,
+      transitionTicketStatus,
     },
   };
 };
