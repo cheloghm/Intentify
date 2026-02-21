@@ -1,8 +1,8 @@
 namespace Intentify.Modules.Engage.Api;
 
-public sealed record WidgetBootstrapResponse(string SiteId, string Domain, string DisplayName);
+public sealed record WidgetBootstrapResponse(string SiteId, string Domain, string DisplayName, string BotName);
 
-public sealed record EngageChatSendRequest(string WidgetKey, string? SessionId, string Message);
+public sealed record EngageChatSendRequest(string WidgetKey, string? SessionId, string Message, string? CollectorSessionId = null);
 
 public sealed record EngageCitationResponse(string SourceId, string ChunkId, int ChunkIndex);
 
@@ -17,3 +17,8 @@ public sealed record ConversationMessageResponse(
     DateTime CreatedAtUtc,
     decimal? Confidence,
     IReadOnlyCollection<EngageCitationResponse> Citations);
+
+
+public sealed record EngageBotResponse(string SiteId, string Name);
+
+public sealed record UpdateEngageBotRequest(string Name);

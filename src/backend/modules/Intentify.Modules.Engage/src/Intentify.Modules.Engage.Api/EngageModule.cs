@@ -88,6 +88,8 @@ public sealed class EngageModule : IAppModule
         var adminGroup = endpoints.MapGroup("/engage")
             .RequireAuthorization();
 
+        adminGroup.MapGet("/bot", EngageEndpoints.GetBotAsync);
+        adminGroup.MapPut("/bot", EngageEndpoints.UpdateBotAsync);
         adminGroup.MapGet("/conversations", EngageEndpoints.ListConversationsAsync);
         adminGroup.MapGet("/conversations/{sessionId}/messages", EngageEndpoints.GetConversationMessagesAsync);
     }

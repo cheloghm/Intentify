@@ -170,13 +170,25 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
 
   const listPromoEntries = async (promoId, page = 1, pageSize = 50) =>
     request(`/promos/${encodeURIComponent(promoId)}/entries${buildQueryString({ page, pageSize })}`);
-  const listEngageConversations = async (siteId) =>
-    request(`/engage/conversations?siteId=${encodeURIComponent(siteId)}`);
+  const listEngageConversations = async (siteId, collectorSessionId) =>
+    request(`/engage/conversations${buildQueryString({ siteId, collectorSessionId })}`);
 
   const getEngageConversationMessages = async (sessionId, siteId) =>
     request(
       `/engage/conversations/${encodeURIComponent(sessionId)}/messages?siteId=${encodeURIComponent(siteId)}`
     );
+
+  const getEngageBot = async (siteId) =>
+    request(`/engage/bot${buildQueryString({ siteId })}`);
+
+  const updateEngageBot = async (siteId, name) =>
+    request(`/engage/bot${buildQueryString({ siteId })}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ name }),
+    });
 
   return {
     request,
@@ -208,6 +220,8 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
       getConversations: listEngageConversations,
       listConversations: listEngageConversations,
       getConversationMessages: getEngageConversationMessages,
+      getBot: getEngageBot,
+      updateBot: updateEngageBot,
     },
   };
 };
