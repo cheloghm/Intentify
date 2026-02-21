@@ -75,6 +75,38 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Conversations_CanFilterByCollectorSessionId()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "first",
+            collectorSessionId = "collector-one"
+        });
+
+        await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "second",
+            collectorSessionId = "collector-two"
+        });
+
+        var response = await SendAuthorizedAsync(
+            HttpMethod.Get,
+            $"/engage/conversations?siteId={site.SiteId}&collectorSessionId=collector-one",
+            token);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal(JsonValueKind.Array, json.RootElement.ValueKind);
+        Assert.Single(json.RootElement.EnumerateArray());
+    }
+
+    [Fact]
     public async Task ConversationMessages_ReturnNotFound_WhenSiteDoesNotMatchSession()
     {
         var token = await RegisterUserAsync();
@@ -249,6 +281,68 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.BadRequest, withoutWidgetKeyResponse.StatusCode);
     }
 
+
+
+    [Fact]
+    public async Task ChatSend_PersistsCollectorSessionId_FromRequest()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var collectorSessionId = "intentify_sid_abc123";
+        var response = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "hello",
+            collectorSessionId
+        });
+
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var sessionId = Guid.Parse(json.RootElement.GetProperty("sessionId").GetString()!);
+
+        var database = new MongoClient(_mongo.ConnectionString).GetDatabase(_mongo.DatabaseName);
+        var sessions = database.GetCollection<BsonEngageSession>("EngageChatSessions");
+        var session = await sessions.Find(item => item.Id == sessionId).FirstOrDefaultAsync();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(session);
+        Assert.Equal(collectorSessionId, session!.CollectorSessionId);
+    }
+
+
+    [Fact]
+    public async Task ChatSend_DoesNotOverwriteCollectorSessionId_WhenAlreadySet()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var firstResponse = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "first",
+            collectorSessionId = "collector-a"
+        });
+
+        using var firstJson = JsonDocument.Parse(await firstResponse.Content.ReadAsStringAsync());
+        var sessionId = firstJson.RootElement.GetProperty("sessionId").GetString();
+
+        var secondResponse = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            sessionId,
+            message = "second",
+            collectorSessionId = "collector-b"
+        });
+
+        var database = new MongoClient(_mongo.ConnectionString).GetDatabase(_mongo.DatabaseName);
+        var sessions = database.GetCollection<BsonEngageSession>("EngageChatSessions");
+        var persisted = await sessions.Find(item => item.Id == Guid.Parse(sessionId!)).FirstOrDefaultAsync();
+
+        Assert.Equal(HttpStatusCode.OK, firstResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, secondResponse.StatusCode);
+        Assert.NotNull(persisted);
+        Assert.Equal("collector-a", persisted!.CollectorSessionId);
+    }
     [Fact]
     public async Task ChatSend_ReusesSession_WhenStillActive()
     {
@@ -313,6 +407,33 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.OK, firstResponse.StatusCode);
         Assert.Equal(HttpStatusCode.OK, secondResponse.StatusCode);
         Assert.NotEqual(firstSessionId, secondSessionId);
+    }
+
+
+    [Fact]
+    public async Task ChatSession_PersistsCollectorSessionId()
+    {
+        var database = new MongoClient(_mongo.ConnectionString).GetDatabase(_mongo.DatabaseName);
+        var sessions = database.GetCollection<BsonEngageSession>("EngageChatSessions");
+
+        var session = new BsonEngageSession
+        {
+            Id = Guid.NewGuid(),
+            TenantId = Guid.NewGuid(),
+            SiteId = Guid.NewGuid(),
+            BotId = Guid.NewGuid(),
+            WidgetKey = "widget-key",
+            CollectorSessionId = "intentify-session-123",
+            CreatedAtUtc = DateTime.UtcNow,
+            UpdatedAtUtc = DateTime.UtcNow
+        };
+
+        await sessions.InsertOneAsync(session);
+
+        var persisted = await sessions.Find(item => item.Id == session.Id).FirstOrDefaultAsync();
+
+        Assert.NotNull(persisted);
+        Assert.Equal(session.CollectorSessionId, persisted!.CollectorSessionId);
     }
 
     private async Task AddKnowledgeAsync(string token, string siteId, string text)
@@ -398,6 +519,12 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
     private sealed class BsonEngageSession
     {
         public Guid Id { get; init; }
+        public Guid TenantId { get; init; }
+        public Guid SiteId { get; init; }
+        public Guid BotId { get; init; }
+        public string WidgetKey { get; init; } = string.Empty;
+        public string? CollectorSessionId { get; init; }
+        public DateTime CreatedAtUtc { get; init; }
         public DateTime UpdatedAtUtc { get; init; }
     }
 
