@@ -34,6 +34,7 @@ public sealed class ChatSendHandler
     private readonly CreateTicketHandler _createTicketHandler;
     private readonly RetrieveTopChunksHandler _retrieveTopChunksHandler;
     private readonly IChatCompletionClient _chatCompletionClient;
+    private readonly TimeSpan _sessionTimeout;
 
     public ChatSendHandler(
         ISiteRepository siteRepository,
@@ -43,7 +44,8 @@ public sealed class ChatSendHandler
         IEngageHandoffTicketRepository ticketRepository,
         CreateTicketHandler createTicketHandler,
         RetrieveTopChunksHandler retrieveTopChunksHandler,
-        IChatCompletionClient chatCompletionClient)
+        IChatCompletionClient chatCompletionClient,
+        int sessionTimeoutMinutes)
     {
         _siteRepository = siteRepository;
         _sessionRepository = sessionRepository;
@@ -53,6 +55,7 @@ public sealed class ChatSendHandler
         _createTicketHandler = createTicketHandler;
         _retrieveTopChunksHandler = retrieveTopChunksHandler;
         _chatCompletionClient = chatCompletionClient;
+        _sessionTimeout = TimeSpan.FromMinutes(sessionTimeoutMinutes > 0 ? sessionTimeoutMinutes : 30);
     }
 
     public async Task<OperationResult<ChatSendResult>> HandleAsync(ChatSendCommand command, CancellationToken cancellationToken = default)
@@ -92,6 +95,8 @@ public sealed class ChatSendHandler
             CreatedAtUtc = now
         }, cancellationToken);
 
+        await _sessionRepository.TouchAsync(session.Id, now, cancellationToken);
+
         var retrieved = await _retrieveTopChunksHandler.HandleAsync(
             new RetrieveTopChunksQuery(site.TenantId, site.Id, command.Message, 3, bot.BotId),
             cancellationToken);
@@ -118,7 +123,7 @@ public sealed class ChatSendHandler
             return await CreateFallbackResponseAsync(site, session, command.Message, now, reason, cancellationToken);
         }
 
-        var response = completion.Value.Trim();
+        var response = NormalizeAiResponse(completion.Value);
         await _messageRepository.InsertAsync(new EngageChatMessage
         {
             SessionId = session.Id,
@@ -153,9 +158,37 @@ public sealed class ChatSendHandler
     {
         var context = string.Join("\n", chunks
             .Take(3)
-            .Select(item => $"- {item.Content.Trim()}"));
+            .Select((item, index) => $"[{index + 1}] {item.Content.Trim()}"));
 
-        return $"Use only the knowledge context below to answer the user question. If context is insufficient, say so briefly.\nKnowledge context:\n{context}\n\nUser question: {message}";
+        return $"""
+You are an Engage support assistant.
+
+Use only the knowledge context to answer the user's question in plain English.
+- Keep the answer concise: 1-2 short paragraphs.
+- Rephrase the content naturally; do not copy/paste raw website text.
+- Do not use markdown lists, bullets, or asterisks unless the user explicitly asks for a list.
+- Do not start with: Based on your knowledge base:
+- If the knowledge context is not enough, ask exactly one clarifying question.
+
+Knowledge context:
+{context}
+
+User question:
+{message}
+""";
+    }
+
+    private static string NormalizeAiResponse(string response)
+    {
+        var normalized = response.Trim();
+        const string prohibitedPrefix = "Based on your knowledge base:";
+
+        if (normalized.StartsWith(prohibitedPrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            normalized = normalized[prohibitedPrefix.Length..].TrimStart();
+        }
+
+        return normalized;
     }
 
     private async Task<OperationResult<ChatSendResult>> CreateFallbackResponseAsync(
@@ -229,7 +262,11 @@ public sealed class ChatSendHandler
             var existing = await _sessionRepository.GetByIdAsync(sessionId.Value, cancellationToken);
             if (existing is not null && existing.TenantId == tenantId && existing.SiteId == siteId && existing.BotId == botId)
             {
-                return existing;
+                var idleFor = now - existing.UpdatedAtUtc;
+                if (idleFor <= _sessionTimeout)
+                {
+                    return existing;
+                }
             }
         }
 
