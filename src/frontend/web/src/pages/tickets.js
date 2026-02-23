@@ -6,6 +6,18 @@ const SELECTED_SITE_STORAGE_KEY = 'intentify.selectedSiteId';
 const DEFAULT_PAGE_SIZE = 20;
 const TICKET_STATUSES = ['Open', 'InProgress', 'Resolved', 'Closed'];
 
+const getTicketIdValue = (ticketOrId) => {
+  if (typeof ticketOrId === 'string') {
+    return ticketOrId;
+  }
+
+  if (ticketOrId && typeof ticketOrId === 'object') {
+    return ticketOrId.value || ticketOrId.id || ticketOrId.ticketId || ticketOrId._id || '';
+  }
+
+  return '';
+};
+
 const formatDate = (value) => {
   if (!value) {
     return '—';
@@ -137,6 +149,21 @@ export const renderTicketsView = async (container, { apiClient, toast, query } =
     notes: [],
     loading: false,
   };
+  const getNextStatusOptions = (status) => {
+    if (status === 'Open') {
+      return ['Open', 'InProgress'];
+    }
+
+    if (status === 'InProgress') {
+      return ['InProgress', 'Resolved'];
+    }
+
+    if (status === 'Resolved') {
+      return ['Resolved', 'Closed'];
+    }
+
+    return ['Closed'];
+  };
 
   const modalOverlay = document.createElement('div');
   modalOverlay.id = 'tickets-modal-overlay';
@@ -204,12 +231,6 @@ export const renderTicketsView = async (container, { apiClient, toast, query } =
   statusSelect.style.padding = '8px 10px';
   statusSelect.style.borderRadius = '6px';
   statusSelect.style.border = '1px solid #cbd5e1';
-  TICKET_STATUSES.forEach((status) => {
-    const option = document.createElement('option');
-    option.value = status;
-    option.textContent = status;
-    statusSelect.appendChild(option);
-  });
 
   const updateStatusButton = document.createElement('button');
   updateStatusButton.type = 'button';
@@ -323,11 +344,21 @@ export const renderTicketsView = async (container, { apiClient, toast, query } =
       return;
     }
 
-    statusSelect.disabled = false;
-    updateStatusButton.disabled = false;
+    const currentStatus = TICKET_STATUSES.includes(ticket.status) ? ticket.status : 'Open';
+    const statusOptions = getNextStatusOptions(currentStatus);
+    statusSelect.innerHTML = '';
+    statusOptions.forEach((status) => {
+      const option = document.createElement('option');
+      option.value = status;
+      option.textContent = status;
+      statusSelect.appendChild(option);
+    });
+
+    statusSelect.disabled = currentStatus === 'Closed';
+    updateStatusButton.disabled = currentStatus === 'Closed';
     addNoteButton.disabled = false;
     noteTextarea.disabled = false;
-    statusSelect.value = ticket.status || 'Open';
+    statusSelect.value = currentStatus;
 
     const fields = [
       ['Subject', ticket.subject || '—'],
@@ -391,20 +422,34 @@ export const renderTicketsView = async (container, { apiClient, toast, query } =
   };
 
   const loadTicketModalData = async (ticketId) => {
-    const ticketPromise = client.tickets?.getTicket
-      ? client.tickets.getTicket(ticketId)
-      : client.request(`/tickets/${encodeURIComponent(ticketId)}`);
-    const notesPromise = client.tickets?.getTicketNotes
-      ? client.tickets.getTicketNotes(ticketId)
-      : client.request(`/tickets/${encodeURIComponent(ticketId)}/notes`);
+    try {
+      const ticketPromise = client.tickets?.getTicket
+        ? client.tickets.getTicket(ticketId)
+        : client.request(`/tickets/${encodeURIComponent(ticketId)}`);
+      const notesPromise = client.tickets?.getTicketNotes
+        ? client.tickets.getTicketNotes(ticketId)
+        : client.request(`/tickets/${encodeURIComponent(ticketId)}/notes`);
 
-    const [ticket, notes] = await Promise.all([ticketPromise, notesPromise]);
-    modalState.ticket = ticket;
-    modalState.notes = Array.isArray(notes) ? notes : [];
+      const [ticket, notes] = await Promise.all([ticketPromise, notesPromise]);
+      modalState.ticket = ticket;
+      modalState.notes = Array.isArray(notes) ? notes : [];
+    } catch (error) {
+      modalState.ticket = null;
+      modalState.notes = [];
+      const apiError = mapApiError(error);
+      setModalError(apiError.message);
+      notifier.show({ message: apiError.message, variant: 'danger' });
+    }
   };
 
   const openTicketModal = async (ticketId) => {
-    modalState.ticketId = ticketId;
+    const normalizedTicketId = getTicketIdValue(ticketId);
+    if (!normalizedTicketId) {
+      notifier.show({ message: 'Invalid ticket id', variant: 'danger' });
+      return;
+    }
+
+    modalState.ticketId = normalizedTicketId;
     modalState.ticket = null;
     modalState.notes = [];
     modalState.loading = true;
@@ -413,7 +458,7 @@ export const renderTicketsView = async (container, { apiClient, toast, query } =
     modalOverlay.style.display = 'flex';
 
     try {
-      await loadTicketModalData(ticketId);
+      await loadTicketModalData(normalizedTicketId);
     } catch (error) {
       setModalError(mapApiError(error).message);
     } finally {
@@ -549,7 +594,7 @@ export const renderTicketsView = async (container, { apiClient, toast, query } =
         tr.appendChild(td);
       });
       tr.addEventListener('click', () => {
-        void openTicketModal(ticket.id);
+        void openTicketModal(getTicketIdValue(ticket.id) || getTicketIdValue(ticket));
       });
       tbody.appendChild(tr);
     });
