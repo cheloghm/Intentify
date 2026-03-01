@@ -156,20 +156,72 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
   };
 
 
-  const createPromo = async (payload) =>
-    request('/promos', {
+  const createPromo = async (payload) => {
+    if (payload instanceof FormData) {
+      return request('/promos', {
+        method: 'POST',
+        body: payload,
+      });
+    }
+
+    return request('/promos', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(payload),
     });
+  };
 
   const listPromos = async (siteId) =>
     request(`/promos${buildQueryString({ siteId })}`);
 
   const listPromoEntries = async (promoId, page = 1, pageSize = 50) =>
     request(`/promos/${encodeURIComponent(promoId)}/entries${buildQueryString({ page, pageSize })}`);
+
+  const getPromoDetail = async (promoId) =>
+    request(`/promos/${encodeURIComponent(promoId)}`);
+
+  const getPromoFlyerUrl = (promoId) => `${baseUrl.replace(/\/$/, "")}/promos/${encodeURIComponent(promoId)}/flyer`;
+
+  const downloadPromoCsv = async (promoId) => {
+    const url = buildUrl(`/promos/${encodeURIComponent(promoId)}/export.csv`, baseUrl);
+    const headers = new Headers();
+    const token = getToken();
+    if (token) {
+      headers.set('Authorization', `Bearer ${token}`);
+    }
+
+    const response = await fetch(url, { method: 'GET', headers });
+    if (!response.ok) {
+      const uiError = await parseErrorResponse(response);
+      const error = new Error(uiError.message);
+      error.uiError = uiError;
+      throw error;
+    }
+
+    return response.blob();
+  };
+
+  const downloadPromoFlyer = async (promoId) => {
+    const url = buildUrl(`/promos/${encodeURIComponent(promoId)}/flyer`, baseUrl);
+    const headers = new Headers();
+    const token = getToken();
+    if (token) {
+      headers.set('Authorization', `Bearer ${token}`);
+    }
+
+    const response = await fetch(url, { method: 'GET', headers });
+    if (!response.ok) {
+      const uiError = await parseErrorResponse(response);
+      const error = new Error(uiError.message);
+      error.uiError = uiError;
+      throw error;
+    }
+
+    return response.blob();
+  };
+
   const listEngageConversations = async (siteId, collectorSessionId) =>
     request(`/engage/conversations${buildQueryString({ siteId, collectorSessionId })}`);
 
@@ -241,6 +293,10 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
       create: createPromo,
       list: listPromos,
       listEntries: listPromoEntries,
+      getDetail: getPromoDetail,
+      flyerUrl: getPromoFlyerUrl,
+      downloadCsv: downloadPromoCsv,
+      downloadFlyer: downloadPromoFlyer,
     },
     engage: {
       sendChat: sendEngageChat,

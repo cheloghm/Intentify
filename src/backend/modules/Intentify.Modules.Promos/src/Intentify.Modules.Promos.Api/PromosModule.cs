@@ -22,6 +22,7 @@ public sealed class PromosModule : IAppModule
         services.AddSingleton<CreatePromoHandler>();
         services.AddSingleton<ListPromosHandler>();
         services.AddSingleton<ListPromoEntriesHandler>();
+        services.AddSingleton<GetPromoDetailHandler>();
         services.AddSingleton<CreatePublicPromoEntryHandler>();
     }
 
@@ -30,7 +31,10 @@ public sealed class PromosModule : IAppModule
         var admin = endpoints.MapGroup("/promos").AddEndpointFilter<RequireAuthFilter>();
         admin.MapPost(string.Empty, PromosEndpoints.CreatePromoAsync);
         admin.MapGet(string.Empty, PromosEndpoints.ListPromosAsync);
+        admin.MapGet("/{promoId}", PromosEndpoints.GetPromoDetailAsync);
         admin.MapGet("/{promoId}/entries", PromosEndpoints.ListEntriesAsync);
+        admin.MapGet("/{promoId}/flyer", PromosEndpoints.DownloadFlyerAsync);
+        admin.MapGet("/{promoId}/export.csv", PromosEndpoints.ExportCsvAsync);
 
         endpoints.MapPost("/promos/public/{promoKey}/entries", PromosEndpoints.CreatePublicEntryAsync);
     }

@@ -71,7 +71,8 @@ public sealed class EngageModule : IAppModule
                 serviceProvider.GetRequiredService<ILeadVisitorLinker>(),
                 serviceProvider.GetRequiredService<RetrieveTopChunksHandler>(),
                 serviceProvider.GetRequiredService<IChatCompletionClient>(),
-                sessionTimeoutMinutes);
+                sessionTimeoutMinutes,
+                serviceProvider.GetRequiredService<Microsoft.Extensions.Logging.ILogger<ChatSendHandler>>());
         });
         services.AddSingleton<GetEngageBotHandler>();
         services.AddSingleton<UpdateEngageBotHandler>();
