@@ -132,7 +132,7 @@ internal static class TicketsEndpoints
         };
     }
 
-    public static async Task<IResult> ListNotesAsync(HttpContext context, string ticketId, int page, int pageSize, ListTicketNotesHandler handler)
+    public static async Task<IResult> ListNotesAsync(HttpContext context, string ticketId, int? page, int? pageSize, ListTicketNotesHandler handler)
     {
         var parsed = ParseTicketAndTenantId(context, ticketId, out var tenantId, out var parsedTicketId);
         if (parsed is not null)
@@ -140,10 +140,13 @@ internal static class TicketsEndpoints
             return parsed;
         }
 
-        page = page <= 0 ? 1 : page;
-        pageSize = pageSize is <= 0 or > 200 ? 50 : pageSize;
+        var resolvedPage = page.GetValueOrDefault();
+        resolvedPage = resolvedPage <= 0 ? 1 : resolvedPage;
 
-        var result = await handler.HandleAsync(new ListTicketNotesQuery(tenantId!.Value, parsedTicketId, page, pageSize), context.RequestAborted);
+        var resolvedPageSize = pageSize.GetValueOrDefault();
+        resolvedPageSize = resolvedPageSize is <= 0 or > 200 ? 50 : resolvedPageSize;
+
+        var result = await handler.HandleAsync(new ListTicketNotesQuery(tenantId!.Value, parsedTicketId, resolvedPage, resolvedPageSize), context.RequestAborted);
 
         return result.Status switch
         {
