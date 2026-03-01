@@ -8,6 +8,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Intentify.Modules.Engage.Domain\Intentify.Modules.Engage.Domain.csproj" />
     <ProjectReference Include="..\..\..\Intentify.Modules.Knowledge\src\Intentify.Modules.Knowledge.Application\Intentify.Modules.Knowledge.Application.csproj" />
+    <ProjectReference Include="..\..\..\Intentify.Modules.Leads\src\Intentify.Modules.Leads.Application\Intentify.Modules.Leads.Application.csproj" />
     <ProjectReference Include="..\..\..\Intentify.Modules.Sites\src\Intentify.Modules.Sites.Application\Intentify.Modules.Sites.Application.csproj" />
     <ProjectReference Include="..\..\..\Intentify.Modules.Tickets\src\Intentify.Modules.Tickets.Application\Intentify.Modules.Tickets.Application.csproj" />
     <ProjectReference Include="..\..\..\..\shared\Intentify.Shared.AI\src\Intentify.Shared.AI\Intentify.Shared.AI.csproj" />

@@ -163,7 +163,8 @@ internal static class TicketsEndpoints
             return parsed;
         }
 
-        var result = await handler.HandleAsync(new TransitionTicketStatusCommand(tenantId!.Value, parsedTicketId, request.Status), context.RequestAborted);
+        var currentUserId = TryGetUserId(context.User);
+        var result = await handler.HandleAsync(new TransitionTicketStatusCommand(tenantId!.Value, parsedTicketId, request.Status, currentUserId), context.RequestAborted);
 
         return result.Status switch
         {

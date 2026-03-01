@@ -1,4 +1,4 @@
-import { createCard, createToastManager } from '../shared/ui/index.js';
+import { createBadge, createCard, createToastManager } from '../shared/ui/index.js';
 import { createApiClient, mapApiError } from '../shared/apiClient.js';
 
 const getSiteId = (site) => site?.siteId || site?.id || '';
@@ -29,6 +29,21 @@ const formatDate = (value) => {
   }
 
   return date.toLocaleString();
+};
+
+
+const getStatusBadgeVariant = (status) => {
+  const normalized = String(status || '').toUpperCase();
+  if (normalized === 'OPEN') {
+    return 'info';
+  }
+  if (normalized === 'INPROGRESS') {
+    return 'warning';
+  }
+  if (normalized === 'RESOLVED') {
+    return 'success';
+  }
+  return '';
 };
 
 const toShortId = (value) => {
@@ -583,16 +598,21 @@ export const renderTicketsView = async (container, { apiClient, toast, query } =
     state.tickets.forEach((ticket) => {
       const tr = document.createElement('tr');
       tr.style.cursor = 'pointer';
-      [
-        toShortId(ticket.id),
-        ticket.subject || '—',
-        ticket.status || '—',
-        formatDate(ticket.updatedAtUtc),
-      ].forEach((value) => {
-        const td = document.createElement('td');
-        td.textContent = String(value);
-        tr.appendChild(td);
-      });
+      const idCell = document.createElement('td');
+      idCell.textContent = String(toShortId(ticket.id));
+
+      const subjectCell = document.createElement('td');
+      subjectCell.textContent = String(ticket.subject || '—');
+
+      const statusCell = document.createElement('td');
+      statusCell.appendChild(
+        createBadge({ text: ticket.status || '—', variant: getStatusBadgeVariant(ticket.status) })
+      );
+
+      const updatedCell = document.createElement('td');
+      updatedCell.textContent = String(formatDate(ticket.updatedAtUtc));
+
+      tr.append(idCell, subjectCell, statusCell, updatedCell);
       tr.addEventListener('click', () => {
         void openTicketModal(getTicketIdValue(ticket.id) || getTicketIdValue(ticket));
       });

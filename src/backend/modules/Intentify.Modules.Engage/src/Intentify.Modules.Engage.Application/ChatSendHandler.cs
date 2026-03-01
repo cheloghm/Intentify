@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using Intentify.Modules.Engage.Domain;
+using Intentify.Modules.Leads.Application;
 using Intentify.Modules.Knowledge.Application;
 using Intentify.Modules.Sites.Application;
 using Intentify.Modules.Sites.Domain;
@@ -44,6 +45,7 @@ public sealed class ChatSendHandler
     private readonly IEngageChatMessageRepository _messageRepository;
     private readonly IEngageHandoffTicketRepository _ticketRepository;
     private readonly CreateTicketHandler _createTicketHandler;
+    private readonly ILeadVisitorLinker _leadVisitorLinker;
     private readonly RetrieveTopChunksHandler _retrieveTopChunksHandler;
     private readonly IChatCompletionClient _chatCompletionClient;
     private readonly TimeSpan _sessionTimeout;
@@ -55,6 +57,7 @@ public sealed class ChatSendHandler
         IEngageChatMessageRepository messageRepository,
         IEngageHandoffTicketRepository ticketRepository,
         CreateTicketHandler createTicketHandler,
+        ILeadVisitorLinker leadVisitorLinker,
         RetrieveTopChunksHandler retrieveTopChunksHandler,
         IChatCompletionClient chatCompletionClient,
         int sessionTimeoutMinutes)
@@ -65,6 +68,7 @@ public sealed class ChatSendHandler
         _messageRepository = messageRepository;
         _ticketRepository = ticketRepository;
         _createTicketHandler = createTicketHandler;
+        _leadVisitorLinker = leadVisitorLinker;
         _retrieveTopChunksHandler = retrieveTopChunksHandler;
         _chatCompletionClient = chatCompletionClient;
         _sessionTimeout = TimeSpan.FromMinutes(sessionTimeoutMinutes > 0 ? sessionTimeoutMinutes : 30);
@@ -321,11 +325,13 @@ User question:
             CreatedAtUtc = now
         }, cancellationToken);
 
+        var visitorId = await ResolveVisitorIdAsync(site.TenantId, site.Id, session.CollectorSessionId, cancellationToken);
+
         await _createTicketHandler.HandleAsync(
             new CreateTicketCommand(
                 site.TenantId,
                 site.Id,
-                null,
+                visitorId,
                 session.Id,
                 $"Engage handoff: {reason}",
                 userMessage,
@@ -402,11 +408,13 @@ User question:
             CreatedAtUtc = now
         }, cancellationToken);
 
+        var visitorId = await ResolveVisitorIdAsync(site.TenantId, site.Id, session.CollectorSessionId, cancellationToken);
+
         await _createTicketHandler.HandleAsync(
             new CreateTicketCommand(
                 site.TenantId,
                 site.Id,
-                null,
+                visitorId,
                 session.Id,
                 "Engage handoff: NeedsHumanHelp",
                 userMessage,
@@ -433,11 +441,13 @@ User question:
         DateTime now,
         CancellationToken cancellationToken)
     {
+        var visitorId = await ResolveVisitorIdAsync(site.TenantId, site.Id, session.CollectorSessionId, cancellationToken);
+
         await _createTicketHandler.HandleAsync(
             new CreateTicketCommand(
                 site.TenantId,
                 site.Id,
-                null,
+                visitorId,
                 session.Id,
                 "Engage handoff: ContactDetails",
                 $"Contact details provided by visitor: {userMessage}",
@@ -455,6 +465,17 @@ User question:
 
         await _sessionRepository.TouchAsync(session.Id, now, cancellationToken);
         return OperationResult<ChatSendResult>.Success(new ChatSendResult(session.Id, ContactDetailsReceivedResponse, 0m, true, []));
+    }
+
+
+    private async Task<Guid?> ResolveVisitorIdAsync(Guid tenantId, Guid siteId, string? collectorSessionId, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(collectorSessionId))
+        {
+            return null;
+        }
+
+        return await _leadVisitorLinker.ResolveVisitorIdAsync(tenantId, siteId, null, null, collectorSessionId, cancellationToken);
     }
 
     private async Task<EngageChatSession> ResolveSessionAsync(
