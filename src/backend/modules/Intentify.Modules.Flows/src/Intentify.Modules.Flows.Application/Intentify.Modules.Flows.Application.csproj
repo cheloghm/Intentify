@@ -8,6 +8,5 @@
   <ItemGroup>
     <ProjectReference Include="..\Intentify.Modules.Flows.Domain\Intentify.Modules.Flows.Domain.csproj" />
     <ProjectReference Include="..\..\..\..\shared\Intentify.Shared.Validation\src\Intentify.Shared.Validation\Intentify.Shared.Validation.csproj" />
-    <ProjectReference Include="..\..\..\Intentify.Modules.Intelligence\src\Intentify.Modules.Intelligence.Application\Intentify.Modules.Intelligence.Application.csproj" />
   </ItemGroup>
 </Project>

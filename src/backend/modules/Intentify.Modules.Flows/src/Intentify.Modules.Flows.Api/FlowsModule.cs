@@ -1,7 +1,6 @@
 using Intentify.Modules.Auth.Api;
 using Intentify.Modules.Flows.Application;
 using Intentify.Modules.Flows.Infrastructure;
-using Intentify.Modules.Intelligence.Application;
 using Intentify.Shared.Web;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
@@ -29,7 +28,6 @@ public sealed class FlowsModule : IAppModule
         services.AddSingleton<ListFlowsService>();
         services.AddSingleton<ListFlowRunsService>();
         services.AddSingleton<ExecuteFlowsForTriggerService>();
-        services.AddSingleton<IIntelligenceObserver, IntelligenceFlowObserver>();
     }
 
     public void MapEndpoints(IEndpointRouteBuilder endpoints)

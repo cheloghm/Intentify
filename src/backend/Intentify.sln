@@ -106,16 +106,6 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Intellige
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Intelligence.Tests", "modules/Intentify.Modules.Intelligence/tests/Intentify.Modules.Intelligence.Tests/Intentify.Modules.Intelligence.Tests.csproj", "{F61D9EB5-665F-4488-A5F6-E174467AE555}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Flows.Domain", "modules/Intentify.Modules.Flows/src/Intentify.Modules.Flows.Domain/Intentify.Modules.Flows.Domain.csproj", "{F2E14C74-6104-4D34-8D47-0E007A2E9720}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Flows.Application", "modules/Intentify.Modules.Flows/src/Intentify.Modules.Flows.Application/Intentify.Modules.Flows.Application.csproj", "{5E89A883-1E8B-40F7-8F83-0B947BC64186}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Flows.Infrastructure", "modules/Intentify.Modules.Flows/src/Intentify.Modules.Flows.Infrastructure/Intentify.Modules.Flows.Infrastructure.csproj", "{FDEFD3CC-52F8-47CA-9ACC-DB1BD40E737D}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Flows.Api", "modules/Intentify.Modules.Flows/src/Intentify.Modules.Flows.Api/Intentify.Modules.Flows.Api.csproj", "{A54A3C27-D1FF-4EE0-A33E-3F7452CDD16D}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Flows.Tests", "modules/Intentify.Modules.Flows/tests/Intentify.Modules.Flows.Tests/Intentify.Modules.Flows.Tests.csproj", "{E65C3102-7D3F-4A01-846F-EC944CF8B042}"
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -330,26 +320,6 @@ Global
 		{F61D9EB5-665F-4488-A5F6-E174467AE555}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F61D9EB5-665F-4488-A5F6-E174467AE555}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F61D9EB5-665F-4488-A5F6-E174467AE555}.Release|Any CPU.Build.0 = Release|Any CPU
-		{F2E14C74-6104-4D34-8D47-0E007A2E9720}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{F2E14C74-6104-4D34-8D47-0E007A2E9720}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{F2E14C74-6104-4D34-8D47-0E007A2E9720}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{F2E14C74-6104-4D34-8D47-0E007A2E9720}.Release|Any CPU.Build.0 = Release|Any CPU
-		{5E89A883-1E8B-40F7-8F83-0B947BC64186}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{5E89A883-1E8B-40F7-8F83-0B947BC64186}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{5E89A883-1E8B-40F7-8F83-0B947BC64186}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{5E89A883-1E8B-40F7-8F83-0B947BC64186}.Release|Any CPU.Build.0 = Release|Any CPU
-		{FDEFD3CC-52F8-47CA-9ACC-DB1BD40E737D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{FDEFD3CC-52F8-47CA-9ACC-DB1BD40E737D}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{FDEFD3CC-52F8-47CA-9ACC-DB1BD40E737D}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{FDEFD3CC-52F8-47CA-9ACC-DB1BD40E737D}.Release|Any CPU.Build.0 = Release|Any CPU
-		{A54A3C27-D1FF-4EE0-A33E-3F7452CDD16D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{A54A3C27-D1FF-4EE0-A33E-3F7452CDD16D}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{A54A3C27-D1FF-4EE0-A33E-3F7452CDD16D}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{A54A3C27-D1FF-4EE0-A33E-3F7452CDD16D}.Release|Any CPU.Build.0 = Release|Any CPU
-		{E65C3102-7D3F-4A01-846F-EC944CF8B042}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{E65C3102-7D3F-4A01-846F-EC944CF8B042}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{E65C3102-7D3F-4A01-846F-EC944CF8B042}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{E65C3102-7D3F-4A01-846F-EC944CF8B042}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -53,7 +53,6 @@ public sealed class IntelligenceModule : IAppModule
         });
 
         services.AddSingleton<IIntelligenceTrendsRepository, IntelligenceTrendsRepository>();
-        services.AddSingleton<IIntelligenceObserver, NoOpIntelligenceObserver>();
         services.AddSingleton<RefreshIntelligenceTrendsService>();
         services.AddSingleton<QueryIntelligenceTrendsService>();
         services.AddSingleton<GetIntelligenceStatusService>();
@@ -69,13 +68,5 @@ public sealed class IntelligenceModule : IAppModule
         group.MapPost("/refresh", IntelligenceEndpoints.RefreshAsync);
         group.MapGet("/trends", IntelligenceEndpoints.GetTrendsAsync);
         group.MapGet("/status", IntelligenceEndpoints.GetStatusAsync);
-    }
-}
-
-internal sealed class NoOpIntelligenceObserver : IIntelligenceObserver
-{
-    public Task OnTrendsUpdated(IntelligenceTrendsUpdatedNotification notification, CancellationToken ct)
-    {
-        return Task.CompletedTask;
     }
 }

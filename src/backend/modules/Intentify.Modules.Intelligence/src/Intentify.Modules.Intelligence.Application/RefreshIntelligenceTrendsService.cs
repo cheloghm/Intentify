@@ -5,8 +5,7 @@ namespace Intentify.Modules.Intelligence.Application;
 
 public sealed class RefreshIntelligenceTrendsService(
     IExternalSearchProvider provider,
-    IIntelligenceTrendsRepository repository,
-    IEnumerable<IIntelligenceObserver> observers)
+    IIntelligenceTrendsRepository repository)
 {
     private const int DefaultLimit = 10;
     private const int MaxLimit = 50;
@@ -54,19 +53,6 @@ public sealed class RefreshIntelligenceTrendsService(
         };
 
         await repository.UpsertAsync(record, ct);
-
-        var notification = new IntelligenceTrendsUpdatedNotification(
-            tenantId,
-            record.SiteId,
-            record.Category,
-            record.Location,
-            record.TimeWindow,
-            record.RefreshedAtUtc);
-
-        foreach (var observer in observers)
-        {
-            await observer.OnTrendsUpdated(notification, ct);
-        }
 
         return OperationResult<RefreshIntelligenceResult>.Success(
             new RefreshIntelligenceResult(record.Provider, record.RefreshedAtUtc, record.Items.Count));

@@ -21,6 +21,5 @@
     <ProjectReference Include="../../../../shared/Intentify.Shared.Testing/src/Intentify.Shared.Testing/Intentify.Shared.Testing.csproj" />
     <ProjectReference Include="../../Intentify.Modules.Auth/src/Intentify.Modules.Auth.Api/Intentify.Modules.Auth.Api.csproj" />
     <ProjectReference Include="../../Intentify.Modules.Sites/src/Intentify.Modules.Sites.Api/Intentify.Modules.Sites.Api.csproj" />
-    <ProjectReference Include="../../Intentify.Modules.Flows/src/Intentify.Modules.Flows.Application/Intentify.Modules.Flows.Application.csproj" />
   </ItemGroup>
 </Project>

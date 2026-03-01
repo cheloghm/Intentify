@@ -3,7 +3,6 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Intentify.AppHost;
 using Intentify.Modules.Auth.Api;
-using Intentify.Modules.Flows.Application;
 using Intentify.Modules.Intelligence.Application;
 using Intentify.Modules.Sites.Api;
 using Intentify.Shared.Testing;
@@ -87,60 +86,6 @@ public sealed class IntelligenceIntegrationTests : IAsyncLifetime
         var statusPayload = await statusResponse.Content.ReadFromJsonAsync<IntelligenceStatusResponse>();
         Assert.NotNull(statusPayload);
         Assert.Equal(2, statusPayload.ItemsCount);
-    }
-
-
-    [Fact]
-    public async Task Refresh_EmitsNotification_AndTriggersFlowsRun()
-    {
-        var token = await RegisterUserAsync();
-        var site = await CreateSiteAsync(token);
-
-        var createFlowResponse = await SendAuthorizedAsync(HttpMethod.Post, "/flows", token, JsonContent.Create(new
-        {
-            siteId = site.SiteId,
-            name = "Flow from intelligence update",
-            trigger = new
-            {
-                triggerType = "IntelligenceTrendsUpdated",
-                filters = new Dictionary<string, string>
-                {
-                    ["category"] = "Marketing",
-                    ["location"] = "US",
-                    ["timeWindow"] = "7d"
-                }
-            },
-            conditions = Array.Empty<object>(),
-            actions = new[]
-            {
-                new
-                {
-                    actionType = "LogRun",
-                    @params = new Dictionary<string, string>()
-                }
-            }
-        }));
-
-        Assert.Equal(HttpStatusCode.OK, createFlowResponse.StatusCode);
-        var flow = await createFlowResponse.Content.ReadFromJsonAsync<FlowDetailDto>();
-        Assert.NotNull(flow);
-
-        var refreshResponse = await SendAuthorizedAsync(HttpMethod.Post, "/intelligence/refresh", token, JsonContent.Create(new
-        {
-            siteId = site.SiteId,
-            category = "Marketing",
-            location = "US",
-            timeWindow = "7d",
-            limit = 2
-        }));
-
-        Assert.Equal(HttpStatusCode.OK, refreshResponse.StatusCode);
-
-        var runsResponse = await SendAuthorizedAsync(HttpMethod.Get, $"/flows/{flow!.Id}/runs", token);
-        Assert.Equal(HttpStatusCode.OK, runsResponse.StatusCode);
-        var runs = await runsResponse.Content.ReadFromJsonAsync<IReadOnlyCollection<FlowRunDto>>();
-        Assert.NotNull(runs);
-        Assert.NotEmpty(runs);
     }
 
     private async Task<string> RegisterUserAsync()
