@@ -10,5 +10,6 @@ public sealed class PromoEntry
     public string? SessionId { get; init; }
     public string? Email { get; init; }
     public string? Name { get; init; }
+    public IReadOnlyDictionary<string, string>? Answers { get; init; }
     public DateTime CreatedAtUtc { get; init; }
 }

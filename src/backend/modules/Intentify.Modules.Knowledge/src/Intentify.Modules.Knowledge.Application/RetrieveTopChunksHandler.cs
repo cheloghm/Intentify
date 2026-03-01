@@ -33,36 +33,48 @@ public sealed class RetrieveTopChunksHandler
 
         if (_openSearchOptions?.Enabled == true && _openSearchClient is not null)
         {
-            var openSearchResults = await _openSearchClient.SearchTopChunksAsync(
-                query.TenantId,
-                query.SiteId,
-                query.BotId,
-                query.Query,
-                query.TopK,
-                cancellationToken);
+            try
+            {
+                var openSearchResults = await _openSearchClient.SearchTopChunksAsync(
+                    query.TenantId,
+                    query.SiteId,
+                    query.BotId,
+                    query.Query,
+                    query.TopK,
+                    cancellationToken);
 
-            var retrievedFromOpenSearch = openSearchResults
-                .Select(item => new RetrievedChunkResult(
-                    item.ChunkId,
-                    item.SourceId,
-                    item.ChunkIndex,
-                    item.Content,
-                    Math.Max(1, ScoreChunk(item.Content, terms))))
-                .OrderByDescending(item => item.Score)
-                .ThenBy(item => item.ChunkIndex)
-                .Take(query.TopK)
-                .ToArray();
+                var retrievedFromOpenSearch = openSearchResults
+                    .Select(item => new RetrievedChunkResult(
+                        item.ChunkId,
+                        item.SourceId,
+                        item.ChunkIndex,
+                        item.Content,
+                        Math.Max(1, ScoreChunk(item.Content, terms))))
+                    .OrderByDescending(item => item.Score)
+                    .ThenBy(item => item.ChunkIndex)
+                    .Take(query.TopK)
+                    .ToArray();
 
-            var topScore = retrievedFromOpenSearch.Length == 0 ? 0 : retrievedFromOpenSearch.Max(item => item.Score);
-            _logger.LogInformation(
-                "Knowledge retrieval (OpenSearch) returned {ReturnedCount} matches with top score {TopScore} for tenant {TenantId}, site {SiteId}, bot {BotId}.",
-                retrievedFromOpenSearch.Length,
-                topScore,
-                query.TenantId,
-                query.SiteId,
-                query.BotId);
+                var topScore = retrievedFromOpenSearch.Length == 0 ? 0 : retrievedFromOpenSearch.Max(item => item.Score);
+                _logger.LogInformation(
+                    "Knowledge retrieval (OpenSearch) returned {ReturnedCount} matches with top score {TopScore} for tenant {TenantId}, site {SiteId}, bot {BotId}.",
+                    retrievedFromOpenSearch.Length,
+                    topScore,
+                    query.TenantId,
+                    query.SiteId,
+                    query.BotId);
 
-            return retrievedFromOpenSearch;
+                return retrievedFromOpenSearch;
+            }
+            catch (Exception exception)
+            {
+                _logger.LogWarning(
+                    exception,
+                    "Knowledge retrieval (OpenSearch) failed for tenant {TenantId}, site {SiteId}, bot {BotId}. Falling back to Mongo retrieval.",
+                    query.TenantId,
+                    query.SiteId,
+                    query.BotId);
+            }
         }
 
         var sources = await _sourceRepository.ListSourcesAsync(query.TenantId, query.SiteId, cancellationToken);

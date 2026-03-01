@@ -7,6 +7,7 @@ using Intentify.Modules.Sites.Domain;
 using Intentify.Modules.Tickets.Application;
 using Intentify.Shared.AI;
 using Intentify.Shared.Validation;
+using Microsoft.Extensions.Logging;
 
 namespace Intentify.Modules.Engage.Application;
 
@@ -49,6 +50,7 @@ public sealed class ChatSendHandler
     private readonly RetrieveTopChunksHandler _retrieveTopChunksHandler;
     private readonly IChatCompletionClient _chatCompletionClient;
     private readonly TimeSpan _sessionTimeout;
+    private readonly ILogger<ChatSendHandler> _logger;
 
     public ChatSendHandler(
         ISiteRepository siteRepository,
@@ -60,7 +62,8 @@ public sealed class ChatSendHandler
         ILeadVisitorLinker leadVisitorLinker,
         RetrieveTopChunksHandler retrieveTopChunksHandler,
         IChatCompletionClient chatCompletionClient,
-        int sessionTimeoutMinutes)
+        int sessionTimeoutMinutes,
+        ILogger<ChatSendHandler> logger)
     {
         _siteRepository = siteRepository;
         _sessionRepository = sessionRepository;
@@ -72,6 +75,7 @@ public sealed class ChatSendHandler
         _retrieveTopChunksHandler = retrieveTopChunksHandler;
         _chatCompletionClient = chatCompletionClient;
         _sessionTimeout = TimeSpan.FromMinutes(sessionTimeoutMinutes > 0 ? sessionTimeoutMinutes : 30);
+        _logger = logger;
     }
 
     public async Task<OperationResult<ChatSendResult>> HandleAsync(ChatSendCommand command, CancellationToken cancellationToken = default)
@@ -96,8 +100,11 @@ public sealed class ChatSendHandler
         var site = await _siteRepository.GetByWidgetKeyAsync(command.WidgetKey, cancellationToken);
         if (site is null)
         {
+            _logger.LogWarning("Engage chat send failed: widgetKey {WidgetKey} did not resolve to a site.", command.WidgetKey);
             return OperationResult<ChatSendResult>.NotFound();
         }
+
+        _logger.LogInformation("Engage chat send received for widgetKey {WidgetKey}, tenant {TenantId}, site {SiteId}.", command.WidgetKey, site.TenantId, site.Id);
 
         var now = DateTime.UtcNow;
         var bot = await _botRepository.GetOrCreateForSiteAsync(site.TenantId, site.Id, cancellationToken);
@@ -138,27 +145,13 @@ public sealed class ChatSendHandler
         var topScore = retrieved.Count == 0 ? 0 : retrieved.Max(item => item.Score);
         var confidence = ComputeConfidence(retrieved.Count > 0, topScore);
 
+        _logger.LogInformation("Engage retrieval summary for session {SessionId}: hits={Hits}, topScore={TopScore}, confidence={Confidence}.", session.Id, retrieved.Count, topScore, confidence);
+
         var isLowConfidence = retrieved.Count == 0 || topScore < TopChunkScoreThreshold || confidence < LowConfidenceThreshold;
         if (isLowConfidence)
         {
-            var shouldCreateTicket = IsRealQuestion(command.Message);
-            if (shouldCreateTicket)
-            {
-                return await CreateFallbackResponseAsync(site, session, command.Message, now, "LowConfidence", cancellationToken);
-            }
-
-            await _messageRepository.InsertAsync(new EngageChatMessage
-            {
-                SessionId = session.Id,
-                Role = "assistant",
-                Content = LowConfidenceClarificationResponse,
-                CreatedAtUtc = now,
-                Confidence = 0m
-            }, cancellationToken);
-
-            await _sessionRepository.TouchAsync(session.Id, now, cancellationToken);
-
-            return OperationResult<ChatSendResult>.Success(new ChatSendResult(session.Id, LowConfidenceClarificationResponse, 0m, false, []));
+            _logger.LogInformation("Engage chat decision: fallback ticket path for session {SessionId}.", session.Id);
+            return await CreateFallbackResponseAsync(site, session, command.Message, now, "LowConfidence", cancellationToken);
         }
 
         var citations = retrieved
@@ -168,8 +161,11 @@ public sealed class ChatSendHandler
         var completion = await _chatCompletionClient.CompleteAsync(BuildPrompt(command.Message, retrieved, recentMessages), cancellationToken);
         if (!completion.IsSuccess || string.IsNullOrWhiteSpace(completion.Value))
         {
+            _logger.LogWarning("Engage AI completion unavailable for session {SessionId}.", session.Id);
             return await CreateFallbackResponseAsync(site, session, command.Message, now, "AiUnavailable", cancellationToken);
         }
+
+        _logger.LogInformation("Engage chat decision: grounded answer path for session {SessionId}.", session.Id);
 
         var response = NormalizeAiResponse(completion.Value);
         await _messageRepository.InsertAsync(new EngageChatMessage
@@ -204,9 +200,15 @@ public sealed class ChatSendHandler
 
     private static string BuildPrompt(string message, IReadOnlyCollection<RetrievedChunkResult> chunks, IReadOnlyCollection<EngageChatMessage> messages)
     {
-        var context = string.Join("\n", chunks
+        var dedupedChunks = chunks
+            .Select(item => item.Content.Trim())
+            .Where(item => !string.IsNullOrWhiteSpace(item))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
             .Take(3)
-            .Select((item, index) => $"[{index + 1}] {item.Content.Trim()}"));
+            .ToArray();
+
+        var context = string.Join("\n", dedupedChunks
+            .Select((item, index) => $"[{index + 1}] {item}"));
 
         var transcript = string.Join("\n", messages
             .TakeLast(30)
@@ -215,14 +217,14 @@ public sealed class ChatSendHandler
         return $"""
 You are an Engage support assistant.
 
-Use only the knowledge context to answer the user's question in plain English.
+Use only the retrieved knowledge context to answer the user's question in plain English.
 - Keep the answer concise: 1-2 short paragraphs.
 - Rephrase the content naturally; do not copy/paste raw website text.
 - Do not use markdown lists, bullets, or asterisks unless the user explicitly asks for a list.
 - Do not start with: Based on your knowledge base:
-- If the knowledge context is not enough, ask exactly one clarifying question.
+- If the answer is not in the retrieved context, reply exactly: I don’t have that information in our knowledge base yet.
 
-Knowledge context:
+Retrieved knowledge context (deduped):
 {context}
 
 Conversation transcript (oldest to newest):
