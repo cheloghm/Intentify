@@ -4,6 +4,7 @@ using Intentify.Modules.Engage.Infrastructure;
 using Intentify.Modules.Tickets.Application;
 using Intentify.Modules.Sites.Application;
 using Intentify.Modules.Knowledge.Application;
+using Intentify.Modules.Leads.Application;
 using Intentify.Shared.AI;
 using Intentify.Shared.Web;
 using Microsoft.AspNetCore.Builder;
@@ -67,6 +68,7 @@ public sealed class EngageModule : IAppModule
                 serviceProvider.GetRequiredService<IEngageChatMessageRepository>(),
                 serviceProvider.GetRequiredService<IEngageHandoffTicketRepository>(),
                 serviceProvider.GetRequiredService<CreateTicketHandler>(),
+                serviceProvider.GetRequiredService<ILeadVisitorLinker>(),
                 serviceProvider.GetRequiredService<RetrieveTopChunksHandler>(),
                 serviceProvider.GetRequiredService<IChatCompletionClient>(),
                 sessionTimeoutMinutes);

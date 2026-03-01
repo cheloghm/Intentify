@@ -71,6 +71,11 @@
   color: var(--ui-success);
 }
 
+.ui-badge--info {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
 .ui-badge--warning {
   background: #fef3c7;
   color: var(--ui-warning);
