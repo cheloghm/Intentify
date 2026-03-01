@@ -1,6 +1,7 @@
 using Intentify.Modules.Auth.Api;
 using Intentify.Modules.Collector.Api;
 using Intentify.Modules.Engage.Api;
+using Intentify.Modules.Intelligence.Api;
 using Intentify.Modules.Knowledge.Api;
 using Intentify.Modules.Leads.Api;
 using Intentify.Modules.Sites.Api;
@@ -21,6 +22,7 @@ public static class AppModuleCatalog
         new CollectorModule(),
         new SitesModule(),
         new KnowledgeModule(),
+        new IntelligenceModule(),
         new LeadsModule(),
         new EngageModule(),
         new VisitorsModule(),

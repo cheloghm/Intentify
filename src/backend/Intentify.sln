@@ -96,6 +96,16 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Tickets.A
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Tickets.Tests", "modules/Intentify.Modules.Tickets/tests/Intentify.Modules.Tickets.Tests/Intentify.Modules.Tickets.Tests.csproj", "{73F2BCEA-D6D1-4388-A201-9AAAAAB05B35}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Intelligence.Domain", "modules/Intentify.Modules.Intelligence/src/Intentify.Modules.Intelligence.Domain/Intentify.Modules.Intelligence.Domain.csproj", "{B3975E67-727E-4569-BFE8-5A1B5D6E82A0}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Intelligence.Application", "modules/Intentify.Modules.Intelligence/src/Intentify.Modules.Intelligence.Application/Intentify.Modules.Intelligence.Application.csproj", "{D50CFA2A-0494-45D8-9D52-D7F8181543AD}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Intelligence.Infrastructure", "modules/Intentify.Modules.Intelligence/src/Intentify.Modules.Intelligence.Infrastructure/Intentify.Modules.Intelligence.Infrastructure.csproj", "{775EA4DA-F60A-41A6-BA98-11F3782B2C1A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Intelligence.Api", "modules/Intentify.Modules.Intelligence/src/Intentify.Modules.Intelligence.Api/Intentify.Modules.Intelligence.Api.csproj", "{FDC36910-C9BA-4A37-825F-C133D88DF2A0}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Intelligence.Tests", "modules/Intentify.Modules.Intelligence/tests/Intentify.Modules.Intelligence.Tests/Intentify.Modules.Intelligence.Tests.csproj", "{F61D9EB5-665F-4488-A5F6-E174467AE555}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -290,6 +300,26 @@ Global
 		{73F2BCEA-D6D1-4388-A201-9AAAAAB05B35}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{73F2BCEA-D6D1-4388-A201-9AAAAAB05B35}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{73F2BCEA-D6D1-4388-A201-9AAAAAB05B35}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B3975E67-727E-4569-BFE8-5A1B5D6E82A0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B3975E67-727E-4569-BFE8-5A1B5D6E82A0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B3975E67-727E-4569-BFE8-5A1B5D6E82A0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B3975E67-727E-4569-BFE8-5A1B5D6E82A0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D50CFA2A-0494-45D8-9D52-D7F8181543AD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D50CFA2A-0494-45D8-9D52-D7F8181543AD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D50CFA2A-0494-45D8-9D52-D7F8181543AD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D50CFA2A-0494-45D8-9D52-D7F8181543AD}.Release|Any CPU.Build.0 = Release|Any CPU
+		{775EA4DA-F60A-41A6-BA98-11F3782B2C1A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{775EA4DA-F60A-41A6-BA98-11F3782B2C1A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{775EA4DA-F60A-41A6-BA98-11F3782B2C1A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{775EA4DA-F60A-41A6-BA98-11F3782B2C1A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{FDC36910-C9BA-4A37-825F-C133D88DF2A0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FDC36910-C9BA-4A37-825F-C133D88DF2A0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FDC36910-C9BA-4A37-825F-C133D88DF2A0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FDC36910-C9BA-4A37-825F-C133D88DF2A0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F61D9EB5-665F-4488-A5F6-E174467AE555}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F61D9EB5-665F-4488-A5F6-E174467AE555}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F61D9EB5-665F-4488-A5F6-E174467AE555}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F61D9EB5-665F-4488-A5F6-E174467AE555}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
