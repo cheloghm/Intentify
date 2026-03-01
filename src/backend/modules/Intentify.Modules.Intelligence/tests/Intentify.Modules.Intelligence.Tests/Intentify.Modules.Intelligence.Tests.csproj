@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Microsoft.AspNetCore.TestHost" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../../app/Intentify.AppHost/Intentify.AppHost.csproj" />
+    <ProjectReference Include="../../Intentify.Modules.Intelligence/src/Intentify.Modules.Intelligence.Api/Intentify.Modules.Intelligence.Api.csproj" />
+    <ProjectReference Include="../../Intentify.Modules.Intelligence/src/Intentify.Modules.Intelligence.Application/Intentify.Modules.Intelligence.Application.csproj" />
+    <ProjectReference Include="../../Intentify.Modules.Intelligence/src/Intentify.Modules.Intelligence.Infrastructure/Intentify.Modules.Intelligence.Infrastructure.csproj" />
+    <ProjectReference Include="../../../../shared/Intentify.Shared.Testing/src/Intentify.Shared.Testing/Intentify.Shared.Testing.csproj" />
+    <ProjectReference Include="../../Intentify.Modules.Auth/src/Intentify.Modules.Auth.Api/Intentify.Modules.Auth.Api.csproj" />
+    <ProjectReference Include="../../Intentify.Modules.Sites/src/Intentify.Modules.Sites.Api/Intentify.Modules.Sites.Api.csproj" />
+    <ProjectReference Include="../../Intentify.Modules.Flows/src/Intentify.Modules.Flows.Application/Intentify.Modules.Flows.Application.csproj" />
+  </ItemGroup>
+</Project>
