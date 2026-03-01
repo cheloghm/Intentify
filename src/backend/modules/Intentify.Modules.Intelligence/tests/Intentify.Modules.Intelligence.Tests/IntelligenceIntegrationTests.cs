@@ -7,6 +7,7 @@ using Intentify.Modules.Intelligence.Application;
 using Intentify.Modules.Sites.Api;
 using Intentify.Shared.Testing;
 using Intentify.Shared.Validation;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
