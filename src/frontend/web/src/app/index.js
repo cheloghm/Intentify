@@ -10,6 +10,8 @@ import { renderEngageView } from '../pages/engage.js';
 import { renderPromosView } from '../pages/promos.js';
 import { renderLeadsView } from '../pages/leads.js';
 import { renderTicketsView } from '../pages/tickets.js';
+import { renderIntelligenceView } from '../pages/intelligence.js';
+import { renderAdsView } from '../pages/ads.js';
 
 const app = document.getElementById('app');
 const toast = createToastManager();
@@ -139,6 +141,8 @@ const createNavbar = ({ isAuthenticated }) => {
     links.appendChild(createNavLink({ label: 'Knowledge', href: '#/knowledge' }));
     links.appendChild(createNavLink({ label: 'Engage', href: '#/engage' }));
     links.appendChild(createNavLink({ label: 'Promos', href: '#/promos' }));
+    links.appendChild(createNavLink({ label: 'Intelligence', href: '#/intelligence' }));
+    links.appendChild(createNavLink({ label: 'Ads', href: '#/ads' }));
     links.appendChild(createNavLink({ label: 'Leads', href: '#/leads' }));
     links.appendChild(createNavLink({ label: 'Tickets', href: '#/tickets' }));
     const logoutButton = document.createElement('button');
@@ -525,6 +529,8 @@ const routes = {
   '/knowledge': renderKnowledgeView,
   '/engage': renderEngageView,
   '/promos': renderPromosView,
+  '/intelligence': renderIntelligenceView,
+  '/ads': renderAdsView,
   '/leads': renderLeadsView,
   '/tickets': renderTicketsView,
 };
@@ -564,7 +570,7 @@ const renderApp = () => {
   const { path: route, query, params } = getRouteFromHash();
   const isAuthenticated = Boolean(getToken());
 
-  if ((route === '/dashboard' || route === '/sites' || route === '/install' || route === '/visitors' || route === '/visitors/:visitorId' || route === '/knowledge' || route === '/engage' || route === '/promos' || route === '/leads' || route === '/tickets') && !isAuthenticated) {
+  if ((route === '/dashboard' || route === '/sites' || route === '/install' || route === '/visitors' || route === '/visitors/:visitorId' || route === '/knowledge' || route === '/engage' || route === '/promos' || route === '/intelligence' || route === '/ads' || route === '/leads' || route === '/tickets') && !isAuthenticated) {
     window.location.hash = '#/login';
     return;
   }
