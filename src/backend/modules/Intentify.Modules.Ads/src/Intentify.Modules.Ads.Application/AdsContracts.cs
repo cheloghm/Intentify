@@ -9,17 +9,6 @@ public sealed record ListAdCampaignsQuery(Guid TenantId, Guid? SiteId);
 public sealed record UpsertAdPlacementsCommand(Guid TenantId, Guid CampaignId, IReadOnlyCollection<AdPlacementInput> Placements);
 public sealed record SetAdCampaignActiveCommand(Guid TenantId, Guid CampaignId, bool IsActive);
 public sealed record GetAdCampaignReportQuery(Guid TenantId, Guid CampaignId, DateTime? FromUtc, DateTime? ToUtc);
-public sealed record GetAdsReportQuery(Guid TenantId, Guid SiteId, string? TimeWindow);
-
-public sealed record AdsReportResponse(
-    int TotalCampaigns,
-    int ActiveCampaigns,
-    long Impressions,
-    long Clicks,
-    decimal Ctr,
-    IReadOnlyCollection<AdsReportCampaignBreakdown> BreakdownByCampaign);
-
-public sealed record AdsReportCampaignBreakdown(Guid CampaignId, string CampaignName, long Impressions, long Clicks, decimal Ctr);
 
 public sealed record AdPlacementInput(string SlotKey, string? PathPattern, string? Device, string Headline, string? Body, string? ImageUrl, string DestinationUrl, string? CtaText, int Order, bool IsActive = true);
 
