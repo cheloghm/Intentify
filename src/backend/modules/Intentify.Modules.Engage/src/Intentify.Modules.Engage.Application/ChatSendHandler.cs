@@ -317,28 +317,34 @@ User question:
         const decimal fallbackConfidence = 0m;
         var fallbackResponse = "Thanks — we’ll get back to you shortly.";
 
-        await _ticketRepository.InsertAsync(new EngageHandoffTicket
+        var existingHandoffs = await _ticketRepository.ListBySessionAsync(session.Id, cancellationToken);
+        var createdTicket = existingHandoffs.Count == 0;
+
+        if (createdTicket)
         {
-            TenantId = site.TenantId,
-            SiteId = site.Id,
-            SessionId = session.Id,
-            UserMessage = userMessage,
-            Reason = reason,
-            CreatedAtUtc = now
-        }, cancellationToken);
+            await _ticketRepository.InsertAsync(new EngageHandoffTicket
+            {
+                TenantId = site.TenantId,
+                SiteId = site.Id,
+                SessionId = session.Id,
+                UserMessage = userMessage,
+                Reason = reason,
+                CreatedAtUtc = now
+            }, cancellationToken);
 
-        var visitorId = await ResolveVisitorIdAsync(site.TenantId, site.Id, session.CollectorSessionId, cancellationToken);
+            var visitorId = await ResolveVisitorIdAsync(site.TenantId, site.Id, session.CollectorSessionId, cancellationToken);
 
-        await _createTicketHandler.HandleAsync(
-            new CreateTicketCommand(
-                site.TenantId,
-                site.Id,
-                visitorId,
-                session.Id,
-                $"Engage handoff: {reason}",
-                userMessage,
-                null),
-            cancellationToken);
+            await _createTicketHandler.HandleAsync(
+                new CreateTicketCommand(
+                    site.TenantId,
+                    site.Id,
+                    visitorId,
+                    session.Id,
+                    $"Engage handoff: {reason}",
+                    userMessage,
+                    null),
+                cancellationToken);
+        }
 
         await _messageRepository.InsertAsync(new EngageChatMessage
         {
@@ -351,7 +357,7 @@ User question:
 
         await _sessionRepository.TouchAsync(session.Id, now, cancellationToken);
 
-        return OperationResult<ChatSendResult>.Success(new ChatSendResult(session.Id, fallbackResponse, fallbackConfidence, true, []));
+        return OperationResult<ChatSendResult>.Success(new ChatSendResult(session.Id, fallbackResponse, fallbackConfidence, createdTicket, []));
     }
 
     private static bool NeedsHumanHelp(string message)
