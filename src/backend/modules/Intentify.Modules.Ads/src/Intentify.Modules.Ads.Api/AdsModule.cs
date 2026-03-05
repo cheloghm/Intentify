@@ -2,6 +2,8 @@ using Intentify.Modules.Ads.Application;
 using Intentify.Modules.Ads.Infrastructure;
 using Intentify.Modules.Auth.Api;
 using Intentify.Shared.Web;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;

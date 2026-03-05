@@ -8,7 +8,7 @@ public sealed class CreateAdCampaignHandler(IAdCampaignRepository repository, IS
 {
     public async Task<OperationResult<AdCampaign>> HandleAsync(CreateAdCampaignCommand command, CancellationToken cancellationToken = default)
     {
-        var errors = ValidateCampaign(command.SiteId, command.Name, command.Budget);
+        var errors = AdsValidationHelpers.ValidateCampaign(command.SiteId, command.Name, command.Budget);
         if (errors.HasErrors) return OperationResult<AdCampaign>.ValidationFailed(errors);
 
         var site = await sites.GetByTenantAndIdAsync(command.TenantId, command.SiteId, cancellationToken);
@@ -20,12 +20,12 @@ public sealed class CreateAdCampaignHandler(IAdCampaignRepository repository, IS
             TenantId = command.TenantId,
             SiteId = command.SiteId,
             Name = command.Name.Trim(),
-            Objective = TrimOrNull(command.Objective, 200),
+            Objective = AdsValidationHelpers.TrimOrNull(command.Objective, 200),
             IsActive = command.IsActive,
             StartsAtUtc = command.StartsAtUtc,
             EndsAtUtc = command.EndsAtUtc,
             Budget = command.Budget,
-            Placements = NormalizePlacements(command.Placements).ToList(),
+            Placements = AdsValidationHelpers.NormalizePlacements(command.Placements).ToList(),
             CreatedAtUtc = now,
             UpdatedAtUtc = now
         };
@@ -39,7 +39,7 @@ public sealed class UpdateAdCampaignHandler(IAdCampaignRepository repository, IS
 {
     public async Task<OperationResult<AdCampaign>> HandleAsync(UpdateAdCampaignCommand command, CancellationToken cancellationToken = default)
     {
-        var errors = ValidateCampaign(command.SiteId, command.Name, command.Budget);
+        var errors = AdsValidationHelpers.ValidateCampaign(command.SiteId, command.Name, command.Budget);
         if (errors.HasErrors) return OperationResult<AdCampaign>.ValidationFailed(errors);
 
         var site = await sites.GetByTenantAndIdAsync(command.TenantId, command.SiteId, cancellationToken);
@@ -50,7 +50,7 @@ public sealed class UpdateAdCampaignHandler(IAdCampaignRepository repository, IS
 
         campaign.SiteId = command.SiteId;
         campaign.Name = command.Name.Trim();
-        campaign.Objective = TrimOrNull(command.Objective, 200);
+        campaign.Objective = AdsValidationHelpers.TrimOrNull(command.Objective, 200);
         campaign.IsActive = command.IsActive;
         campaign.StartsAtUtc = command.StartsAtUtc;
         campaign.EndsAtUtc = command.EndsAtUtc;
@@ -90,7 +90,7 @@ public sealed class UpsertAdPlacementsHandler(IAdCampaignRepository repository)
 {
     public async Task<OperationResult<AdCampaign>> HandleAsync(UpsertAdPlacementsCommand command, CancellationToken cancellationToken = default)
     {
-        var placements = NormalizePlacements(command.Placements);
+        var placements = AdsValidationHelpers.NormalizePlacements(command.Placements);
         var updated = await repository.ReplacePlacementsAsync(command.TenantId, command.CampaignId, placements, DateTime.UtcNow, cancellationToken);
         return updated is null ? OperationResult<AdCampaign>.NotFound() : OperationResult<AdCampaign>.Success(updated);
     }
