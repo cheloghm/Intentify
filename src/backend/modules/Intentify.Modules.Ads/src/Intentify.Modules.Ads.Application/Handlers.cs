@@ -110,30 +110,6 @@ public sealed class SetAdCampaignActiveHandler(IAdCampaignRepository repository)
     }
 }
 
-
-public sealed class GetAdsReportHandler(IAdCampaignRepository repository, ISiteRepository sites)
-{
-    public async Task<OperationResult<AdsReportResponse>> HandleAsync(GetAdsReportQuery query, CancellationToken cancellationToken = default)
-    {
-        var site = await sites.GetByTenantAndIdAsync(query.TenantId, query.SiteId, cancellationToken);
-        if (site is null) return OperationResult<AdsReportResponse>.NotFound();
-
-        var campaigns = await repository.ListAsync(new ListAdCampaignsQuery(query.TenantId, query.SiteId), cancellationToken);
-
-        // Reporting currently returns zeroed metrics because there is no ad-specific event source
-        // (e.g. ad_impression/ad_click linked to campaign/placement ids) persisted by Collector.
-        var response = new AdsReportResponse(
-            campaigns.Count,
-            campaigns.Count(item => item.IsActive),
-            0,
-            0,
-            0m,
-            []);
-
-        return OperationResult<AdsReportResponse>.Success(response);
-    }
-}
-
 public sealed class GetAdCampaignReportHandler(IAdCampaignRepository repository)
 {
     public async Task<OperationResult<AdCampaignReportResponse>> HandleAsync(GetAdCampaignReportQuery query, CancellationToken cancellationToken = default)
