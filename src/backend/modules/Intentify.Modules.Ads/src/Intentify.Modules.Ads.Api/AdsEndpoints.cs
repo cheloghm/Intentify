@@ -40,21 +40,6 @@ internal static class AdsEndpoints
         return result.Status == OperationStatus.NotFound ? Results.NotFound() : Results.Ok(result.Value);
     }
 
-
-    public static async Task<IResult> GetReportSummaryAsync(HttpContext context, string? siteId, string? timeWindow, GetAdsReportHandler handler)
-    {
-        var tenantId = TryGetTenantId(context.User);
-        if (tenantId is null) return Results.Unauthorized();
-
-        if (string.IsNullOrWhiteSpace(siteId) || !Guid.TryParse(siteId, out var parsedSiteId))
-        {
-            return Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(new Dictionary<string, string[]> { ["siteId"] = ["Site id is invalid."] }));
-        }
-
-        var result = await handler.HandleAsync(new GetAdsReportQuery(tenantId.Value, parsedSiteId, timeWindow), context.RequestAborted);
-        return result.Status == OperationStatus.NotFound ? Results.NotFound() : Results.Ok(result.Value);
-    }
-
     public static async Task<IResult> GetCampaignAsync(HttpContext context, string campaignId, GetAdCampaignHandler handler)
     {
         var parsed = ParseCampaignAndTenantId(context, campaignId, out var tenantId, out var parsedCampaignId);

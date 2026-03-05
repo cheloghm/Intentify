@@ -117,26 +117,6 @@ public sealed class AdsIntegrationTests : IAsyncLifetime
         }
     }
 
-
-    [Fact]
-    public async Task ReportSummary_ReturnsCampaignCounts_AndZeroMetrics()
-    {
-        var token = await RegisterUserAsync("ads-summary");
-        var site = await CreateSiteAsync(token);
-
-        await CreateCampaignAsync(token, site.SiteId, "One");
-        await CreateCampaignAsync(token, site.SiteId, "Two");
-
-        var response = await SendAuthorizedAsync(HttpMethod.Get, $"/ads/report?siteId={site.SiteId}&timeWindow=7d", token);
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-
-        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        Assert.Equal(2, json.RootElement.GetProperty("totalCampaigns").GetInt32());
-        Assert.Equal(2, json.RootElement.GetProperty("activeCampaigns").GetInt32());
-        Assert.Equal(0, json.RootElement.GetProperty("impressions").GetInt64());
-        Assert.Equal(0, json.RootElement.GetProperty("clicks").GetInt64());
-    }
-
     private async Task<(Guid CampaignId, Guid SiteId)> CreateCampaignAsync(string token, string siteId, string name)
     {
         var response = await SendAuthorizedAsync(HttpMethod.Post, "/ads/campaigns", token,

@@ -22,14 +22,12 @@ public sealed class AdsModule : IAppModule
         services.AddSingleton<UpsertAdPlacementsHandler>();
         services.AddSingleton<SetAdCampaignActiveHandler>();
         services.AddSingleton<GetAdCampaignReportHandler>();
-        services.AddSingleton<GetAdsReportHandler>();
     }
 
     public void MapEndpoints(IEndpointRouteBuilder endpoints)
     {
         var group = endpoints.MapGroup("/ads").AddEndpointFilter<RequireAuthFilter>();
 
-        group.MapGet("/report", AdsEndpoints.GetReportSummaryAsync);
         group.MapPost("/campaigns", AdsEndpoints.CreateCampaignAsync);
         group.MapGet("/campaigns", AdsEndpoints.ListCampaignsAsync);
         group.MapGet("/campaigns/{campaignId}", AdsEndpoints.GetCampaignAsync);
