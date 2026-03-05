@@ -257,6 +257,52 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
       body: JSON.stringify({ name }),
     });
 
+  const listAdsCampaigns = async (siteId) =>
+    request(`/ads/campaigns${buildQueryString({ siteId })}`);
+
+  const getAdsCampaign = async (campaignId) =>
+    request(`/ads/campaigns/${encodeURIComponent(campaignId)}`);
+
+  const createAdsCampaign = async (payload) =>
+    request('/ads/campaigns', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+  const updateAdsCampaign = async (campaignId, payload) =>
+    request(`/ads/campaigns/${encodeURIComponent(campaignId)}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+  const upsertAdsPlacements = async (campaignId, payload) =>
+    request(`/ads/campaigns/${encodeURIComponent(campaignId)}/placements`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+  const activateAdsCampaign = async (campaignId) =>
+    request(`/ads/campaigns/${encodeURIComponent(campaignId)}/activate`, {
+      method: 'POST',
+    });
+
+  const deactivateAdsCampaign = async (campaignId) =>
+    request(`/ads/campaigns/${encodeURIComponent(campaignId)}/deactivate`, {
+      method: 'POST',
+    });
+
+  const getAdsReport = async (campaignId, fromUtc, toUtc) =>
+    request(`/ads/campaigns/${encodeURIComponent(campaignId)}/report${buildQueryString({ fromUtc, toUtc })}`);
+
   const listTickets = async ({ siteId, page = 1, pageSize = 50 } = {}) =>
     request(`/tickets${buildQueryString({ siteId, page, pageSize })}`);
 
@@ -310,6 +356,16 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
       refresh: refreshIntelligence,
     },
 
+    ads: {
+      listCampaigns: listAdsCampaigns,
+      getCampaign: getAdsCampaign,
+      createCampaign: createAdsCampaign,
+      updateCampaign: updateAdsCampaign,
+      upsertPlacements: upsertAdsPlacements,
+      activateCampaign: activateAdsCampaign,
+      deactivateCampaign: deactivateAdsCampaign,
+      getReport: getAdsReport,
+    },
     promos: {
       create: createPromo,
       list: listPromos,
