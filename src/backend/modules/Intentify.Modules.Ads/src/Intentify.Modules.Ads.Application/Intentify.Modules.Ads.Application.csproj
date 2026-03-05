@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net10.0</TargetFramework><Nullable>enable</Nullable><ImplicitUsings>enable</ImplicitUsings></PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Intentify.Modules.Ads.Domain\Intentify.Modules.Ads.Domain.csproj" />
+    <ProjectReference Include="..\..\..\Intentify.Modules.Sites\src\Intentify.Modules.Sites.Application\Intentify.Modules.Sites.Application.csproj" />
+    <ProjectReference Include="..\..\..\..\shared\Intentify.Shared.Validation\src\Intentify.Shared.Validation\Intentify.Shared.Validation.csproj" />
+  </ItemGroup>
+</Project>
