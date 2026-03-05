@@ -1,3 +1,4 @@
+using Intentify.Modules.Ads.Api;
 using Intentify.Modules.Auth.Api;
 using Intentify.Modules.Collector.Api;
 using Intentify.Modules.Engage.Api;
@@ -20,6 +21,7 @@ public static class AppModuleCatalog
     public static IReadOnlyList<IAppModule> Modules { get; } =
     [
         new AuthModule(),
+        new AdsModule(),
         new CollectorModule(),
         new SitesModule(),
         new KnowledgeModule(),
