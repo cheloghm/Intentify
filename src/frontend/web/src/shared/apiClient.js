@@ -135,6 +135,21 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
   const retrieveKnowledgeChunks = async ({ siteId, query, top = 5 }) =>
     request(`/knowledge/retrieve${buildQueryString({ siteId, query, top })}`);
 
+  const getIntelligenceStatus = async (params) =>
+    request(`/intelligence/status${buildQueryString(params)}`);
+
+  const getIntelligenceTrends = async (params) =>
+    request(`/intelligence/trends${buildQueryString(params)}`);
+
+  const refreshIntelligence = async (payload) =>
+    request('/intelligence/refresh', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
   const sendEngageChat = async (widgetKeyOrPayload, sessionId, message) => {
     const payload =
       typeof widgetKeyOrPayload === 'object' && widgetKeyOrPayload !== null
@@ -287,6 +302,12 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
       indexSource: indexKnowledgeSource,
       listSources: listKnowledgeSources,
       retrieve: retrieveKnowledgeChunks,
+    },
+
+    intelligence: {
+      status: getIntelligenceStatus,
+      trends: getIntelligenceTrends,
+      refresh: refreshIntelligence,
     },
 
     promos: {
