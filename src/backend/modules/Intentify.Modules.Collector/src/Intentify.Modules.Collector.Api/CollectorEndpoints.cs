@@ -39,27 +39,29 @@ internal static class CollectorEndpoints
         HttpContext context,
         IngestCollectorEventHandler handler)
     {
-        _ = siteKey;
-
         if (context.Request.ContentLength is > MaxContentLengthBytes)
         {
             return Results.StatusCode(StatusCodes.Status413PayloadTooLarge);
         }
 
         var requestErrors = ValidateRequest(request);
+
+        var resolvedSiteKey = ResolveSiteKey(request?.SiteKey, siteKey, requestErrors);
+        var resolvedSessionId = NormalizeOptional(request?.SessionId);
+
         if (requestErrors.Count > 0)
         {
             return Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(requestErrors));
         }
 
         var result = await handler.HandleAsync(new CollectEventCommand(
-            request!.SiteKey,
+            resolvedSiteKey,
             request.Type,
             request.Url,
             request.Referrer,
             request.TsUtc,
             TryResolveOrigin(context.Request),
-            request.SessionId,
+            resolvedSessionId,
             request.Data),
             context.RequestAborted);
 
@@ -71,6 +73,31 @@ internal static class CollectorEndpoints
             OperationStatus.Forbidden => Results.StatusCode(StatusCodes.Status403Forbidden),
             _ => Results.StatusCode(StatusCodes.Status500InternalServerError)
         };
+    }
+
+    private static string? ResolveSiteKey(string? bodySiteKey, string? querySiteKey, IDictionary<string, string[]> errors)
+    {
+        var normalizedBodySiteKey = NormalizeOptional(bodySiteKey);
+        var normalizedQuerySiteKey = NormalizeOptional(querySiteKey);
+
+        if (!string.IsNullOrWhiteSpace(normalizedBodySiteKey) && !string.IsNullOrWhiteSpace(normalizedQuerySiteKey)
+            && !string.Equals(normalizedBodySiteKey, normalizedQuerySiteKey, StringComparison.Ordinal))
+        {
+            errors["siteKey"] = ["Site key mismatch between query and request body."];
+        }
+
+        // Body is authoritative; query remains compatibility-only.
+        return normalizedBodySiteKey;
+    }
+
+    private static string? NormalizeOptional(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        return value.Trim();
     }
 
     private static Dictionary<string, string[]> ValidateRequest(CollectorEventRequest? request)
