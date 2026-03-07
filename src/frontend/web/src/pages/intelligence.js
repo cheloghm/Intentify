@@ -101,6 +101,7 @@ export const renderIntelligenceView = (container, { apiClient, toast } = {}) => 
   const state = {
     filters: { ...DEFAULT_FILTERS },
     sites: [],
+    loading: false,
   };
 
   const page = document.createElement('div');
@@ -172,6 +173,7 @@ export const renderIntelligenceView = (container, { apiClient, toast } = {}) => 
   trendsBody.style.color = '#334155';
 
   const setLoading = (isLoading) => {
+    state.loading = isLoading;
     applyButton.disabled = isLoading;
     resetButton.disabled = isLoading;
     applyButton.textContent = isLoading ? 'Loading...' : 'Apply filters';
