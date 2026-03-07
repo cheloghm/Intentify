@@ -330,6 +330,16 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
       body: JSON.stringify({ content }),
     });
 
+
+  const getPlatformSummary = async () => request('/platform-admin/summary');
+
+  const listPlatformTenants = async ({ page = 1, pageSize = 25, search } = {}) =>
+    request(`/platform-admin/tenants${buildQueryString({ page, pageSize, search })}`);
+
+  const getPlatformTenantDetail = async (tenantId) =>
+    request(`/platform-admin/tenants/${encodeURIComponent(tenantId)}`);
+
+  const getPlatformOperationalSummary = async () => request('/platform-admin/operations/summary');
   const transitionTicketStatus = async (ticketId, status) =>
     request(`/tickets/${encodeURIComponent(ticketId)}/status`, {
       method: 'PUT',
@@ -401,6 +411,12 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
       getTicketNotes,
       addTicketNote,
       transitionTicketStatus,
+    },
+    platformAdmin: {
+      getSummary: getPlatformSummary,
+      listTenants: listPlatformTenants,
+      getTenantDetail: getPlatformTenantDetail,
+      getOperationalSummary: getPlatformOperationalSummary,
     },
   };
 };
