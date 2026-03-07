@@ -116,6 +116,25 @@ public sealed class VisitorsIntegrationTests : IAsyncLifetime
         Assert.Equal(3, json.RootElement.GetProperty("last90").GetInt32());
     }
 
+    [Fact]
+    public async Task CollectorEvents_WithoutSessionAndFirstParty_DoNotCollapseIntoSharedVisitor()
+    {
+        var accessToken = await RegisterUserAsync();
+        var site = await CreateSiteAsync(accessToken);
+        await SetAllowedOriginAsync(accessToken, site.SiteId, "http://localhost:8088");
+
+        var now = DateTime.UtcNow;
+        await PostCollectorEventAsync(site.SiteKey, "page_view", "http://localhost:8088/one", null, now, null);
+        await PostCollectorEventAsync(site.SiteKey, "page_view", "http://localhost:8088/two", null, now.AddSeconds(1), null);
+
+        var mongoClient = new MongoClient(_mongo.ConnectionString);
+        var database = mongoClient.GetDatabase(_mongo.DatabaseName);
+        var visitorsCollection = database.GetCollection<Visitor>(VisitorsMongoCollections.Visitors);
+        var visitorCount = await visitorsCollection.CountDocumentsAsync(item => item.SiteId == Guid.Parse(site.SiteId));
+
+        Assert.Equal(2, visitorCount);
+    }
+
     private async Task SetAllowedOriginAsync(string accessToken, string siteId, string origin)
     {
         var updateResponse = await SendAuthorizedAsync(
@@ -127,7 +146,7 @@ public sealed class VisitorsIntegrationTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.OK, updateResponse.StatusCode);
     }
 
-    private async Task PostCollectorEventAsync(string siteKey, string eventType, string url, string? referrer, DateTime tsUtc, string sessionId)
+    private async Task PostCollectorEventAsync(string siteKey, string eventType, string url, string? referrer, DateTime tsUtc, string? sessionId)
     {
         var request = new HttpRequestMessage(HttpMethod.Post, "/collector/events")
         {
