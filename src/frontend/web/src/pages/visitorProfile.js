@@ -666,7 +666,7 @@ export const renderVisitorProfileView = async (
     allButton.addEventListener('click', async () => {
       state.selectedCollectorSessionId = '';
       refreshTimeline();
-      renderConversations();
+      await loadConversationsForSelectedSession();
       renderSessionList();
     });
     sessionList.appendChild(allButton);
@@ -683,7 +683,7 @@ export const renderVisitorProfileView = async (
       button.addEventListener('click', async () => {
         state.selectedCollectorSessionId = sessionId;
         refreshTimeline();
-        renderConversations();
+        await loadConversationsForSelectedSession();
         renderSessionList();
       });
       sessionList.appendChild(button);
@@ -769,14 +769,13 @@ export const renderVisitorProfileView = async (
     refreshTimeline();
   });
 
-  page.append(backLink, header, summaryCard, recentSessionsCard, timelineCard, conversationsCard, ticketsCard);
+  page.append(backLink, header, summaryCard, recentSessionsCard, timelineCard, conversationsCard);
   container.appendChild(page);
 
   if (!visitorId || !siteId) {
     fillSummary();
     renderRecentSessions();
     renderSessionList();
-    renderTickets();
     setTypeOptions([]);
     renderTimeline();
     renderConversations();
@@ -786,11 +785,8 @@ export const renderVisitorProfileView = async (
   fillSummary();
   renderRecentSessions();
   renderSessionList();
-  renderTickets();
   timelineBody.textContent = 'Loading timeline...';
   recentSessionsBody.textContent = 'Loading sessions...';
-  conversationsBody.textContent = 'Loading linked conversations...';
-  ticketsBody.textContent = 'Loading linked tickets...';
 
   const [detailResult, timelineResult] = await Promise.allSettled([
     client.visitors?.detail
@@ -844,5 +840,5 @@ export const renderVisitorProfileView = async (
   renderRecentSessions();
   renderSessionList();
   refreshTimeline();
-  await Promise.all([loadConversationsForSelectedSession(), loadLinkedTickets()]);
+  await loadConversationsForSelectedSession();
 };
