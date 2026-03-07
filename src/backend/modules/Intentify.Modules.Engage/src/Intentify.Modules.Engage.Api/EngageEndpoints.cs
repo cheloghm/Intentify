@@ -209,12 +209,26 @@ internal static class EngageEndpoints
         ChatSendHandler handler,
         HttpContext context)
     {
-        var resolvedWidgetKey = string.IsNullOrWhiteSpace(widgetKey) ? request.WidgetKey : widgetKey.Trim();
+        var queryWidgetKey = NormalizeOptional(widgetKey);
+        var bodyWidgetKey = NormalizeOptional(request.WidgetKey);
+
+        if (!string.IsNullOrWhiteSpace(queryWidgetKey)
+            && !string.IsNullOrWhiteSpace(bodyWidgetKey)
+            && !string.Equals(queryWidgetKey, bodyWidgetKey, StringComparison.Ordinal))
+        {
+            return Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(new Dictionary<string, string[]>
+            {
+                ["widgetKey"] = ["Widget key mismatch between query and request body."]
+            }));
+        }
+
+        var resolvedWidgetKey = bodyWidgetKey ?? queryWidgetKey;
 
         Guid? sessionId = null;
-        if (!string.IsNullOrWhiteSpace(request.SessionId))
+        var normalizedSessionId = NormalizeOptional(request.SessionId);
+        if (!string.IsNullOrWhiteSpace(normalizedSessionId))
         {
-            if (!Guid.TryParse(request.SessionId, out var parsedSessionId))
+            if (!Guid.TryParse(normalizedSessionId, out var parsedSessionId))
             {
                 return Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(new Dictionary<string, string[]>
                 {
@@ -225,9 +239,8 @@ internal static class EngageEndpoints
             sessionId = parsedSessionId;
         }
 
-        var resolvedCollectorSessionId = string.IsNullOrWhiteSpace(request.CollectorSessionId)
-            ? context.Request.Cookies["intentify_sid"]
-            : request.CollectorSessionId;
+        var resolvedCollectorSessionId = NormalizeOptional(request.CollectorSessionId)
+            ?? NormalizeOptional(context.Request.Cookies["intentify_sid"]);
 
         var result = await handler.HandleAsync(new ChatSendCommand(resolvedWidgetKey, sessionId, request.Message, resolvedCollectorSessionId), context.RequestAborted);
         return result.Status switch
@@ -381,6 +394,17 @@ internal static class EngageEndpoints
                 item.Confidence,
                 item.Citations.Select(c => new EngageCitationResponse(c.SourceId.ToString("N"), c.ChunkId.ToString("N"), c.ChunkIndex)).ToArray())).ToArray())
         };
+    }
+
+
+    private static string? NormalizeOptional(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        return value.Trim();
     }
 
     private static Guid? TryGetTenantId(ClaimsPrincipal user)

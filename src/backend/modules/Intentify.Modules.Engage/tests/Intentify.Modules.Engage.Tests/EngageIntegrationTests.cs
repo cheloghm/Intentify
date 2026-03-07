@@ -306,6 +306,25 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    [Fact]
+    public async Task ChatSend_RejectsWidgetKeyMismatchBetweenQueryAndBody()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var response = await _client!.PostAsJsonAsync($"/engage/chat/send?widgetKey={Uri.EscapeDataString(site.WidgetKey)}", new
+        {
+            widgetKey = "different-widget-key",
+            message = "hello"
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.True(json.RootElement.TryGetProperty("errors", out var errors));
+        Assert.True(errors.TryGetProperty("widgetKey", out _));
+    }
+
     public async Task ChatSend_AcceptsWidgetKeyFromQuery_AndRequiresWidgetKeyWhenMissingFromBoth()
     {
         var token = await RegisterUserAsync();
@@ -420,6 +439,39 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
         Assert.Equal("collector-a", persisted!.CollectorSessionId);
     }
     [Fact]
+    public async Task ChatSend_ResumesSession_WhenSessionIdMissing_AndCollectorSessionMatches()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        const string collectorSessionId = "collector-shared";
+
+        var firstResponse = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "first",
+            collectorSessionId
+        });
+
+        using var firstJson = JsonDocument.Parse(await firstResponse.Content.ReadAsStringAsync());
+        var firstSessionId = firstJson.RootElement.GetProperty("sessionId").GetString();
+
+        var secondResponse = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "second",
+            collectorSessionId
+        });
+
+        using var secondJson = JsonDocument.Parse(await secondResponse.Content.ReadAsStringAsync());
+        var secondSessionId = secondJson.RootElement.GetProperty("sessionId").GetString();
+
+        Assert.Equal(HttpStatusCode.OK, firstResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, secondResponse.StatusCode);
+        Assert.Equal(firstSessionId, secondSessionId);
+    }
+
+    [Fact]
     public async Task ChatSend_ReusesSession_WhenStillActive()
     {
         var token = await RegisterUserAsync();
@@ -447,6 +499,45 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.OK, firstResponse.StatusCode);
         Assert.Equal(HttpStatusCode.OK, secondResponse.StatusCode);
         Assert.Equal(firstSessionId, secondSessionId);
+    }
+
+    [Fact]
+    public async Task ChatSend_CreatesNewSession_WhenCollectorLinkedSessionIsExpired_AndSessionIdMissing()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        const string collectorSessionId = "collector-expired";
+
+        var firstResponse = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "first",
+            collectorSessionId
+        });
+
+        using var firstJson = JsonDocument.Parse(await firstResponse.Content.ReadAsStringAsync());
+        var firstSessionId = firstJson.RootElement.GetProperty("sessionId").GetString();
+
+        var database = new MongoClient(_mongo.ConnectionString).GetDatabase(_mongo.DatabaseName);
+        var sessions = database.GetCollection<BsonEngageSession>("EngageChatSessions");
+        var firstSessionGuid = Guid.Parse(firstSessionId!);
+        var expireUpdate = Builders<BsonEngageSession>.Update.Set(item => item.UpdatedAtUtc, DateTime.UtcNow.AddMinutes(-31));
+        await sessions.UpdateOneAsync(item => item.Id == firstSessionGuid, expireUpdate);
+
+        var secondResponse = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "second",
+            collectorSessionId
+        });
+
+        using var secondJson = JsonDocument.Parse(await secondResponse.Content.ReadAsStringAsync());
+        var secondSessionId = secondJson.RootElement.GetProperty("sessionId").GetString();
+
+        Assert.Equal(HttpStatusCode.OK, firstResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, secondResponse.StatusCode);
+        Assert.NotEqual(firstSessionId, secondSessionId);
     }
 
     [Fact]
