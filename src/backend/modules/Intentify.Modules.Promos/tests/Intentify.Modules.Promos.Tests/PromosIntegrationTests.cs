@@ -70,9 +70,71 @@ public sealed class PromosIntegrationTests : IAsyncLifetime
         var logs = db.GetCollection<BsonPromoConsentLog>("promo_consent_logs");
         var entry = await entries.Find(item => item.PromoId == promo.Id).FirstOrDefaultAsync();
         Assert.NotNull(entry);
-        var log = await logs.Find(item => item.PromoEntryId == entry!.Id).FirstOrDefaultAsync();
+        Assert.Equal(Guid.Parse(site.SiteId), entry!.SiteId);
+        Assert.Null(entry.EngageSessionId);
+        var log = await logs.Find(item => item.PromoEntryId == entry.Id).FirstOrDefaultAsync();
         Assert.NotNull(log);
         Assert.True(log!.ConsentGiven);
+    }
+
+
+
+    [Fact]
+    public async Task PublicEntry_PersistsEngageSessionId_WhenProvided()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+        var promo = await CreatePromoAsync(token, site.SiteId, "Engage Link Promo");
+        var engageSessionId = Guid.NewGuid();
+
+        var response = await _client!.PostAsJsonAsync($"/promos/public/{promo.PublicKey}/entries", new
+        {
+            email = "user@example.com",
+            consentGiven = true,
+            consentStatement = "I agree",
+            engageSessionId = engageSessionId.ToString("N")
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var db = new MongoClient(_mongo.ConnectionString).GetDatabase(_mongo.DatabaseName);
+        var entries = db.GetCollection<BsonPromoEntry>("promo_entries");
+        var entry = await entries.Find(item => item.PromoId == promo.Id).SortByDescending(i => i.CreatedAtUtc).FirstOrDefaultAsync();
+        Assert.NotNull(entry);
+        Assert.Equal(engageSessionId, entry!.EngageSessionId);
+        Assert.Equal(Guid.Parse(site.SiteId), entry.SiteId);
+    }
+
+    [Fact]
+    public async Task PublicPromoEndpoint_ReturnsActivePromoQuestions()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        using var content = new MultipartFormDataContent();
+        content.Add(new StringContent(site.SiteId), "siteId");
+        content.Add(new StringContent("Widget Promo"), "name");
+        content.Add(new StringContent("Widget description"), "description");
+        content.Add(new StringContent("[{\"key\":\"email\",\"label\":\"Email\",\"type\":\"email\",\"required\":true,\"order\":1},{\"key\":\"agree\",\"label\":\"Agree\",\"type\":\"checkbox\",\"required\":false,\"order\":2}]"), "questions");
+        var createResponse = await SendAuthorizedAsync(HttpMethod.Post, "/promos", token, content);
+        Assert.Equal(HttpStatusCode.OK, createResponse.StatusCode);
+
+        using var createJson = JsonDocument.Parse(await createResponse.Content.ReadAsStringAsync());
+        var publicKey = createJson.RootElement.GetProperty("publicKey").GetString();
+
+        var publicResponse = await _client!.GetAsync($"/promos/public/{publicKey}");
+        Assert.Equal(HttpStatusCode.OK, publicResponse.StatusCode);
+
+        using var json = JsonDocument.Parse(await publicResponse.Content.ReadAsStringAsync());
+        Assert.Equal(publicKey, json.RootElement.GetProperty("publicKey").GetString());
+        Assert.Equal("Widget Promo", json.RootElement.GetProperty("name").GetString());
+        Assert.Equal("Widget description", json.RootElement.GetProperty("description").GetString());
+
+        var questions = json.RootElement.GetProperty("questions");
+        Assert.Equal(2, questions.GetArrayLength());
+        Assert.Equal("email", questions[0].GetProperty("key").GetString());
+        Assert.Equal("email", questions[0].GetProperty("type").GetString());
+        Assert.True(questions[0].GetProperty("required").GetBoolean());
     }
 
     [Fact]
@@ -257,11 +319,13 @@ public sealed class PromosIntegrationTests : IAsyncLifetime
         var promoId = createJson.RootElement.GetProperty("id").GetString();
         var publicKey = createJson.RootElement.GetProperty("publicKey").GetString();
 
+        var engageSessionId = Guid.NewGuid();
         var entryResponse = await _client!.PostAsJsonAsync($"/promos/public/{publicKey}/entries", new
         {
             email = "user@example.com",
             consentGiven = true,
             consentStatement = "I agree",
+            engageSessionId = engageSessionId.ToString("N"),
             answers = new Dictionary<string, string> { ["favorite"] = "Blue" }
         });
         Assert.Equal(HttpStatusCode.OK, entryResponse.StatusCode);
@@ -269,6 +333,10 @@ public sealed class PromosIntegrationTests : IAsyncLifetime
         var csvResponse = await SendAuthorizedAsync(HttpMethod.Get, $"/promos/{promoId}/export.csv", token);
         Assert.Equal(HttpStatusCode.OK, csvResponse.StatusCode);
         var csv = await csvResponse.Content.ReadAsStringAsync();
+        Assert.Contains("siteId", csv);
+        Assert.Contains("engageSessionId", csv);
+        Assert.Contains(Guid.Parse(site.SiteId).ToString("N"), csv);
+        Assert.Contains(engageSessionId.ToString("N"), csv);
         Assert.Contains("q_favorite", csv);
         Assert.Contains("Blue", csv);
     }
@@ -329,6 +397,8 @@ public sealed class PromosIntegrationTests : IAsyncLifetime
     {
         public Guid Id { get; init; }
         public Guid PromoId { get; init; }
+        public Guid SiteId { get; init; }
+        public Guid? EngageSessionId { get; init; }
         public Guid? VisitorId { get; init; }
         public Dictionary<string, string>? Answers { get; init; }
         public DateTime CreatedAtUtc { get; init; }

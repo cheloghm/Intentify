@@ -187,9 +187,11 @@ public sealed class CreatePublicPromoEntryHandler
         {
             TenantId = promo.TenantId,
             PromoId = promo.Id,
+            SiteId = promo.SiteId,
             VisitorId = linkedVisitorId,
             FirstPartyId = TrimOrNull(command.FirstPartyId, 200),
             SessionId = TrimOrNull(command.SessionId, 200),
+            EngageSessionId = ParseOptionalGuid(command.EngageSessionId),
             Email = TrimOrNull(command.Email, 320),
             Name = TrimOrNull(command.Name, 200),
             Answers = normalizedAnswers,
@@ -219,7 +221,19 @@ public sealed class CreatePublicPromoEntryHandler
         if (!string.IsNullOrWhiteSpace(command.Name) && command.Name.Length > 200) errors.Add("name", "Name is too long.");
         if (!string.IsNullOrWhiteSpace(command.FirstPartyId) && command.FirstPartyId.Length > 200) errors.Add("firstPartyId", "First-party id is too long.");
         if (!string.IsNullOrWhiteSpace(command.SessionId) && command.SessionId.Length > 200) errors.Add("sessionId", "Session id is too long.");
+        if (!string.IsNullOrWhiteSpace(command.EngageSessionId) && !Guid.TryParse(command.EngageSessionId, out _)) errors.Add("engageSessionId", "Engage session id is invalid.");
         return errors;
+    }
+
+
+    private static Guid? ParseOptionalGuid(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        return Guid.TryParse(value.Trim(), out var parsed) ? parsed : null;
     }
 
     private static IReadOnlyDictionary<string, string>? NormalizeAnswers(IReadOnlyDictionary<string, string>? answers)

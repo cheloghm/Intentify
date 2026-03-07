@@ -39,6 +39,8 @@ public sealed class ChatSendHandler
     private const string GreetingResponse = "Hi! How can I help you today?";
     private const string AckResponse = "Got it — what would you like to know or do next?";
     private const string LowConfidenceClarificationResponse = "I don’t have that information in our knowledge base yet. If you tell me a bit more, I can help refine the question — or I can create a ticket for our team to follow up.";
+    private const string PromoCommandPrefix = "/promo";
+    private const string PromoResponseText = "Please complete this short promo form.";
 
     private readonly ISiteRepository _siteRepository;
     private readonly IEngageChatSessionRepository _sessionRepository;
@@ -121,6 +123,29 @@ public sealed class ChatSendHandler
         await _sessionRepository.TouchAsync(session.Id, now, cancellationToken);
 
         var recentMessages = await _messageRepository.ListBySessionAsync(session.Id, cancellationToken);
+
+        if (TryResolveManualPromo(command.Message, out var promoPublicKey))
+        {
+            await _messageRepository.InsertAsync(new EngageChatMessage
+            {
+                SessionId = session.Id,
+                Role = "assistant",
+                Content = PromoResponseText,
+                CreatedAtUtc = now,
+                Confidence = 1m
+            }, cancellationToken);
+
+            await _sessionRepository.TouchAsync(session.Id, now, cancellationToken);
+
+            return OperationResult<ChatSendResult>.Success(new ChatSendResult(
+                session.Id,
+                PromoResponseText,
+                1m,
+                false,
+                [],
+                "promo",
+                promoPublicKey));
+        }
 
         if (TryBuildSmalltalkResponse(command.Message, recentMessages, out var smalltalkResponse))
         {
@@ -544,6 +569,34 @@ User question:
 
         await _sessionRepository.InsertAsync(created, cancellationToken);
         return created;
+    }
+
+    private static bool TryResolveManualPromo(string message, out string promoPublicKey)
+    {
+        promoPublicKey = string.Empty;
+
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return false;
+        }
+
+        var trimmed = message.Trim();
+        if (!trimmed.StartsWith(PromoCommandPrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var remainder = trimmed.Length == PromoCommandPrefix.Length
+            ? string.Empty
+            : trimmed[PromoCommandPrefix.Length..].Trim();
+
+        if (string.IsNullOrWhiteSpace(remainder))
+        {
+            return false;
+        }
+
+        promoPublicKey = remainder.Split(' ', StringSplitOptions.RemoveEmptyEntries)[0];
+        return !string.IsNullOrWhiteSpace(promoPublicKey);
     }
 
     private static string? NormalizeOptional(string? value)

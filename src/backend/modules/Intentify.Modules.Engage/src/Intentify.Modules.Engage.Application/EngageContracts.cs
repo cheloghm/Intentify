@@ -8,7 +8,16 @@ public sealed record ChatSendCommand(string WidgetKey, Guid? SessionId, string M
 
 public sealed record EngageCitationResult(Guid SourceId, Guid ChunkId, int ChunkIndex);
 
-public sealed record ChatSendResult(Guid SessionId, string Response, decimal Confidence, bool TicketCreated, IReadOnlyCollection<EngageCitationResult> Sources);
+public sealed record ChatSendResult(
+    Guid SessionId,
+    string Response,
+    decimal Confidence,
+    bool TicketCreated,
+    IReadOnlyCollection<EngageCitationResult> Sources,
+    string? ResponseKind = null,
+    string? PromoPublicKey = null,
+    string? PromoTitle = null,
+    string? PromoDescription = null);
 
 public sealed record ListConversationsQuery(Guid TenantId, Guid SiteId, string? CollectorSessionId);
 

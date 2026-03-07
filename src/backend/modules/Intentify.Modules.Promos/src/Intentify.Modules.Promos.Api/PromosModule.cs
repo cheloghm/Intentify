@@ -38,6 +38,7 @@ public sealed class PromosModule : IAppModule
         admin.MapGet("/{promoId}/flyer", PromosEndpoints.DownloadFlyerAsync);
         admin.MapGet("/{promoId}/export.csv", PromosEndpoints.ExportCsvAsync);
 
+        endpoints.MapGet("/promos/public/{promoKey}", PromosEndpoints.GetPublicPromoAsync);
         endpoints.MapPost("/promos/public/{promoKey}/entries", PromosEndpoints.CreatePublicEntryAsync);
     }
 }
