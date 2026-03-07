@@ -34,9 +34,38 @@ public sealed record VisitorTimelineQuery(Guid TenantId, Guid SiteId, Guid Visit
 public sealed record VisitorTimelineItem(
     DateTime OccurredAtUtc,
     string Type,
+    string? SessionId,
     string Url,
     string? Referrer,
     IReadOnlyDictionary<string, string>? MetadataSummary);
+
+public sealed record GetVisitorDetailQuery(Guid TenantId, Guid SiteId, Guid VisitorId);
+
+public sealed record VisitorRecentSessionItem(
+    string SessionId,
+    DateTime FirstSeenAtUtc,
+    DateTime LastSeenAtUtc,
+    int PagesVisited,
+    int TimeOnSiteSeconds,
+    int EngagementScore,
+    string? LastPath,
+    string? LastReferrer,
+    IReadOnlyDictionary<string, int> TopActions);
+
+public sealed record VisitorDetailResult(
+    Guid VisitorId,
+    Guid SiteId,
+    DateTime FirstSeenAtUtc,
+    DateTime LastSeenAtUtc,
+    int VisitCount,
+    int TotalPagesVisited,
+    string? PrimaryEmail,
+    string? DisplayName,
+    string? Phone,
+    string? UserAgent,
+    string? Language,
+    string? Platform,
+    IReadOnlyCollection<VisitorRecentSessionItem> RecentSessions);
 
 public sealed record VisitCountWindows(int Last7, int Last30, int Last90);
 

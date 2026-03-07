@@ -80,6 +80,42 @@ internal static class VisitorsEndpoints
         return Results.Ok(result);
     }
 
+    public static async Task<IResult> GetVisitorAsync(
+        HttpContext context,
+        string visitorId,
+        string siteId,
+        GetVisitorDetailHandler handler)
+    {
+        var errors = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
+
+        if (!Guid.TryParse(siteId, out var siteGuid))
+        {
+            errors["siteId"] = ["Site id is invalid."];
+        }
+
+        if (!Guid.TryParse(visitorId, out var parsedVisitorId))
+        {
+            errors["visitorId"] = ["Visitor id is invalid."];
+        }
+
+        if (errors.Count > 0)
+        {
+            return Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(errors));
+        }
+
+        var tenantId = TryGetTenantId(context.User);
+        if (tenantId is null)
+        {
+            return Results.Unauthorized();
+        }
+
+        var result = await handler.HandleAsync(
+            new GetVisitorDetailQuery(tenantId.Value, siteGuid, parsedVisitorId),
+            context.RequestAborted);
+
+        return result is null ? Results.NotFound() : Results.Ok(result);
+    }
+
     public static async Task<IResult> GetVisitCountsAsync(
         HttpContext context,
         string siteId,

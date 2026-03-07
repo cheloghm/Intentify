@@ -30,6 +30,7 @@ public sealed class VisitorsModule : IAppModule
         services.AddSingleton<UpsertVisitorFromCollectorEventHandler>();
         services.AddSingleton<ICollectorEventObserver, CollectorVisitorEventObserver>();
         services.AddSingleton<ListVisitorsHandler>();
+        services.AddSingleton<GetVisitorDetailHandler>();
         services.AddSingleton<GetVisitorTimelineHandler>();
         services.AddSingleton<GetVisitCountWindowsHandler>();
     }
@@ -42,6 +43,7 @@ public sealed class VisitorsModule : IAppModule
             .AddEndpointFilter<RequireAuthFilter>();
 
         group.MapGet(string.Empty, VisitorsEndpoints.ListVisitorsAsync);
+        group.MapGet("/{visitorId}", VisitorsEndpoints.GetVisitorAsync);
         group.MapGet("/{visitorId}/timeline", VisitorsEndpoints.GetTimelineAsync);
         group.MapGet("/visits/counts", VisitorsEndpoints.GetVisitCountsAsync);
     }

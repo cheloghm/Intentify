@@ -98,3 +98,57 @@ public sealed class GetVisitCountWindowsHandler
 
     private static DateTime Max(DateTime left, DateTime right) => left > right ? left : right;
 }
+
+public sealed class GetVisitorDetailHandler
+{
+    private const int DefaultRecentSessionCount = 5;
+    private readonly IVisitorRepository _repository;
+
+    public GetVisitorDetailHandler(IVisitorRepository repository)
+    {
+        _repository = repository;
+    }
+
+    public async Task<VisitorDetailResult?> HandleAsync(GetVisitorDetailQuery query, CancellationToken cancellationToken = default)
+    {
+        var visitor = await _repository.GetByIdAsync(query.TenantId, query.SiteId, query.VisitorId, cancellationToken);
+        if (visitor is null)
+        {
+            return null;
+        }
+
+        var firstSeenAtUtc = visitor.Sessions.Count > 0
+            ? visitor.Sessions.Min(session => session.FirstSeenAtUtc)
+            : visitor.CreatedAtUtc;
+
+        var recentSessions = visitor.Sessions
+            .OrderByDescending(session => session.LastSeenAtUtc)
+            .Take(DefaultRecentSessionCount)
+            .Select(session => new VisitorRecentSessionItem(
+                session.SessionId,
+                session.FirstSeenAtUtc,
+                session.LastSeenAtUtc,
+                session.PagesVisited,
+                session.TimeOnSiteSeconds,
+                session.EngagementScore,
+                session.LastPath,
+                session.LastReferrer,
+                new Dictionary<string, int>(session.TopActions, StringComparer.OrdinalIgnoreCase)))
+            .ToArray();
+
+        return new VisitorDetailResult(
+            visitor.Id,
+            visitor.SiteId,
+            firstSeenAtUtc,
+            visitor.LastSeenAtUtc,
+            visitor.Sessions.Count,
+            visitor.Sessions.Sum(session => session.PagesVisited),
+            visitor.PrimaryEmail,
+            visitor.DisplayName,
+            visitor.Phone,
+            visitor.UserAgentHint,
+            visitor.Language,
+            visitor.Platform,
+            recentSessions);
+    }
+}
