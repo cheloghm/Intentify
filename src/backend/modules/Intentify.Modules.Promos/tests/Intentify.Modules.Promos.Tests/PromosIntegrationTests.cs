@@ -273,6 +273,35 @@ public sealed class PromosIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ListAndDetailEndpoints_StillReturnPromoAndEntries()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+        var promo = await CreatePromoAsync(token, site.SiteId, "List Detail Promo");
+
+        var entryResponse = await _client!.PostAsJsonAsync($"/promos/public/{promo.PublicKey}/entries", new
+        {
+            email = "list-detail@example.com",
+            consentGiven = true,
+            consentStatement = "I agree"
+        });
+        Assert.Equal(HttpStatusCode.OK, entryResponse.StatusCode);
+
+        var listResponse = await SendAuthorizedAsync(HttpMethod.Get, $"/promos?siteId={site.SiteId}", token);
+        Assert.Equal(HttpStatusCode.OK, listResponse.StatusCode);
+        using var listJson = JsonDocument.Parse(await listResponse.Content.ReadAsStringAsync());
+        Assert.Equal(JsonValueKind.Array, listJson.RootElement.ValueKind);
+        Assert.Contains(listJson.RootElement.EnumerateArray(), item => item.GetProperty("id").GetString() == promo.Id.ToString("N"));
+
+        var detailResponse = await SendAuthorizedAsync(HttpMethod.Get, $"/promos/{promo.Id:N}", token);
+        Assert.Equal(HttpStatusCode.OK, detailResponse.StatusCode);
+        using var detailJson = JsonDocument.Parse(await detailResponse.Content.ReadAsStringAsync());
+        var detailRoot = detailJson.RootElement;
+        Assert.Equal(promo.Id, detailRoot.GetProperty("promo").GetProperty("id").GetGuid());
+        Assert.True(detailRoot.GetProperty("entries").GetArrayLength() >= 1);
+    }
+
+    [Fact]
     public async Task ExportCsv_ReturnsFixedAndDynamicColumns()
     {
         var token = await RegisterUserAsync();
