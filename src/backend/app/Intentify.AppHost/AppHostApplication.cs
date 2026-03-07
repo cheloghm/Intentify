@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using Intentify.Modules.Auth.Domain;
+using Intentify.Modules.PlatformAdmin.Api;
 using Intentify.Modules.Sites.Application;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
@@ -93,7 +95,13 @@ public static class AppHostApplication
 
         builder.Services.AddAppModules(builder.Configuration);
 
-        builder.Services.AddAuthorization();
+        builder.Services.AddAuthorization(options =>
+        {
+            options.AddPolicy(PlatformAdminModule.PolicyName, policy =>
+            {
+                policy.RequireRole(AuthRoles.SuperAdmin);
+            });
+        });
 
         // ✅ CORS (required for frontend calling backend)
         ConfigureCors(builder);

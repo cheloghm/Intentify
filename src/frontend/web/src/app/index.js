@@ -12,6 +12,7 @@ import { renderLeadsView } from '../pages/leads.js';
 import { renderTicketsView } from '../pages/tickets.js';
 import { renderIntelligenceView } from '../pages/intelligence.js';
 import { renderAdsView } from '../pages/ads.js';
+import { renderPlatformAdminTenantDetailView, renderPlatformAdminView } from '../pages/platformAdmin.js';
 
 const app = document.getElementById('app');
 const toast = createToastManager();
@@ -110,7 +111,7 @@ const createNavLink = ({ label, href }) => {
   return link;
 };
 
-const createNavbar = ({ isAuthenticated }) => {
+const createNavbar = ({ isAuthenticated, canAccessPlatformAdmin }) => {
   const nav = document.createElement('nav');
   nav.style.display = 'flex';
   nav.style.alignItems = 'center';
@@ -145,6 +146,9 @@ const createNavbar = ({ isAuthenticated }) => {
     links.appendChild(createNavLink({ label: 'Ads', href: '#/ads' }));
     links.appendChild(createNavLink({ label: 'Leads', href: '#/leads' }));
     links.appendChild(createNavLink({ label: 'Tickets', href: '#/tickets' }));
+    if (canAccessPlatformAdmin) {
+      links.appendChild(createNavLink({ label: 'Platform Admin', href: '#/platform-admin' }));
+    }
     const logoutButton = document.createElement('button');
     logoutButton.type = 'button';
     logoutButton.textContent = 'Logout';
@@ -533,6 +537,8 @@ const routes = {
   '/ads': renderAdsView,
   '/leads': renderLeadsView,
   '/tickets': renderTicketsView,
+  '/platform-admin': renderPlatformAdminView,
+  '/platform-admin/tenant/:tenantId': renderPlatformAdminTenantDetailView,
 };
 
 const getRouteFromHash = () => {
@@ -557,7 +563,45 @@ const getRouteFromHash = () => {
     return { path: '/visitors/:visitorId', query, params: { visitorId: visitorMatch[1] } };
   }
 
+  const platformTenantMatch = path.match(/^\/platform-admin\/tenant\/([^/]+)$/);
+  if (platformTenantMatch) {
+    return {
+      path: '/platform-admin/tenant/:tenantId',
+      query,
+      params: { tenantId: platformTenantMatch[1] },
+    };
+  }
+
   return { path, query, params: {} };
+};
+
+
+const authState = {
+  loaded: false,
+  loading: false,
+  roles: [],
+};
+
+const hasPlatformAccess = () =>
+  Array.isArray(authState.roles)
+  && (authState.roles.includes('super_admin') || authState.roles.includes('platform_admin'));
+
+const loadAuthRoles = async () => {
+  if (authState.loading) {
+    return;
+  }
+
+  authState.loading = true;
+  try {
+    const me = await apiClient.request('/auth/me');
+    authState.roles = Array.isArray(me.roles) ? me.roles : [];
+  } catch (error) {
+    authState.roles = [];
+  } finally {
+    authState.loaded = true;
+    authState.loading = false;
+    renderApp();
+  }
 };
 
 const renderApp = () => {
@@ -570,7 +614,24 @@ const renderApp = () => {
   const { path: route, query, params } = getRouteFromHash();
   const isAuthenticated = Boolean(getToken());
 
-  if ((route === '/dashboard' || route === '/sites' || route === '/install' || route === '/visitors' || route === '/visitors/:visitorId' || route === '/knowledge' || route === '/engage' || route === '/promos' || route === '/intelligence' || route === '/ads' || route === '/leads' || route === '/tickets') && !isAuthenticated) {
+  const protectedRoutes = [
+    '/dashboard',
+    '/sites',
+    '/install',
+    '/visitors',
+    '/visitors/:visitorId',
+    '/knowledge',
+    '/engage',
+    '/promos',
+    '/intelligence',
+    '/ads',
+    '/leads',
+    '/tickets',
+    '/platform-admin',
+    '/platform-admin/tenant/:tenantId',
+  ];
+
+  if (protectedRoutes.includes(route) && !isAuthenticated) {
     window.location.hash = '#/login';
     return;
   }
@@ -580,13 +641,45 @@ const renderApp = () => {
     return;
   }
 
+  if (isAuthenticated && !authState.loaded) {
+    loadAuthRoles();
+  }
+
+  if (!isAuthenticated) {
+    authState.loaded = false;
+    authState.roles = [];
+  }
+
+  const isPlatformRoute = route === '/platform-admin' || route === '/platform-admin/tenant/:tenantId';
+  if (isAuthenticated && isPlatformRoute && !authState.loaded) {
+    app.innerHTML = '';
+    const navbar = createNavbar({ isAuthenticated, canAccessPlatformAdmin: false });
+    const main = createMain();
+    const loading = document.createElement('div');
+    loading.style.color = '#475569';
+    loading.textContent = 'Loading access...';
+    main.appendChild(loading);
+    app.append(navbar, main);
+    return;
+  }
+
+  if (isAuthenticated && isPlatformRoute && authState.loaded && !hasPlatformAccess()) {
+    window.location.hash = '#/dashboard';
+    return;
+  }
+
   const view = routes[route] || routes['/'];
   app.innerHTML = '';
-  const navbar = createNavbar({ isAuthenticated });
+  const navbar = createNavbar({ isAuthenticated, canAccessPlatformAdmin: hasPlatformAccess() });
   const main = createMain();
   app.append(navbar, main);
   if (route === '/visitors/:visitorId') {
     renderVisitorProfileView(main, { apiClient, toast, query, params });
+    return;
+  }
+
+  if (route === '/platform-admin/tenant/:tenantId') {
+    renderPlatformAdminTenantDetailView(main, { apiClient, toast, query, params });
     return;
   }
 
