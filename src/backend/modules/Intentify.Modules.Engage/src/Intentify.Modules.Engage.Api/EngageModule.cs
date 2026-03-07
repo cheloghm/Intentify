@@ -81,8 +81,6 @@ public sealed class EngageModule : IAppModule
         services.AddSingleton<ListConversationsHandler>();
         services.AddSingleton<GetConversationMessagesHandler>();
         services.AddSingleton<Stage7VisitorContextBundleHandler>();
-        services.AddSingleton<Stage7AiDecisionGenerationService>();
-        services.AddSingleton<Stage7RecommendationExecutor>();
     }
 
     public void MapEndpoints(IEndpointRouteBuilder endpoints)
