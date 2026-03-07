@@ -42,6 +42,7 @@ public sealed class VisitorTimelineReader : IVisitorTimelineReader
         return events.Select(item => new VisitorTimelineItem(
             item.OccurredAtUtc,
             item.Type,
+            item.SessionId,
             item.Url,
             item.Referrer,
             ToSummary(item.Data))).ToArray();

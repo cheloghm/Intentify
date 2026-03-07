@@ -98,6 +98,9 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
   const listVisitors = async (siteId, page = 1, pageSize = 50) =>
     request(`/visitors${buildQueryString({ siteId, page, pageSize })}`);
 
+  const getVisitorDetail = async (visitorId, siteId) =>
+    request(`/visitors/${visitorId}${buildQueryString({ siteId })}`);
+
   const getVisitorTimeline = async (visitorId, limit = 200, siteId) =>
     request(`/visitors/${visitorId}/timeline${buildQueryString({ siteId, limit })}`);
 
@@ -303,8 +306,8 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
   const getAdsReport = async (campaignId, fromUtc, toUtc) =>
     request(`/ads/campaigns/${encodeURIComponent(campaignId)}/report${buildQueryString({ fromUtc, toUtc })}`);
 
-  const listTickets = async ({ siteId, page = 1, pageSize = 50 } = {}) =>
-    request(`/tickets${buildQueryString({ siteId, page, pageSize })}`);
+  const listTickets = async ({ siteId, visitorId, engageSessionId, page = 1, pageSize = 50 } = {}) =>
+    request(`/tickets${buildQueryString({ siteId, visitorId, engageSessionId, page, pageSize })}`);
 
   const getTicket = async (ticketId) =>
     request(`/tickets/${encodeURIComponent(ticketId)}`);
@@ -339,6 +342,7 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
     },
     visitors: {
       list: listVisitors,
+      detail: getVisitorDetail,
       timeline: getVisitorTimeline,
       visitCounts: getVisitCounts,
     },
