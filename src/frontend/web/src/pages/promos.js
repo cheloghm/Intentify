@@ -17,6 +17,12 @@ const button = (label, primary = false) => {
 const getSiteId = (site) => site?.siteId || site?.id || '';
 const getPromoId = (promo) => promo?.id || promo?.promoId || '';
 
+const SUPPORTED_WIDGET_QUESTION_TYPES = ['text', 'email', 'phone', 'textarea', 'checkbox'];
+const normalizeQuestionType = (value) => {
+  const normalized = String(value || '').trim().toLowerCase();
+  return SUPPORTED_WIDGET_QUESTION_TYPES.includes(normalized) ? normalized : 'text';
+};
+
 export const renderPromosView = (container, { apiClient, toast } = {}) => {
   const client = apiClient || createApiClient();
   const notifier = toast || createToastManager();
@@ -163,10 +169,15 @@ export const renderPromosView = (container, { apiClient, toast } = {}) => {
       labelInput.value = question.label;
       labelInput.addEventListener('input', () => { question.label = labelInput.value; });
 
-      const typeInput = document.createElement('input');
-      typeInput.placeholder = 'type';
-      typeInput.value = question.type;
-      typeInput.addEventListener('input', () => { question.type = typeInput.value || 'text'; });
+      const typeInput = document.createElement('select');
+      SUPPORTED_WIDGET_QUESTION_TYPES.forEach((type) => {
+        const option = document.createElement('option');
+        option.value = type;
+        option.textContent = type;
+        typeInput.appendChild(option);
+      });
+      typeInput.value = normalizeQuestionType(question.type);
+      typeInput.addEventListener('change', () => { question.type = normalizeQuestionType(typeInput.value); });
 
       const requiredInput = document.createElement('label');
       requiredInput.style.display = 'flex';
@@ -346,7 +357,7 @@ export const renderPromosView = (container, { apiClient, toast } = {}) => {
       formData.append('questions', JSON.stringify(state.questions.map((question, index) => ({
         key: question.key.trim(),
         label: question.label.trim() || question.key.trim(),
-        type: question.type || 'text',
+        type: normalizeQuestionType(question.type),
         required: Boolean(question.required),
         order: index,
       })).filter((question) => question.key)));

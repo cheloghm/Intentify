@@ -197,6 +197,9 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
   const listPromoEntries = async (promoId, page = 1, pageSize = 50) =>
     request(`/promos/${encodeURIComponent(promoId)}/entries${buildQueryString({ page, pageSize })}`);
 
+  const listVisitorPromoEntries = async (siteId, visitorId, page = 1, pageSize = 50) =>
+    request(`/promos/entries/by-visitor${buildQueryString({ siteId, visitorId, page, pageSize })}`);
+
   const getPromoDetail = async (promoId) =>
     request(`/promos/${encodeURIComponent(promoId)}`);
 
@@ -374,6 +377,7 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
       create: createPromo,
       list: listPromos,
       listEntries: listPromoEntries,
+      listVisitorEntries: listVisitorPromoEntries,
       getDetail: getPromoDetail,
       flyerUrl: getPromoFlyerUrl,
       downloadCsv: downloadPromoCsv,
