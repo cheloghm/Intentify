@@ -19,3 +19,13 @@ public sealed record CreatePublicPromoEntryRequest(
 public sealed record PublicPromoQuestionResponse(string Key, string Label, string Type, bool Required, int Order);
 
 public sealed record PublicPromoResponse(string PublicKey, string Name, string? Description, IReadOnlyCollection<PublicPromoQuestionResponse> Questions);
+
+public sealed record VisitorPromoEntryResponse(
+    string Id,
+    string PromoId,
+    string PromoName,
+    string SiteId,
+    string? Email,
+    string? Name,
+    DateTime CreatedAtUtc,
+    IReadOnlyDictionary<string, string>? Answers);
