@@ -9,6 +9,14 @@ const formatDate = (value) => {
   return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString();
 };
 
+const toShortId = (value) => {
+  if (!value || value.length < 8) {
+    return value || '—';
+  }
+
+  return `${value.slice(0, 8)}…`;
+};
+
 const createSummaryValue = (label, value) => {
   const block = document.createElement('div');
   block.style.padding = '10px 12px';
@@ -55,6 +63,9 @@ const mapReferrer = (timelineItem) => {
 const sortByOccurredDesc = (items) =>
   [...items].sort((left, right) => new Date(right?.occurredAtUtc || 0).getTime() - new Date(left?.occurredAtUtc || 0).getTime());
 
+const normalizeSessionId = (value) =>
+  typeof value === 'string' && value.trim() ? value.trim() : 'sessionless';
+
 const getEventData = (timelineItem) => {
   const raw = timelineItem?.metadataSummary ?? timelineItem?.data;
   if (!raw) return null;
@@ -70,18 +81,19 @@ const getEventData = (timelineItem) => {
 };
 
 const getCollectorSessionId = (timelineItem) => {
-  const data = getEventData(timelineItem);
-  const candidates = [
-    timelineItem?.sessionId,
-    timelineItem?.SessionId,
-    timelineItem?.metadataSummary?.sessionId,
-    timelineItem?.metadataSummary?.SessionId,
-    data?.sessionId,
-    data?.SessionId,
-  ];
+  return normalizeSessionId(timelineItem?.sessionId ?? timelineItem?.SessionId);
+};
 
-  const match = candidates.find((value) => typeof value === 'string' && value.trim());
-  return match ? match.trim() : 'sessionless';
+const getDateKey = (value) => {
+  const date = new Date(value || 0);
+  if (Number.isNaN(date.getTime())) return 'Unknown date';
+  return date.toISOString().slice(0, 10);
+};
+
+const formatDateHeading = (key) => {
+  const date = new Date(`${key}T00:00:00.000Z`);
+  if (Number.isNaN(date.getTime())) return key;
+  return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 };
 
 const parseNumber = (value) => {
@@ -190,6 +202,11 @@ export const renderVisitorProfileView = async (
   sessionList.style.gap = '8px';
   sessionList.style.flexWrap = 'wrap';
 
+  const recentSessionsBody = document.createElement('div');
+  recentSessionsBody.style.display = 'flex';
+  recentSessionsBody.style.flexDirection = 'column';
+  recentSessionsBody.style.gap = '10px';
+
   const timelineBody = document.createElement('div');
   timelineBody.style.display = 'flex';
   timelineBody.style.flexDirection = 'column';
@@ -220,15 +237,24 @@ export const renderVisitorProfileView = async (
   conversationsBody.style.flexDirection = 'column';
   conversationsBody.style.gap = '8px';
 
+  const ticketsBody = document.createElement('div');
+  ticketsBody.style.display = 'flex';
+  ticketsBody.style.flexDirection = 'column';
+  ticketsBody.style.gap = '8px';
+
   const state = {
+    detail: null,
     events: [],
     sessions: [],
     selectedCollectorSessionId: '',
     typeFilter: 'all',
     search: '',
     conversations: [],
+    conversationsBySession: {},
+    linkedSessionIds: [],
     selectedConversationId: '',
     selectedMessages: [],
+    tickets: [],
   };
 
   const modalOverlay = document.createElement('div');
@@ -283,18 +309,28 @@ export const renderVisitorProfileView = async (
     if (event.target === modalOverlay) closeModal();
   });
 
-  const fillSummary = (events = []) => {
-    const sessionCount = state.sessions.length;
-    const pagesVisited = query.totalPagesVisited || events.length || '—';
+  const fillSummary = () => {
+    const detail = state.detail;
+    const detailSessions = Array.isArray(detail?.recentSessions) ? detail.recentSessions : [];
+    const totalTimeOnSiteSeconds = detailSessions.reduce(
+      (sum, session) => sum + (Number.isFinite(session?.timeOnSiteSeconds) ? session.timeOnSiteSeconds : 0),
+      0
+    );
 
     summaryGrid.innerHTML = '';
     summaryGrid.append(
-      createSummaryValue('Last seen', formatDate(query.lastSeenAtUtc || events[0]?.occurredAtUtc)),
-      createSummaryValue('Sessions count', query.sessionsCount || (sessionCount || '—')),
-      createSummaryValue('Pages visited', String(pagesVisited)),
-      createSummaryValue('Time on site', getTimeOnSite(events)),
-      createSummaryValue('Engagement score', query.lastSessionEngagementScore || '—'),
-      createSummaryValue('Recent events', String(events.length))
+      createSummaryValue('First seen', formatDate(detail?.firstSeenAtUtc)),
+      createSummaryValue('Last seen', formatDate(detail?.lastSeenAtUtc || state.events[0]?.occurredAtUtc)),
+      createSummaryValue('Visit count', detail?.visitCount ?? '—'),
+      createSummaryValue('Total pages visited', detail?.totalPagesVisited ?? '—'),
+      createSummaryValue('Display name', detail?.displayName || '—'),
+      createSummaryValue('Primary email', detail?.primaryEmail || '—'),
+      createSummaryValue('Phone', detail?.phone || '—'),
+      createSummaryValue('User agent', detail?.userAgent || '—'),
+      createSummaryValue('Language', detail?.language || '—'),
+      createSummaryValue('Platform', detail?.platform || '—'),
+      createSummaryValue('Time on site', totalTimeOnSiteSeconds > 0 ? formatDuration(totalTimeOnSiteSeconds) : getTimeOnSite(state.events)),
+      createSummaryValue('Recent events', String(state.events.length))
     );
   };
 
@@ -314,32 +350,57 @@ export const renderVisitorProfileView = async (
       return;
     }
 
-    const table = document.createElement('table');
-    table.className = 'ui-table';
-
-    const thead = document.createElement('thead');
-    const row = document.createElement('tr');
-    ['Timestamp', 'Event', 'Path / URL', 'Referrer', 'Details'].forEach((label) => {
-      const th = document.createElement('th');
-      th.textContent = label;
-      row.appendChild(th);
-    });
-    thead.appendChild(row);
-    table.appendChild(thead);
-
-    const tbody = document.createElement('tbody');
+    const groupedByDate = new Map();
     items.forEach((item) => {
-      const tr = document.createElement('tr');
-      [formatDate(item.occurredAtUtc), item.type || '—', mapPath(item), mapReferrer(item), getTimelineDetails(item)].forEach((value) => {
-        const td = document.createElement('td');
-        td.textContent = value;
-        tr.appendChild(td);
-      });
-      tbody.appendChild(tr);
+      const key = getDateKey(item?.occurredAtUtc);
+      if (!groupedByDate.has(key)) {
+        groupedByDate.set(key, []);
+      }
+      groupedByDate.get(key).push(item);
     });
 
-    table.appendChild(tbody);
-    timelineBody.appendChild(table);
+    const sortedKeys = Array.from(groupedByDate.keys()).sort((left, right) => right.localeCompare(left));
+
+    sortedKeys.forEach((key) => {
+      const section = document.createElement('section');
+      section.style.display = 'flex';
+      section.style.flexDirection = 'column';
+      section.style.gap = '8px';
+
+      const heading = document.createElement('div');
+      heading.textContent = formatDateHeading(key);
+      heading.style.fontWeight = '600';
+      heading.style.color = '#0f172a';
+      section.appendChild(heading);
+
+      const table = document.createElement('table');
+      table.className = 'ui-table';
+
+      const thead = document.createElement('thead');
+      const row = document.createElement('tr');
+      ['Timestamp', 'Event', 'Path / URL', 'Referrer', 'Details'].forEach((label) => {
+        const th = document.createElement('th');
+        th.textContent = label;
+        row.appendChild(th);
+      });
+      thead.appendChild(row);
+      table.appendChild(thead);
+
+      const tbody = document.createElement('tbody');
+      groupedByDate.get(key).forEach((item) => {
+        const tr = document.createElement('tr');
+        [formatDate(item.occurredAtUtc), item.type || '—', mapPath(item), mapReferrer(item), getTimelineDetails(item)].forEach((value) => {
+          const td = document.createElement('td');
+          td.textContent = value;
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      });
+
+      table.appendChild(tbody);
+      section.appendChild(table);
+      timelineBody.appendChild(section);
+    });
   };
 
   const renderConversationModal = () => {
@@ -390,23 +451,21 @@ export const renderVisitorProfileView = async (
   const renderConversations = () => {
     conversationsBody.innerHTML = '';
 
-    if (!state.selectedCollectorSessionId) {
+    const scopedConversations = state.selectedCollectorSessionId
+      ? state.conversations.filter((conversation) => conversation.linkedCollectorSessionId === state.selectedCollectorSessionId)
+      : state.conversations;
+
+    if (!scopedConversations.length) {
       const empty = document.createElement('div');
-      empty.textContent = 'Select a visitor session to view matching Engage chats.';
+      empty.textContent = state.selectedCollectorSessionId
+        ? 'No Engage conversations for this visitor session.'
+        : 'No Engage conversations for this visitor.';
       empty.style.color = '#64748b';
       conversationsBody.appendChild(empty);
       return;
     }
 
-    if (!state.conversations.length) {
-      const empty = document.createElement('div');
-      empty.textContent = 'No Engage conversations for this visitor session.';
-      empty.style.color = '#64748b';
-      conversationsBody.appendChild(empty);
-      return;
-    }
-
-    state.conversations.forEach((conversation) => {
+    scopedConversations.forEach((conversation) => {
       const row = document.createElement('div');
       row.style.display = 'flex';
       row.style.justifyContent = 'space-between';
@@ -416,7 +475,7 @@ export const renderVisitorProfileView = async (
       row.style.padding = '8px 10px';
 
       const label = document.createElement('div');
-      label.textContent = conversation.sessionId || '—';
+      label.textContent = `${conversation.sessionId || '—'} • ${formatDate(conversation.updatedAtUtc)}`;
       label.style.fontFamily = 'ui-monospace, SFMono-Regular, Menlo, monospace';
       label.style.fontSize = '12px';
 
@@ -431,18 +490,123 @@ export const renderVisitorProfileView = async (
   };
 
   const loadConversationsForSelectedSession = async () => {
-    if (!siteId || !state.selectedCollectorSessionId) {
+    if (!siteId) {
       state.conversations = [];
+      state.conversationsBySession = {};
+      state.linkedSessionIds = [];
+      renderConversations();
+      return;
+    }
+
+    const linkedSessionIds = (Array.isArray(state.detail?.recentSessions) ? state.detail.recentSessions : [])
+      .map((session) => normalizeSessionId(session?.sessionId))
+      .filter((sessionId) => sessionId && sessionId !== 'sessionless');
+
+    state.linkedSessionIds = Array.from(new Set(linkedSessionIds));
+
+    if (!state.linkedSessionIds.length) {
+      state.conversations = [];
+      state.conversationsBySession = {};
       renderConversations();
       return;
     }
 
     try {
-      state.conversations = await client.engage.getConversations(siteId, state.selectedCollectorSessionId);
+      const fetchResults = await Promise.allSettled(
+        state.linkedSessionIds.map((collectorSessionId) =>
+          client.engage.getConversations(siteId, collectorSessionId)
+        )
+      );
+
+      const bySession = {};
+      const deduped = new Map();
+
+      fetchResults.forEach((result, index) => {
+        const collectorSessionId = state.linkedSessionIds[index];
+        if (result.status !== 'fulfilled' || !Array.isArray(result.value)) {
+          return;
+        }
+
+        bySession[collectorSessionId] = result.value;
+
+        result.value.forEach((conversation) => {
+          const key = conversation?.sessionId || `${collectorSessionId}-${conversation?.updatedAtUtc || ''}`;
+          if (!deduped.has(key)) {
+            deduped.set(key, {
+              ...conversation,
+              linkedCollectorSessionId: collectorSessionId,
+            });
+          }
+        });
+      });
+
+      state.conversationsBySession = bySession;
+      state.conversations = Array.from(deduped.values()).sort(
+        (left, right) => new Date(right?.updatedAtUtc || 0).getTime() - new Date(left?.updatedAtUtc || 0).getTime()
+      );
+
       renderConversations();
     } catch (error) {
       state.conversations = [];
+      state.conversationsBySession = {};
       renderConversations();
+      notifier.show({ message: mapApiError(error).message, variant: 'danger' });
+    }
+  };
+
+  const renderTickets = () => {
+    ticketsBody.innerHTML = '';
+
+    if (!state.tickets.length) {
+      const empty = document.createElement('div');
+      empty.textContent = 'No linked tickets for this visitor.';
+      empty.style.color = '#64748b';
+      ticketsBody.appendChild(empty);
+      return;
+    }
+
+    const table = document.createElement('table');
+    table.className = 'ui-table';
+    const thead = document.createElement('thead');
+    const row = document.createElement('tr');
+    ['Ticket', 'Status', 'Created'].forEach((label) => {
+      const th = document.createElement('th');
+      th.textContent = label;
+      row.appendChild(th);
+    });
+    thead.appendChild(row);
+    table.appendChild(thead);
+
+    const tbody = document.createElement('tbody');
+    state.tickets.forEach((ticket) => {
+      const tr = document.createElement('tr');
+      [toShortId(ticket.id), ticket.status || '—', formatDate(ticket.createdAtUtc)].forEach((value) => {
+        const td = document.createElement('td');
+        td.textContent = String(value);
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+
+    table.appendChild(tbody);
+    ticketsBody.appendChild(table);
+  };
+
+  const loadLinkedTickets = async () => {
+    if (!visitorId || !siteId) {
+      state.tickets = [];
+      renderTickets();
+      return;
+    }
+
+    try {
+      state.tickets = client.tickets?.listTickets
+        ? await client.tickets.listTickets({ siteId, visitorId, page: 1, pageSize: 50 })
+        : await client.request(`/tickets?siteId=${encodeURIComponent(siteId)}&visitorId=${encodeURIComponent(visitorId)}&page=1&pageSize=50`);
+      renderTickets();
+    } catch (error) {
+      state.tickets = [];
+      renderTickets();
       notifier.show({ message: mapApiError(error).message, variant: 'danger' });
     }
   };
@@ -486,33 +650,101 @@ export const renderVisitorProfileView = async (
     sessionList.innerHTML = '';
     if (!state.sessions.length) {
       const empty = document.createElement('div');
-      empty.textContent = 'No visitor sessions found.';
+      empty.textContent = 'No recent sessions.';
       empty.style.color = '#64748b';
       sessionList.appendChild(empty);
       return;
     }
 
+    const allButton = document.createElement('button');
+    allButton.type = 'button';
+    allButton.textContent = 'All sessions';
+    allButton.style.padding = '6px 10px';
+    allButton.style.borderRadius = '999px';
+    allButton.style.border = '1px solid #cbd5e1';
+    allButton.style.background = !state.selectedCollectorSessionId ? '#dbeafe' : '#ffffff';
+    allButton.addEventListener('click', async () => {
+      state.selectedCollectorSessionId = '';
+      refreshTimeline();
+      renderConversations();
+      renderSessionList();
+    });
+    sessionList.appendChild(allButton);
+
     state.sessions.forEach((session) => {
+      const sessionId = normalizeSessionId(session.sessionId);
       const button = document.createElement('button');
       button.type = 'button';
-      button.textContent = `${session.sessionId} • ${formatDate(session.lastOccurredAtUtc)}`;
+      button.textContent = `${sessionId} • ${formatDate(session.lastSeenAtUtc || session.lastOccurredAtUtc)}`;
       button.style.padding = '6px 10px';
       button.style.borderRadius = '999px';
       button.style.border = '1px solid #cbd5e1';
-      button.style.background = state.selectedCollectorSessionId === session.sessionId ? '#dbeafe' : '#ffffff';
+      button.style.background = state.selectedCollectorSessionId === sessionId ? '#dbeafe' : '#ffffff';
       button.addEventListener('click', async () => {
-        state.selectedCollectorSessionId = session.sessionId;
+        state.selectedCollectorSessionId = sessionId;
         refreshTimeline();
-        await loadConversationsForSelectedSession();
+        renderConversations();
+        renderSessionList();
       });
       sessionList.appendChild(button);
     });
   };
 
+  const renderRecentSessions = () => {
+    recentSessionsBody.innerHTML = '';
+
+    if (!state.sessions.length) {
+      const empty = document.createElement('div');
+      empty.textContent = 'No recent sessions.';
+      empty.style.color = '#64748b';
+      recentSessionsBody.appendChild(empty);
+      return;
+    }
+
+    const table = document.createElement('table');
+    table.className = 'ui-table';
+    const thead = document.createElement('thead');
+    const headRow = document.createElement('tr');
+    ['Session', 'First seen', 'Last seen', 'Pages', 'Time', 'Engagement', 'Last path'].forEach((label) => {
+      const th = document.createElement('th');
+      th.textContent = label;
+      headRow.appendChild(th);
+    });
+    thead.appendChild(headRow);
+    table.appendChild(thead);
+
+    const tbody = document.createElement('tbody');
+    state.sessions.forEach((session) => {
+      const tr = document.createElement('tr');
+      const values = [
+        normalizeSessionId(session.sessionId),
+        formatDate(session.firstSeenAtUtc),
+        formatDate(session.lastSeenAtUtc || session.lastOccurredAtUtc),
+        session.pagesVisited ?? '—',
+        session.timeOnSiteSeconds !== undefined ? formatDuration(session.timeOnSiteSeconds) : '—',
+        session.engagementScore ?? '—',
+        session.lastPath || '—',
+      ];
+
+      values.forEach((value) => {
+        const td = document.createElement('td');
+        td.textContent = String(value);
+        tr.appendChild(td);
+      });
+
+      tbody.appendChild(tr);
+    });
+
+    table.appendChild(tbody);
+    recentSessionsBody.appendChild(table);
+  };
+
   const summaryCard = createCard({ title: 'Summary', body: summaryGrid });
 
+  const recentSessionsCard = createCard({ title: 'Recent sessions', body: recentSessionsBody });
+
   const timelineCard = createCard({
-    title: 'Timeline by session',
+    title: 'Recent activity by date',
     body: (() => {
       const wrapper = document.createElement('div');
       wrapper.style.display = 'flex';
@@ -525,6 +757,8 @@ export const renderVisitorProfileView = async (
 
   const conversationsCard = createCard({ title: 'Engage conversations', body: conversationsBody });
 
+  const ticketsCard = createCard({ title: 'Linked tickets', body: ticketsBody });
+
   typeFilter.addEventListener('change', () => {
     state.typeFilter = typeFilter.value;
     refreshTimeline();
@@ -535,57 +769,80 @@ export const renderVisitorProfileView = async (
     refreshTimeline();
   });
 
-  page.append(backLink, header, summaryCard, timelineCard, conversationsCard);
+  page.append(backLink, header, summaryCard, recentSessionsCard, timelineCard, conversationsCard, ticketsCard);
   container.appendChild(page);
 
   if (!visitorId || !siteId) {
     fillSummary();
+    renderRecentSessions();
+    renderSessionList();
+    renderTickets();
+    setTypeOptions([]);
     renderTimeline();
     renderConversations();
     return;
   }
 
+  fillSummary();
+  renderRecentSessions();
+  renderSessionList();
+  renderTickets();
   timelineBody.textContent = 'Loading timeline...';
+  recentSessionsBody.textContent = 'Loading sessions...';
+  conversationsBody.textContent = 'Loading linked conversations...';
+  ticketsBody.textContent = 'Loading linked tickets...';
 
-  try {
-    const timeline = client.visitors?.timeline
-      ? await client.visitors.timeline(visitorId, 200, siteId)
-      : await client.request(`/visitors/${visitorId}/timeline?siteId=${encodeURIComponent(siteId)}&limit=200`);
+  const [detailResult, timelineResult] = await Promise.allSettled([
+    client.visitors?.detail
+      ? client.visitors.detail(visitorId, siteId)
+      : client.request(`/visitors/${visitorId}?siteId=${encodeURIComponent(siteId)}`),
+    client.visitors?.timeline
+      ? client.visitors.timeline(visitorId, 200, siteId)
+      : client.request(`/visitors/${visitorId}/timeline?siteId=${encodeURIComponent(siteId)}&limit=200`),
+  ]);
 
-    const sortedTimeline = Array.isArray(timeline) ? sortByOccurredDesc(timeline) : [];
-    state.events = sortedTimeline;
+  if (detailResult.status === 'fulfilled') {
+    state.detail = detailResult.value || null;
+  } else {
+    state.detail = null;
+    notifier.show({ message: mapApiError(detailResult.reason).message, variant: 'danger' });
+  }
 
+  if (timelineResult.status === 'fulfilled') {
+    state.events = Array.isArray(timelineResult.value) ? sortByOccurredDesc(timelineResult.value) : [];
+  } else {
+    state.events = [];
+    notifier.show({ message: mapApiError(timelineResult.reason).message, variant: 'danger' });
+  }
+
+  const detailSessions = Array.isArray(state.detail?.recentSessions) ? state.detail.recentSessions : [];
+  if (detailSessions.length) {
+    state.sessions = [...detailSessions].sort(
+      (left, right) => new Date(right?.lastSeenAtUtc || 0).getTime() - new Date(left?.lastSeenAtUtc || 0).getTime()
+    );
+  } else {
     const grouped = new Map();
-    sortedTimeline.forEach((item) => {
+    state.events.forEach((item) => {
       const sessionId = getCollectorSessionId(item);
       const existing = grouped.get(sessionId);
       if (!existing) {
-        grouped.set(sessionId, { sessionId, events: [item], lastOccurredAtUtc: item?.occurredAtUtc });
-      } else {
-        existing.events.push(item);
+        grouped.set(sessionId, { sessionId, lastOccurredAtUtc: item?.occurredAtUtc });
       }
     });
 
     state.sessions = Array.from(grouped.values()).sort(
       (left, right) => new Date(right.lastOccurredAtUtc || 0).getTime() - new Date(left.lastOccurredAtUtc || 0).getTime()
     );
-
-    state.selectedCollectorSessionId = state.sessions[0]?.sessionId || '';
-
-    fillSummary(sortedTimeline);
-    renderSessionList();
-    refreshTimeline();
-    await loadConversationsForSelectedSession();
-  } catch (error) {
-    const uiError = mapApiError(error);
-    notifier.show({ message: uiError.message, variant: 'danger' });
-    state.events = [];
-    state.sessions = [];
-    state.conversations = [];
-    fillSummary();
-    renderSessionList();
-    setTypeOptions([]);
-    renderTimeline();
-    renderConversations();
   }
+
+  const validSessionIds = new Set(state.sessions.map((session) => normalizeSessionId(session.sessionId)));
+  if (state.selectedCollectorSessionId && !validSessionIds.has(state.selectedCollectorSessionId)) {
+    state.selectedCollectorSessionId = '';
+  }
+
+  fillSummary();
+  renderRecentSessions();
+  renderSessionList();
+  refreshTimeline();
+  await Promise.all([loadConversationsForSelectedSession(), loadLinkedTickets()]);
 };
