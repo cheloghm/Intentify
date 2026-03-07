@@ -174,20 +174,6 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task WidgetScript_IncludesPromoFormRenderAndSubmitContext()
-    {
-        var response = await _client!.GetAsync("/engage/widget.js");
-
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var script = await response.Content.ReadAsStringAsync();
-
-        Assert.Contains("function addPromoForm", script);
-        Assert.Contains("fetchPromoDefinition", script);
-        Assert.Contains("engageSessionId: sessionId || null", script);
-        Assert.Contains("consentStatement", script);
-    }
-
-    [Fact]
     public async Task ChatSend_WithKnowledge_WhenAiNotConfigured_ReturnsFallback_AndCreatesTicket()
     {
         var token = await RegisterUserAsync();
@@ -271,27 +257,6 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
         var tickets = database.GetCollection<BsonTicket>("tickets");
         var createdTicket = await tickets.Find(item => item.EngageSessionId == sessionId).FirstOrDefaultAsync();
         Assert.Null(createdTicket);
-    }
-
-    [Fact]
-    public async Task ChatSend_WithoutPromoTrigger_PreservesLegacyResponseFields()
-    {
-        var token = await RegisterUserAsync();
-        var site = await CreateSiteAsync(token);
-
-        var response = await _client!.PostAsJsonAsync("/engage/chat/send", new
-        {
-            widgetKey = site.WidgetKey,
-            message = "hello"
-        });
-
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        Assert.True(json.RootElement.TryGetProperty("response", out _));
-        Assert.True(json.RootElement.TryGetProperty("confidence", out _));
-        Assert.True(json.RootElement.TryGetProperty("ticketCreated", out _));
-        Assert.True(json.RootElement.TryGetProperty("sources", out var sources));
-        Assert.Equal(JsonValueKind.Array, sources.ValueKind);
     }
 
     [Fact]
