@@ -153,6 +153,9 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
       body: JSON.stringify(payload),
     });
 
+  const getIntelligenceDashboard = async (params) =>
+    request(`/intelligence/dashboard${buildQueryString(params)}`);
+
   const sendEngageChat = async (widgetKeyOrPayload, sessionId, message) => {
     const payload =
       typeof widgetKeyOrPayload === 'object' && widgetKeyOrPayload !== null
@@ -360,6 +363,7 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
     intelligence: {
       status: getIntelligenceStatus,
       trends: getIntelligenceTrends,
+      dashboard: getIntelligenceDashboard,
       refresh: refreshIntelligence,
     },
 
