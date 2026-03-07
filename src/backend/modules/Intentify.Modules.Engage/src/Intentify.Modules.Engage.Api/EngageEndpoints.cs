@@ -450,7 +450,8 @@ internal static class EngageEndpoints
                 result.Value.ResponseKind,
                 result.Value.PromoPublicKey,
                 result.Value.PromoTitle,
-                result.Value.PromoDescription))
+                result.Value.PromoDescription,
+                ToStage7DecisionResponse(result.Value.Stage7Decision)))
         };
     }
 
@@ -594,6 +595,48 @@ internal static class EngageEndpoints
         };
     }
 
+
+
+    private static EngageAiDecisionResponse? ToStage7DecisionResponse(AiDecisionContract? decision)
+    {
+        if (decision is null)
+        {
+            return null;
+        }
+
+        return new EngageAiDecisionResponse(
+            decision.SchemaVersion,
+            decision.DecisionId,
+            decision.ContextRef is null
+                ? null
+                : new EngageAiDecisionContextRefResponse(
+                    decision.ContextRef.TenantId.ToString("N"),
+                    decision.ContextRef.SiteId.ToString("N"),
+                    decision.ContextRef.VisitorId?.ToString("N"),
+                    decision.ContextRef.EngageSessionId?.ToString("N")),
+            decision.OverallConfidence,
+            decision.Recommendations?.Select(item => new EngageAiRecommendationResponse(
+                item.Type.ToString(),
+                item.Confidence,
+                item.Rationale,
+                item.EvidenceRefs?.Select(evidence => new EngageAiEvidenceRefResponse(evidence.Source, evidence.ReferenceId, evidence.Detail)).ToArray(),
+                item.TargetRefs is null
+                    ? null
+                    : new EngageAiTargetRefsResponse(
+                        item.TargetRefs.PromoId?.ToString("N"),
+                        item.TargetRefs.PromoPublicKey,
+                        item.TargetRefs.KnowledgeSourceId?.ToString("N"),
+                        item.TargetRefs.TicketId?.ToString("N"),
+                        item.TargetRefs.VisitorId?.ToString("N")),
+                item.RequiresApproval,
+                item.ProposedCommand)).ToArray(),
+            decision.ValidationStatus.ToString(),
+            decision.ValidationErrors,
+            decision.AllowlistedActions?.Select(item => item.ToString()).ToArray(),
+            decision.ShouldFallback,
+            decision.FallbackReason,
+            decision.NoActionMessage);
+    }
 
     private static string? NormalizeOptional(string? value)
     {
