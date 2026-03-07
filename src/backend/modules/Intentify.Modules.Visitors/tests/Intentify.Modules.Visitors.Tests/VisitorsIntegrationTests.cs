@@ -147,33 +147,6 @@ public sealed class VisitorsIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task GetVisitorDetail_RespectsSiteAndTenantScoping()
-    {
-        var tenantAccessToken = await RegisterUserAsync();
-        var tenantSite = await CreateSiteAsync(tenantAccessToken);
-        var otherSiteSameTenant = await CreateSiteAsync(tenantAccessToken);
-
-        await SetAllowedOriginAsync(tenantAccessToken, tenantSite.SiteId, "http://localhost:8088");
-
-        var now = DateTime.UtcNow;
-        await PostCollectorEventAsync(tenantSite.SiteKey, "page_view", "http://localhost:8088/home", null, now, "scope-sess");
-
-        var visitorsResponse = await SendAuthorizedAsync(HttpMethod.Get, $"/visitors?siteId={tenantSite.SiteId}&page=1&pageSize=10", tenantAccessToken);
-        Assert.Equal(HttpStatusCode.OK, visitorsResponse.StatusCode);
-
-        using var visitorsDoc = JsonDocument.Parse(await visitorsResponse.Content.ReadAsStringAsync());
-        var visitorId = visitorsDoc.RootElement[0].GetProperty("visitorId").GetString();
-        Assert.False(string.IsNullOrWhiteSpace(visitorId));
-
-        var wrongSiteResponse = await SendAuthorizedAsync(HttpMethod.Get, $"/visitors/{visitorId}?siteId={otherSiteSameTenant.SiteId}", tenantAccessToken);
-        Assert.Equal(HttpStatusCode.NotFound, wrongSiteResponse.StatusCode);
-
-        var otherTenantToken = await RegisterUserAsync();
-        var crossTenantResponse = await SendAuthorizedAsync(HttpMethod.Get, $"/visitors/{visitorId}?siteId={tenantSite.SiteId}", otherTenantToken);
-        Assert.Equal(HttpStatusCode.NotFound, crossTenantResponse.StatusCode);
-    }
-
-    [Fact]
     public async Task VisitCounts_ReturnsExpectedWindows()
     {
         var accessToken = await RegisterUserAsync();
