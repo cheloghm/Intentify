@@ -139,6 +139,52 @@ internal static class PromosEndpoints
         return result.Status == OperationStatus.NotFound ? Results.NotFound() : Results.Ok(result.Value);
     }
 
+    public static async Task<IResult> ListEntriesByVisitorAsync(HttpContext context, string siteId, string visitorId, int page, int pageSize, IPromoRepository promoRepository, IPromoEntryRepository entryRepository)
+    {
+        var tenantId = TryGetTenantId(context.User);
+        if (tenantId is null) return Results.Unauthorized();
+
+        var errors = new Dictionary<string, string[]>();
+        if (!Guid.TryParse(siteId, out var parsedSiteId))
+        {
+            errors["siteId"] = ["Site id is invalid."];
+        }
+
+        if (!Guid.TryParse(visitorId, out var parsedVisitorId))
+        {
+            errors["visitorId"] = ["Visitor id is invalid."];
+        }
+
+        if (errors.Count > 0)
+        {
+            return Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(errors));
+        }
+
+        page = page <= 0 ? 1 : page;
+        pageSize = pageSize is <= 0 or > 200 ? 50 : pageSize;
+
+        var entries = await entryRepository.ListByVisitorAsync(
+            new ListVisitorPromoEntriesQuery(tenantId.Value, parsedSiteId, parsedVisitorId, page, pageSize),
+            context.RequestAborted);
+
+        var promos = await promoRepository.ListAsync(new ListPromosQuery(tenantId.Value, parsedSiteId), context.RequestAborted);
+        var promoNames = promos.ToDictionary(item => item.Id, item => item.Name);
+
+        var response = entries
+            .Select(item => new VisitorPromoEntryResponse(
+                item.Id.ToString("N"),
+                item.PromoId.ToString("N"),
+                promoNames.TryGetValue(item.PromoId, out var name) ? name : "Promo",
+                item.SiteId.ToString("N"),
+                item.Email,
+                item.Name,
+                item.CreatedAtUtc,
+                item.Answers))
+            .ToArray();
+
+        return Results.Ok(response);
+    }
+
 
     public static async Task<IResult> DownloadFlyerAsync(HttpContext context, string promoId, GetPromoDetailHandler handler)
     {
@@ -186,7 +232,7 @@ internal static class PromosEndpoints
             .OrderBy(item => item, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        var fixedColumns = new[] { "id", "promoId", "visitorId", "firstPartyId", "sessionId", "email", "name", "createdAtUtc" };
+        var fixedColumns = new[] { "id", "promoId", "siteId", "engageSessionId", "visitorId", "firstPartyId", "sessionId", "email", "name", "createdAtUtc" };
         var answerColumns = answerKeys.Select(item => $"q_{item}").ToArray();
         var headers = fixedColumns.Concat(answerColumns).ToArray();
 
@@ -199,6 +245,8 @@ internal static class PromosEndpoints
             {
                 entry.Id.ToString("N"),
                 entry.PromoId.ToString("N"),
+                entry.SiteId.ToString("N"),
+                entry.EngageSessionId?.ToString("N") ?? string.Empty,
                 entry.VisitorId?.ToString("N") ?? string.Empty,
                 entry.FirstPartyId ?? string.Empty,
                 entry.SessionId ?? string.Empty,
@@ -219,6 +267,31 @@ internal static class PromosEndpoints
         return Results.File(Encoding.UTF8.GetBytes(builder.ToString()), "text/csv", fileName);
     }
 
+
+    public static async Task<IResult> GetPublicPromoAsync(string promoKey, IPromoRepository promoRepository, HttpContext context)
+    {
+        if (string.IsNullOrWhiteSpace(promoKey))
+        {
+            return Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(new Dictionary<string, string[]>
+            {
+                ["promoKey"] = ["Promo key is required."]
+            }));
+        }
+
+        var promo = await promoRepository.GetActiveByPublicKeyAsync(promoKey.Trim(), context.RequestAborted);
+        if (promo is null)
+        {
+            return Results.NotFound();
+        }
+
+        var questions = promo.Questions
+            .OrderBy(item => item.Order)
+            .Select(item => new PublicPromoQuestionResponse(item.Key, item.Label, item.Type, item.Required, item.Order))
+            .ToArray();
+
+        return Results.Ok(new PublicPromoResponse(promo.PublicKey, promo.Name, promo.Description, questions));
+    }
+
     public static async Task<IResult> CreatePublicEntryAsync(HttpContext context, string promoKey, CreatePublicPromoEntryRequest request, CreatePublicPromoEntryHandler handler)
     {
         var result = await handler.HandleAsync(
@@ -227,6 +300,7 @@ internal static class PromosEndpoints
                 request.VisitorId,
                 request.FirstPartyId,
                 request.SessionId,
+                request.EngageSessionId,
                 request.Email,
                 request.Name,
                 request.ConsentGiven,

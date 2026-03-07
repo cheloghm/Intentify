@@ -31,11 +31,22 @@ public sealed class PromoEntryRepository : IPromoEntryRepository
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyCollection<PromoEntry>> ListByVisitorAsync(ListVisitorPromoEntriesQuery query, CancellationToken cancellationToken = default)
+    {
+        await _ensureIndexes;
+        return await _entries.Find(item => item.TenantId == query.TenantId && item.SiteId == query.SiteId && item.VisitorId == query.VisitorId)
+            .SortByDescending(item => item.CreatedAtUtc)
+            .Skip((query.Page - 1) * query.PageSize)
+            .Limit(query.PageSize)
+            .ToListAsync(cancellationToken);
+    }
+
     private Task EnsureIndexesAsync()
     {
         var indexes = new[]
         {
-            new CreateIndexModel<PromoEntry>(Builders<PromoEntry>.IndexKeys.Ascending(item => item.TenantId).Ascending(item => item.PromoId).Descending(item => item.CreatedAtUtc))
+            new CreateIndexModel<PromoEntry>(Builders<PromoEntry>.IndexKeys.Ascending(item => item.TenantId).Ascending(item => item.PromoId).Descending(item => item.CreatedAtUtc)),
+            new CreateIndexModel<PromoEntry>(Builders<PromoEntry>.IndexKeys.Ascending(item => item.TenantId).Ascending(item => item.SiteId).Ascending(item => item.VisitorId).Descending(item => item.CreatedAtUtc))
         };
         return MongoIndexHelper.EnsureIndexesAsync(_entries, indexes);
     }

@@ -16,6 +16,7 @@ public sealed record CreatePromoCommand(
 public sealed record ListPromosQuery(Guid TenantId, Guid? SiteId);
 public sealed record ListPromoEntriesQuery(Guid TenantId, Guid PromoId, int Page, int PageSize);
 public sealed record GetPromoDetailQuery(Guid TenantId, Guid PromoId, int EntryPage, int EntryPageSize);
+public sealed record ListVisitorPromoEntriesQuery(Guid TenantId, Guid SiteId, Guid VisitorId, int Page, int PageSize);
 
 public sealed record PromoDetailResult(Promo Promo, IReadOnlyCollection<PromoEntry> Entries);
 
@@ -24,6 +25,7 @@ public sealed record CreatePublicPromoEntryCommand(
     string? VisitorId,
     string? FirstPartyId,
     string? SessionId,
+    string? EngageSessionId,
     string? Email,
     string? Name,
     bool ConsentGiven,
@@ -42,6 +44,7 @@ public interface IPromoEntryRepository
 {
     Task InsertAsync(PromoEntry entry, CancellationToken cancellationToken = default);
     Task<IReadOnlyCollection<PromoEntry>> ListByPromoAsync(ListPromoEntriesQuery query, CancellationToken cancellationToken = default);
+    Task<IReadOnlyCollection<PromoEntry>> ListByVisitorAsync(ListVisitorPromoEntriesQuery query, CancellationToken cancellationToken = default);
 }
 
 public interface IPromoConsentLogRepository
