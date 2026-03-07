@@ -88,6 +88,57 @@ public sealed class PromosIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Entry_UsesVisitorResolutionPrecedence_VisitorId_OverFirstPartyAndSession()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+        var tenantId = Guid.Parse((await GetCurrentUserAsync(token)).TenantId);
+        var siteGuid = Guid.Parse(site.SiteId);
+
+        var db = new MongoClient(_mongo.ConnectionString).GetDatabase(_mongo.DatabaseName);
+        var visitors = db.GetCollection<Visitor>(VisitorsMongoCollections.Visitors);
+
+        var explicitVisitor = new Visitor
+        {
+            TenantId = tenantId,
+            SiteId = siteGuid,
+            FirstPartyId = "fp-explicit",
+            CreatedAtUtc = DateTime.UtcNow,
+            LastSeenAtUtc = DateTime.UtcNow,
+            Sessions = [new VisitorSession { SessionId = "sess-explicit", FirstSeenAtUtc = DateTime.UtcNow, LastSeenAtUtc = DateTime.UtcNow }]
+        };
+
+        var firstPartyVisitor = new Visitor
+        {
+            TenantId = tenantId,
+            SiteId = siteGuid,
+            FirstPartyId = "fp-shared",
+            CreatedAtUtc = DateTime.UtcNow,
+            LastSeenAtUtc = DateTime.UtcNow,
+            Sessions = [new VisitorSession { SessionId = "sess-shared", FirstSeenAtUtc = DateTime.UtcNow, LastSeenAtUtc = DateTime.UtcNow }]
+        };
+
+        await visitors.InsertManyAsync([explicitVisitor, firstPartyVisitor]);
+
+        var promo = await CreatePromoAsync(token, site.SiteId, "Precedence Promo");
+        var response = await _client!.PostAsJsonAsync($"/promos/public/{promo.PublicKey}/entries", new
+        {
+            visitorId = explicitVisitor.Id.ToString("N"),
+            firstPartyId = "fp-shared",
+            sessionId = "sess-shared",
+            consentGiven = true,
+            consentStatement = "I agree"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var entries = db.GetCollection<BsonPromoEntry>("promo_entries");
+        var entry = await entries.Find(item => item.PromoId == promo.Id).SortByDescending(i => i.CreatedAtUtc).FirstOrDefaultAsync();
+        Assert.NotNull(entry);
+        Assert.Equal(explicitVisitor.Id, entry!.VisitorId);
+    }
+
+    [Fact]
     public async Task Entry_WithFirstPartyId_LinksToExistingVisitor()
     {
         var token = await RegisterUserAsync();
