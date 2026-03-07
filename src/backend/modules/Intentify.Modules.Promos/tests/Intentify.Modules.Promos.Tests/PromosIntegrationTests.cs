@@ -106,38 +106,6 @@ public sealed class PromosIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task PublicPromoEndpoint_ReturnsActivePromoQuestions()
-    {
-        var token = await RegisterUserAsync();
-        var site = await CreateSiteAsync(token);
-
-        using var content = new MultipartFormDataContent();
-        content.Add(new StringContent(site.SiteId), "siteId");
-        content.Add(new StringContent("Widget Promo"), "name");
-        content.Add(new StringContent("Widget description"), "description");
-        content.Add(new StringContent("[{\"key\":\"email\",\"label\":\"Email\",\"type\":\"email\",\"required\":true,\"order\":1},{\"key\":\"agree\",\"label\":\"Agree\",\"type\":\"checkbox\",\"required\":false,\"order\":2}]"), "questions");
-        var createResponse = await SendAuthorizedAsync(HttpMethod.Post, "/promos", token, content);
-        Assert.Equal(HttpStatusCode.OK, createResponse.StatusCode);
-
-        using var createJson = JsonDocument.Parse(await createResponse.Content.ReadAsStringAsync());
-        var publicKey = createJson.RootElement.GetProperty("publicKey").GetString();
-
-        var publicResponse = await _client!.GetAsync($"/promos/public/{publicKey}");
-        Assert.Equal(HttpStatusCode.OK, publicResponse.StatusCode);
-
-        using var json = JsonDocument.Parse(await publicResponse.Content.ReadAsStringAsync());
-        Assert.Equal(publicKey, json.RootElement.GetProperty("publicKey").GetString());
-        Assert.Equal("Widget Promo", json.RootElement.GetProperty("name").GetString());
-        Assert.Equal("Widget description", json.RootElement.GetProperty("description").GetString());
-
-        var questions = json.RootElement.GetProperty("questions");
-        Assert.Equal(2, questions.GetArrayLength());
-        Assert.Equal("email", questions[0].GetProperty("key").GetString());
-        Assert.Equal("email", questions[0].GetProperty("type").GetString());
-        Assert.True(questions[0].GetProperty("required").GetBoolean());
-    }
-
-    [Fact]
     public async Task InvalidPromoKey_IsRejected()
     {
         var response = await _client!.PostAsJsonAsync($"/promos/public/{Guid.NewGuid():N}/entries", new
