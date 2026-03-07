@@ -68,5 +68,6 @@ public sealed class IntelligenceModule : IAppModule
         group.MapPost("/refresh", IntelligenceEndpoints.RefreshAsync);
         group.MapGet("/trends", IntelligenceEndpoints.GetTrendsAsync);
         group.MapGet("/status", IntelligenceEndpoints.GetStatusAsync);
+        group.MapGet("/dashboard", IntelligenceEndpoints.GetDashboardAsync);
     }
 }

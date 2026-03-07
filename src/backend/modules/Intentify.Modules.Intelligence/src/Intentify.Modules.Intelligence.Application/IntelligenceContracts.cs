@@ -24,6 +24,32 @@ public sealed record IntelligenceStatusResponse(
     DateTime RefreshedAtUtc,
     int ItemsCount);
 
+public sealed record IntelligenceDashboardQuery(
+    Guid SiteId,
+    string Category,
+    string Location,
+    string TimeWindow,
+    string? Provider,
+    string? Keyword,
+    string? AudienceType,
+    int? Limit);
+
+public sealed record IntelligenceDashboardSummaryResponse(int MatchingItemsCount, double AverageScore, double MaxScore);
+
+public sealed record IntelligenceDashboardTrendItemResponse(string QueryOrTopic, double Score, int? Rank, string Provider);
+
+public sealed record IntelligenceDashboardResponse(
+    Guid SiteId,
+    string Category,
+    string Location,
+    string TimeWindow,
+    string? AudienceType,
+    string? Provider,
+    DateTime? RefreshedAtUtc,
+    int TotalItems,
+    IntelligenceDashboardSummaryResponse Summary,
+    IReadOnlyList<IntelligenceDashboardTrendItemResponse> TopItems);
+
 public interface IIntelligenceTrendsRepository
 {
     Task UpsertAsync(IntelligenceTrendRecord record, CancellationToken ct = default);
