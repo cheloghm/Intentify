@@ -252,7 +252,11 @@ internal static class EngageEndpoints
                 result.Value.Response,
                 result.Value.Confidence,
                 result.Value.TicketCreated,
-                result.Value.Sources.Select(item => new EngageCitationResponse(item.SourceId.ToString("N"), item.ChunkId.ToString("N"), item.ChunkIndex)).ToArray()))
+                result.Value.Sources.Select(item => new EngageCitationResponse(item.SourceId.ToString("N"), item.ChunkId.ToString("N"), item.ChunkIndex)).ToArray(),
+                result.Value.ResponseKind,
+                result.Value.PromoPublicKey,
+                result.Value.PromoTitle,
+                result.Value.PromoDescription))
         };
     }
 

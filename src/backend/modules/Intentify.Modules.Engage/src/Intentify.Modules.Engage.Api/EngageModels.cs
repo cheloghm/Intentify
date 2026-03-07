@@ -6,7 +6,16 @@ public sealed record EngageChatSendRequest(string WidgetKey, string? SessionId, 
 
 public sealed record EngageCitationResponse(string SourceId, string ChunkId, int ChunkIndex);
 
-public sealed record EngageChatSendResponse(string SessionId, string Response, decimal Confidence, bool TicketCreated, IReadOnlyCollection<EngageCitationResponse> Sources);
+public sealed record EngageChatSendResponse(
+    string SessionId,
+    string Response,
+    decimal Confidence,
+    bool TicketCreated,
+    IReadOnlyCollection<EngageCitationResponse> Sources,
+    string? ResponseKind = null,
+    string? PromoPublicKey = null,
+    string? PromoTitle = null,
+    string? PromoDescription = null);
 
 public sealed record ConversationSummaryResponse(string SessionId, DateTime CreatedAtUtc, DateTime UpdatedAtUtc);
 

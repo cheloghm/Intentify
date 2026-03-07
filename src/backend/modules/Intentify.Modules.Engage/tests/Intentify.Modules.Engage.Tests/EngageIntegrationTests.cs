@@ -257,6 +257,62 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ChatSend_WithoutPromoTrigger_DoesNotReturnPromoMetadata()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var response = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "hello"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.True(json.RootElement.TryGetProperty("response", out _));
+
+        if (json.RootElement.TryGetProperty("responseKind", out var responseKind))
+        {
+            Assert.True(responseKind.ValueKind is JsonValueKind.Null or JsonValueKind.String);
+            if (responseKind.ValueKind == JsonValueKind.String)
+            {
+                Assert.NotEqual("promo", responseKind.GetString());
+            }
+        }
+
+        if (json.RootElement.TryGetProperty("promoPublicKey", out var promoPublicKey))
+        {
+            Assert.True(promoPublicKey.ValueKind is JsonValueKind.Null or JsonValueKind.String);
+            if (promoPublicKey.ValueKind == JsonValueKind.String)
+            {
+                Assert.True(string.IsNullOrWhiteSpace(promoPublicKey.GetString()));
+            }
+        }
+    }
+
+    [Fact]
+    public async Task ChatSend_ManualPromoTrigger_ReturnsPromoMetadata()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var response = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "/promo promo-public-key-123"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("promo", json.RootElement.GetProperty("responseKind").GetString());
+        Assert.Equal("promo-public-key-123", json.RootElement.GetProperty("promoPublicKey").GetString());
+        Assert.Equal("Please complete this short promo form.", json.RootElement.GetProperty("response").GetString());
+        Assert.False(json.RootElement.GetProperty("ticketCreated").GetBoolean());
+        Assert.Equal(0, json.RootElement.GetProperty("sources").GetArrayLength());
+    }
+
+    [Fact]
     public async Task ChatSend_WithoutKnowledge_CreatesLowConfidenceTicket()
     {
         var token = await RegisterUserAsync();
