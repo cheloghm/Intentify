@@ -603,6 +603,14 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
         Assert.Equal(session.CollectorSessionId, persisted!.CollectorSessionId);
     }
 
+
+    private async Task<CurrentUserResponse> GetCurrentUserAsync(string token)
+    {
+        var response = await SendAuthorizedAsync(HttpMethod.Get, "/auth/me", token);
+        var payload = await response.Content.ReadFromJsonAsync<CurrentUserResponse>();
+        return payload!;
+    }
+
     private async Task AddKnowledgeAsync(string token, string siteId, string text)
     {
         var createResponse = await SendAuthorizedAsync(HttpMethod.Post, "/knowledge/sources", token, JsonContent.Create(new
@@ -710,6 +718,7 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
     {
         public Guid SiteId { get; init; }
         public Guid EngageSessionId { get; init; }
+        public Guid? VisitorId { get; init; }
         public string Subject { get; init; } = string.Empty;
         public string Description { get; init; } = string.Empty;
         public string Status { get; init; } = string.Empty;
