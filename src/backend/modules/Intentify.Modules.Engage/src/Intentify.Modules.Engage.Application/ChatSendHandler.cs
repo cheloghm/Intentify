@@ -496,6 +496,8 @@ User question:
         DateTime now,
         CancellationToken cancellationToken)
     {
+        var normalizedCollectorSessionId = NormalizeOptional(collectorSessionId);
+
         if (sessionId.HasValue)
         {
             var existing = await _sessionRepository.GetByIdAsync(sessionId.Value, cancellationToken);
@@ -504,14 +506,28 @@ User question:
                 var idleFor = now - existing.UpdatedAtUtc;
                 if (idleFor <= _sessionTimeout)
                 {
-                    if (!string.IsNullOrWhiteSpace(collectorSessionId)
+                    if (!string.IsNullOrWhiteSpace(normalizedCollectorSessionId)
                         && string.IsNullOrWhiteSpace(existing.CollectorSessionId))
                     {
-                        await _sessionRepository.SetCollectorSessionIdIfEmptyAsync(existing.Id, collectorSessionId, cancellationToken);
+                        await _sessionRepository.SetCollectorSessionIdIfEmptyAsync(existing.Id, normalizedCollectorSessionId, cancellationToken);
                     }
 
                     return existing;
                 }
+            }
+        }
+
+        if (!sessionId.HasValue && !string.IsNullOrWhiteSpace(normalizedCollectorSessionId))
+        {
+            var byCollectorSession = await _sessionRepository.ListBySiteAsync(tenantId, siteId, normalizedCollectorSessionId, cancellationToken);
+            var resumed = byCollectorSession
+                .Where(item => item.BotId == botId && string.Equals(item.WidgetKey, widgetKey, StringComparison.Ordinal))
+                .OrderByDescending(item => item.UpdatedAtUtc)
+                .FirstOrDefault(item => now - item.UpdatedAtUtc <= _sessionTimeout);
+
+            if (resumed is not null)
+            {
+                return resumed;
             }
         }
 
@@ -521,12 +537,22 @@ User question:
             SiteId = siteId,
             BotId = botId,
             WidgetKey = widgetKey,
-            CollectorSessionId = string.IsNullOrWhiteSpace(collectorSessionId) ? null : collectorSessionId.Trim(),
+            CollectorSessionId = normalizedCollectorSessionId,
             CreatedAtUtc = now,
             UpdatedAtUtc = now
         };
 
         await _sessionRepository.InsertAsync(created, cancellationToken);
         return created;
+    }
+
+    private static string? NormalizeOptional(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        return value.Trim();
     }
 }
