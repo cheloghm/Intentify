@@ -111,6 +111,45 @@ internal static class IntelligenceEndpoints
         };
     }
 
+    public static async Task<IResult> GetDashboardAsync(
+        string siteId,
+        string category,
+        string location,
+        string timeWindow,
+        string? provider,
+        string? keyword,
+        string? audienceType,
+        int? limit,
+        HttpContext context,
+        QueryIntelligenceTrendsService service)
+    {
+        var tenantId = TryGetTenantId(context.User);
+        if (tenantId is null)
+        {
+            return Results.Unauthorized();
+        }
+
+        if (!Guid.TryParse(siteId, out var siteGuid))
+        {
+            return Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(new Dictionary<string, string[]>
+            {
+                ["siteId"] = ["Site id is invalid."]
+            }));
+        }
+
+        var result = await service.HandleDashboardAsync(
+            tenantId,
+            new IntelligenceDashboardQuery(siteGuid, category, location, timeWindow, provider, keyword, audienceType, limit),
+            context.RequestAborted);
+
+        return result.Status switch
+        {
+            OperationStatus.Success => Results.Ok(result.Value),
+            OperationStatus.ValidationFailed => Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(result.Errors!.Errors)),
+            _ => Results.StatusCode(StatusCodes.Status500InternalServerError)
+        };
+    }
+
     private static string? TryGetTenantId(ClaimsPrincipal user)
     {
         var tenantId = user.FindFirstValue("tenantId");

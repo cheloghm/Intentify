@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text.Json;
 using Intentify.AppHost;
 using Intentify.Modules.Auth.Api;
 using Intentify.Modules.Intelligence.Application;
@@ -80,6 +81,183 @@ public sealed class IntelligenceIntegrationTests : IAsyncLifetime
         var trendsPayload = await trendsResponse.Content.ReadFromJsonAsync<IntelligenceTrendsResponse>();
         Assert.NotNull(trendsPayload);
         Assert.Equal("Google", trendsPayload.Provider);
+        Assert.Equal(2, trendsPayload.Items.Count);
+
+        var statusResponse = await SendAuthorizedAsync(HttpMethod.Get, $"/intelligence/status?siteId={site.SiteId}&category=Marketing&location=US&timeWindow=7d", token);
+        Assert.Equal(HttpStatusCode.OK, statusResponse.StatusCode);
+        var statusPayload = await statusResponse.Content.ReadFromJsonAsync<IntelligenceStatusResponse>();
+        Assert.NotNull(statusPayload);
+        Assert.Equal(2, statusPayload.ItemsCount);
+    }
+
+    [Fact]
+    public async Task Dashboard_ReturnsSummarizedData_ForValidInputs()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var refreshResponse = await SendAuthorizedAsync(HttpMethod.Post, "/intelligence/refresh", token, JsonContent.Create(new
+        {
+            siteId = site.SiteId,
+            category = "Marketing",
+            location = "US",
+            timeWindow = "7d",
+            limit = 3
+        }));
+
+        Assert.Equal(HttpStatusCode.OK, refreshResponse.StatusCode);
+
+        var dashboardResponse = await SendAuthorizedAsync(
+            HttpMethod.Get,
+            $"/intelligence/dashboard?siteId={site.SiteId}&category=Marketing&location=US&timeWindow=7d&audienceType=B2B&limit=2",
+            token);
+
+        Assert.Equal(HttpStatusCode.OK, dashboardResponse.StatusCode);
+        var payload = await dashboardResponse.Content.ReadFromJsonAsync<IntelligenceDashboardResponse>();
+        Assert.NotNull(payload);
+        Assert.Equal("Marketing", payload.Category);
+        Assert.Equal("US", payload.Location);
+        Assert.Equal("7d", payload.TimeWindow);
+        Assert.Equal("B2B", payload.AudienceType);
+        Assert.Equal("Google", payload.Provider);
+        Assert.Equal(2, payload.TotalItems);
+        Assert.Equal(2, payload.TopItems.Count);
+        Assert.Equal(2, payload.Summary.MatchingItemsCount);
+        Assert.Equal(91d, payload.Summary.AverageScore);
+        Assert.Equal(95d, payload.Summary.MaxScore);
+        Assert.All(payload.TopItems, item => Assert.Equal("Google", item.Provider));
+    }
+
+    [Fact]
+    public async Task Dashboard_KeywordFilter_IsCaseInsensitive_AndNarrowsItems()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var refreshResponse = await SendAuthorizedAsync(HttpMethod.Post, "/intelligence/refresh", token, JsonContent.Create(new
+        {
+            siteId = site.SiteId,
+            category = "Marketing",
+            location = "US",
+            timeWindow = "7d",
+            limit = 5
+        }));
+
+        Assert.Equal(HttpStatusCode.OK, refreshResponse.StatusCode);
+
+        var filteredResponse = await SendAuthorizedAsync(
+            HttpMethod.Get,
+            $"/intelligence/dashboard?siteId={site.SiteId}&category=Marketing&location=US&timeWindow=7d&provider=Google&keyword=LEAD",
+            token);
+
+        Assert.Equal(HttpStatusCode.OK, filteredResponse.StatusCode);
+        var filteredPayload = await filteredResponse.Content.ReadFromJsonAsync<IntelligenceDashboardResponse>();
+        Assert.NotNull(filteredPayload);
+        Assert.Equal(1, filteredPayload.TotalItems);
+        Assert.Equal(1, filteredPayload.Summary.MatchingItemsCount);
+        Assert.Equal(87d, filteredPayload.Summary.AverageScore);
+        Assert.Equal(87d, filteredPayload.Summary.MaxScore);
+        Assert.Single(filteredPayload.TopItems);
+        Assert.Equal("lead generation", filteredPayload.TopItems[0].QueryOrTopic);
+    }
+
+    [Fact]
+    public async Task Dashboard_ProviderFilter_ReturnsEmptyWhenProviderDoesNotMatch()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var refreshResponse = await SendAuthorizedAsync(HttpMethod.Post, "/intelligence/refresh", token, JsonContent.Create(new
+        {
+            siteId = site.SiteId,
+            category = "Marketing",
+            location = "US",
+            timeWindow = "7d",
+            limit = 5
+        }));
+
+        Assert.Equal(HttpStatusCode.OK, refreshResponse.StatusCode);
+
+        var providerMissResponse = await SendAuthorizedAsync(
+            HttpMethod.Get,
+            $"/intelligence/dashboard?siteId={site.SiteId}&category=Marketing&location=US&timeWindow=7d&provider=Bing",
+            token);
+
+        Assert.Equal(HttpStatusCode.OK, providerMissResponse.StatusCode);
+        var providerMissPayload = await providerMissResponse.Content.ReadFromJsonAsync<IntelligenceDashboardResponse>();
+        Assert.NotNull(providerMissPayload);
+        Assert.Equal("Bing", providerMissPayload.Provider);
+        Assert.Equal(0, providerMissPayload.TotalItems);
+        Assert.Equal(0, providerMissPayload.Summary.MatchingItemsCount);
+        Assert.Empty(providerMissPayload.TopItems);
+    }
+
+    [Fact]
+    public async Task Dashboard_InvalidLimitOrAudienceType_ReturnsBadRequest()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var response = await SendAuthorizedAsync(
+            HttpMethod.Get,
+            $"/intelligence/dashboard?siteId={site.SiteId}&category=Marketing&location=US&timeWindow=7d&audienceType=Other&limit=0",
+            token);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        using var payload = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+        var errors = payload.RootElement.GetProperty("errors");
+        Assert.True(errors.TryGetProperty("audienceType", out _));
+        Assert.True(errors.TryGetProperty("limit", out _));
+    }
+
+    [Fact]
+    public async Task Dashboard_NoData_ReturnsEmptyResult()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var response = await SendAuthorizedAsync(
+            HttpMethod.Get,
+            $"/intelligence/dashboard?siteId={site.SiteId}&category=Unknown&location=US&timeWindow=7d",
+            token);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var payload = await response.Content.ReadFromJsonAsync<IntelligenceDashboardResponse>();
+        Assert.NotNull(payload);
+        Assert.Equal(0, payload.TotalItems);
+        Assert.Empty(payload.TopItems);
+        Assert.Equal(0, payload.Summary.MatchingItemsCount);
+        Assert.Equal(0d, payload.Summary.AverageScore);
+        Assert.Equal(0d, payload.Summary.MaxScore);
+    }
+
+    [Fact]
+    public async Task Dashboard_DoesNotRegress_RefreshTrendsAndStatusBehavior()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var refreshResponse = await SendAuthorizedAsync(HttpMethod.Post, "/intelligence/refresh", token, JsonContent.Create(new
+        {
+            siteId = site.SiteId,
+            category = "Marketing",
+            location = "US",
+            timeWindow = "7d",
+            limit = 2
+        }));
+
+        Assert.Equal(HttpStatusCode.OK, refreshResponse.StatusCode);
+
+        var dashboardResponse = await SendAuthorizedAsync(
+            HttpMethod.Get,
+            $"/intelligence/dashboard?siteId={site.SiteId}&category=Marketing&location=US&timeWindow=7d&audienceType=B2C",
+            token);
+        Assert.Equal(HttpStatusCode.OK, dashboardResponse.StatusCode);
+
+        var trendsResponse = await SendAuthorizedAsync(HttpMethod.Get, $"/intelligence/trends?siteId={site.SiteId}&category=Marketing&location=US&timeWindow=7d", token);
+        Assert.Equal(HttpStatusCode.OK, trendsResponse.StatusCode);
+        var trendsPayload = await trendsResponse.Content.ReadFromJsonAsync<IntelligenceTrendsResponse>();
+        Assert.NotNull(trendsPayload);
         Assert.Equal(2, trendsPayload.Items.Count);
 
         var statusResponse = await SendAuthorizedAsync(HttpMethod.Get, $"/intelligence/status?siteId={site.SiteId}&category=Marketing&location=US&timeWindow=7d", token);
