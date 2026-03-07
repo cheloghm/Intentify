@@ -584,7 +584,7 @@ const authState = {
 
 const hasPlatformAccess = () =>
   Array.isArray(authState.roles)
-  && authState.roles.includes('super_admin');
+  && (authState.roles.includes('super_admin') || authState.roles.includes('platform_admin'));
 
 const loadAuthRoles = async () => {
   if (authState.loading) {

@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using Intentify.Modules.Ads.Domain;
 using Intentify.Modules.Auth.Domain;
 using Intentify.Modules.Engage.Domain;
@@ -86,15 +85,22 @@ public sealed class PlatformAdminReadRepository : IPlatformAdminReadRepository
 
     public async Task<PlatformTenantListResult> ListTenantsAsync(ListPlatformTenantsQuery query, CancellationToken cancellationToken = default)
     {
-        var filter = BuildTenantFilter(query.Search);
-
-        var totalCount = (int)await _tenants.CountDocumentsAsync(filter, cancellationToken: cancellationToken);
-
-        var paged = await _tenants.Find(filter)
+        var tenants = await _tenants.Find(FilterDefinition<Tenant>.Empty)
             .SortBy(item => item.Name)
-            .Skip((query.Page - 1) * query.PageSize)
-            .Limit(query.PageSize)
             .ToListAsync(cancellationToken);
+
+        var filtered = string.IsNullOrWhiteSpace(query.Search)
+            ? tenants
+            : tenants.Where(item =>
+                    item.Name.Contains(query.Search, StringComparison.OrdinalIgnoreCase)
+                    || item.Domain.Contains(query.Search, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+        var totalCount = filtered.Count;
+        var paged = filtered
+            .Skip((query.Page - 1) * query.PageSize)
+            .Take(query.PageSize)
+            .ToArray();
 
         var tenantIds = paged.Select(item => item.Id).ToArray();
         var usage = await BuildUsageByTenantAsync(tenantIds, cancellationToken);
@@ -332,34 +338,25 @@ public sealed class PlatformAdminReadRepository : IPlatformAdminReadRepository
 
     private async Task<Dictionary<Guid, int>> CountEngageMessagesByTenantAsync(IReadOnlyCollection<Guid> tenantIds, CancellationToken cancellationToken)
     {
-        if (tenantIds.Count == 0)
-        {
-            return new Dictionary<Guid, int>();
-        }
-
         var pipeline = new[]
         {
-            new BsonDocument("$match", new BsonDocument(nameof(EngageChatSession.TenantId), new BsonDocument("$in", new BsonArray(tenantIds.Select(item => new BsonBinaryData(item, GuidRepresentation.Standard))))),
             new BsonDocument("$lookup", new BsonDocument
             {
-                { "from", EngageMongoCollections.ChatMessages },
-                { "localField", nameof(EngageChatSession.Id) },
-                { "foreignField", nameof(EngageChatMessage.SessionId) },
-                { "as", "messages" }
+                { "from", EngageMongoCollections.ChatSessions },
+                { "localField", nameof(EngageChatMessage.SessionId) },
+                { "foreignField", nameof(EngageChatSession.Id) },
+                { "as", "session" }
             }),
-            new BsonDocument("$project", new BsonDocument
-            {
-                { "tenantId", "$" + nameof(EngageChatSession.TenantId) },
-                { "count", new BsonDocument("$size", "$messages") }
-            }),
+            new BsonDocument("$unwind", "$session"),
+            new BsonDocument("$match", new BsonDocument("session.TenantId", new BsonDocument("$in", new BsonArray(tenantIds.Select(item => new BsonBinaryData(item, GuidRepresentation.Standard)))))),
             new BsonDocument("$group", new BsonDocument
             {
-                { "_id", "$tenantId" },
-                { "count", new BsonDocument("$sum", "$count") }
+                { "_id", "$session.TenantId" },
+                { "count", new BsonDocument("$sum", 1) }
             })
         };
 
-        var grouped = await _engageSessions.Aggregate<BsonDocument>(pipeline).ToListAsync(cancellationToken);
+        var grouped = await _engageMessages.Aggregate<BsonDocument>(pipeline).ToListAsync(cancellationToken);
 
         var result = new Dictionary<Guid, int>();
         foreach (var item in grouped)
@@ -369,21 +366,6 @@ public sealed class PlatformAdminReadRepository : IPlatformAdminReadRepository
         }
 
         return result;
-    }
-
-    private static FilterDefinition<Tenant> BuildTenantFilter(string? search)
-    {
-        if (string.IsNullOrWhiteSpace(search))
-        {
-            return FilterDefinition<Tenant>.Empty;
-        }
-
-        var trimmed = search.Trim();
-        var escaped = Regex.Escape(trimmed);
-        var regex = new BsonRegularExpression(escaped, "i");
-
-        return Builders<Tenant>.Filter.Regex(item => item.Name, regex)
-            | Builders<Tenant>.Filter.Regex(item => item.Domain, regex);
     }
 
     private static async Task<Dictionary<Guid, DateTime>> MaxDateByTenantAsync<TDocument>(
