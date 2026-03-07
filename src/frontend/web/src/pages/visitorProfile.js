@@ -112,6 +112,15 @@ const formatDuration = (secondsValue) => {
   return `${Math.floor(totalSeconds / 60)}m ${totalSeconds % 60}s`;
 };
 
+const summarizePromoAnswers = (answers) => {
+  const entries = Object.entries(answers || {});
+  if (!entries.length) return '—';
+  return entries
+    .slice(0, 3)
+    .map(([key, value]) => `${key}: ${value}`)
+    .join('; ');
+};
+
 const getTimelineDetails = (item) => {
   const data = getEventData(item);
   if (!data) return '—';
@@ -242,6 +251,11 @@ export const renderVisitorProfileView = async (
   ticketsBody.style.flexDirection = 'column';
   ticketsBody.style.gap = '8px';
 
+  const promoEntriesBody = document.createElement('div');
+  promoEntriesBody.style.display = 'flex';
+  promoEntriesBody.style.flexDirection = 'column';
+  promoEntriesBody.style.gap = '8px';
+
   const state = {
     detail: null,
     events: [],
@@ -255,6 +269,7 @@ export const renderVisitorProfileView = async (
     selectedConversationId: '',
     selectedMessages: [],
     tickets: [],
+    promoEntries: [],
   };
 
   const modalOverlay = document.createElement('div');
@@ -611,6 +626,69 @@ export const renderVisitorProfileView = async (
     }
   };
 
+  const renderPromoEntries = () => {
+    promoEntriesBody.innerHTML = '';
+
+    if (!state.promoEntries.length) {
+      const empty = document.createElement('div');
+      empty.textContent = 'No linked promo submissions for this visitor.';
+      empty.style.color = '#64748b';
+      promoEntriesBody.appendChild(empty);
+      return;
+    }
+
+    const table = document.createElement('table');
+    table.className = 'ui-table';
+    const thead = document.createElement('thead');
+    const row = document.createElement('tr');
+    ['Promo', 'Submitted', 'Email', 'Name', 'Answers'].forEach((label) => {
+      const th = document.createElement('th');
+      th.textContent = label;
+      row.appendChild(th);
+    });
+    thead.appendChild(row);
+    table.appendChild(thead);
+
+    const tbody = document.createElement('tbody');
+    state.promoEntries.forEach((entry) => {
+      const tr = document.createElement('tr');
+      [
+        entry.promoName || 'Promo',
+        formatDate(entry.createdAtUtc),
+        entry.email || '—',
+        entry.name || '—',
+        summarizePromoAnswers(entry.answers),
+      ].forEach((value) => {
+        const td = document.createElement('td');
+        td.textContent = String(value);
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+
+    table.appendChild(tbody);
+    promoEntriesBody.appendChild(table);
+  };
+
+  const loadPromoEntries = async () => {
+    if (!visitorId || !siteId) {
+      state.promoEntries = [];
+      renderPromoEntries();
+      return;
+    }
+
+    try {
+      state.promoEntries = client.promos?.listVisitorEntries
+        ? await client.promos.listVisitorEntries(siteId, visitorId, 1, 50)
+        : await client.request(`/promos/entries/by-visitor?siteId=${encodeURIComponent(siteId)}&visitorId=${encodeURIComponent(visitorId)}&page=1&pageSize=50`);
+      renderPromoEntries();
+    } catch (error) {
+      state.promoEntries = [];
+      renderPromoEntries();
+      notifier.show({ message: mapApiError(error).message, variant: 'danger' });
+    }
+  };
+
   const setTypeOptions = (events = []) => {
     const typeValues = Array.from(new Set(events.map((item) => String(item?.type || '').toLowerCase()).filter(Boolean))).sort();
     typeFilter.innerHTML = '';
@@ -759,6 +837,8 @@ export const renderVisitorProfileView = async (
 
   const ticketsCard = createCard({ title: 'Linked tickets', body: ticketsBody });
 
+  const promoEntriesCard = createCard({ title: 'Promo submissions', body: promoEntriesBody });
+
   typeFilter.addEventListener('change', () => {
     state.typeFilter = typeFilter.value;
     refreshTimeline();
@@ -769,7 +849,7 @@ export const renderVisitorProfileView = async (
     refreshTimeline();
   });
 
-  page.append(backLink, header, summaryCard, recentSessionsCard, timelineCard, conversationsCard);
+  page.append(backLink, header, summaryCard, recentSessionsCard, timelineCard, conversationsCard, promoEntriesCard);
   container.appendChild(page);
 
   if (!visitorId || !siteId) {
@@ -779,6 +859,7 @@ export const renderVisitorProfileView = async (
     setTypeOptions([]);
     renderTimeline();
     renderConversations();
+    renderPromoEntries();
     return;
   }
 
@@ -787,6 +868,7 @@ export const renderVisitorProfileView = async (
   renderSessionList();
   timelineBody.textContent = 'Loading timeline...';
   recentSessionsBody.textContent = 'Loading sessions...';
+  promoEntriesBody.textContent = 'Loading promo submissions...';
 
   const [detailResult, timelineResult] = await Promise.allSettled([
     client.visitors?.detail
@@ -841,4 +923,5 @@ export const renderVisitorProfileView = async (
   renderSessionList();
   refreshTimeline();
   await loadConversationsForSelectedSession();
+  await loadPromoEntries();
 };

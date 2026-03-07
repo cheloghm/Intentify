@@ -139,6 +139,52 @@ internal static class PromosEndpoints
         return result.Status == OperationStatus.NotFound ? Results.NotFound() : Results.Ok(result.Value);
     }
 
+    public static async Task<IResult> ListEntriesByVisitorAsync(HttpContext context, string siteId, string visitorId, int page, int pageSize, IPromoRepository promoRepository, IPromoEntryRepository entryRepository)
+    {
+        var tenantId = TryGetTenantId(context.User);
+        if (tenantId is null) return Results.Unauthorized();
+
+        var errors = new Dictionary<string, string[]>();
+        if (!Guid.TryParse(siteId, out var parsedSiteId))
+        {
+            errors["siteId"] = ["Site id is invalid."];
+        }
+
+        if (!Guid.TryParse(visitorId, out var parsedVisitorId))
+        {
+            errors["visitorId"] = ["Visitor id is invalid."];
+        }
+
+        if (errors.Count > 0)
+        {
+            return Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(errors));
+        }
+
+        page = page <= 0 ? 1 : page;
+        pageSize = pageSize is <= 0 or > 200 ? 50 : pageSize;
+
+        var entries = await entryRepository.ListByVisitorAsync(
+            new ListVisitorPromoEntriesQuery(tenantId.Value, parsedSiteId, parsedVisitorId, page, pageSize),
+            context.RequestAborted);
+
+        var promos = await promoRepository.ListAsync(new ListPromosQuery(tenantId.Value, parsedSiteId), context.RequestAborted);
+        var promoNames = promos.ToDictionary(item => item.Id, item => item.Name);
+
+        var response = entries
+            .Select(item => new VisitorPromoEntryResponse(
+                item.Id.ToString("N"),
+                item.PromoId.ToString("N"),
+                promoNames.TryGetValue(item.PromoId, out var name) ? name : "Promo",
+                item.SiteId.ToString("N"),
+                item.Email,
+                item.Name,
+                item.CreatedAtUtc,
+                item.Answers))
+            .ToArray();
+
+        return Results.Ok(response);
+    }
+
 
     public static async Task<IResult> DownloadFlyerAsync(HttpContext context, string promoId, GetPromoDetailHandler handler)
     {
