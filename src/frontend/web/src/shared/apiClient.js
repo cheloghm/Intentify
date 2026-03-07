@@ -306,8 +306,8 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
   const getAdsReport = async (campaignId, fromUtc, toUtc) =>
     request(`/ads/campaigns/${encodeURIComponent(campaignId)}/report${buildQueryString({ fromUtc, toUtc })}`);
 
-  const listTickets = async ({ siteId, page = 1, pageSize = 50 } = {}) =>
-    request(`/tickets${buildQueryString({ siteId, page, pageSize })}`);
+  const listTickets = async ({ siteId, visitorId, engageSessionId, page = 1, pageSize = 50 } = {}) =>
+    request(`/tickets${buildQueryString({ siteId, visitorId, engageSessionId, page, pageSize })}`);
 
   const getTicket = async (ticketId) =>
     request(`/tickets/${encodeURIComponent(ticketId)}`);

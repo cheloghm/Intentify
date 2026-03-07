@@ -9,6 +9,14 @@ const formatDate = (value) => {
   return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString();
 };
 
+const toShortId = (value) => {
+  if (!value || value.length < 8) {
+    return value || '—';
+  }
+
+  return `${value.slice(0, 8)}…`;
+};
+
 const createSummaryValue = (label, value) => {
   const block = document.createElement('div');
   block.style.padding = '10px 12px';
@@ -229,6 +237,11 @@ export const renderVisitorProfileView = async (
   conversationsBody.style.flexDirection = 'column';
   conversationsBody.style.gap = '8px';
 
+  const ticketsBody = document.createElement('div');
+  ticketsBody.style.display = 'flex';
+  ticketsBody.style.flexDirection = 'column';
+  ticketsBody.style.gap = '8px';
+
   const state = {
     detail: null,
     events: [],
@@ -237,8 +250,11 @@ export const renderVisitorProfileView = async (
     typeFilter: 'all',
     search: '',
     conversations: [],
+    conversationsBySession: {},
+    linkedSessionIds: [],
     selectedConversationId: '',
     selectedMessages: [],
+    tickets: [],
   };
 
   const modalOverlay = document.createElement('div');
@@ -435,23 +451,21 @@ export const renderVisitorProfileView = async (
   const renderConversations = () => {
     conversationsBody.innerHTML = '';
 
-    if (!state.selectedCollectorSessionId) {
+    const scopedConversations = state.selectedCollectorSessionId
+      ? state.conversations.filter((conversation) => conversation.linkedCollectorSessionId === state.selectedCollectorSessionId)
+      : state.conversations;
+
+    if (!scopedConversations.length) {
       const empty = document.createElement('div');
-      empty.textContent = 'Select a visitor session to view matching Engage chats.';
+      empty.textContent = state.selectedCollectorSessionId
+        ? 'No Engage conversations for this visitor session.'
+        : 'No Engage conversations for this visitor.';
       empty.style.color = '#64748b';
       conversationsBody.appendChild(empty);
       return;
     }
 
-    if (!state.conversations.length) {
-      const empty = document.createElement('div');
-      empty.textContent = 'No Engage conversations for this visitor session.';
-      empty.style.color = '#64748b';
-      conversationsBody.appendChild(empty);
-      return;
-    }
-
-    state.conversations.forEach((conversation) => {
+    scopedConversations.forEach((conversation) => {
       const row = document.createElement('div');
       row.style.display = 'flex';
       row.style.justifyContent = 'space-between';
@@ -461,7 +475,7 @@ export const renderVisitorProfileView = async (
       row.style.padding = '8px 10px';
 
       const label = document.createElement('div');
-      label.textContent = conversation.sessionId || '—';
+      label.textContent = `${conversation.sessionId || '—'} • ${formatDate(conversation.updatedAtUtc)}`;
       label.style.fontFamily = 'ui-monospace, SFMono-Regular, Menlo, monospace';
       label.style.fontSize = '12px';
 
@@ -476,18 +490,123 @@ export const renderVisitorProfileView = async (
   };
 
   const loadConversationsForSelectedSession = async () => {
-    if (!siteId || !state.selectedCollectorSessionId) {
+    if (!siteId) {
       state.conversations = [];
+      state.conversationsBySession = {};
+      state.linkedSessionIds = [];
+      renderConversations();
+      return;
+    }
+
+    const linkedSessionIds = (Array.isArray(state.detail?.recentSessions) ? state.detail.recentSessions : [])
+      .map((session) => normalizeSessionId(session?.sessionId))
+      .filter((sessionId) => sessionId && sessionId !== 'sessionless');
+
+    state.linkedSessionIds = Array.from(new Set(linkedSessionIds));
+
+    if (!state.linkedSessionIds.length) {
+      state.conversations = [];
+      state.conversationsBySession = {};
       renderConversations();
       return;
     }
 
     try {
-      state.conversations = await client.engage.getConversations(siteId, state.selectedCollectorSessionId);
+      const fetchResults = await Promise.allSettled(
+        state.linkedSessionIds.map((collectorSessionId) =>
+          client.engage.getConversations(siteId, collectorSessionId)
+        )
+      );
+
+      const bySession = {};
+      const deduped = new Map();
+
+      fetchResults.forEach((result, index) => {
+        const collectorSessionId = state.linkedSessionIds[index];
+        if (result.status !== 'fulfilled' || !Array.isArray(result.value)) {
+          return;
+        }
+
+        bySession[collectorSessionId] = result.value;
+
+        result.value.forEach((conversation) => {
+          const key = conversation?.sessionId || `${collectorSessionId}-${conversation?.updatedAtUtc || ''}`;
+          if (!deduped.has(key)) {
+            deduped.set(key, {
+              ...conversation,
+              linkedCollectorSessionId: collectorSessionId,
+            });
+          }
+        });
+      });
+
+      state.conversationsBySession = bySession;
+      state.conversations = Array.from(deduped.values()).sort(
+        (left, right) => new Date(right?.updatedAtUtc || 0).getTime() - new Date(left?.updatedAtUtc || 0).getTime()
+      );
+
       renderConversations();
     } catch (error) {
       state.conversations = [];
+      state.conversationsBySession = {};
       renderConversations();
+      notifier.show({ message: mapApiError(error).message, variant: 'danger' });
+    }
+  };
+
+  const renderTickets = () => {
+    ticketsBody.innerHTML = '';
+
+    if (!state.tickets.length) {
+      const empty = document.createElement('div');
+      empty.textContent = 'No linked tickets for this visitor.';
+      empty.style.color = '#64748b';
+      ticketsBody.appendChild(empty);
+      return;
+    }
+
+    const table = document.createElement('table');
+    table.className = 'ui-table';
+    const thead = document.createElement('thead');
+    const row = document.createElement('tr');
+    ['Ticket', 'Status', 'Created'].forEach((label) => {
+      const th = document.createElement('th');
+      th.textContent = label;
+      row.appendChild(th);
+    });
+    thead.appendChild(row);
+    table.appendChild(thead);
+
+    const tbody = document.createElement('tbody');
+    state.tickets.forEach((ticket) => {
+      const tr = document.createElement('tr');
+      [toShortId(ticket.id), ticket.status || '—', formatDate(ticket.createdAtUtc)].forEach((value) => {
+        const td = document.createElement('td');
+        td.textContent = String(value);
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+
+    table.appendChild(tbody);
+    ticketsBody.appendChild(table);
+  };
+
+  const loadLinkedTickets = async () => {
+    if (!visitorId || !siteId) {
+      state.tickets = [];
+      renderTickets();
+      return;
+    }
+
+    try {
+      state.tickets = client.tickets?.listTickets
+        ? await client.tickets.listTickets({ siteId, visitorId, page: 1, pageSize: 50 })
+        : await client.request(`/tickets?siteId=${encodeURIComponent(siteId)}&visitorId=${encodeURIComponent(visitorId)}&page=1&pageSize=50`);
+      renderTickets();
+    } catch (error) {
+      state.tickets = [];
+      renderTickets();
       notifier.show({ message: mapApiError(error).message, variant: 'danger' });
     }
   };
@@ -637,6 +756,8 @@ export const renderVisitorProfileView = async (
   });
 
   const conversationsCard = createCard({ title: 'Engage conversations', body: conversationsBody });
+
+  const ticketsCard = createCard({ title: 'Linked tickets', body: ticketsBody });
 
   typeFilter.addEventListener('change', () => {
     state.typeFilter = typeFilter.value;
