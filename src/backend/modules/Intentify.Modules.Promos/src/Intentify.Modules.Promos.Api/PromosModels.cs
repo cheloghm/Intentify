@@ -8,6 +8,7 @@ public sealed record CreatePublicPromoEntryRequest(
     string? VisitorId,
     string? FirstPartyId,
     string? SessionId,
+    string? EngageSessionId,
     string? Email,
     string? Name,
     bool ConsentGiven,

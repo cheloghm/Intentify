@@ -24,6 +24,7 @@ public sealed record CreatePublicPromoEntryCommand(
     string? VisitorId,
     string? FirstPartyId,
     string? SessionId,
+    string? EngageSessionId,
     string? Email,
     string? Name,
     bool ConsentGiven,

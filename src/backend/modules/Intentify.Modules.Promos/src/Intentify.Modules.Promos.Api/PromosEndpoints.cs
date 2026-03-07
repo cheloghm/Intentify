@@ -186,7 +186,7 @@ internal static class PromosEndpoints
             .OrderBy(item => item, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        var fixedColumns = new[] { "id", "promoId", "visitorId", "firstPartyId", "sessionId", "email", "name", "createdAtUtc" };
+        var fixedColumns = new[] { "id", "promoId", "siteId", "engageSessionId", "visitorId", "firstPartyId", "sessionId", "email", "name", "createdAtUtc" };
         var answerColumns = answerKeys.Select(item => $"q_{item}").ToArray();
         var headers = fixedColumns.Concat(answerColumns).ToArray();
 
@@ -199,6 +199,8 @@ internal static class PromosEndpoints
             {
                 entry.Id.ToString("N"),
                 entry.PromoId.ToString("N"),
+                entry.SiteId.ToString("N"),
+                entry.EngageSessionId?.ToString("N") ?? string.Empty,
                 entry.VisitorId?.ToString("N") ?? string.Empty,
                 entry.FirstPartyId ?? string.Empty,
                 entry.SessionId ?? string.Empty,
@@ -227,6 +229,7 @@ internal static class PromosEndpoints
                 request.VisitorId,
                 request.FirstPartyId,
                 request.SessionId,
+                request.EngageSessionId,
                 request.Email,
                 request.Name,
                 request.ConsentGiven,
