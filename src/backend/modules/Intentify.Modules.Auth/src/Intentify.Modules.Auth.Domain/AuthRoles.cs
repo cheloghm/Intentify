@@ -4,4 +4,5 @@ public static class AuthRoles
 {
     public const string User = "user";
     public const string Admin = "admin";
+    public const string SuperAdmin = "super_admin";
 }

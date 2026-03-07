@@ -5,6 +5,7 @@ using Intentify.Modules.Engage.Api;
 using Intentify.Modules.Intelligence.Api;
 using Intentify.Modules.Knowledge.Api;
 using Intentify.Modules.Leads.Api;
+using Intentify.Modules.PlatformAdmin.Api;
 using Intentify.Modules.Promos.Api;
 using Intentify.Modules.Sites.Api;
 using Intentify.Modules.Tickets.Api;
@@ -30,7 +31,8 @@ public static class AppModuleCatalog
         new LeadsModule(),
         new EngageModule(),
         new VisitorsModule(),
-        new TicketsModule()
+        new TicketsModule(),
+        new PlatformAdminModule()
     ];
 }
 
