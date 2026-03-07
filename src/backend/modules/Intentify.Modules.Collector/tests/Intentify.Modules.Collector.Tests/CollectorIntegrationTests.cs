@@ -150,6 +150,39 @@ public sealed class CollectorIntegrationTests : IAsyncLifetime
         Assert.Equal(0, eventCount);
     }
 
+    [Fact]
+    public async Task PostEvent_SiteKeyMismatchBetweenQueryAndBody_IsRejected()
+    {
+        var accessToken = await RegisterUserAsync();
+        var site = await CreateSiteAsync(accessToken);
+
+        var updateResponse = await SendAuthorizedAsync(
+            HttpMethod.Put,
+            $"/sites/{site.SiteId}/origins",
+            accessToken,
+            JsonContent.Create(new UpdateAllowedOriginsRequest(new[] { "http://localhost:8088" })));
+
+        Assert.Equal(HttpStatusCode.OK, updateResponse.StatusCode);
+
+        var collectRequest = new HttpRequestMessage(HttpMethod.Post, $"/collector/events?siteKey={Guid.NewGuid():N}")
+        {
+            Content = JsonContent.Create(new CollectorEventRequest(
+                site.SiteKey,
+                "pageview",
+                "http://localhost:8088/home",
+                null,
+                DateTime.UtcNow))
+        };
+        collectRequest.Headers.TryAddWithoutValidation("Origin", "http://localhost:8088");
+
+        var collectResponse = await _client!.SendAsync(collectRequest);
+        Assert.Equal(HttpStatusCode.BadRequest, collectResponse.StatusCode);
+
+        using var json = JsonDocument.Parse(await collectResponse.Content.ReadAsStringAsync());
+        Assert.True(json.RootElement.TryGetProperty("errors", out var errors));
+        Assert.True(errors.TryGetProperty("siteKey", out _));
+    }
+
     private async Task<CreateSiteResponse> CreateSiteAsync(string accessToken)
     {
         var domain = $"collector-{Guid.NewGuid():N}.intentify.local";

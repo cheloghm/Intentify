@@ -22,12 +22,11 @@ public sealed class VisitorRepository : IVisitorRepository
         await _ensureIndexes;
 
         var resolvedSessionId = ResolveSessionId(command);
+        var normalizedFirstPartyId = NormalizeOptional(command.FirstPartyId);
+
         var filter = Builders<Visitor>.Filter.Eq(visitor => visitor.SiteId, command.SiteId)
             & Builders<Visitor>.Filter.Eq(visitor => visitor.TenantId, command.TenantId)
-            & (Builders<Visitor>.Filter.Eq("Sessions.SessionId", resolvedSessionId)
-                | (command.FirstPartyId is null
-                    ? Builders<Visitor>.Filter.Empty
-                    : Builders<Visitor>.Filter.Eq(visitor => visitor.FirstPartyId, command.FirstPartyId)));
+            & BuildIdentityFilter(resolvedSessionId, normalizedFirstPartyId);
 
         var visitor = await _visitors.Find(filter).FirstOrDefaultAsync(cancellationToken);
 
@@ -39,35 +38,40 @@ public sealed class VisitorRepository : IVisitorRepository
                 TenantId = command.TenantId,
                 CreatedAtUtc = command.OccurredAtUtc,
                 LastSeenAtUtc = command.OccurredAtUtc,
-                FirstPartyId = command.FirstPartyId,
+                FirstPartyId = normalizedFirstPartyId,
                 UserAgentHint = Truncate(command.UserAgent, 256),
                 Language = Truncate(command.Language, 32),
                 Platform = Truncate(command.Platform, 32),
-                Sessions =
-                [
-                    CreateSession(command, resolvedSessionId)
-                ]
+                Sessions = CreateInitialSessions(command, resolvedSessionId)
             };
 
             await _visitors.InsertOneAsync(visitor, cancellationToken: cancellationToken);
-            return new UpsertVisitorResult(visitor.Id, visitor.Sessions[0]);
+            return new UpsertVisitorResult(visitor.Id, visitor.Sessions.FirstOrDefault() ?? CreateDetachedSession(command, resolvedSessionId));
         }
 
         visitor.LastSeenAtUtc = Max(visitor.LastSeenAtUtc, command.OccurredAtUtc);
-        visitor.FirstPartyId ??= command.FirstPartyId;
+        visitor.FirstPartyId ??= normalizedFirstPartyId;
         visitor.UserAgentHint ??= Truncate(command.UserAgent, 256);
         visitor.Language ??= Truncate(command.Language, 32);
         visitor.Platform ??= Truncate(command.Platform, 32);
 
-        var session = visitor.Sessions.FirstOrDefault(item => item.SessionId == resolvedSessionId);
-        if (session is null)
+        VisitorSession session;
+        if (resolvedSessionId is null)
         {
-            session = CreateSession(command, resolvedSessionId);
-            visitor.Sessions.Add(session);
+            session = CreateDetachedSession(command, resolvedSessionId);
         }
         else
         {
-            UpdateSession(session, command);
+            session = visitor.Sessions.FirstOrDefault(item => item.SessionId == resolvedSessionId);
+            if (session is null)
+            {
+                session = CreateSession(command, resolvedSessionId);
+                visitor.Sessions.Add(session);
+            }
+            else
+            {
+                UpdateSession(session, command);
+            }
         }
 
         await _visitors.ReplaceOneAsync(existing => existing.Id == visitor.Id, visitor, cancellationToken: cancellationToken);
@@ -115,6 +119,53 @@ public sealed class VisitorRepository : IVisitorRepository
             .ToListAsync(cancellationToken);
 
         return visitors.Sum(sessions => sessions.Count(session => session.FirstSeenAtUtc >= cutoff));
+    }
+
+    private static FilterDefinition<Visitor> BuildIdentityFilter(string? sessionId, string? firstPartyId)
+    {
+        var filters = new List<FilterDefinition<Visitor>>();
+
+        if (!string.IsNullOrWhiteSpace(sessionId))
+        {
+            filters.Add(Builders<Visitor>.Filter.Eq("Sessions.SessionId", sessionId));
+        }
+
+        if (!string.IsNullOrWhiteSpace(firstPartyId))
+        {
+            filters.Add(Builders<Visitor>.Filter.Eq(visitor => visitor.FirstPartyId, firstPartyId));
+        }
+
+        if (filters.Count == 0)
+        {
+            return Builders<Visitor>.Filter.Where(_ => false);
+        }
+
+        return Builders<Visitor>.Filter.Or(filters);
+    }
+
+    private static List<VisitorSession> CreateInitialSessions(UpsertVisitorFromCollectorEvent command, string? sessionId)
+    {
+        if (sessionId is null)
+        {
+            return [];
+        }
+
+        return [CreateSession(command, sessionId)];
+    }
+
+    private static VisitorSession CreateDetachedSession(UpsertVisitorFromCollectorEvent command, string? sessionId)
+    {
+        var session = new VisitorSession
+        {
+            SessionId = sessionId ?? string.Empty,
+            FirstSeenAtUtc = command.OccurredAtUtc,
+            LastSeenAtUtc = command.OccurredAtUtc,
+            LastPath = command.Url,
+            LastReferrer = command.Referrer
+        };
+
+        UpdateSession(session, command);
+        return session;
     }
 
     private static VisitorSession CreateSession(UpsertVisitorFromCollectorEvent command, string sessionId)
@@ -182,7 +233,7 @@ public sealed class VisitorRepository : IVisitorRepository
             : 1;
     }
 
-    private static string ResolveSessionId(UpsertVisitorFromCollectorEvent command)
+    private static string? ResolveSessionId(UpsertVisitorFromCollectorEvent command)
     {
         if (!string.IsNullOrWhiteSpace(command.SessionId))
         {
@@ -194,7 +245,17 @@ public sealed class VisitorRepository : IVisitorRepository
             return $"fp:{command.FirstPartyId.Trim()}";
         }
 
-        return "sessionless";
+        return null;
+    }
+
+    private static string? NormalizeOptional(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        return value.Trim();
     }
 
     private static string? Truncate(string? value, int maxLength)
