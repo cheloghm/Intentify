@@ -221,6 +221,31 @@ internal static class PromosEndpoints
         return Results.File(Encoding.UTF8.GetBytes(builder.ToString()), "text/csv", fileName);
     }
 
+
+    public static async Task<IResult> GetPublicPromoAsync(string promoKey, IPromoRepository promoRepository, HttpContext context)
+    {
+        if (string.IsNullOrWhiteSpace(promoKey))
+        {
+            return Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(new Dictionary<string, string[]>
+            {
+                ["promoKey"] = ["Promo key is required."]
+            }));
+        }
+
+        var promo = await promoRepository.GetActiveByPublicKeyAsync(promoKey.Trim(), context.RequestAborted);
+        if (promo is null)
+        {
+            return Results.NotFound();
+        }
+
+        var questions = promo.Questions
+            .OrderBy(item => item.Order)
+            .Select(item => new PublicPromoQuestionResponse(item.Key, item.Label, item.Type, item.Required, item.Order))
+            .ToArray();
+
+        return Results.Ok(new PublicPromoResponse(promo.PublicKey, promo.Name, promo.Description, questions));
+    }
+
     public static async Task<IResult> CreatePublicEntryAsync(HttpContext context, string promoKey, CreatePublicPromoEntryRequest request, CreatePublicPromoEntryHandler handler)
     {
         var result = await handler.HandleAsync(

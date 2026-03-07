@@ -14,3 +14,8 @@ public sealed record CreatePublicPromoEntryRequest(
     bool ConsentGiven,
     string ConsentStatement,
     IReadOnlyDictionary<string, string>? Answers = null);
+
+
+public sealed record PublicPromoQuestionResponse(string Key, string Label, string Type, bool Required, int Order);
+
+public sealed record PublicPromoResponse(string PublicKey, string Name, string? Description, IReadOnlyCollection<PublicPromoQuestionResponse> Questions);
