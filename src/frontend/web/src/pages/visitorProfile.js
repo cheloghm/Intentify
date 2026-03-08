@@ -151,6 +151,59 @@ const getTimelineDetails = (item) => {
   return '—';
 };
 
+
+const formatConfidencePercent = (value) => {
+  const numeric = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(numeric)) {
+    return 'n/a';
+  }
+
+  return `${Math.round(numeric * 100)}%`;
+};
+
+const buildStage7TargetSummary = (targetRefs) => {
+  if (!targetRefs || typeof targetRefs !== 'object') {
+    return '';
+  }
+
+  return [
+    targetRefs.promoId ? `promoId: ${targetRefs.promoId}` : null,
+    targetRefs.promoPublicKey ? `promoKey: ${targetRefs.promoPublicKey}` : null,
+    targetRefs.knowledgeSourceId ? `knowledgeSourceId: ${targetRefs.knowledgeSourceId}` : null,
+    targetRefs.ticketId ? `ticketId: ${targetRefs.ticketId}` : null,
+    targetRefs.visitorId ? `visitorId: ${targetRefs.visitorId}` : null,
+  ].filter(Boolean).join(' · ');
+};
+
+const getReadOnlyStage7Recommendations = (message) => {
+  const decision = message?.stage7Decision;
+  const recommendations = decision?.recommendations ?? message?.recommendations;
+
+  if (decision && decision.validationStatus && decision.validationStatus !== 'Valid') {
+    return [];
+  }
+
+  if (!Array.isArray(recommendations)) {
+    return [];
+  }
+
+  return recommendations.filter((item) => {
+    if (!item || typeof item !== 'object') {
+      return false;
+    }
+
+    if (typeof item.type !== 'string' || !item.type.trim()) {
+      return false;
+    }
+
+    if (typeof item.rationale !== 'string' || !item.rationale.trim()) {
+      return false;
+    }
+
+    return true;
+  });
+};
+
 const getTimeOnSite = (events = []) => {
   const totalSeconds = events.reduce((sum, item) => {
     if (String(item?.type || '').toLowerCase() !== 'time_on_page') return sum;
@@ -447,6 +500,62 @@ export const renderVisitorProfileView = async (
       content.style.whiteSpace = 'pre-wrap';
 
       row.append(meta, content);
+
+      const stage7Recommendations = getReadOnlyStage7Recommendations(message);
+      if (stage7Recommendations.length > 0) {
+        const recommendationsWrap = document.createElement('div');
+        recommendationsWrap.style.marginTop = '8px';
+        recommendationsWrap.style.paddingTop = '8px';
+        recommendationsWrap.style.borderTop = '1px solid #e2e8f0';
+        recommendationsWrap.style.display = 'flex';
+        recommendationsWrap.style.flexDirection = 'column';
+        recommendationsWrap.style.gap = '6px';
+
+        const recommendationsTitle = document.createElement('div');
+        recommendationsTitle.textContent = 'Stage 7 recommendations';
+        recommendationsTitle.style.fontSize = '12px';
+        recommendationsTitle.style.fontWeight = '600';
+        recommendationsTitle.style.color = '#334155';
+        recommendationsWrap.appendChild(recommendationsTitle);
+
+        stage7Recommendations.forEach((recommendation) => {
+          const item = document.createElement('div');
+          item.style.border = '1px solid #e2e8f0';
+          item.style.borderRadius = '6px';
+          item.style.background = '#f8fafc';
+          item.style.padding = '6px 8px';
+          item.style.display = 'flex';
+          item.style.flexDirection = 'column';
+          item.style.gap = '4px';
+
+          const type = document.createElement('div');
+          type.textContent = `${recommendation.type} · Confidence ${formatConfidencePercent(recommendation.confidence)}`;
+          type.style.fontSize = '12px';
+          type.style.fontWeight = '600';
+          type.style.color = '#0f172a';
+
+          const rationale = document.createElement('div');
+          rationale.textContent = recommendation.rationale;
+          rationale.style.fontSize = '12px';
+          rationale.style.color = '#1e293b';
+
+          item.append(type, rationale);
+
+          const targetSummary = buildStage7TargetSummary(recommendation.targetRefs);
+          if (targetSummary) {
+            const target = document.createElement('div');
+            target.textContent = `Target: ${targetSummary}`;
+            target.style.fontSize = '11px';
+            target.style.color = '#475569';
+            item.appendChild(target);
+          }
+
+          recommendationsWrap.appendChild(item);
+        });
+
+        row.appendChild(recommendationsWrap);
+      }
+
       modalMessages.appendChild(row);
     });
   };
