@@ -34,10 +34,6 @@ public sealed class GoogleAdsOptions
 
     public string? ClientSecret { get; set; }
 
-    public string? CustomerId { get; set; }
-
-    public string? LoginCustomerId { get; set; }
-
     public int TimeoutSeconds { get; set; } = 10;
 }
 
