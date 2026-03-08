@@ -156,6 +156,18 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
   const getIntelligenceDashboard = async (params) =>
     request(`/intelligence/dashboard${buildQueryString(params)}`);
 
+  const getIntelligenceProfile = async (siteId) =>
+    request(`/intelligence/profiles/${encodeURIComponent(siteId)}`);
+
+  const upsertIntelligenceProfile = async (siteId, payload) =>
+    request(`/intelligence/profiles/${encodeURIComponent(siteId)}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
   const sendEngageChat = async (widgetKeyOrPayload, sessionId, message) => {
     const payload =
       typeof widgetKeyOrPayload === 'object' && widgetKeyOrPayload !== null
@@ -312,6 +324,12 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
   const getAdsReport = async (campaignId, fromUtc, toUtc) =>
     request(`/ads/campaigns/${encodeURIComponent(campaignId)}/report${buildQueryString({ fromUtc, toUtc })}`);
 
+  const listLeads = async (siteId, page = 1, pageSize = 50) =>
+    request(`/leads${buildQueryString({ siteId, page, pageSize })}`);
+
+  const getLead = async (leadId) =>
+    request(`/leads/${encodeURIComponent(leadId)}`);
+
   const listTickets = async ({ siteId, visitorId, engageSessionId, page = 1, pageSize = 50 } = {}) =>
     request(`/tickets${buildQueryString({ siteId, visitorId, engageSessionId, page, pageSize })}`);
 
@@ -375,6 +393,8 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
       trends: getIntelligenceTrends,
       dashboard: getIntelligenceDashboard,
       refresh: refreshIntelligence,
+      getProfile: getIntelligenceProfile,
+      upsertProfile: upsertIntelligenceProfile,
     },
 
     ads: {
@@ -411,6 +431,10 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
       getTicketNotes,
       addTicketNote,
       transitionTicketStatus,
+    },
+    leads: {
+      list: listLeads,
+      get: getLead,
     },
     platformAdmin: {
       getSummary: getPlatformSummary,

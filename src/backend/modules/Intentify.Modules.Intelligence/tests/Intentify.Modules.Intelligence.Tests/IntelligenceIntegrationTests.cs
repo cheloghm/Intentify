@@ -90,6 +90,42 @@ public sealed class IntelligenceIntegrationTests : IAsyncLifetime
         Assert.Equal(2, statusPayload.ItemsCount);
     }
 
+
+    [Fact]
+    public async Task Refresh_PersistsData_IsolatedPerTenantAndSite()
+    {
+        var tokenA = await RegisterUserAsync();
+        var tokenB = await RegisterUserAsync();
+        var siteA = await CreateSiteAsync(tokenA);
+        var siteB = await CreateSiteAsync(tokenB);
+
+        var refreshA = await SendAuthorizedAsync(HttpMethod.Post, "/intelligence/refresh", tokenA, JsonContent.Create(new
+        {
+            siteId = siteA.SiteId,
+            category = "Marketing",
+            location = "US",
+            timeWindow = "7d",
+            limit = 2
+        }));
+        Assert.Equal(HttpStatusCode.OK, refreshA.StatusCode);
+
+        var refreshB = await SendAuthorizedAsync(HttpMethod.Post, "/intelligence/refresh", tokenB, JsonContent.Create(new
+        {
+            siteId = siteB.SiteId,
+            category = "Marketing",
+            location = "US",
+            timeWindow = "7d",
+            limit = 2
+        }));
+        Assert.Equal(HttpStatusCode.OK, refreshB.StatusCode);
+
+        var tenantAOwn = await SendAuthorizedAsync(HttpMethod.Get, $"/intelligence/trends?siteId={siteA.SiteId}&category=Marketing&location=US&timeWindow=7d", tokenA);
+        Assert.Equal(HttpStatusCode.OK, tenantAOwn.StatusCode);
+
+        var tenantAOtherSite = await SendAuthorizedAsync(HttpMethod.Get, $"/intelligence/trends?siteId={siteB.SiteId}&category=Marketing&location=US&timeWindow=7d", tokenA);
+        Assert.Equal(HttpStatusCode.NotFound, tenantAOtherSite.StatusCode);
+    }
+
     [Fact]
     public async Task Dashboard_ReturnsSummarizedData_ForValidInputs()
     {
@@ -177,6 +213,147 @@ public sealed class IntelligenceIntegrationTests : IAsyncLifetime
             token);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+
+    [Fact]
+    public async Task UpsertProfile_ThenGetProfile_ReturnsStoredProfile()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var upsertResponse = await SendAuthorizedAsync(
+            HttpMethod.Put,
+            $"/intelligence/profiles/{site.SiteId}",
+            token,
+            JsonContent.Create(new
+            {
+                profileName = "Intentify Retail",
+                industryCategory = "Retail",
+                primaryAudienceType = "B2C",
+                targetLocations = new[] { "US", "CA" },
+                primaryProductsOrServices = new[] { "Loyalty program", "Email campaigns" },
+                watchTopics = new[] { "holiday offers" },
+                seasonalPriorities = new[] { "Q4" },
+                isActive = true,
+                refreshIntervalMinutes = 120
+            }));
+
+        Assert.Equal(HttpStatusCode.OK, upsertResponse.StatusCode);
+        var upsertPayload = await upsertResponse.Content.ReadFromJsonAsync<IntelligenceProfileResponse>();
+        Assert.NotNull(upsertPayload);
+        Assert.Equal(Guid.Parse(site.SiteId), upsertPayload.SiteId);
+        Assert.Equal("B2C", upsertPayload.PrimaryAudienceType);
+        Assert.Equal(2, upsertPayload.TargetLocations.Count);
+
+        var getResponse = await SendAuthorizedAsync(HttpMethod.Get, $"/intelligence/profiles/{site.SiteId}", token);
+        Assert.Equal(HttpStatusCode.OK, getResponse.StatusCode);
+        var getPayload = await getResponse.Content.ReadFromJsonAsync<IntelligenceProfileResponse>();
+        Assert.NotNull(getPayload);
+        Assert.Equal("Intentify Retail", getPayload.ProfileName);
+        Assert.Equal("Retail", getPayload.IndustryCategory);
+    }
+
+    [Fact]
+    public async Task UpsertProfile_MissingRequiredFields_ReturnsBadRequest()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var response = await SendAuthorizedAsync(
+            HttpMethod.Put,
+            $"/intelligence/profiles/{site.SiteId}",
+            token,
+            JsonContent.Create(new
+            {
+                profileName = "",
+                industryCategory = "",
+                primaryAudienceType = "",
+                targetLocations = Array.Empty<string>(),
+                primaryProductsOrServices = Array.Empty<string>(),
+                isActive = true
+            }));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetProfile_IsTenantIsolated()
+    {
+        var tokenA = await RegisterUserAsync();
+        var tokenB = await RegisterUserAsync();
+        var siteA = await CreateSiteAsync(tokenA);
+
+        var upsertResponse = await SendAuthorizedAsync(
+            HttpMethod.Put,
+            $"/intelligence/profiles/{siteA.SiteId}",
+            tokenA,
+            JsonContent.Create(new
+            {
+                profileName = "Tenant A",
+                industryCategory = "SaaS",
+                primaryAudienceType = "B2B",
+                targetLocations = new[] { "US" },
+                primaryProductsOrServices = new[] { "Platform" },
+                isActive = true
+            }));
+
+        Assert.Equal(HttpStatusCode.OK, upsertResponse.StatusCode);
+
+        var response = await SendAuthorizedAsync(HttpMethod.Get, $"/intelligence/profiles/{siteA.SiteId}", tokenB);
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task UpsertProfile_SecondWrite_UpdatesSameTenantSiteIdentity()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var first = await SendAuthorizedAsync(
+            HttpMethod.Put,
+            $"/intelligence/profiles/{site.SiteId}",
+            token,
+            JsonContent.Create(new
+            {
+                profileName = "Original",
+                industryCategory = "Healthcare",
+                primaryAudienceType = "B2C",
+                targetLocations = new[] { "US" },
+                primaryProductsOrServices = new[] { "Consulting" },
+                isActive = true,
+                refreshIntervalMinutes = 60
+            }));
+
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+        var firstPayload = await first.Content.ReadFromJsonAsync<IntelligenceProfileResponse>();
+        Assert.NotNull(firstPayload);
+
+        var second = await SendAuthorizedAsync(
+            HttpMethod.Put,
+            $"/intelligence/profiles/{site.SiteId}",
+            token,
+            JsonContent.Create(new
+            {
+                profileName = "Updated",
+                industryCategory = "Healthcare",
+                primaryAudienceType = "B2B",
+                targetLocations = new[] { "US", "UK" },
+                primaryProductsOrServices = new[] { "Consulting", "Audits" },
+                watchTopics = new[] { "compliance" },
+                seasonalPriorities = new[] { "Budget season" },
+                isActive = false,
+                refreshIntervalMinutes = 180
+            }));
+
+        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+        var secondPayload = await second.Content.ReadFromJsonAsync<IntelligenceProfileResponse>();
+        Assert.NotNull(secondPayload);
+        Assert.Equal(Guid.Parse(site.SiteId), secondPayload.SiteId);
+        Assert.Equal("Updated", secondPayload.ProfileName);
+        Assert.Equal("B2B", secondPayload.PrimaryAudienceType);
+        Assert.Equal(firstPayload.SiteId, secondPayload.SiteId);
+        Assert.True(secondPayload.UpdatedAtUtc >= firstPayload.UpdatedAtUtc);
     }
 
     [Fact]
