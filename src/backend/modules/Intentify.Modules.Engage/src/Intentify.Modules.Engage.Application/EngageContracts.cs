@@ -17,7 +17,8 @@ public sealed record ChatSendResult(
     string? ResponseKind = null,
     string? PromoPublicKey = null,
     string? PromoTitle = null,
-    string? PromoDescription = null);
+    string? PromoDescription = null,
+    AiDecisionContract? Stage7Decision = null);
 
 public sealed record ListConversationsQuery(Guid TenantId, Guid SiteId, string? CollectorSessionId);
 

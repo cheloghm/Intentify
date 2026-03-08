@@ -51,6 +51,8 @@ public sealed class ChatSendHandler
     private readonly ILeadVisitorLinker _leadVisitorLinker;
     private readonly RetrieveTopChunksHandler _retrieveTopChunksHandler;
     private readonly IChatCompletionClient _chatCompletionClient;
+    private readonly Stage7VisitorContextBundleHandler _stage7VisitorContextBundleHandler;
+    private readonly Stage7AiDecisionGenerationService _stage7AiDecisionGenerationService;
     private readonly TimeSpan _sessionTimeout;
     private readonly ILogger<ChatSendHandler> _logger;
 
@@ -64,6 +66,8 @@ public sealed class ChatSendHandler
         ILeadVisitorLinker leadVisitorLinker,
         RetrieveTopChunksHandler retrieveTopChunksHandler,
         IChatCompletionClient chatCompletionClient,
+        Stage7VisitorContextBundleHandler stage7VisitorContextBundleHandler,
+        Stage7AiDecisionGenerationService stage7AiDecisionGenerationService,
         int sessionTimeoutMinutes,
         ILogger<ChatSendHandler> logger)
     {
@@ -76,6 +80,8 @@ public sealed class ChatSendHandler
         _leadVisitorLinker = leadVisitorLinker;
         _retrieveTopChunksHandler = retrieveTopChunksHandler;
         _chatCompletionClient = chatCompletionClient;
+        _stage7VisitorContextBundleHandler = stage7VisitorContextBundleHandler;
+        _stage7AiDecisionGenerationService = stage7AiDecisionGenerationService;
         _sessionTimeout = TimeSpan.FromMinutes(sessionTimeoutMinutes > 0 ? sessionTimeoutMinutes : 30);
         _logger = logger;
     }
@@ -210,7 +216,52 @@ public sealed class ChatSendHandler
 
         await _sessionRepository.TouchAsync(session.Id, now, cancellationToken);
 
-        return OperationResult<ChatSendResult>.Success(new ChatSendResult(session.Id, response, confidence, false, citations));
+        var stage7Decision = await TryGenerateStage7DecisionAsync(
+            site.TenantId,
+            site.Id,
+            session,
+            command.Message,
+            cancellationToken);
+
+        return OperationResult<ChatSendResult>.Success(new ChatSendResult(
+            session.Id,
+            response,
+            confidence,
+            false,
+            citations,
+            Stage7Decision: stage7Decision));
+    }
+
+
+    private async Task<AiDecisionContract?> TryGenerateStage7DecisionAsync(
+        Guid tenantId,
+        Guid siteId,
+        EngageChatSession session,
+        string message,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var visitorId = await ResolveVisitorIdAsync(tenantId, siteId, session.CollectorSessionId, cancellationToken);
+            var bundle = await _stage7VisitorContextBundleHandler.HandleAsync(
+                new BuildVisitorContextBundleQuery(
+                    tenantId,
+                    siteId,
+                    visitorId,
+                    session.Id,
+                    message),
+                cancellationToken);
+
+            var decision = await _stage7AiDecisionGenerationService.GenerateAsync(bundle, cancellationToken);
+            return decision.ValidationStatus == AiDecisionValidationStatus.Valid
+                ? decision
+                : null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Stage7 recommendation generation failed for session {SessionId}.", session.Id);
+            return null;
+        }
     }
 
     private static decimal ComputeConfidence(bool hasChunks, int topScore)
