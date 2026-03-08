@@ -34,8 +34,8 @@ public sealed class IntelligenceModule : IAppModule
         services.AddSingleton(searchOptions);
 
         RegisterHttpClient(services, GoogleSearchProvider.ClientName, googleSearchOptions.BaseUrl, googleSearchOptions.TimeoutSeconds);
-        RegisterHttpClient(services, GoogleTrendsProvider.ClientName, googleTrendsOptions.BaseUrl, googleTrendsOptions.TimeoutSeconds);
-        RegisterHttpClient(services, GoogleAdsHistoricalMetricsProvider.ClientName, googleAdsOptions.BaseUrl, googleAdsOptions.TimeoutSeconds);
+        RegisterHttpClient(services, IntelligenceHttpClientNames.GoogleTrends, googleTrendsOptions.BaseUrl, googleTrendsOptions.TimeoutSeconds);
+        RegisterHttpClient(services, IntelligenceHttpClientNames.GoogleAds, googleAdsOptions.BaseUrl, googleAdsOptions.TimeoutSeconds);
 
         services.AddSingleton<IExternalSearchProvider>(serviceProvider =>
         {
@@ -50,22 +50,11 @@ public sealed class IntelligenceModule : IAppModule
                 return new GoogleSearchProvider(httpClient, configuredSearchOptions);
             }
 
-            if (providerName.Equals("GoogleAds", StringComparison.OrdinalIgnoreCase))
-            {
-                var httpClient = clientFactory.CreateClient(GoogleAdsHistoricalMetricsProvider.ClientName);
-                var configuredAdsOptions = serviceProvider.GetRequiredService<GoogleAdsOptions>();
-                var profileRepository = serviceProvider.GetRequiredService<IIntelligenceProfileRepository>();
-                return new GoogleAdsHistoricalMetricsProvider(httpClient, configuredAdsOptions, profileRepository);
-            }
+            var clientFactory = serviceProvider.GetRequiredService<IHttpClientFactory>();
+            var httpClient = clientFactory.CreateClient(GoogleSearchProvider.ClientName);
+            var configuredSearchOptions = serviceProvider.GetRequiredService<GoogleSearchOptions>();
 
-            if (providerName.Equals("GoogleTrends", StringComparison.OrdinalIgnoreCase))
-            {
-                var httpClient = clientFactory.CreateClient(GoogleTrendsProvider.ClientName);
-                var configuredTrendsOptions = serviceProvider.GetRequiredService<GoogleTrendsOptions>();
-                return new GoogleTrendsProvider(httpClient, configuredTrendsOptions);
-            }
-
-            throw new InvalidOperationException($"Unsupported intelligence search provider '{providerName}'.");
+            return new GoogleSearchProvider(httpClient, configuredSearchOptions);
         });
 
         services.AddSingleton<IIntelligenceTrendsRepository, IntelligenceTrendsRepository>();
@@ -104,5 +93,16 @@ public sealed class IntelligenceModule : IAppModule
             client.Timeout = TimeSpan.FromSeconds(timeoutSeconds > 0 ? timeoutSeconds : 10);
         });
     }
+}
+
+internal static class IntelligenceHttpClientNames
+{
+    public const string GoogleTrends = "intelligence-google-trends";
+}
+
+internal static class IntelligenceHttpClientNames
+{
+    public const string GoogleTrends = "intelligence-google-trends";
+    public const string GoogleAds = "intelligence-google-ads";
 }
 

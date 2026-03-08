@@ -15,8 +15,6 @@ public sealed class GoogleTrendsOptions
 {
     public const string ConfigurationSection = "Intentify:Intelligence:Google:Trends";
 
-    public bool Enabled { get; set; }
-
     public string? BaseUrl { get; set; }
 
     public string? ApiKey { get; set; }
@@ -35,10 +33,6 @@ public sealed class GoogleAdsOptions
     public string? ClientId { get; set; }
 
     public string? ClientSecret { get; set; }
-
-    public string? CustomerId { get; set; }
-
-    public string? LoginCustomerId { get; set; }
 
     public int TimeoutSeconds { get; set; } = 10;
 }
