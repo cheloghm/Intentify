@@ -81,6 +81,58 @@ const sortConversationsNewestFirst = (conversations) => {
   });
 };
 
+
+const formatConfidence = (value) => {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return 'n/a';
+  }
+
+  return `${Math.round(numeric * 100)}%`;
+};
+
+const buildRecommendationTargetSummary = (targetRefs) => {
+  if (!targetRefs || typeof targetRefs !== 'object') {
+    return '';
+  }
+
+  const targets = [
+    targetRefs.promoId ? `promoId: ${targetRefs.promoId}` : null,
+    targetRefs.promoPublicKey ? `promoKey: ${targetRefs.promoPublicKey}` : null,
+    targetRefs.knowledgeSourceId ? `knowledgeSourceId: ${targetRefs.knowledgeSourceId}` : null,
+    targetRefs.ticketId ? `ticketId: ${targetRefs.ticketId}` : null,
+    targetRefs.visitorId ? `visitorId: ${targetRefs.visitorId}` : null,
+  ].filter(Boolean);
+
+  return targets.join(' · ');
+};
+
+const getValidRecommendations = (stage7Decision) => {
+  if (!stage7Decision || stage7Decision.validationStatus !== 'Valid') {
+    return [];
+  }
+
+  if (!Array.isArray(stage7Decision.recommendations)) {
+    return [];
+  }
+
+  return stage7Decision.recommendations.filter((item) => {
+    if (!item || typeof item !== 'object') {
+      return false;
+    }
+
+    if (typeof item.type !== 'string' || !item.type.trim()) {
+      return false;
+    }
+
+    if (typeof item.rationale !== 'string' || !item.rationale.trim()) {
+      return false;
+    }
+
+    return true;
+  });
+};
+
 const copyToClipboardRobust = async (value) => {
   if (navigator.clipboard?.writeText) {
     try {
@@ -436,6 +488,64 @@ const label = document.createElement('div');
       content.style.whiteSpace = 'pre-wrap';
 
       bubble.append(label, content);
+
+      if (entry.role === 'assistant') {
+        const recommendations = getValidRecommendations(entry.stage7Decision);
+        if (recommendations.length > 0) {
+          const recommendationPanel = document.createElement('div');
+          recommendationPanel.style.marginTop = '8px';
+          recommendationPanel.style.paddingTop = '8px';
+          recommendationPanel.style.borderTop = '1px solid #cbd5e1';
+          recommendationPanel.style.display = 'flex';
+          recommendationPanel.style.flexDirection = 'column';
+          recommendationPanel.style.gap = '6px';
+
+          const recommendationTitle = document.createElement('div');
+          recommendationTitle.textContent = 'Recommendations';
+          recommendationTitle.style.fontSize = '11px';
+          recommendationTitle.style.fontWeight = '600';
+          recommendationTitle.style.color = '#334155';
+          recommendationPanel.appendChild(recommendationTitle);
+
+          recommendations.forEach((recommendation) => {
+            const item = document.createElement('div');
+            item.style.padding = '6px 8px';
+            item.style.border = '1px solid #cbd5e1';
+            item.style.borderRadius = '6px';
+            item.style.background = '#ffffff';
+            item.style.display = 'flex';
+            item.style.flexDirection = 'column';
+            item.style.gap = '4px';
+
+            const meta = document.createElement('div');
+            meta.style.fontSize = '11px';
+            meta.style.fontWeight = '600';
+            meta.style.color = '#0f172a';
+            meta.textContent = `${recommendation.type} · Confidence ${formatConfidence(recommendation.confidence)} · ${recommendation.requiresApproval ? 'Approval required' : 'No approval required'}`;
+
+            const rationale = document.createElement('div');
+            rationale.style.fontSize = '12px';
+            rationale.style.color = '#1e293b';
+            rationale.textContent = recommendation.rationale;
+
+            item.append(meta, rationale);
+
+            const targetSummary = buildRecommendationTargetSummary(recommendation.targetRefs);
+            if (targetSummary) {
+              const target = document.createElement('div');
+              target.style.fontSize = '11px';
+              target.style.color = '#475569';
+              target.textContent = `Target: ${targetSummary}`;
+              item.appendChild(target);
+            }
+
+            recommendationPanel.appendChild(item);
+          });
+
+          bubble.appendChild(recommendationPanel);
+        }
+      }
+
       transcript.appendChild(bubble);
     });
   };
@@ -697,7 +807,11 @@ const label = document.createElement('div');
       );
       state.sessionId = response.sessionId || state.sessionId;
       state.transcript.push({ role: 'user', content: message });
-      state.transcript.push({ role: 'assistant', content: response.response || '' });
+      state.transcript.push({
+        role: 'assistant',
+        content: response.response || '',
+        stage7Decision: response.stage7Decision || null,
+      });
       renderTranscript();
       await loadConversations();
     } catch (error) {
