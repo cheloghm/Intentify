@@ -41,9 +41,13 @@ public sealed class IntelligenceModule : IAppModule
         {
             var options = serviceProvider.GetRequiredService<IntelligenceSearchOptions>();
             var providerName = options.Provider?.Trim() ?? "Google";
-            if (!providerName.Equals("Google", StringComparison.OrdinalIgnoreCase))
+
+            var clientFactory = serviceProvider.GetRequiredService<IHttpClientFactory>();
+            if (providerName.Equals("Google", StringComparison.OrdinalIgnoreCase))
             {
-                throw new InvalidOperationException($"Unsupported intelligence search provider '{providerName}'.");
+                var httpClient = clientFactory.CreateClient(GoogleSearchProvider.ClientName);
+                var configuredSearchOptions = serviceProvider.GetRequiredService<GoogleSearchOptions>();
+                return new GoogleSearchProvider(httpClient, configuredSearchOptions);
             }
 
             var clientFactory = serviceProvider.GetRequiredService<IHttpClientFactory>();
@@ -76,6 +80,24 @@ public sealed class IntelligenceModule : IAppModule
         group.MapPut("/profiles/{siteId}", IntelligenceEndpoints.UpsertProfileAsync);
         group.MapGet("/profiles/{siteId}", IntelligenceEndpoints.GetProfileAsync);
     }
+
+    private static void RegisterHttpClient(IServiceCollection services, string clientName, string? baseUrl, int timeoutSeconds)
+    {
+        services.AddHttpClient(clientName, (_, client) =>
+        {
+            if (Uri.TryCreate(baseUrl, UriKind.Absolute, out var baseUri))
+            {
+                client.BaseAddress = baseUri;
+            }
+
+            client.Timeout = TimeSpan.FromSeconds(timeoutSeconds > 0 ? timeoutSeconds : 10);
+        });
+    }
+}
+
+internal static class IntelligenceHttpClientNames
+{
+    public const string GoogleTrends = "intelligence-google-trends";
 }
 
 internal static class IntelligenceHttpClientNames

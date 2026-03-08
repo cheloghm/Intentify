@@ -90,6 +90,42 @@ public sealed class IntelligenceIntegrationTests : IAsyncLifetime
         Assert.Equal(2, statusPayload.ItemsCount);
     }
 
+
+    [Fact]
+    public async Task Refresh_PersistsData_IsolatedPerTenantAndSite()
+    {
+        var tokenA = await RegisterUserAsync();
+        var tokenB = await RegisterUserAsync();
+        var siteA = await CreateSiteAsync(tokenA);
+        var siteB = await CreateSiteAsync(tokenB);
+
+        var refreshA = await SendAuthorizedAsync(HttpMethod.Post, "/intelligence/refresh", tokenA, JsonContent.Create(new
+        {
+            siteId = siteA.SiteId,
+            category = "Marketing",
+            location = "US",
+            timeWindow = "7d",
+            limit = 2
+        }));
+        Assert.Equal(HttpStatusCode.OK, refreshA.StatusCode);
+
+        var refreshB = await SendAuthorizedAsync(HttpMethod.Post, "/intelligence/refresh", tokenB, JsonContent.Create(new
+        {
+            siteId = siteB.SiteId,
+            category = "Marketing",
+            location = "US",
+            timeWindow = "7d",
+            limit = 2
+        }));
+        Assert.Equal(HttpStatusCode.OK, refreshB.StatusCode);
+
+        var tenantAOwn = await SendAuthorizedAsync(HttpMethod.Get, $"/intelligence/trends?siteId={siteA.SiteId}&category=Marketing&location=US&timeWindow=7d", tokenA);
+        Assert.Equal(HttpStatusCode.OK, tenantAOwn.StatusCode);
+
+        var tenantAOtherSite = await SendAuthorizedAsync(HttpMethod.Get, $"/intelligence/trends?siteId={siteB.SiteId}&category=Marketing&location=US&timeWindow=7d", tokenA);
+        Assert.Equal(HttpStatusCode.NotFound, tenantAOtherSite.StatusCode);
+    }
+
     [Fact]
     public async Task Dashboard_ReturnsSummarizedData_ForValidInputs()
     {
