@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 
 namespace Intentify.Modules.Intelligence.Api;
 
@@ -33,6 +34,10 @@ public sealed class IntelligenceModule : IAppModule
         configuration.GetSection(IntelligenceSearchOptions.ConfigurationSection).Bind(searchOptions);
         services.AddSingleton(searchOptions);
 
+        var recurringRefreshOptions = new RecurringIntelligenceRefreshOptions();
+        configuration.GetSection(RecurringIntelligenceRefreshOptions.ConfigurationSection).Bind(recurringRefreshOptions);
+        services.AddSingleton(Microsoft.Extensions.Options.Options.Create(recurringRefreshOptions));
+
         RegisterHttpClient(services, GoogleSearchProvider.ClientName, googleSearchOptions.BaseUrl, googleSearchOptions.TimeoutSeconds);
         RegisterHttpClient(services, IntelligenceHttpClientNames.GoogleTrends, googleTrendsOptions.BaseUrl, googleTrendsOptions.TimeoutSeconds);
         RegisterHttpClient(services, IntelligenceHttpClientNames.GoogleAds, googleAdsOptions.BaseUrl, googleAdsOptions.TimeoutSeconds);
@@ -50,7 +55,6 @@ public sealed class IntelligenceModule : IAppModule
                 return new GoogleSearchProvider(httpClient, configuredSearchOptions);
             }
 
-            var clientFactory = serviceProvider.GetRequiredService<IHttpClientFactory>();
             var httpClient = clientFactory.CreateClient(GoogleSearchProvider.ClientName);
             var configuredSearchOptions = serviceProvider.GetRequiredService<GoogleSearchOptions>();
 
@@ -64,6 +68,10 @@ public sealed class IntelligenceModule : IAppModule
         services.AddSingleton<GetIntelligenceStatusService>();
         services.AddSingleton<UpsertIntelligenceProfileService>();
         services.AddSingleton<GetIntelligenceProfileService>();
+        services.AddSingleton(TimeProvider.System);
+        services.AddSingleton<IRecurringIntelligenceRefreshExecutor, RecurringIntelligenceRefreshExecutor>();
+        services.AddSingleton<RecurringIntelligenceRefreshOrchestrator>();
+        services.AddHostedService<RecurringIntelligenceRefreshWorker>();
     }
 
     public void MapEndpoints(IEndpointRouteBuilder endpoints)
@@ -93,11 +101,6 @@ public sealed class IntelligenceModule : IAppModule
             client.Timeout = TimeSpan.FromSeconds(timeoutSeconds > 0 ? timeoutSeconds : 10);
         });
     }
-}
-
-internal static class IntelligenceHttpClientNames
-{
-    public const string GoogleTrends = "intelligence-google-trends";
 }
 
 internal static class IntelligenceHttpClientNames

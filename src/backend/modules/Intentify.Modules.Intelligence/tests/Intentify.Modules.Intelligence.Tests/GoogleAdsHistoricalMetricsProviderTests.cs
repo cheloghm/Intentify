@@ -130,5 +130,8 @@ public sealed class GoogleAdsHistoricalMetricsProviderTests
 
         public Task<IntelligenceProfile?> GetAsync(string tenantId, Guid siteId, CancellationToken ct = default)
             => Task.FromResult(profile is not null && profile.SiteId == siteId ? profile : null);
+
+        public Task<IReadOnlyList<IntelligenceProfile>> ListActiveAsync(CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<IntelligenceProfile>>(profile is null ? [] : [profile]);
     }
 }

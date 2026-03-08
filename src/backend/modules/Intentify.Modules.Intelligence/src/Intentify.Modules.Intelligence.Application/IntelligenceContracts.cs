@@ -82,6 +82,8 @@ public interface IIntelligenceProfileRepository
     Task UpsertAsync(IntelligenceProfile profile, CancellationToken ct = default);
 
     Task<IntelligenceProfile?> GetAsync(string tenantId, Guid siteId, CancellationToken ct = default);
+
+    Task<IReadOnlyList<IntelligenceProfile>> ListActiveAsync(CancellationToken ct = default);
 }
 
 public interface IIntelligenceTrendsRepository
