@@ -46,7 +46,17 @@ public sealed class IntelligenceModule : IAppModule
         {
             var options = serviceProvider.GetRequiredService<IntelligenceSearchOptions>();
             var providerName = options.Provider?.Trim() ?? "Google";
+
             var clientFactory = serviceProvider.GetRequiredService<IHttpClientFactory>();
+            if (providerName.Equals("Google", StringComparison.OrdinalIgnoreCase))
+            {
+                var httpClient = clientFactory.CreateClient(GoogleSearchProvider.ClientName);
+                var configuredSearchOptions = serviceProvider.GetRequiredService<GoogleSearchOptions>();
+                return new GoogleSearchProvider(httpClient, configuredSearchOptions);
+            }
+
+            var httpClient = clientFactory.CreateClient(GoogleSearchProvider.ClientName);
+            var configuredSearchOptions = serviceProvider.GetRequiredService<GoogleSearchOptions>();
 
             return providerName.ToLowerInvariant() switch
             {
@@ -105,4 +115,9 @@ public sealed class IntelligenceModule : IAppModule
     }
 }
 
+internal static class IntelligenceHttpClientNames
+{
+    public const string GoogleTrends = "intelligence-google-trends";
+    public const string GoogleAds = "intelligence-google-ads";
+}
 
