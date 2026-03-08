@@ -356,6 +356,188 @@ public sealed class IntelligenceIntegrationTests : IAsyncLifetime
         Assert.True(secondPayload.UpdatedAtUtc >= firstPayload.UpdatedAtUtc);
     }
 
+
+    [Fact]
+    public async Task Dashboard_ExplicitFilters_OverrideProfileDefaults()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var upsertResponse = await SendAuthorizedAsync(
+            HttpMethod.Put,
+            $"/intelligence/profiles/{site.SiteId}",
+            token,
+            JsonContent.Create(new
+            {
+                profileName = "Profile Defaults",
+                industryCategory = "Retail",
+                primaryAudienceType = "B2C",
+                targetLocations = new[] { "CA" },
+                primaryProductsOrServices = new[] { "Offers" },
+                isActive = true,
+                refreshIntervalMinutes = 120
+            }));
+
+        Assert.Equal(HttpStatusCode.OK, upsertResponse.StatusCode);
+
+        var refreshResponse = await SendAuthorizedAsync(HttpMethod.Post, "/intelligence/refresh", token, JsonContent.Create(new
+        {
+            siteId = site.SiteId,
+            category = "Marketing",
+            location = "US",
+            timeWindow = "30d",
+            limit = 2
+        }));
+        Assert.Equal(HttpStatusCode.OK, refreshResponse.StatusCode);
+
+        var dashboardResponse = await SendAuthorizedAsync(
+            HttpMethod.Get,
+            $"/intelligence/dashboard?siteId={site.SiteId}&category=Marketing&location=US&timeWindow=30d",
+            token);
+
+        Assert.Equal(HttpStatusCode.OK, dashboardResponse.StatusCode);
+        var dashboard = await dashboardResponse.Content.ReadFromJsonAsync<IntelligenceDashboardResponse>();
+        Assert.NotNull(dashboard);
+        Assert.Equal("Marketing", dashboard.Category);
+        Assert.Equal("US", dashboard.Location);
+        Assert.Equal("30d", dashboard.TimeWindow);
+    }
+
+    [Fact]
+    public async Task Dashboard_AbsentFilters_FallBackToProfileDefaults()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var upsertResponse = await SendAuthorizedAsync(
+            HttpMethod.Put,
+            $"/intelligence/profiles/{site.SiteId}",
+            token,
+            JsonContent.Create(new
+            {
+                profileName = "Profile Defaults",
+                industryCategory = "Marketing",
+                primaryAudienceType = "B2B",
+                targetLocations = new[] { "US" },
+                primaryProductsOrServices = new[] { "Campaigns" },
+                isActive = true,
+                refreshIntervalMinutes = 120
+            }));
+
+        Assert.Equal(HttpStatusCode.OK, upsertResponse.StatusCode);
+
+        var refreshResponse = await SendAuthorizedAsync(HttpMethod.Post, "/intelligence/refresh", token, JsonContent.Create(new
+        {
+            siteId = site.SiteId,
+            category = "Marketing",
+            location = "US",
+            timeWindow = "7d",
+            limit = 2
+        }));
+        Assert.Equal(HttpStatusCode.OK, refreshResponse.StatusCode);
+
+        var dashboardResponse = await SendAuthorizedAsync(HttpMethod.Get, $"/intelligence/dashboard?siteId={site.SiteId}", token);
+
+        Assert.Equal(HttpStatusCode.OK, dashboardResponse.StatusCode);
+        var dashboard = await dashboardResponse.Content.ReadFromJsonAsync<IntelligenceDashboardResponse>();
+        Assert.NotNull(dashboard);
+        Assert.Equal("Marketing", dashboard.Category);
+        Assert.Equal("US", dashboard.Location);
+        Assert.Equal("7d", dashboard.TimeWindow);
+        Assert.Equal("B2B", dashboard.AudienceType);
+    }
+
+    [Fact]
+    public async Task Dashboard_AbsentFilters_WorksWithoutProfile()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var dashboardResponse = await SendAuthorizedAsync(HttpMethod.Get, $"/intelligence/dashboard?siteId={site.SiteId}", token);
+
+        Assert.Equal(HttpStatusCode.OK, dashboardResponse.StatusCode);
+        var dashboard = await dashboardResponse.Content.ReadFromJsonAsync<IntelligenceDashboardResponse>();
+        Assert.NotNull(dashboard);
+        Assert.Equal("general", dashboard.Category);
+        Assert.Equal("US", dashboard.Location);
+        Assert.Equal("7d", dashboard.TimeWindow);
+    }
+
+    [Fact]
+    public async Task Dashboard_ProfileDefaults_AreTenantIsolated()
+    {
+        var tokenA = await RegisterUserAsync();
+        var tokenB = await RegisterUserAsync();
+        var siteA = await CreateSiteAsync(tokenA);
+        var siteB = await CreateSiteAsync(tokenB);
+
+        var upsertA = await SendAuthorizedAsync(
+            HttpMethod.Put,
+            $"/intelligence/profiles/{siteA.SiteId}",
+            tokenA,
+            JsonContent.Create(new
+            {
+                profileName = "Tenant A",
+                industryCategory = "Marketing",
+                primaryAudienceType = "B2B",
+                targetLocations = new[] { "US" },
+                primaryProductsOrServices = new[] { "Campaigns" },
+                isActive = true,
+                refreshIntervalMinutes = 60
+            }));
+        Assert.Equal(HttpStatusCode.OK, upsertA.StatusCode);
+
+        var upsertB = await SendAuthorizedAsync(
+            HttpMethod.Put,
+            $"/intelligence/profiles/{siteB.SiteId}",
+            tokenB,
+            JsonContent.Create(new
+            {
+                profileName = "Tenant B",
+                industryCategory = "Retail",
+                primaryAudienceType = "B2C",
+                targetLocations = new[] { "CA" },
+                primaryProductsOrServices = new[] { "Offers" },
+                isActive = true,
+                refreshIntervalMinutes = 60
+            }));
+        Assert.Equal(HttpStatusCode.OK, upsertB.StatusCode);
+
+        var refreshA = await SendAuthorizedAsync(HttpMethod.Post, "/intelligence/refresh", tokenA, JsonContent.Create(new
+        {
+            siteId = siteA.SiteId,
+            category = "Marketing",
+            location = "US",
+            timeWindow = "7d",
+            limit = 2
+        }));
+        Assert.Equal(HttpStatusCode.OK, refreshA.StatusCode);
+
+        var refreshB = await SendAuthorizedAsync(HttpMethod.Post, "/intelligence/refresh", tokenB, JsonContent.Create(new
+        {
+            siteId = siteB.SiteId,
+            category = "Retail",
+            location = "CA",
+            timeWindow = "7d",
+            limit = 2
+        }));
+        Assert.Equal(HttpStatusCode.OK, refreshB.StatusCode);
+
+        var dashboardA = await SendAuthorizedAsync(HttpMethod.Get, $"/intelligence/dashboard?siteId={siteA.SiteId}", tokenA);
+        var payloadA = await dashboardA.Content.ReadFromJsonAsync<IntelligenceDashboardResponse>();
+        Assert.Equal(HttpStatusCode.OK, dashboardA.StatusCode);
+        Assert.NotNull(payloadA);
+        Assert.Equal("Marketing", payloadA.Category);
+        Assert.Equal("US", payloadA.Location);
+
+        var dashboardB = await SendAuthorizedAsync(HttpMethod.Get, $"/intelligence/dashboard?siteId={siteB.SiteId}", tokenB);
+        var payloadB = await dashboardB.Content.ReadFromJsonAsync<IntelligenceDashboardResponse>();
+        Assert.Equal(HttpStatusCode.OK, dashboardB.StatusCode);
+        Assert.NotNull(payloadB);
+        Assert.Equal("Retail", payloadB.Category);
+        Assert.Equal("CA", payloadB.Location);
+    }
+
     [Fact]
     public async Task Dashboard_NoData_ReturnsEmptyResult()
     {
