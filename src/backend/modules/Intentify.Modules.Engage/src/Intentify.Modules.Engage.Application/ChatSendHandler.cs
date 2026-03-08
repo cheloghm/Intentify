@@ -234,16 +234,16 @@ public sealed class ChatSendHandler
 
 
     private async Task<AiDecisionContract?> TryGenerateStage7DecisionAsync(
-        Guid tenantId,
-        Guid siteId,
-        EngageChatSession session,
-        string message,
-        CancellationToken cancellationToken)
+    Guid tenantId,
+    Guid siteId,
+    EngageChatSession session,
+    string message,
+    CancellationToken cancellationToken)
     {
         try
         {
             var visitorId = await ResolveVisitorIdAsync(tenantId, siteId, session.CollectorSessionId, cancellationToken);
-            var bundle = await _stage7VisitorContextBundleHandler.HandleAsync(
+            var bundleResult = await _stage7VisitorContextBundleHandler.HandleAsync(
                 new BuildVisitorContextBundleQuery(
                     tenantId,
                     siteId,
@@ -252,7 +252,12 @@ public sealed class ChatSendHandler
                     message),
                 cancellationToken);
 
-            var decision = await _stage7AiDecisionGenerationService.GenerateAsync(bundle, cancellationToken);
+            if (!bundleResult.IsSuccess || bundleResult.Value is null)
+            {
+                return null;
+            }
+
+            var decision = await _stage7AiDecisionGenerationService.GenerateAsync(bundleResult.Value, cancellationToken);
             return decision.ValidationStatus == AiDecisionValidationStatus.Valid
                 ? decision
                 : null;
