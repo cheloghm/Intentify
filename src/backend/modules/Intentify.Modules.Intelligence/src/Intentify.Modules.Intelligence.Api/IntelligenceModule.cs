@@ -76,19 +76,6 @@ public sealed class IntelligenceModule : IAppModule
         group.MapPut("/profiles/{siteId}", IntelligenceEndpoints.UpsertProfileAsync);
         group.MapGet("/profiles/{siteId}", IntelligenceEndpoints.GetProfileAsync);
     }
-
-    private static void RegisterHttpClient(IServiceCollection services, string clientName, string? baseUrl, int timeoutSeconds)
-    {
-        services.AddHttpClient(clientName, (_, client) =>
-        {
-            if (Uri.TryCreate(baseUrl, UriKind.Absolute, out var baseUri))
-            {
-                client.BaseAddress = baseUri;
-            }
-
-            client.Timeout = TimeSpan.FromSeconds(timeoutSeconds > 0 ? timeoutSeconds : 10);
-        });
-    }
 }
 
 internal static class IntelligenceHttpClientNames
