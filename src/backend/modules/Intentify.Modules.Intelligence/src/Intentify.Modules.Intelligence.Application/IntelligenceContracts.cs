@@ -50,6 +50,40 @@ public sealed record IntelligenceDashboardResponse(
     IntelligenceDashboardSummaryResponse Summary,
     IReadOnlyList<IntelligenceDashboardTrendItemResponse> TopItems);
 
+
+public sealed record UpsertIntelligenceProfileRequest(
+    Guid SiteId,
+    string ProfileName,
+    string IndustryCategory,
+    string PrimaryAudienceType,
+    IReadOnlyCollection<string> TargetLocations,
+    IReadOnlyCollection<string> PrimaryProductsOrServices,
+    IReadOnlyCollection<string>? WatchTopics,
+    IReadOnlyCollection<string>? SeasonalPriorities,
+    bool IsActive,
+    int? RefreshIntervalMinutes);
+
+public sealed record IntelligenceProfileResponse(
+    Guid SiteId,
+    string ProfileName,
+    string IndustryCategory,
+    string PrimaryAudienceType,
+    IReadOnlyCollection<string> TargetLocations,
+    IReadOnlyCollection<string> PrimaryProductsOrServices,
+    IReadOnlyCollection<string> WatchTopics,
+    IReadOnlyCollection<string> SeasonalPriorities,
+    bool IsActive,
+    int? RefreshIntervalMinutes,
+    DateTime CreatedAtUtc,
+    DateTime UpdatedAtUtc);
+
+public interface IIntelligenceProfileRepository
+{
+    Task UpsertAsync(IntelligenceProfile profile, CancellationToken ct = default);
+
+    Task<IntelligenceProfile?> GetAsync(string tenantId, Guid siteId, CancellationToken ct = default);
+}
+
 public interface IIntelligenceTrendsRepository
 {
     Task UpsertAsync(IntelligenceTrendRecord record, CancellationToken ct = default);
