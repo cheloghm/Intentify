@@ -39,8 +39,8 @@ public sealed class IntelligenceModule : IAppModule
         services.AddSingleton(Microsoft.Extensions.Options.Options.Create(recurringRefreshOptions));
 
         RegisterHttpClient(services, GoogleSearchProvider.ClientName, googleSearchOptions.BaseUrl, googleSearchOptions.TimeoutSeconds);
-        RegisterHttpClient(services, IntelligenceHttpClientNames.GoogleTrends, googleTrendsOptions.BaseUrl, googleTrendsOptions.TimeoutSeconds);
-        RegisterHttpClient(services, IntelligenceHttpClientNames.GoogleAds, googleAdsOptions.BaseUrl, googleAdsOptions.TimeoutSeconds);
+        RegisterHttpClient(services, GoogleTrendsProvider.ClientName, googleTrendsOptions.BaseUrl, googleTrendsOptions.TimeoutSeconds);
+        RegisterHttpClient(services, GoogleAdsHistoricalMetricsProvider.ClientName, googleAdsOptions.BaseUrl, googleAdsOptions.TimeoutSeconds);
 
         services.AddSingleton<IExternalSearchProvider>(serviceProvider =>
         {
@@ -58,7 +58,19 @@ public sealed class IntelligenceModule : IAppModule
             var httpClient = clientFactory.CreateClient(GoogleSearchProvider.ClientName);
             var configuredSearchOptions = serviceProvider.GetRequiredService<GoogleSearchOptions>();
 
-            return new GoogleSearchProvider(httpClient, configuredSearchOptions);
+            return providerName.ToLowerInvariant() switch
+            {
+                "googletrends" or "trends" => new GoogleTrendsProvider(
+                    clientFactory.CreateClient(GoogleTrendsProvider.ClientName),
+                    serviceProvider.GetRequiredService<GoogleTrendsOptions>()),
+                "googleads" or "ads" => new GoogleAdsHistoricalMetricsProvider(
+                    clientFactory.CreateClient(GoogleAdsHistoricalMetricsProvider.ClientName),
+                    serviceProvider.GetRequiredService<GoogleAdsOptions>(),
+                    serviceProvider.GetRequiredService<IIntelligenceProfileRepository>()),
+                _ => new GoogleSearchProvider(
+                    clientFactory.CreateClient(GoogleSearchProvider.ClientName),
+                    serviceProvider.GetRequiredService<GoogleSearchOptions>())
+            };
         });
 
         services.AddSingleton<IIntelligenceTrendsRepository, IntelligenceTrendsRepository>();
