@@ -136,7 +136,6 @@ const createNavbar = ({ isAuthenticated, canAccessPlatformAdmin }) => {
     links.appendChild(createNavLink({ label: 'Register', href: '#/register' }));
   } else {
     links.appendChild(createNavLink({ label: 'Sites', href: '#/sites' }));
-    links.appendChild(createNavLink({ label: 'Install', href: '#/install' }));
     links.appendChild(createNavLink({ label: 'Dashboard', href: '#/dashboard' }));
     links.appendChild(createNavLink({ label: 'Visitors', href: '#/visitors' }));
     links.appendChild(createNavLink({ label: 'Knowledge', href: '#/knowledge' }));

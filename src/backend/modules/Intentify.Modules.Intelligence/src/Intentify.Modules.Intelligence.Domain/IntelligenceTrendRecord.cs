@@ -3,6 +3,7 @@ namespace Intentify.Modules.Intelligence.Domain;
 public static class IntelligenceMongoCollections
 {
     public const string Trends = "intelligence_trends";
+    public const string Profiles = "intelligence_profiles";
 }
 
 public sealed class IntelligenceTrendRecord

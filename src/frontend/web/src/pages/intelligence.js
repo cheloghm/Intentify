@@ -94,6 +94,14 @@ const createSummaryRows = (dashboard) => {
   return list;
 };
 
+const parseCsv = (value) =>
+  value
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+const stringifyList = (values) => (Array.isArray(values) ? values.join(', ') : '');
+
 export const renderIntelligenceView = (container, { apiClient, toast } = {}) => {
   const client = apiClient || createApiClient();
   const notifier = toast || createToastManager();
@@ -102,6 +110,7 @@ export const renderIntelligenceView = (container, { apiClient, toast } = {}) => 
     filters: { ...DEFAULT_FILTERS },
     sites: [],
     loading: false,
+    profileLoading: false,
   };
 
   const page = document.createElement('div');
@@ -110,6 +119,65 @@ export const renderIntelligenceView = (container, { apiClient, toast } = {}) => 
   page.style.gap = '16px';
   page.style.width = '100%';
   page.style.maxWidth = '1100px';
+
+  const profileStatusText = document.createElement('div');
+  profileStatusText.style.color = '#475569';
+  profileStatusText.style.fontSize = '13px';
+
+  const profileGrid = document.createElement('div');
+  profileGrid.style.display = 'grid';
+  profileGrid.style.gridTemplateColumns = 'repeat(auto-fit, minmax(220px, 1fr))';
+  profileGrid.style.gap = '12px';
+
+  const profileNameField = createInput({ label: 'Profile Name', placeholder: 'Business profile name' });
+  const profileIndustryField = createInput({ label: 'Industry Category', placeholder: 'e.g. Retail' });
+  const profileAudienceField = createSelectField({
+    label: 'Primary Audience Type',
+    value: '',
+    options: AUDIENCE_OPTIONS,
+  });
+  const profileLocationsField = createInput({ label: 'Target Locations', placeholder: 'US, CA' });
+  const profileProductsField = createInput({ label: 'Products / Services', placeholder: 'Consulting, Audits' });
+  const profileWatchTopicsField = createInput({ label: 'Watch Topics', placeholder: 'Optional, comma separated' });
+  const profileSeasonalPrioritiesField = createInput({ label: 'Seasonal Priorities', placeholder: 'Optional, comma separated' });
+  const profileRefreshIntervalField = createInput({ label: 'Refresh Interval Minutes', type: 'number', placeholder: 'Optional' });
+
+  const profileIsActiveWrapper = document.createElement('label');
+  profileIsActiveWrapper.className = 'ui-input';
+  const profileIsActiveText = document.createElement('span');
+  profileIsActiveText.textContent = 'Profile Active';
+  const profileIsActiveField = document.createElement('input');
+  profileIsActiveField.type = 'checkbox';
+  profileIsActiveField.checked = true;
+  profileIsActiveWrapper.append(profileIsActiveText, profileIsActiveField);
+
+  const profileActions = document.createElement('div');
+  profileActions.style.display = 'flex';
+  profileActions.style.gap = '8px';
+
+  const saveProfileButton = document.createElement('button');
+  saveProfileButton.type = 'button';
+  saveProfileButton.textContent = 'Save profile';
+  saveProfileButton.style.padding = '10px 14px';
+  saveProfileButton.style.borderRadius = '6px';
+  saveProfileButton.style.border = 'none';
+  saveProfileButton.style.background = '#2563eb';
+  saveProfileButton.style.color = '#fff';
+  saveProfileButton.style.cursor = 'pointer';
+
+  profileActions.append(saveProfileButton);
+
+  profileGrid.append(
+    profileNameField.wrapper,
+    profileIndustryField.wrapper,
+    profileAudienceField.wrapper,
+    profileLocationsField.wrapper,
+    profileProductsField.wrapper,
+    profileWatchTopicsField.wrapper,
+    profileSeasonalPrioritiesField.wrapper,
+    profileRefreshIntervalField.wrapper,
+    profileIsActiveWrapper,
+  );
 
   const statusText = document.createElement('div');
   statusText.style.color = '#334155';
@@ -179,6 +247,12 @@ export const renderIntelligenceView = (container, { apiClient, toast } = {}) => 
     applyButton.textContent = isLoading ? 'Loading...' : 'Apply filters';
   };
 
+  const setProfileLoading = (isLoading) => {
+    state.profileLoading = isLoading;
+    saveProfileButton.disabled = isLoading;
+    saveProfileButton.textContent = isLoading ? 'Saving...' : 'Save profile';
+  };
+
   const readFiltersFromInputs = () => ({
     siteId: siteField.select.value,
     category: categoryField.input.value.trim(),
@@ -188,6 +262,54 @@ export const renderIntelligenceView = (container, { apiClient, toast } = {}) => 
     provider: providerField.input.value.trim(),
     keyword: keywordField.input.value.trim(),
   });
+
+  const readProfileFromInputs = () => {
+    const refreshValue = profileRefreshIntervalField.input.value.trim();
+
+    return {
+      profileName: profileNameField.input.value.trim(),
+      industryCategory: profileIndustryField.input.value.trim(),
+      primaryAudienceType: profileAudienceField.select.value,
+      targetLocations: parseCsv(profileLocationsField.input.value),
+      primaryProductsOrServices: parseCsv(profileProductsField.input.value),
+      watchTopics: parseCsv(profileWatchTopicsField.input.value),
+      seasonalPriorities: parseCsv(profileSeasonalPrioritiesField.input.value),
+      isActive: Boolean(profileIsActiveField.checked),
+      refreshIntervalMinutes: refreshValue ? Number(refreshValue) : null,
+    };
+  };
+
+  const applyProfileToInputs = (profile) => {
+    profileNameField.input.value = profile?.profileName || '';
+    profileIndustryField.input.value = profile?.industryCategory || '';
+    profileAudienceField.select.value = profile?.primaryAudienceType || '';
+    profileLocationsField.input.value = stringifyList(profile?.targetLocations);
+    profileProductsField.input.value = stringifyList(profile?.primaryProductsOrServices);
+    profileWatchTopicsField.input.value = stringifyList(profile?.watchTopics);
+    profileSeasonalPrioritiesField.input.value = stringifyList(profile?.seasonalPriorities);
+    profileRefreshIntervalField.input.value = profile?.refreshIntervalMinutes ? String(profile.refreshIntervalMinutes) : '';
+    profileIsActiveField.checked = profile?.isActive ?? true;
+  };
+
+  const applyProfileDefaultsToFilters = (profile) => {
+    if (!profile) {
+      return;
+    }
+
+    if ((!categoryField.input.value || categoryField.input.value === DEFAULT_FILTERS.category) && profile.industryCategory) {
+      categoryField.input.value = profile.industryCategory;
+    }
+
+    if ((!locationField.input.value || locationField.input.value === DEFAULT_FILTERS.location)
+      && Array.isArray(profile.targetLocations)
+      && profile.targetLocations.length) {
+      locationField.input.value = profile.targetLocations[0];
+    }
+
+    if (!audienceTypeField.select.value && profile.primaryAudienceType) {
+      audienceTypeField.select.value = profile.primaryAudienceType;
+    }
+  };
 
   const syncSiteOptions = () => {
     siteField.select.innerHTML = '';
@@ -209,6 +331,60 @@ export const renderIntelligenceView = (container, { apiClient, toast } = {}) => 
       }
       siteField.select.appendChild(option);
     });
+  };
+
+  const loadProfile = async () => {
+    const siteId = siteField.select.value || state.filters.siteId;
+    if (!siteId) {
+      applyProfileToInputs(null);
+      profileStatusText.textContent = 'Select a site to manage profile defaults.';
+      return;
+    }
+
+    profileStatusText.textContent = 'Loading profile...';
+
+    try {
+      const profile = await client.intelligence.getProfile(siteId);
+      applyProfileToInputs(profile);
+      applyProfileDefaultsToFilters(profile);
+      profileStatusText.textContent = 'Profile loaded.';
+    } catch (error) {
+      const uiError = mapApiError(error);
+      if (uiError.status === 404) {
+        applyProfileToInputs(null);
+        profileStatusText.textContent = 'No profile saved for this site yet.';
+        return;
+      }
+
+      profileStatusText.textContent = 'Unable to load profile.';
+      notifier.show({ message: uiError.message, variant: 'danger' });
+    }
+  };
+
+  const saveProfile = async () => {
+    const siteId = siteField.select.value || state.filters.siteId;
+    if (!siteId) {
+      notifier.show({ message: 'Select a site before saving profile.', variant: 'warning' });
+      return;
+    }
+
+    setProfileLoading(true);
+    profileStatusText.textContent = 'Saving profile...';
+
+    try {
+      const payload = readProfileFromInputs();
+      const saved = await client.intelligence.upsertProfile(siteId, payload);
+      applyProfileToInputs(saved);
+      applyProfileDefaultsToFilters(saved);
+      profileStatusText.textContent = 'Profile saved.';
+      notifier.show({ message: 'Intelligence profile saved.', variant: 'success' });
+    } catch (error) {
+      const uiError = mapApiError(error);
+      profileStatusText.textContent = 'Unable to save profile.';
+      notifier.show({ message: uiError.message, variant: 'danger' });
+    } finally {
+      setProfileLoading(false);
+    }
   };
 
   const renderSummary = (dashboard) => {
@@ -305,6 +481,11 @@ export const renderIntelligenceView = (container, { apiClient, toast } = {}) => 
 
   applyButton.addEventListener('click', loadDashboard);
   resetButton.addEventListener('click', resetFilters);
+  saveProfileButton.addEventListener('click', saveProfile);
+  siteField.select.addEventListener('change', async () => {
+    state.filters.siteId = siteField.select.value;
+    await loadProfile();
+  });
 
   filterGrid.append(
     siteField.wrapper,
@@ -317,6 +498,17 @@ export const renderIntelligenceView = (container, { apiClient, toast } = {}) => 
   );
 
   page.append(
+    createCard({
+      title: 'Intelligence Profile',
+      body: (() => {
+        const body = document.createElement('div');
+        body.style.display = 'flex';
+        body.style.flexDirection = 'column';
+        body.style.gap = '12px';
+        body.append(profileStatusText, profileGrid, profileActions);
+        return body;
+      })(),
+    }),
     createCard({
       title: 'Intelligence Dashboard',
       body: (() => {
@@ -343,6 +535,7 @@ export const renderIntelligenceView = (container, { apiClient, toast } = {}) => 
       if (state.filters.siteId) {
         siteField.select.value = state.filters.siteId;
       }
+      await loadProfile();
       await loadDashboard();
     } catch (error) {
       const uiError = mapApiError(error);
@@ -350,6 +543,7 @@ export const renderIntelligenceView = (container, { apiClient, toast } = {}) => 
         statusText.textContent = 'You are not authorized to view intelligence data. Please sign in again.';
       } else {
         statusText.textContent = 'Unable to load intelligence data.';
+        profileStatusText.textContent = 'Unable to load profile data.';
         notifier.show({ message: uiError.message, variant: 'danger' });
       }
       summaryBody.textContent = '';

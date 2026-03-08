@@ -17,24 +17,25 @@ public sealed class IntelligenceModule : IAppModule
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configuration);
 
-        var googleOptions = new GoogleSearchOptions();
-        configuration.GetSection(GoogleSearchOptions.ConfigurationSection).Bind(googleOptions);
-        services.AddSingleton(googleOptions);
+        var googleSearchOptions = new GoogleSearchOptions();
+        configuration.GetSection(GoogleSearchOptions.ConfigurationSection).Bind(googleSearchOptions);
+        services.AddSingleton(googleSearchOptions);
+
+        var googleTrendsOptions = new GoogleTrendsOptions();
+        configuration.GetSection(GoogleTrendsOptions.ConfigurationSection).Bind(googleTrendsOptions);
+        services.AddSingleton(googleTrendsOptions);
+
+        var googleAdsOptions = new GoogleAdsOptions();
+        configuration.GetSection(GoogleAdsOptions.ConfigurationSection).Bind(googleAdsOptions);
+        services.AddSingleton(googleAdsOptions);
 
         var searchOptions = new IntelligenceSearchOptions();
         configuration.GetSection(IntelligenceSearchOptions.ConfigurationSection).Bind(searchOptions);
         services.AddSingleton(searchOptions);
 
-        services.AddHttpClient(GoogleSearchProvider.ClientName, (serviceProvider, client) =>
-        {
-            var options = serviceProvider.GetRequiredService<GoogleSearchOptions>();
-            if (Uri.TryCreate(options.BaseUrl, UriKind.Absolute, out var baseUri))
-            {
-                client.BaseAddress = baseUri;
-            }
-
-            client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds > 0 ? options.TimeoutSeconds : 10);
-        });
+        RegisterHttpClient(services, GoogleSearchProvider.ClientName, googleSearchOptions.BaseUrl, googleSearchOptions.TimeoutSeconds);
+        RegisterHttpClient(services, IntelligenceHttpClientNames.GoogleTrends, googleTrendsOptions.BaseUrl, googleTrendsOptions.TimeoutSeconds);
+        RegisterHttpClient(services, IntelligenceHttpClientNames.GoogleAds, googleAdsOptions.BaseUrl, googleAdsOptions.TimeoutSeconds);
 
         services.AddSingleton<IExternalSearchProvider>(serviceProvider =>
         {
@@ -47,15 +48,18 @@ public sealed class IntelligenceModule : IAppModule
 
             var clientFactory = serviceProvider.GetRequiredService<IHttpClientFactory>();
             var httpClient = clientFactory.CreateClient(GoogleSearchProvider.ClientName);
-            var googleSearchOptions = serviceProvider.GetRequiredService<GoogleSearchOptions>();
+            var configuredSearchOptions = serviceProvider.GetRequiredService<GoogleSearchOptions>();
 
-            return new GoogleSearchProvider(httpClient, googleSearchOptions);
+            return new GoogleSearchProvider(httpClient, configuredSearchOptions);
         });
 
         services.AddSingleton<IIntelligenceTrendsRepository, IntelligenceTrendsRepository>();
+        services.AddSingleton<IIntelligenceProfileRepository, IntelligenceProfileRepository>();
         services.AddSingleton<RefreshIntelligenceTrendsService>();
         services.AddSingleton<QueryIntelligenceTrendsService>();
         services.AddSingleton<GetIntelligenceStatusService>();
+        services.AddSingleton<UpsertIntelligenceProfileService>();
+        services.AddSingleton<GetIntelligenceProfileService>();
     }
 
     public void MapEndpoints(IEndpointRouteBuilder endpoints)
@@ -69,5 +73,26 @@ public sealed class IntelligenceModule : IAppModule
         group.MapGet("/trends", IntelligenceEndpoints.GetTrendsAsync);
         group.MapGet("/status", IntelligenceEndpoints.GetStatusAsync);
         group.MapGet("/dashboard", IntelligenceEndpoints.GetDashboardAsync);
+        group.MapPut("/profiles/{siteId}", IntelligenceEndpoints.UpsertProfileAsync);
+        group.MapGet("/profiles/{siteId}", IntelligenceEndpoints.GetProfileAsync);
     }
+
+    private static void RegisterHttpClient(IServiceCollection services, string clientName, string? baseUrl, int timeoutSeconds)
+    {
+        services.AddHttpClient(clientName, (_, client) =>
+        {
+            if (Uri.TryCreate(baseUrl, UriKind.Absolute, out var baseUri))
+            {
+                client.BaseAddress = baseUri;
+            }
+
+            client.Timeout = TimeSpan.FromSeconds(timeoutSeconds > 0 ? timeoutSeconds : 10);
+        });
+    }
+}
+
+internal static class IntelligenceHttpClientNames
+{
+    public const string GoogleTrends = "intelligence-google-trends";
+    public const string GoogleAds = "intelligence-google-ads";
 }
