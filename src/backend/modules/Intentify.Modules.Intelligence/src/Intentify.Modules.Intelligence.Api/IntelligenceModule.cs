@@ -105,3 +105,4 @@ internal static class IntelligenceHttpClientNames
     public const string GoogleTrends = "intelligence-google-trends";
     public const string GoogleAds = "intelligence-google-ads";
 }
+
