@@ -312,6 +312,12 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
   const getAdsReport = async (campaignId, fromUtc, toUtc) =>
     request(`/ads/campaigns/${encodeURIComponent(campaignId)}/report${buildQueryString({ fromUtc, toUtc })}`);
 
+  const listLeads = async (siteId, page = 1, pageSize = 50) =>
+    request(`/leads${buildQueryString({ siteId, page, pageSize })}`);
+
+  const getLead = async (leadId) =>
+    request(`/leads/${encodeURIComponent(leadId)}`);
+
   const listTickets = async ({ siteId, visitorId, engageSessionId, page = 1, pageSize = 50 } = {}) =>
     request(`/tickets${buildQueryString({ siteId, visitorId, engageSessionId, page, pageSize })}`);
 
@@ -411,6 +417,10 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
       getTicketNotes,
       addTicketNote,
       transitionTicketStatus,
+    },
+    leads: {
+      list: listLeads,
+      get: getLead,
     },
     platformAdmin: {
       getSummary: getPlatformSummary,
