@@ -3,8 +3,8 @@ import { createApiClient, mapApiError } from '../shared/apiClient.js';
 
 const DEFAULT_FILTERS = {
   siteId: '',
-  category: 'general',
-  location: 'US',
+  category: '',
+  location: '',
   timeWindow: '7d',
   audienceType: '',
   provider: '',
@@ -67,6 +67,8 @@ const createSummaryRows = (dashboard) => {
     { label: 'Total Items', value: dashboard.totalItems ?? 0 },
     { label: 'Average Score', value: dashboard.summary?.averageScore ?? 0 },
     { label: 'Max Score', value: dashboard.summary?.maxScore ?? 0 },
+    { label: 'Ranked Items', value: dashboard.summary?.rankedItemsCount ?? 0 },
+    { label: 'Top Query', value: dashboard.summary?.topQueryOrTopic || '—' },
     { label: 'Refreshed At', value: formatTimestamp(dashboard.refreshedAtUtc) },
   ];
 
@@ -188,8 +190,8 @@ export const renderIntelligenceView = (container, { apiClient, toast } = {}) => 
   filterGrid.style.gap = '12px';
 
   const keywordField = createInput({ label: 'Keyword', value: state.filters.keyword, placeholder: 'e.g. lead generation' });
-  const categoryField = createInput({ label: 'Category', value: state.filters.category });
-  const locationField = createInput({ label: 'Location', value: state.filters.location });
+  const categoryField = createInput({ label: 'Category', value: state.filters.category, placeholder: 'Uses profile default when blank' });
+  const locationField = createInput({ label: 'Location', value: state.filters.location, placeholder: 'Uses profile default when blank' });
   const providerField = createInput({ label: 'Provider', value: state.filters.provider, placeholder: 'Google' });
   const timeWindowField = createSelectField({
     label: 'Time Window',
@@ -296,11 +298,11 @@ export const renderIntelligenceView = (container, { apiClient, toast } = {}) => 
       return;
     }
 
-    if ((!categoryField.input.value || categoryField.input.value === DEFAULT_FILTERS.category) && profile.industryCategory) {
+    if (!categoryField.input.value && profile.industryCategory) {
       categoryField.input.value = profile.industryCategory;
     }
 
-    if ((!locationField.input.value || locationField.input.value === DEFAULT_FILTERS.location)
+    if (!locationField.input.value
       && Array.isArray(profile.targetLocations)
       && profile.targetLocations.length) {
       locationField.input.value = profile.targetLocations[0];
@@ -446,7 +448,7 @@ export const renderIntelligenceView = (container, { apiClient, toast } = {}) => 
         keyword: state.filters.keyword,
       });
 
-      statusText.textContent = `Showing trends for ${state.filters.category} in ${state.filters.location} (${state.filters.timeWindow}).`;
+      statusText.textContent = `Showing trends for ${dashboard.category} in ${dashboard.location} (${dashboard.timeWindow}).`;
       renderSummary(dashboard);
       renderTrends(dashboard);
     } catch (error) {
@@ -485,6 +487,7 @@ export const renderIntelligenceView = (container, { apiClient, toast } = {}) => 
   siteField.select.addEventListener('change', async () => {
     state.filters.siteId = siteField.select.value;
     await loadProfile();
+    await loadDashboard();
   });
 
   filterGrid.append(

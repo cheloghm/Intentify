@@ -2,10 +2,15 @@ using Intentify.Shared.Validation;
 
 namespace Intentify.Modules.Intelligence.Application;
 
-public sealed class QueryIntelligenceTrendsService(IIntelligenceTrendsRepository repository)
+public sealed class QueryIntelligenceTrendsService(
+    IIntelligenceTrendsRepository repository,
+    IIntelligenceProfileRepository profileRepository)
 {
     private const int DashboardDefaultLimit = 10;
     private const int DashboardMaxLimit = 50;
+    private const string DefaultCategory = "general";
+    private const string DefaultLocation = "US";
+    private const string DefaultTimeWindow = "7d";
 
     public async Task<OperationResult<IntelligenceTrendsResponse>> HandleAsync(
         string tenantId,
@@ -41,9 +46,12 @@ public sealed class QueryIntelligenceTrendsService(IIntelligenceTrendsRepository
         IntelligenceDashboardQuery query,
         CancellationToken ct = default)
     {
+        var profile = await profileRepository.GetAsync(tenantId, query.SiteId, ct);
+
         var errors = ValidateDashboardQuery(
             tenantId,
             query,
+            profile,
             out var normalizedCategory,
             out var normalizedLocation,
             out var normalizedTimeWindow,
@@ -106,6 +114,8 @@ public sealed class QueryIntelligenceTrendsService(IIntelligenceTrendsRepository
 
         var averageScore = matchingItems.Length == 0 ? 0d : matchingItems.Average(item => item.Score);
         var maxScore = matchingItems.Length == 0 ? 0d : matchingItems.Max(item => item.Score);
+        var rankedItemsCount = matchingItems.Count(item => item.Rank is not null);
+        var topQueryOrTopic = topItems.FirstOrDefault()?.QueryOrTopic;
 
         return OperationResult<IntelligenceDashboardResponse>.Success(new IntelligenceDashboardResponse(
             query.SiteId,
@@ -116,7 +126,7 @@ public sealed class QueryIntelligenceTrendsService(IIntelligenceTrendsRepository
             record.Provider,
             record.RefreshedAtUtc,
             matchingItems.Length,
-            new IntelligenceDashboardSummaryResponse(matchingItems.Length, averageScore, maxScore),
+            new IntelligenceDashboardSummaryResponse(matchingItems.Length, averageScore, maxScore, rankedItemsCount, topQueryOrTopic),
             topItems));
     }
 
@@ -170,6 +180,7 @@ public sealed class QueryIntelligenceTrendsService(IIntelligenceTrendsRepository
     private static ValidationErrors ValidateDashboardQuery(
         string tenantId,
         IntelligenceDashboardQuery query,
+        IntelligenceProfileResponse? profile,
         out string? normalizedCategory,
         out string? normalizedLocation,
         out string? normalizedTimeWindow,
@@ -178,7 +189,29 @@ public sealed class QueryIntelligenceTrendsService(IIntelligenceTrendsRepository
         out string? normalizedAudienceType,
         out int limit)
     {
-        var errors = Validate(tenantId, query.SiteId, query.Category, query.Location, query.TimeWindow, out normalizedCategory, out normalizedLocation, out normalizedTimeWindow);
+        var errors = new ValidationErrors();
+        normalizedCategory = !string.IsNullOrWhiteSpace(query.Category)
+            ? query.Category.Trim()
+            : !string.IsNullOrWhiteSpace(profile?.IndustryCategory) ? profile.IndustryCategory.Trim() : DefaultCategory;
+
+        normalizedLocation = !string.IsNullOrWhiteSpace(query.Location)
+            ? query.Location.Trim()
+            : profile?.TargetLocations.FirstOrDefault(static x => !string.IsNullOrWhiteSpace(x))?.Trim() ?? DefaultLocation;
+
+        normalizedTimeWindow = !string.IsNullOrWhiteSpace(query.TimeWindow)
+            ? query.TimeWindow.Trim()
+            : DefaultTimeWindow;
+
+        if (string.IsNullOrWhiteSpace(tenantId) || !Guid.TryParse(tenantId, out _))
+        {
+            errors.Add("tenantId", "Tenant id is invalid.");
+        }
+
+        if (query.SiteId == Guid.Empty)
+        {
+            errors.Add("siteId", "Site id is required.");
+        }
+
         normalizedProvider = null;
         normalizedKeyword = null;
         normalizedAudienceType = null;
@@ -194,9 +227,13 @@ public sealed class QueryIntelligenceTrendsService(IIntelligenceTrendsRepository
             normalizedKeyword = query.Keyword.Trim();
         }
 
-        if (!string.IsNullOrWhiteSpace(query.AudienceType))
+        var audienceSource = !string.IsNullOrWhiteSpace(query.AudienceType)
+            ? query.AudienceType
+            : profile?.PrimaryAudienceType;
+
+        if (!string.IsNullOrWhiteSpace(audienceSource))
         {
-            var audienceType = query.AudienceType.Trim();
+            var audienceType = audienceSource.Trim();
             if (!audienceType.Equals("B2B", StringComparison.OrdinalIgnoreCase)
                 && !audienceType.Equals("B2C", StringComparison.OrdinalIgnoreCase))
             {
@@ -234,7 +271,7 @@ public sealed class QueryIntelligenceTrendsService(IIntelligenceTrendsRepository
             provider,
             refreshedAtUtc,
             0,
-            new IntelligenceDashboardSummaryResponse(0, 0d, 0d),
+            new IntelligenceDashboardSummaryResponse(0, 0d, 0d, 0, null),
             []);
     }
 }

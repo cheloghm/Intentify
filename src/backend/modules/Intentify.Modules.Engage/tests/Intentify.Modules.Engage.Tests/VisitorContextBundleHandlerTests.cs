@@ -240,9 +240,9 @@ public sealed class VisitorContextBundleHandlerTests
                 "Google",
                 DateTime.UtcNow,
                 1,
-                new IntelligenceDashboardSummaryResponse(1, 0.8, 0.8),
+                new IntelligenceDashboardSummaryResponse(1, 0.8, 0.8, 1, "query"),
                 [new IntelligenceDashboardTrendItemResponse("topic", 0.8, 1, "Google")]));
-            var intelligenceService = new QueryIntelligenceTrendsService(intelligenceRepo);
+            var intelligenceService = new QueryIntelligenceTrendsService(intelligenceRepo, new FakeIntelligenceProfileRepository());
 
             Handler = new VisitorContextBundleHandler(
                 chatSessions,
@@ -369,6 +369,20 @@ public sealed class VisitorContextBundleHandlerTests
                 .Where(item => item.TenantId == query.TenantId && item.SiteId == query.SiteId && item.VisitorId == query.VisitorId)
                 .Take(query.PageSize)
                 .ToArray());
+    }
+
+
+
+    private sealed class FakeIntelligenceProfileRepository : IIntelligenceProfileRepository
+    {
+        public Task UpsertAsync(Intentify.Modules.Intelligence.Domain.IntelligenceProfile profile, CancellationToken ct = default)
+            => Task.CompletedTask;
+
+        public Task<Intentify.Modules.Intelligence.Domain.IntelligenceProfile?> GetAsync(string tenantId, Guid siteId, CancellationToken ct = default)
+            => Task.FromResult<Intentify.Modules.Intelligence.Domain.IntelligenceProfile?>(null);
+
+        public Task<IReadOnlyList<Intentify.Modules.Intelligence.Domain.IntelligenceProfile>> ListActiveAsync(CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<Intentify.Modules.Intelligence.Domain.IntelligenceProfile>>([]);
     }
 
     private sealed class FakeIntelligenceRepository(IntelligenceDashboardResponse dashboard) : IIntelligenceTrendsRepository

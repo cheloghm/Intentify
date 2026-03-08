@@ -26,6 +26,15 @@ public sealed class IntelligenceProfileRepository : IIntelligenceProfileReposito
         await _collection.ReplaceOneAsync(filter, profile, new ReplaceOptions { IsUpsert = true }, ct);
     }
 
+
+    public async Task<IReadOnlyList<IntelligenceProfile>> ListActiveAsync(CancellationToken ct = default)
+    {
+        await _ensureIndexes;
+
+        var filter = Builders<IntelligenceProfile>.Filter.Eq(x => x.IsActive, true);
+        return await _collection.Find(filter).ToListAsync(ct);
+    }
+
     public async Task<IntelligenceProfile?> GetAsync(string tenantId, Guid siteId, CancellationToken ct = default)
     {
         await _ensureIndexes;

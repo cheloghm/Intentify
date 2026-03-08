@@ -208,7 +208,7 @@ public sealed class AiDecisionGenerationServiceTests
                 "Google",
                 DateTime.UtcNow,
                 1,
-                new IntelligenceDashboardSummaryResponse(1, 0.7, 0.7),
+                new IntelligenceDashboardSummaryResponse(1, 0.7, 0.7, 1, "query"),
                 [new IntelligenceDashboardTrendItemResponse("return policy", 0.7, 1, "Google")]));
     }
 
