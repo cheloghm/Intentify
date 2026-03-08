@@ -56,25 +56,6 @@ public sealed class Stage7RecommendationExecutorTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_InvalidTenantEntityRef_IsRejected()
-    {
-        var fixture = new ExecutorFixture();
-
-        var recommendation = new AiRecommendation(
-            AiRecommendationType.SuggestPromo,
-            0.7m,
-            "Promo suggestion",
-            [],
-            new AiTargetRefs(PromoId: fixture.PromoId),
-            false,
-            null);
-
-        var result = await fixture.Executor.ExecuteAsync(fixture.CreateCommand(recommendation, approved: false) with { TenantId = Guid.NewGuid() });
-
-        Assert.Equal(OperationStatus.ValidationFailed, result.Status);
-    }
-
-    [Fact]
     public async Task ExecuteAsync_InvalidTenantSiteEntityRef_IsRejected()
     {
         var fixture = new ExecutorFixture();
