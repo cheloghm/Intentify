@@ -11,7 +11,7 @@ using Intentify.Modules.Visitors.Domain;
 
 namespace Intentify.Modules.Engage.Tests;
 
-public sealed class Stage7RecommendationExecutorTests
+public sealed class RecommendationExecutorTests
 {
     [Fact]
     public async Task ExecuteAsync_ApprovedEscalateTicket_ExecutesCreateTicket()
@@ -31,7 +31,7 @@ public sealed class Stage7RecommendationExecutorTests
         var result = await fixture.Executor.ExecuteAsync(command);
 
         Assert.Equal(OperationStatus.Success, result.Status);
-        Assert.Equal(Stage7RecommendationExecutionStatus.Executed, result.Value!.Status);
+        Assert.Equal(RecommendationExecutionStatus.Executed, result.Value!.Status);
         Assert.NotNull(result.Value.TicketId);
         Assert.Single(fixture.TicketRepository.Items);
     }
@@ -91,7 +91,7 @@ public sealed class Stage7RecommendationExecutorTests
         var result = await fixture.Executor.ExecuteAsync(fixture.CreateCommand(recommendation, approved: true));
 
         Assert.Equal(OperationStatus.Success, result.Status);
-        Assert.Equal(Stage7RecommendationExecutionStatus.Rejected, result.Value!.Status);
+        Assert.Equal(RecommendationExecutionStatus.Rejected, result.Value!.Status);
         Assert.Equal("UnsupportedAction", result.Value.Reason);
     }
 
@@ -112,7 +112,7 @@ public sealed class Stage7RecommendationExecutorTests
         var result = await fixture.Executor.ExecuteAsync(fixture.CreateCommand(recommendation, approved: false));
 
         Assert.Equal(OperationStatus.Success, result.Status);
-        Assert.Equal(Stage7RecommendationExecutionStatus.DisplayOnly, result.Value!.Status);
+        Assert.Equal(RecommendationExecutionStatus.DisplayOnly, result.Value!.Status);
         Assert.Empty(fixture.TicketRepository.Items);
     }
 
@@ -133,7 +133,7 @@ public sealed class Stage7RecommendationExecutorTests
         var result = await fixture.Executor.ExecuteAsync(fixture.CreateCommand(recommendation, approved: false));
 
         Assert.Equal(OperationStatus.Success, result.Status);
-        Assert.Equal(Stage7RecommendationExecutionStatus.NoOp, result.Value!.Status);
+        Assert.Equal(RecommendationExecutionStatus.NoOp, result.Value!.Status);
         Assert.Empty(fixture.TicketRepository.Items);
     }
 
@@ -146,7 +146,7 @@ public sealed class Stage7RecommendationExecutorTests
         public Guid PromoId { get; } = Guid.NewGuid();
 
         public InMemoryTicketRepository TicketRepository { get; }
-        public Stage7RecommendationExecutor Executor { get; }
+        public RecommendationExecutor Executor { get; }
 
         public ExecutorFixture()
         {
@@ -185,7 +185,7 @@ public sealed class Stage7RecommendationExecutorTests
                 UpdatedAtUtc = DateTime.UtcNow
             });
 
-            Executor = new Stage7RecommendationExecutor(
+            Executor = new RecommendationExecutor(
                 createTicketHandler,
                 listTicketsHandler,
                 chatSessions,
@@ -194,7 +194,7 @@ public sealed class Stage7RecommendationExecutorTests
                 knowledge);
         }
 
-        public ExecuteStage7RecommendationCommand CreateCommand(AiRecommendation recommendation, bool approved)
+        public ExecuteRecommendationCommand CreateCommand(AiRecommendation recommendation, bool approved)
             => new(
                 TenantId,
                 SiteId,

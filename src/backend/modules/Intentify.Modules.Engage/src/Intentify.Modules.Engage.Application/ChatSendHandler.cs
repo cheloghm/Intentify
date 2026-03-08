@@ -51,8 +51,8 @@ public sealed class ChatSendHandler
     private readonly ILeadVisitorLinker _leadVisitorLinker;
     private readonly RetrieveTopChunksHandler _retrieveTopChunksHandler;
     private readonly IChatCompletionClient _chatCompletionClient;
-    private readonly Stage7VisitorContextBundleHandler _stage7VisitorContextBundleHandler;
-    private readonly Stage7AiDecisionGenerationService _stage7AiDecisionGenerationService;
+    private readonly VisitorContextBundleHandler _stage7VisitorContextBundleHandler;
+    private readonly AiDecisionGenerationService _stage7AiDecisionGenerationService;
     private readonly TimeSpan _sessionTimeout;
     private readonly ILogger<ChatSendHandler> _logger;
 
@@ -66,8 +66,8 @@ public sealed class ChatSendHandler
         ILeadVisitorLinker leadVisitorLinker,
         RetrieveTopChunksHandler retrieveTopChunksHandler,
         IChatCompletionClient chatCompletionClient,
-        Stage7VisitorContextBundleHandler stage7VisitorContextBundleHandler,
-        Stage7AiDecisionGenerationService stage7AiDecisionGenerationService,
+        VisitorContextBundleHandler stage7VisitorContextBundleHandler,
+        AiDecisionGenerationService stage7AiDecisionGenerationService,
         int sessionTimeoutMinutes,
         ILogger<ChatSendHandler> logger)
     {

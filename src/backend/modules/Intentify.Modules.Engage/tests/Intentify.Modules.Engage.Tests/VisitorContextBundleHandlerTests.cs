@@ -14,18 +14,18 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Intentify.Modules.Engage.Tests;
 
-public sealed class Stage7VisitorContextBundleHandlerTests
+public sealed class VisitorContextBundleHandlerTests
 {
     [Fact]
     public async Task HandleAsync_BundleWithEngageSessionOnly_Succeeds()
     {
-        var fixture = new Stage7Fixture();
+        var fixture = new Fixture();
         var query = fixture.CreateQuery(visitorId: null, engageSessionId: fixture.EngageSession.Id);
 
         var result = await fixture.Handler.HandleAsync(query);
 
         Assert.Equal(OperationStatus.Success, result.Status);
-        var value = Assert.IsType<Stage7VisitorContextBundle>(result.Value);
+        var value = Assert.IsType<VisitorContextBundle>(result.Value);
         Assert.Equal(fixture.EngageSession.Id, value.ContextRef.EngageSessionId);
         Assert.Equal(fixture.Visitor.Id, value.ContextRef.VisitorId);
         Assert.NotNull(value.RecentEngageSummary);
@@ -35,13 +35,13 @@ public sealed class Stage7VisitorContextBundleHandlerTests
     [Fact]
     public async Task HandleAsync_BundleWithVisitorOnly_Succeeds()
     {
-        var fixture = new Stage7Fixture();
+        var fixture = new Fixture();
         var query = fixture.CreateQuery(visitorId: fixture.Visitor.Id, engageSessionId: null);
 
         var result = await fixture.Handler.HandleAsync(query);
 
         Assert.Equal(OperationStatus.Success, result.Status);
-        var value = Assert.IsType<Stage7VisitorContextBundle>(result.Value);
+        var value = Assert.IsType<VisitorContextBundle>(result.Value);
         Assert.Equal(fixture.Visitor.Id, value.ContextRef.VisitorId);
         Assert.Null(value.ContextRef.EngageSessionId);
         Assert.NotNull(value.VisitorProfile);
@@ -51,13 +51,13 @@ public sealed class Stage7VisitorContextBundleHandlerTests
     [Fact]
     public async Task HandleAsync_BundleWithBoth_Succeeds()
     {
-        var fixture = new Stage7Fixture();
+        var fixture = new Fixture();
         var query = fixture.CreateQuery(visitorId: fixture.Visitor.Id, engageSessionId: fixture.EngageSession.Id);
 
         var result = await fixture.Handler.HandleAsync(query);
 
         Assert.Equal(OperationStatus.Success, result.Status);
-        var value = Assert.IsType<Stage7VisitorContextBundle>(result.Value);
+        var value = Assert.IsType<VisitorContextBundle>(result.Value);
         Assert.Equal(fixture.Visitor.Id, value.ContextRef.VisitorId);
         Assert.Equal(fixture.EngageSession.Id, value.ContextRef.EngageSessionId);
     }
@@ -65,13 +65,13 @@ public sealed class Stage7VisitorContextBundleHandlerTests
     [Fact]
     public async Task HandleAsync_MissingOptionalSources_StillSucceeds()
     {
-        var fixture = new Stage7Fixture(includeOptionalData: false);
+        var fixture = new Fixture(includeOptionalData: false);
         var query = fixture.CreateQuery(visitorId: fixture.Visitor.Id, engageSessionId: fixture.EngageSession.Id);
 
         var result = await fixture.Handler.HandleAsync(query);
 
         Assert.Equal(OperationStatus.Success, result.Status);
-        var value = Assert.IsType<Stage7VisitorContextBundle>(result.Value);
+        var value = Assert.IsType<VisitorContextBundle>(result.Value);
         Assert.NotNull(value.KnowledgeRetrievalSnapshot);
         Assert.True(value.LinkedTicketsSummary is null || value.LinkedTicketsSummary.Count == 0);
         Assert.True(value.PromoInteractionSummary is null || value.PromoInteractionSummary.Count == 0);
@@ -80,7 +80,7 @@ public sealed class Stage7VisitorContextBundleHandlerTests
     [Fact]
     public async Task HandleAsync_InvalidTenantSiteContext_FailsValidation()
     {
-        var fixture = new Stage7Fixture();
+        var fixture = new Fixture();
         var query = fixture.CreateQuery(visitorId: fixture.Visitor.Id, engageSessionId: null) with
         {
             TenantId = Guid.Empty,
@@ -95,7 +95,7 @@ public sealed class Stage7VisitorContextBundleHandlerTests
     [Fact]
     public async Task HandleAsync_ReturnsBoundedSummariesOnly()
     {
-        var fixture = new Stage7Fixture();
+        var fixture = new Fixture();
         var query = fixture.CreateQuery(visitorId: fixture.Visitor.Id, engageSessionId: fixture.EngageSession.Id) with
         {
             EngageMessageLimit = 2,
@@ -108,7 +108,7 @@ public sealed class Stage7VisitorContextBundleHandlerTests
         var result = await fixture.Handler.HandleAsync(query);
 
         Assert.Equal(OperationStatus.Success, result.Status);
-        var value = Assert.IsType<Stage7VisitorContextBundle>(result.Value);
+        var value = Assert.IsType<VisitorContextBundle>(result.Value);
         Assert.True(value.RecentEngageSummary?.Messages.Count <= 2);
         Assert.True((value.RecentTimelineSummary?.Count ?? 0) <= 2);
         Assert.True((value.LinkedTicketsSummary?.Count ?? 0) <= 1);
@@ -121,7 +121,7 @@ public sealed class Stage7VisitorContextBundleHandlerTests
     [Fact]
     public async Task HandleAsync_TenantSiteMismatch_FailsSafely()
     {
-        var fixture = new Stage7Fixture();
+        var fixture = new Fixture();
         var query = fixture.CreateQuery(visitorId: null, engageSessionId: fixture.EngageSession.Id) with
         {
             SiteId = Guid.NewGuid()
@@ -132,15 +132,15 @@ public sealed class Stage7VisitorContextBundleHandlerTests
         Assert.Equal(OperationStatus.NotFound, result.Status);
     }
 
-    private sealed class Stage7Fixture
+    private sealed class Fixture
     {
         public Guid TenantId { get; } = Guid.NewGuid();
         public Guid SiteId { get; } = Guid.NewGuid();
         public Visitor Visitor { get; }
         public EngageChatSession EngageSession { get; }
-        public Stage7VisitorContextBundleHandler Handler { get; }
+        public VisitorContextBundleHandler Handler { get; }
 
-        public Stage7Fixture(bool includeOptionalData = true)
+        public Fixture(bool includeOptionalData = true)
         {
             Visitor = new Visitor
             {
@@ -244,7 +244,7 @@ public sealed class Stage7VisitorContextBundleHandlerTests
                 [new IntelligenceDashboardTrendItemResponse("topic", 0.8, 1, "Google")]));
             var intelligenceService = new QueryIntelligenceTrendsService(intelligenceRepo);
 
-            Handler = new Stage7VisitorContextBundleHandler(
+            Handler = new VisitorContextBundleHandler(
                 chatSessions,
                 chatMessages,
                 leadLinker,

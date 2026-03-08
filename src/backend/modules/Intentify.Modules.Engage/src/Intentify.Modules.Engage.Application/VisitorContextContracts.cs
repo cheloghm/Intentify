@@ -23,18 +23,18 @@ public sealed record BuildVisitorContextBundleQuery(
     string? IntelligenceAudienceType = null,
     int? IntelligenceLimit = 5);
 
-public sealed record Stage7VisitorContextBundle(
+public sealed record VisitorContextBundle(
     AiDecisionContextRef ContextRef,
     IReadOnlyCollection<string> CollectorSessionIds,
-    Stage7KnowledgeRetrievalSnapshot KnowledgeRetrievalSnapshot,
-    Stage7VisitorProfileSummary? VisitorProfile,
-    IReadOnlyCollection<Stage7TimelineItemSummary>? RecentTimelineSummary,
-    Stage7EngageSessionSummary? RecentEngageSummary,
-    IReadOnlyCollection<Stage7TicketSummary>? LinkedTicketsSummary,
-    IReadOnlyCollection<Stage7PromoInteractionSummary>? PromoInteractionSummary,
-    Stage7IntelligenceSnapshot? IntelligenceSnapshot);
+    KnowledgeRetrievalSnapshot KnowledgeRetrievalSnapshot,
+    VisitorProfileSummary? VisitorProfile,
+    IReadOnlyCollection<TimelineItemSummary>? RecentTimelineSummary,
+    EngageSessionSummary? RecentEngageSummary,
+    IReadOnlyCollection<TicketSummary>? LinkedTicketsSummary,
+    IReadOnlyCollection<PromoInteractionSummary>? PromoInteractionSummary,
+    IntelligenceSnapshot? IntelligenceSnapshot);
 
-public sealed record Stage7VisitorProfileSummary(
+public sealed record VisitorProfileSummary(
     Guid VisitorId,
     DateTime FirstSeenAtUtc,
     DateTime LastSeenAtUtc,
@@ -46,27 +46,27 @@ public sealed record Stage7VisitorProfileSummary(
     string? Language,
     string? Platform);
 
-public sealed record Stage7TimelineItemSummary(
+public sealed record TimelineItemSummary(
     DateTime OccurredAtUtc,
     string Type,
     string Url,
     string? SessionId,
     IReadOnlyDictionary<string, string>? Metadata);
 
-public sealed record Stage7EngageMessageSummary(
+public sealed record EngageMessageSummary(
     string Role,
     string ContentExcerpt,
     DateTime CreatedAtUtc,
     decimal? Confidence,
     int CitationCount);
 
-public sealed record Stage7EngageSessionSummary(
+public sealed record EngageSessionSummary(
     Guid SessionId,
     DateTime StartedAtUtc,
     DateTime LastActivityAtUtc,
-    IReadOnlyCollection<Stage7EngageMessageSummary> Messages);
+    IReadOnlyCollection<EngageMessageSummary> Messages);
 
-public sealed record Stage7TicketSummary(
+public sealed record TicketSummary(
     Guid TicketId,
     string Subject,
     string Status,
@@ -75,7 +75,7 @@ public sealed record Stage7TicketSummary(
     Guid? EngageSessionId,
     Guid? VisitorId);
 
-public sealed record Stage7PromoInteractionSummary(
+public sealed record PromoInteractionSummary(
     Guid PromoEntryId,
     Guid PromoId,
     DateTime SubmittedAtUtc,
@@ -83,19 +83,19 @@ public sealed record Stage7PromoInteractionSummary(
     string? Name,
     IReadOnlyDictionary<string, string>? AnswerHighlights);
 
-public sealed record Stage7RetrievedKnowledgeChunkSummary(
+public sealed record RetrievedKnowledgeChunkSummary(
     Guid SourceId,
     Guid ChunkId,
     int ChunkIndex,
     int Score,
     string ContentExcerpt);
 
-public sealed record Stage7KnowledgeRetrievalSnapshot(
+public sealed record KnowledgeRetrievalSnapshot(
     string Query,
     int TopK,
-    IReadOnlyCollection<Stage7RetrievedKnowledgeChunkSummary> TopChunks);
+    IReadOnlyCollection<RetrievedKnowledgeChunkSummary> TopChunks);
 
-public sealed record Stage7IntelligenceSnapshot(
+public sealed record IntelligenceSnapshot(
     string Category,
     string Location,
     string TimeWindow,
