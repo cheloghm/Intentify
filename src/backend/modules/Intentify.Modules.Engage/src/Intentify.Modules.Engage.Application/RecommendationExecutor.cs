@@ -7,7 +7,7 @@ using Intentify.Shared.Validation;
 
 namespace Intentify.Modules.Engage.Application;
 
-public sealed class Stage7RecommendationExecutor
+public sealed class RecommendationExecutor
 {
     private static readonly IReadOnlyCollection<AiRecommendationType> DefaultAllowlistedActions = Enum
         .GetValues<AiRecommendationType>()
@@ -20,7 +20,7 @@ public sealed class Stage7RecommendationExecutor
     private readonly IPromoRepository _promoRepository;
     private readonly IKnowledgeSourceRepository _knowledgeSourceRepository;
 
-    public Stage7RecommendationExecutor(
+    public RecommendationExecutor(
         CreateTicketHandler createTicketHandler,
         ListTicketsHandler listTicketsHandler,
         IEngageChatSessionRepository chatSessionRepository,
@@ -36,41 +36,41 @@ public sealed class Stage7RecommendationExecutor
         _knowledgeSourceRepository = knowledgeSourceRepository;
     }
 
-    public async Task<OperationResult<Stage7RecommendationExecutionResult>> ExecuteAsync(
-        ExecuteStage7RecommendationCommand command,
+    public async Task<OperationResult<RecommendationExecutionResult>> ExecuteAsync(
+        ExecuteRecommendationCommand command,
         CancellationToken cancellationToken = default)
     {
         var validationErrors = await ValidateCommandAsync(command, cancellationToken);
         if (validationErrors.HasErrors)
         {
-            return OperationResult<Stage7RecommendationExecutionResult>.ValidationFailed(validationErrors);
+            return OperationResult<RecommendationExecutionResult>.ValidationFailed(validationErrors);
         }
 
         var type = command.Recommendation.Type;
 
         if (type == AiRecommendationType.NoAction)
         {
-            return OperationResult<Stage7RecommendationExecutionResult>.Success(
-                new Stage7RecommendationExecutionResult(Stage7RecommendationExecutionStatus.NoOp, "No action executed.", null));
+            return OperationResult<RecommendationExecutionResult>.Success(
+                new RecommendationExecutionResult(RecommendationExecutionStatus.NoOp, "No action executed.", null));
         }
 
         if (type == AiRecommendationType.TagVisitor)
         {
-            return OperationResult<Stage7RecommendationExecutionResult>.Success(
-                new Stage7RecommendationExecutionResult(Stage7RecommendationExecutionStatus.Rejected, "TagVisitor is not executable in current platform scope.", "UnsupportedAction"));
+            return OperationResult<RecommendationExecutionResult>.Success(
+                new RecommendationExecutionResult(RecommendationExecutionStatus.Rejected, "TagVisitor is not executable in current platform scope.", "UnsupportedAction"));
         }
 
         if (type == AiRecommendationType.SuggestPromo)
         {
             var promoPublicKey = command.Recommendation.TargetRefs?.PromoPublicKey;
-            return OperationResult<Stage7RecommendationExecutionResult>.Success(
-                new Stage7RecommendationExecutionResult(Stage7RecommendationExecutionStatus.DisplayOnly, "Promo suggestion available for display only.", null, null, promoPublicKey));
+            return OperationResult<RecommendationExecutionResult>.Success(
+                new RecommendationExecutionResult(RecommendationExecutionStatus.DisplayOnly, "Promo suggestion available for display only.", null, null, promoPublicKey));
         }
 
         if (type == AiRecommendationType.SuggestKnowledge)
         {
-            return OperationResult<Stage7RecommendationExecutionResult>.Success(
-                new Stage7RecommendationExecutionResult(Stage7RecommendationExecutionStatus.DisplayOnly, "Knowledge suggestion available for display only.", null));
+            return OperationResult<RecommendationExecutionResult>.Success(
+                new RecommendationExecutionResult(RecommendationExecutionStatus.DisplayOnly, "Knowledge suggestion available for display only.", null));
         }
 
         if (type == AiRecommendationType.EscalateTicket)
@@ -88,11 +88,11 @@ public sealed class Stage7RecommendationExecutor
             return await ExecuteKnowledgeBacklogTicketAsync(command, "Stage7 knowledge gap notification", cancellationToken);
         }
 
-        return OperationResult<Stage7RecommendationExecutionResult>.Success(
-            new Stage7RecommendationExecutionResult(Stage7RecommendationExecutionStatus.Rejected, "Recommendation type is not executable.", "UnsupportedAction"));
+        return OperationResult<RecommendationExecutionResult>.Success(
+            new RecommendationExecutionResult(RecommendationExecutionStatus.Rejected, "Recommendation type is not executable.", "UnsupportedAction"));
     }
 
-    private async Task<ValidationErrors> ValidateCommandAsync(ExecuteStage7RecommendationCommand command, CancellationToken cancellationToken)
+    private async Task<ValidationErrors> ValidateCommandAsync(ExecuteRecommendationCommand command, CancellationToken cancellationToken)
     {
         var errors = new ValidationErrors();
 
@@ -194,8 +194,8 @@ public sealed class Stage7RecommendationExecutor
         return errors;
     }
 
-    private async Task<OperationResult<Stage7RecommendationExecutionResult>> ExecuteEscalateTicketAsync(
-        ExecuteStage7RecommendationCommand command,
+    private async Task<OperationResult<RecommendationExecutionResult>> ExecuteEscalateTicketAsync(
+        ExecuteRecommendationCommand command,
         CancellationToken cancellationToken)
     {
         var subject = ReadCommandValue(command.Recommendation.ProposedCommand, "subject")
@@ -212,9 +212,9 @@ public sealed class Stage7RecommendationExecutor
         var duplicate = await FindDuplicateTicketAsync(command, subject, cancellationToken);
         if (duplicate is { } existingTicketId)
         {
-            return OperationResult<Stage7RecommendationExecutionResult>.Success(
-                new Stage7RecommendationExecutionResult(
-                    Stage7RecommendationExecutionStatus.Rejected,
+            return OperationResult<RecommendationExecutionResult>.Success(
+                new RecommendationExecutionResult(
+                    RecommendationExecutionStatus.Rejected,
                     "Duplicate escalation suppressed.",
                     "DuplicateSuppressed",
                     existingTicketId));
@@ -234,20 +234,20 @@ public sealed class Stage7RecommendationExecutor
         if (createResult.Status != OperationStatus.Success || createResult.Value is null)
         {
             return createResult.Status == OperationStatus.ValidationFailed && createResult.Errors is not null
-                ? OperationResult<Stage7RecommendationExecutionResult>.ValidationFailed(createResult.Errors)
-                : OperationResult<Stage7RecommendationExecutionResult>.Error();
+                ? OperationResult<RecommendationExecutionResult>.ValidationFailed(createResult.Errors)
+                : OperationResult<RecommendationExecutionResult>.Error();
         }
 
-        return OperationResult<Stage7RecommendationExecutionResult>.Success(
-            new Stage7RecommendationExecutionResult(
-                Stage7RecommendationExecutionStatus.Executed,
+        return OperationResult<RecommendationExecutionResult>.Success(
+            new RecommendationExecutionResult(
+                RecommendationExecutionStatus.Executed,
                 "Escalation ticket created.",
                 null,
                 createResult.Value.Id));
     }
 
-    private async Task<OperationResult<Stage7RecommendationExecutionResult>> ExecuteKnowledgeBacklogTicketAsync(
-        ExecuteStage7RecommendationCommand command,
+    private async Task<OperationResult<RecommendationExecutionResult>> ExecuteKnowledgeBacklogTicketAsync(
+        ExecuteRecommendationCommand command,
         string subjectPrefix,
         CancellationToken cancellationToken)
     {
@@ -273,9 +273,9 @@ public sealed class Stage7RecommendationExecutor
         var duplicate = await FindDuplicateTicketAsync(command, subject, cancellationToken);
         if (duplicate is { } existingTicketId)
         {
-            return OperationResult<Stage7RecommendationExecutionResult>.Success(
-                new Stage7RecommendationExecutionResult(
-                    Stage7RecommendationExecutionStatus.Rejected,
+            return OperationResult<RecommendationExecutionResult>.Success(
+                new RecommendationExecutionResult(
+                    RecommendationExecutionStatus.Rejected,
                     "Duplicate backlog ticket suppressed.",
                     "DuplicateSuppressed",
                     existingTicketId));
@@ -295,20 +295,20 @@ public sealed class Stage7RecommendationExecutor
         if (createResult.Status != OperationStatus.Success || createResult.Value is null)
         {
             return createResult.Status == OperationStatus.ValidationFailed && createResult.Errors is not null
-                ? OperationResult<Stage7RecommendationExecutionResult>.ValidationFailed(createResult.Errors)
-                : OperationResult<Stage7RecommendationExecutionResult>.Error();
+                ? OperationResult<RecommendationExecutionResult>.ValidationFailed(createResult.Errors)
+                : OperationResult<RecommendationExecutionResult>.Error();
         }
 
-        return OperationResult<Stage7RecommendationExecutionResult>.Success(
-            new Stage7RecommendationExecutionResult(
-                Stage7RecommendationExecutionStatus.Executed,
+        return OperationResult<RecommendationExecutionResult>.Success(
+            new RecommendationExecutionResult(
+                RecommendationExecutionStatus.Executed,
                 "Backlog ticket created.",
                 null,
                 createResult.Value.Id));
     }
 
     private async Task<Guid?> FindDuplicateTicketAsync(
-        ExecuteStage7RecommendationCommand command,
+        ExecuteRecommendationCommand command,
         string subject,
         CancellationToken cancellationToken)
     {

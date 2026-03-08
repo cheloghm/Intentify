@@ -8,7 +8,7 @@ using Intentify.Shared.Validation;
 
 namespace Intentify.Modules.Engage.Application;
 
-public sealed class Stage7VisitorContextBundleHandler
+public sealed class VisitorContextBundleHandler
 {
     private const int MaxKnowledgeTop = 5;
     private const int MaxTimelineLimit = 30;
@@ -27,7 +27,7 @@ public sealed class Stage7VisitorContextBundleHandler
     private readonly IPromoEntryRepository _promoEntryRepository;
     private readonly QueryIntelligenceTrendsService _queryIntelligenceTrendsService;
 
-    public Stage7VisitorContextBundleHandler(
+    public VisitorContextBundleHandler(
         IEngageChatSessionRepository chatSessionRepository,
         IEngageChatMessageRepository chatMessageRepository,
         ILeadVisitorLinker leadVisitorLinker,
@@ -49,14 +49,14 @@ public sealed class Stage7VisitorContextBundleHandler
         _queryIntelligenceTrendsService = queryIntelligenceTrendsService;
     }
 
-    public async Task<OperationResult<Stage7VisitorContextBundle>> HandleAsync(
+    public async Task<OperationResult<VisitorContextBundle>> HandleAsync(
         BuildVisitorContextBundleQuery query,
         CancellationToken cancellationToken = default)
     {
         var errors = Validate(query);
         if (errors.HasErrors)
         {
-            return OperationResult<Stage7VisitorContextBundle>.ValidationFailed(errors);
+            return OperationResult<VisitorContextBundle>.ValidationFailed(errors);
         }
 
         var engageSession = query.EngageSessionId.HasValue
@@ -67,7 +67,7 @@ public sealed class Stage7VisitorContextBundleHandler
         {
             if (engageSession is null || engageSession.TenantId != query.TenantId || engageSession.SiteId != query.SiteId)
             {
-                return OperationResult<Stage7VisitorContextBundle>.NotFound();
+                return OperationResult<VisitorContextBundle>.NotFound();
             }
         }
 
@@ -95,12 +95,12 @@ public sealed class Stage7VisitorContextBundleHandler
             new RetrieveTopChunksQuery(query.TenantId, query.SiteId, query.KnowledgeQuery.Trim(), knowledgeTop),
             cancellationToken);
 
-        var knowledgeSnapshot = new Stage7KnowledgeRetrievalSnapshot(
+        var knowledgeSnapshot = new KnowledgeRetrievalSnapshot(
             query.KnowledgeQuery.Trim(),
             knowledgeTop,
             retrievedChunks
                 .Take(knowledgeTop)
-                .Select(item => new Stage7RetrievedKnowledgeChunkSummary(
+                .Select(item => new RetrievedKnowledgeChunkSummary(
                     item.SourceId,
                     item.ChunkId,
                     item.ChunkIndex,
@@ -108,8 +108,8 @@ public sealed class Stage7VisitorContextBundleHandler
                     ToExcerpt(item.Content, ExcerptLength)))
                 .ToArray());
 
-        Stage7VisitorProfileSummary? visitorProfile = null;
-        IReadOnlyCollection<Stage7TimelineItemSummary>? timelineSummary = null;
+        VisitorProfileSummary? visitorProfile = null;
+        IReadOnlyCollection<TimelineItemSummary>? timelineSummary = null;
 
         if (resolvedVisitorId.HasValue)
         {
@@ -121,7 +121,7 @@ public sealed class Stage7VisitorContextBundleHandler
 
                 if (detail is not null)
                 {
-                    visitorProfile = new Stage7VisitorProfileSummary(
+                    visitorProfile = new VisitorProfileSummary(
                         detail.VisitorId,
                         detail.FirstSeenAtUtc,
                         detail.LastSeenAtUtc,
@@ -148,7 +148,7 @@ public sealed class Stage7VisitorContextBundleHandler
 
                     timelineSummary = timeline
                         .Take(timelineLimit)
-                        .Select(item => new Stage7TimelineItemSummary(
+                        .Select(item => new TimelineItemSummary(
                             item.OccurredAtUtc,
                             item.Type,
                             ToExcerpt(item.Url, ExcerptLength),
@@ -163,7 +163,7 @@ public sealed class Stage7VisitorContextBundleHandler
             }
         }
 
-        Stage7EngageSessionSummary? engageSummary = null;
+        EngageSessionSummary? engageSummary = null;
         if (engageSession is not null)
         {
             try
@@ -171,7 +171,7 @@ public sealed class Stage7VisitorContextBundleHandler
                 var engageLimit = Clamp(query.EngageMessageLimit, 1, MaxEngageMessageLimit);
                 var messages = await _chatMessageRepository.ListBySessionAsync(engageSession.Id, cancellationToken);
 
-                engageSummary = new Stage7EngageSessionSummary(
+                engageSummary = new EngageSessionSummary(
                     engageSession.Id,
                     engageSession.CreatedAtUtc,
                     engageSession.UpdatedAtUtc,
@@ -179,7 +179,7 @@ public sealed class Stage7VisitorContextBundleHandler
                         .OrderByDescending(item => item.CreatedAtUtc)
                         .Take(engageLimit)
                         .OrderBy(item => item.CreatedAtUtc)
-                        .Select(item => new Stage7EngageMessageSummary(
+                        .Select(item => new EngageMessageSummary(
                             item.Role,
                             ToExcerpt(item.Content, ExcerptLength),
                             item.CreatedAtUtc,
@@ -193,7 +193,7 @@ public sealed class Stage7VisitorContextBundleHandler
             }
         }
 
-        IReadOnlyCollection<Stage7TicketSummary>? ticketsSummary = null;
+        IReadOnlyCollection<TicketSummary>? ticketsSummary = null;
         try
         {
             var ticketLimit = Clamp(query.TicketsLimit, 1, MaxTicketsLimit);
@@ -203,7 +203,7 @@ public sealed class Stage7VisitorContextBundleHandler
 
             ticketsSummary = tickets
                 .Take(ticketLimit)
-                .Select(item => new Stage7TicketSummary(
+                .Select(item => new TicketSummary(
                     item.Id,
                     ToExcerpt(item.Subject, 120),
                     item.Status,
@@ -218,7 +218,7 @@ public sealed class Stage7VisitorContextBundleHandler
             // Optional source: fail-soft.
         }
 
-        IReadOnlyCollection<Stage7PromoInteractionSummary>? promoSummary = null;
+        IReadOnlyCollection<PromoInteractionSummary>? promoSummary = null;
         if (resolvedVisitorId.HasValue)
         {
             try
@@ -230,7 +230,7 @@ public sealed class Stage7VisitorContextBundleHandler
 
                 promoSummary = entries
                     .Take(promoLimit)
-                    .Select(item => new Stage7PromoInteractionSummary(
+                    .Select(item => new PromoInteractionSummary(
                         item.Id,
                         item.PromoId,
                         item.CreatedAtUtc,
@@ -245,7 +245,7 @@ public sealed class Stage7VisitorContextBundleHandler
             }
         }
 
-        Stage7IntelligenceSnapshot? intelligenceSnapshot = null;
+        IntelligenceSnapshot? intelligenceSnapshot = null;
         if (query.IncludeIntelligenceSnapshot)
         {
             try
@@ -266,7 +266,7 @@ public sealed class Stage7VisitorContextBundleHandler
                 if (dashboardResult.Status == OperationStatus.Success && dashboardResult.Value is not null)
                 {
                     var dashboard = dashboardResult.Value;
-                    intelligenceSnapshot = new Stage7IntelligenceSnapshot(
+                    intelligenceSnapshot = new IntelligenceSnapshot(
                         dashboard.Category,
                         dashboard.Location,
                         dashboard.TimeWindow,
@@ -289,7 +289,7 @@ public sealed class Stage7VisitorContextBundleHandler
             resolvedVisitorId,
             query.EngageSessionId);
 
-        var bundle = new Stage7VisitorContextBundle(
+        var bundle = new VisitorContextBundle(
             contextRef,
             collectorSessionIds.OrderBy(item => item, StringComparer.Ordinal).ToArray(),
             knowledgeSnapshot,
@@ -300,7 +300,7 @@ public sealed class Stage7VisitorContextBundleHandler
             promoSummary,
             intelligenceSnapshot);
 
-        return OperationResult<Stage7VisitorContextBundle>.Success(bundle);
+        return OperationResult<VisitorContextBundle>.Success(bundle);
     }
 
     private static ValidationErrors Validate(BuildVisitorContextBundleQuery query)
