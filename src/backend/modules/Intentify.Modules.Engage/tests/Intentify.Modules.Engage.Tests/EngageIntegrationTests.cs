@@ -192,6 +192,10 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
         var sessionId = json.RootElement.GetProperty("sessionId").GetString();
         Assert.Equal("Thanks — we’ll get back to you shortly.", json.RootElement.GetProperty("response").GetString());
         Assert.True(json.RootElement.GetProperty("ticketCreated").GetBoolean());
+        if (json.RootElement.TryGetProperty("stage7Decision", out var stage7Decision))
+        {
+            Assert.Equal(JsonValueKind.Null, stage7Decision.ValueKind);
+        }
 
         var database = new MongoClient(_mongo.ConnectionString).GetDatabase(_mongo.DatabaseName);
         var handoffTickets = database.GetCollection<BsonEngageTicket>("EngageHandoffTickets");
@@ -248,6 +252,10 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
         Assert.False(json.RootElement.GetProperty("ticketCreated").GetBoolean());
         Assert.True(json.RootElement.GetProperty("confidence").GetDecimal() >= 0.5m);
         Assert.True(json.RootElement.GetProperty("sources").GetArrayLength() > 0);
+        if (json.RootElement.TryGetProperty("stage7Decision", out var stage7Decision))
+        {
+            Assert.Equal(JsonValueKind.Null, stage7Decision.ValueKind);
+        }
 
         var database = new MongoClient(_mongo.ConnectionString).GetDatabase(_mongo.DatabaseName);
         var handoffTickets = database.GetCollection<BsonEngageTicket>("EngageHandoffTickets");
@@ -490,7 +498,6 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
-    [Fact]
     public async Task ChatSend_RejectsWidgetKeyMismatchBetweenQueryAndBody()
     {
         var token = await RegisterUserAsync();
@@ -509,6 +516,7 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
         Assert.True(errors.TryGetProperty("widgetKey", out _));
     }
 
+    [Fact]
     public async Task ChatSend_AcceptsWidgetKeyFromQuery_AndRequiresWidgetKeyWhenMissingFromBoth()
     {
         var token = await RegisterUserAsync();
