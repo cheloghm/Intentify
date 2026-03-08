@@ -5,7 +5,7 @@ using Intentify.Shared.AI;
 
 namespace Intentify.Modules.Engage.Tests;
 
-public sealed class Stage7AiDecisionGenerationServiceTests
+public sealed class AiDecisionGenerationServiceTests
 {
     [Fact]
     public async Task GenerateAsync_ValidSuggestKnowledgeOutput_ReturnsValidDecision()
@@ -31,7 +31,7 @@ public sealed class Stage7AiDecisionGenerationServiceTests
         }
         """;
 
-        var service = new Stage7AiDecisionGenerationService(new FakeChatCompletionClient(Result<string>.Success(aiOutput)));
+        var service = new AiDecisionGenerationService(new FakeChatCompletionClient(Result<string>.Success(aiOutput)));
         var result = await service.GenerateAsync(CreateContextBundle());
 
         Assert.Equal(AiDecisionValidationStatus.Valid, result.ValidationStatus);
@@ -64,7 +64,7 @@ public sealed class Stage7AiDecisionGenerationServiceTests
         }
         """;
 
-        var service = new Stage7AiDecisionGenerationService(new FakeChatCompletionClient(Result<string>.Success(aiOutput)));
+        var service = new AiDecisionGenerationService(new FakeChatCompletionClient(Result<string>.Success(aiOutput)));
         var result = await service.GenerateAsync(CreateContextBundle());
 
         Assert.Equal(AiDecisionValidationStatus.Valid, result.ValidationStatus);
@@ -76,7 +76,7 @@ public sealed class Stage7AiDecisionGenerationServiceTests
     [Fact]
     public async Task GenerateAsync_MalformedOutput_ReturnsInvalidNoAction()
     {
-        var service = new Stage7AiDecisionGenerationService(new FakeChatCompletionClient(Result<string>.Success("not-json-output")));
+        var service = new AiDecisionGenerationService(new FakeChatCompletionClient(Result<string>.Success("not-json-output")));
         var result = await service.GenerateAsync(CreateContextBundle());
 
         Assert.Equal(AiDecisionValidationStatus.Invalid, result.ValidationStatus);
@@ -107,7 +107,7 @@ public sealed class Stage7AiDecisionGenerationServiceTests
         }
         """;
 
-        var service = new Stage7AiDecisionGenerationService(new FakeChatCompletionClient(Result<string>.Success(aiOutput)));
+        var service = new AiDecisionGenerationService(new FakeChatCompletionClient(Result<string>.Success(aiOutput)));
         var result = await service.GenerateAsync(CreateContextBundle());
 
         Assert.Equal(AiDecisionValidationStatus.Invalid, result.ValidationStatus);
@@ -118,7 +118,7 @@ public sealed class Stage7AiDecisionGenerationServiceTests
     [Fact]
     public async Task GenerateAsync_AiUnavailable_ReturnsInvalidNoAction()
     {
-        var service = new Stage7AiDecisionGenerationService(new FakeChatCompletionClient(Result<string>.Failure(new Error("AI_UNAVAILABLE", "down"))));
+        var service = new AiDecisionGenerationService(new FakeChatCompletionClient(Result<string>.Failure(new Error("AI_UNAVAILABLE", "down"))));
         var result = await service.GenerateAsync(CreateContextBundle());
 
         Assert.Equal(AiDecisionValidationStatus.Invalid, result.ValidationStatus);
@@ -149,7 +149,7 @@ public sealed class Stage7AiDecisionGenerationServiceTests
         }
         """;
 
-        var service = new Stage7AiDecisionGenerationService(new FakeChatCompletionClient(Result<string>.Success(aiOutput)));
+        var service = new AiDecisionGenerationService(new FakeChatCompletionClient(Result<string>.Success(aiOutput)));
         var result = await service.GenerateAsync(CreateContextBundle());
 
         Assert.Equal(AiDecisionValidationStatus.Valid, result.ValidationStatus);
@@ -158,25 +158,25 @@ public sealed class Stage7AiDecisionGenerationServiceTests
         Assert.Equal(AiRecommendationType.NoAction, Assert.Single(result.Recommendations!).Type);
     }
 
-    private static Stage7VisitorContextBundle CreateContextBundle()
+    private static VisitorContextBundle CreateContextBundle()
     {
         var contextRef = new AiDecisionContextRef(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
 
-        return new Stage7VisitorContextBundle(
+        return new VisitorContextBundle(
             contextRef,
             ["collector-1"],
-            new Stage7KnowledgeRetrievalSnapshot(
+            new KnowledgeRetrievalSnapshot(
                 "What is return policy?",
                 3,
                 [
-                    new Stage7RetrievedKnowledgeChunkSummary(
+                    new RetrievedKnowledgeChunkSummary(
                         Guid.NewGuid(),
                         Guid.NewGuid(),
                         0,
                         4,
                         "Return policy is 30 days.")
                 ]),
-            new Stage7VisitorProfileSummary(
+            new VisitorProfileSummary(
                 contextRef.VisitorId!.Value,
                 DateTime.UtcNow.AddDays(-10),
                 DateTime.UtcNow,
@@ -188,20 +188,20 @@ public sealed class Stage7AiDecisionGenerationServiceTests
                 "en",
                 "web"),
             [
-                new Stage7TimelineItemSummary(DateTime.UtcNow.AddMinutes(-5), "pageview", "/pricing", "collector-1", null)
+                new TimelineItemSummary(DateTime.UtcNow.AddMinutes(-5), "pageview", "/pricing", "collector-1", null)
             ],
-            new Stage7EngageSessionSummary(
+            new EngageSessionSummary(
                 contextRef.EngageSessionId!.Value,
                 DateTime.UtcNow.AddMinutes(-10),
                 DateTime.UtcNow,
-                [new Stage7EngageMessageSummary("user", "What is your return policy?", DateTime.UtcNow.AddMinutes(-2), null, 0)]),
+                [new EngageMessageSummary("user", "What is your return policy?", DateTime.UtcNow.AddMinutes(-2), null, 0)]),
             [
-                new Stage7TicketSummary(Guid.NewGuid(), "Return policy clarification", "Open", DateTime.UtcNow.AddHours(-3), DateTime.UtcNow, contextRef.EngageSessionId, contextRef.VisitorId)
+                new TicketSummary(Guid.NewGuid(), "Return policy clarification", "Open", DateTime.UtcNow.AddHours(-3), DateTime.UtcNow, contextRef.EngageSessionId, contextRef.VisitorId)
             ],
             [
-                new Stage7PromoInteractionSummary(Guid.NewGuid(), Guid.NewGuid(), DateTime.UtcNow.AddHours(-5), "visitor@example.com", "Visitor", null)
+                new PromoInteractionSummary(Guid.NewGuid(), Guid.NewGuid(), DateTime.UtcNow.AddHours(-5), "visitor@example.com", "Visitor", null)
             ],
-            new Stage7IntelligenceSnapshot(
+            new IntelligenceSnapshot(
                 "general",
                 "US",
                 "7d",

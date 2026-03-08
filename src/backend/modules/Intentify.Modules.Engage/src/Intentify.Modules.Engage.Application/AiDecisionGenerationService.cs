@@ -4,7 +4,7 @@ using Intentify.Shared.AI;
 
 namespace Intentify.Modules.Engage.Application;
 
-public sealed class Stage7AiDecisionGenerationService
+public sealed class AiDecisionGenerationService
 {
     private const decimal LowConfidenceThreshold = 0.5m;
 
@@ -15,13 +15,13 @@ public sealed class Stage7AiDecisionGenerationService
 
     private readonly IChatCompletionClient _chatCompletionClient;
 
-    public Stage7AiDecisionGenerationService(IChatCompletionClient chatCompletionClient)
+    public AiDecisionGenerationService(IChatCompletionClient chatCompletionClient)
     {
         _chatCompletionClient = chatCompletionClient;
     }
 
     public async Task<AiDecisionContract> GenerateAsync(
-        Stage7VisitorContextBundle contextBundle,
+        VisitorContextBundle contextBundle,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(contextBundle);
@@ -39,7 +39,7 @@ public sealed class Stage7AiDecisionGenerationService
             return CreateInvalidNoAction(contextBundle.ContextRef, "MalformedOutput", "AI decision output was malformed.");
         }
 
-        var validated = Stage7AiDecisionValidator.ValidateAndNormalize(parsedDecision);
+        var validated = AiDecisionValidator.ValidateAndNormalize(parsedDecision);
         if (validated.ValidationStatus == AiDecisionValidationStatus.Invalid)
         {
             return validated;
@@ -270,7 +270,7 @@ public sealed class Stage7AiDecisionGenerationService
             NoActionMessage: noActionMessage);
     }
 
-    private static string BuildPrompt(Stage7VisitorContextBundle contextBundle)
+    private static string BuildPrompt(VisitorContextBundle contextBundle)
     {
         var builder = new StringBuilder();
 

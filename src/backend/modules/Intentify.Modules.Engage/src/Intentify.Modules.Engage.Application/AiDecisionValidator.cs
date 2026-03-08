@@ -2,7 +2,7 @@ using Intentify.Shared.Validation;
 
 namespace Intentify.Modules.Engage.Application;
 
-public static class Stage7AiDecisionValidator
+public static class AiDecisionValidator
 {
     public const string DefaultFallbackReason = "InvalidContract";
     public const string DefaultNoActionMessage = "No safe action available.";

@@ -2,7 +2,7 @@ using Intentify.Modules.Engage.Application;
 
 namespace Intentify.Modules.Engage.Tests;
 
-public sealed class Stage7AiDecisionValidatorTests
+public sealed class AiDecisionValidatorTests
 {
     [Fact]
     public void ValidateAndNormalize_ValidNoActionDecision_ReturnsValid()
@@ -12,7 +12,7 @@ public sealed class Stage7AiDecisionValidatorTests
             shouldFallback: true,
             noActionMessage: "No safe action.");
 
-        var validated = Stage7AiDecisionValidator.ValidateAndNormalize(decision);
+        var validated = AiDecisionValidator.ValidateAndNormalize(decision);
 
         Assert.Equal(AiDecisionValidationStatus.Valid, validated.ValidationStatus);
         Assert.False(validated.ValidationErrors?.Any() == true);
@@ -33,7 +33,7 @@ public sealed class Stage7AiDecisionValidatorTests
 
         var decision = CreateBaseDecision(recommendations: [recommendation]);
 
-        var validated = Stage7AiDecisionValidator.ValidateAndNormalize(decision);
+        var validated = AiDecisionValidator.ValidateAndNormalize(decision);
 
         Assert.Equal(AiDecisionValidationStatus.Valid, validated.ValidationStatus);
         Assert.False(validated.ValidationErrors?.Any() == true);
@@ -53,7 +53,7 @@ public sealed class Stage7AiDecisionValidatorTests
 
         var decision = CreateBaseDecision(recommendations: [recommendation]);
 
-        var validated = Stage7AiDecisionValidator.ValidateAndNormalize(decision);
+        var validated = AiDecisionValidator.ValidateAndNormalize(decision);
 
         Assert.Equal(AiDecisionValidationStatus.Invalid, validated.ValidationStatus);
         Assert.True(validated.ShouldFallback);
@@ -74,7 +74,7 @@ public sealed class Stage7AiDecisionValidatorTests
 
         var decision = CreateBaseDecision(recommendations: [recommendation], overallConfidence: 1.2m);
 
-        var validated = Stage7AiDecisionValidator.ValidateAndNormalize(decision);
+        var validated = AiDecisionValidator.ValidateAndNormalize(decision);
 
         Assert.Equal(AiDecisionValidationStatus.Invalid, validated.ValidationStatus);
         Assert.True(validated.ShouldFallback);
@@ -97,7 +97,7 @@ public sealed class Stage7AiDecisionValidatorTests
             FallbackReason: "NoContext",
             NoActionMessage: "No context");
 
-        var validated = Stage7AiDecisionValidator.ValidateAndNormalize(decision);
+        var validated = AiDecisionValidator.ValidateAndNormalize(decision);
 
         Assert.Equal(AiDecisionValidationStatus.Invalid, validated.ValidationStatus);
         Assert.True(validated.ShouldFallback);
@@ -122,7 +122,7 @@ public sealed class Stage7AiDecisionValidatorTests
 
         var decision = CreateBaseDecision(recommendations: [recommendation]);
 
-        var validated = Stage7AiDecisionValidator.ValidateAndNormalize(decision);
+        var validated = AiDecisionValidator.ValidateAndNormalize(decision);
 
         Assert.Equal(AiDecisionValidationStatus.Invalid, validated.ValidationStatus);
         Assert.True(validated.ShouldFallback);
@@ -137,7 +137,7 @@ public sealed class Stage7AiDecisionValidatorTests
             shouldFallback: false,
             noActionMessage: null);
 
-        var validated = Stage7AiDecisionValidator.ValidateAndNormalize(decision);
+        var validated = AiDecisionValidator.ValidateAndNormalize(decision);
 
         Assert.Equal(AiDecisionValidationStatus.Invalid, validated.ValidationStatus);
         Assert.True(validated.ShouldFallback);
