@@ -53,9 +53,12 @@ public sealed class IntelligenceModule : IAppModule
         });
 
         services.AddSingleton<IIntelligenceTrendsRepository, IntelligenceTrendsRepository>();
+        services.AddSingleton<IIntelligenceProfileRepository, IntelligenceProfileRepository>();
         services.AddSingleton<RefreshIntelligenceTrendsService>();
         services.AddSingleton<QueryIntelligenceTrendsService>();
         services.AddSingleton<GetIntelligenceStatusService>();
+        services.AddSingleton<UpsertIntelligenceProfileService>();
+        services.AddSingleton<GetIntelligenceProfileService>();
     }
 
     public void MapEndpoints(IEndpointRouteBuilder endpoints)
@@ -69,5 +72,7 @@ public sealed class IntelligenceModule : IAppModule
         group.MapGet("/trends", IntelligenceEndpoints.GetTrendsAsync);
         group.MapGet("/status", IntelligenceEndpoints.GetStatusAsync);
         group.MapGet("/dashboard", IntelligenceEndpoints.GetDashboardAsync);
+        group.MapPut("/profiles/{siteId}", IntelligenceEndpoints.UpsertProfileAsync);
+        group.MapGet("/profiles/{siteId}", IntelligenceEndpoints.GetProfileAsync);
     }
 }
