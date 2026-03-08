@@ -156,6 +156,18 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
   const getIntelligenceDashboard = async (params) =>
     request(`/intelligence/dashboard${buildQueryString(params)}`);
 
+  const getIntelligenceProfile = async (siteId) =>
+    request(`/intelligence/profiles/${encodeURIComponent(siteId)}`);
+
+  const upsertIntelligenceProfile = async (siteId, payload) =>
+    request(`/intelligence/profiles/${encodeURIComponent(siteId)}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
   const sendEngageChat = async (widgetKeyOrPayload, sessionId, message) => {
     const payload =
       typeof widgetKeyOrPayload === 'object' && widgetKeyOrPayload !== null
@@ -381,6 +393,8 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
       trends: getIntelligenceTrends,
       dashboard: getIntelligenceDashboard,
       refresh: refreshIntelligence,
+      getProfile: getIntelligenceProfile,
+      upsertProfile: upsertIntelligenceProfile,
     },
 
     ads: {
