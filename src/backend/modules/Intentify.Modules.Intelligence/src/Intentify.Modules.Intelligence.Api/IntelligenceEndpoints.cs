@@ -113,9 +113,9 @@ internal static class IntelligenceEndpoints
 
     public static async Task<IResult> GetDashboardAsync(
         string siteId,
-        string category,
-        string location,
-        string timeWindow,
+        string? category,
+        string? location,
+        string? timeWindow,
         string? provider,
         string? keyword,
         string? audienceType,

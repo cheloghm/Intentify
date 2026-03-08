@@ -26,15 +26,20 @@ public sealed record IntelligenceStatusResponse(
 
 public sealed record IntelligenceDashboardQuery(
     Guid SiteId,
-    string Category,
-    string Location,
-    string TimeWindow,
+    string? Category,
+    string? Location,
+    string? TimeWindow,
     string? Provider,
     string? Keyword,
     string? AudienceType,
     int? Limit);
 
-public sealed record IntelligenceDashboardSummaryResponse(int MatchingItemsCount, double AverageScore, double MaxScore);
+public sealed record IntelligenceDashboardSummaryResponse(
+    int MatchingItemsCount,
+    double AverageScore,
+    double MaxScore,
+    int RankedItemsCount,
+    string? TopQueryOrTopic);
 
 public sealed record IntelligenceDashboardTrendItemResponse(string QueryOrTopic, double Score, int? Rank, string Provider);
 
