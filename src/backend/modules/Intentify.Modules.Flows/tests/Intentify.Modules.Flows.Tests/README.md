@@ -31,5 +31,5 @@
 
 ## Related docs
 - Related production README: `../../README.md`
-- Testing playbook: [`docs/codex/03-testing-playbook.md`](/docs/codex/03-testing-playbook.md)
-- Test project guardrails: [`docs/codex/02-test-project-guardrails.md`](/docs/codex/02-test-project-guardrails.md)
+- Testing playbook: `docs/codex/03-testing-playbook.md`
+- Test project guardrails: `docs/codex/02-test-project-guardrails.md`

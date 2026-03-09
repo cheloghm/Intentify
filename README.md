@@ -20,43 +20,6 @@ Intentify is a monorepo containing:
 - Frontend currently runs from `src/frontend/web` with `http-server` + Node scripts.
 - The frontend uses `NEXT_PUBLIC_*` naming for API base env compatibility, but the repository does **not** currently verify a Next.js runtime application setup.
 
-## High-level backend module summary
-Backend modules are organized as bounded contexts under `src/backend/modules`.
-
-Current module set includes:
-- Ads
-- Auth
-- Collector
-- Engage
-- Flows
-- Intelligence
-- Knowledge
-- Leads
-- PlatformAdmin
-- Promos
-- Sites
-- Tickets
-- Visitors
-
-Use `src/backend/modules/README.md` for module-level navigation, and each module README for detailed extension/change guidance.
-
-## High-level shared package summary
-Shared backend packages under `src/backend/shared` provide reusable cross-cutting capabilities used by modules.
-
-Current shared package set includes:
-- Intentify.Shared.AI
-- Intentify.Shared.Abstractions
-- Intentify.Shared.Data.Mongo
-- Intentify.Shared.KeyManagement
-- Intentify.Shared.Messaging
-- Intentify.Shared.Observability
-- Intentify.Shared.Security
-- Intentify.Shared.Testing
-- Intentify.Shared.Validation
-- Intentify.Shared.Web
-
-Use `src/backend/shared/README.md` for package-level navigation; package READMEs contain specific usage and change guidance.
-
 ## High-level quick start
 1. Review root/backend/frontend READMEs.
 2. Backend:
@@ -86,8 +49,6 @@ See `.github/workflows/ci.yml` for exact CI commands and conditions.
 ## Documentation map
 - Source index: [`src/README.md`](src/README.md)
 - Backend overview: [`src/backend/README.md`](src/backend/README.md)
-- Backend modules index: [`src/backend/modules/README.md`](src/backend/modules/README.md)
-- Backend shared packages index: [`src/backend/shared/README.md`](src/backend/shared/README.md)
 - Frontend overview: [`src/frontend/README.md`](src/frontend/README.md)
 - Frontend web app: [`src/frontend/web/README.md`](src/frontend/web/README.md)
 - Internal policy references: [`docs/codex/README.md`](docs/codex/README.md)
@@ -103,7 +64,6 @@ Use `docs/codex` as canonical internal references (do not duplicate these policy
 - Avoid duplication: do not copy/paste architecture policy from `docs/codex` into local READMEs.
 - Keep implementation detail local: module/layer specifics should live in module/layer docs.
 - Keep docs reality-based: only document behavior verified in repository code/config.
-- Use lower-level READMEs for extension/change guidance; keep this root README at repository-orientation level.
 
 ## Contribution/navigation pointers
 - Start from `src/README.md` to navigate backend vs frontend areas.
