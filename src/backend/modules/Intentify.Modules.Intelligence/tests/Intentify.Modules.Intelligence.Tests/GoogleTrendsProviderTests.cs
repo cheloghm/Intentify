@@ -8,7 +8,7 @@ namespace Intentify.Modules.Intelligence.Tests;
 public sealed class GoogleTrendsProviderTests
 {
     [Fact]
-    public async Task SearchAsync_WhenDisabled_ReturnsSuccessWithEmptyItems()
+    public async Task SearchAsync_WhenMissingConfig_ReturnsValidationFailed()
     {
         using var httpClient = new HttpClient(new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)))
         {
@@ -17,15 +17,14 @@ public sealed class GoogleTrendsProviderTests
 
         var provider = new GoogleTrendsProvider(httpClient, new GoogleTrendsOptions
         {
-            Enabled = false,
+            BaseUrl = "",
+            ApiKey = null,
         });
 
         var result = await provider.SearchAsync(Guid.NewGuid().ToString("D"), Guid.NewGuid(), new("marketing", "US", "7d", 10), CancellationToken.None);
 
-        Assert.Equal(OperationStatus.Success, result.Status);
-        Assert.NotNull(result.Value);
-        Assert.Empty(result.Value.Items);
-        Assert.Equal("GoogleTrends", result.Value.Provider);
+        Assert.Equal(OperationStatus.ValidationFailed, result.Status);
+        Assert.NotNull(result.Errors);
     }
 
     [Fact]
@@ -50,7 +49,6 @@ public sealed class GoogleTrendsProviderTests
 
         var provider = new GoogleTrendsProvider(httpClient, new GoogleTrendsOptions
         {
-            Enabled = true,
             BaseUrl = "https://example.test",
             ApiKey = "test-key",
         });
@@ -74,7 +72,6 @@ public sealed class GoogleTrendsProviderTests
 
         var provider = new GoogleTrendsProvider(httpClient, new GoogleTrendsOptions
         {
-            Enabled = true,
             BaseUrl = "",
             ApiKey = null,
         });

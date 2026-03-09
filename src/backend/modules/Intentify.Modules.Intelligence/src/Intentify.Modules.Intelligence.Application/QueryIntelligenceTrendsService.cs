@@ -1,4 +1,5 @@
 using Intentify.Shared.Validation;
+using Intentify.Modules.Intelligence.Domain;
 
 namespace Intentify.Modules.Intelligence.Application;
 
@@ -180,7 +181,7 @@ public sealed class QueryIntelligenceTrendsService(
     private static ValidationErrors ValidateDashboardQuery(
         string tenantId,
         IntelligenceDashboardQuery query,
-        IntelligenceProfileResponse? profile,
+        IntelligenceProfile? profile,
         out string? normalizedCategory,
         out string? normalizedLocation,
         out string? normalizedTimeWindow,

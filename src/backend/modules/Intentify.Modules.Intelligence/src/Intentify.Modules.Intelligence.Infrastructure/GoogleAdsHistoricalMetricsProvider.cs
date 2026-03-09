@@ -91,8 +91,6 @@ public sealed class GoogleAdsHistoricalMetricsProvider(
             location = query.Location,
             timeWindow = query.TimeWindow,
             limit = query.Limit,
-            customerId = options.CustomerId,
-            loginCustomerId = options.LoginCustomerId,
         };
 
         var request = new HttpRequestMessage(HttpMethod.Post, "historical-metrics")

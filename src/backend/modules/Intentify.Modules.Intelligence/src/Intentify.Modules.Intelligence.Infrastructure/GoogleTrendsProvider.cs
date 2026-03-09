@@ -10,10 +10,6 @@ public sealed class GoogleTrendsProvider(HttpClient httpClient, GoogleTrendsOpti
 
     public async Task<OperationResult<ExternalSearchResult>> SearchAsync(string tenantId, Guid siteId, ExternalSearchQuery query, CancellationToken ct)
     {
-        if (!options.Enabled)
-        {
-            return OperationResult<ExternalSearchResult>.Success(new ExternalSearchResult([], "GoogleTrends", DateTime.UtcNow));
-        }
 
         if (string.IsNullOrWhiteSpace(options.BaseUrl) || string.IsNullOrWhiteSpace(options.ApiKey))
         {

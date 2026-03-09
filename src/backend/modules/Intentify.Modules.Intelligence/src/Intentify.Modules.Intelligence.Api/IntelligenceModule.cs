@@ -55,9 +55,6 @@ public sealed class IntelligenceModule : IAppModule
                 return new GoogleSearchProvider(httpClient, configuredSearchOptions);
             }
 
-            var httpClient = clientFactory.CreateClient(GoogleSearchProvider.ClientName);
-            var configuredSearchOptions = serviceProvider.GetRequiredService<GoogleSearchOptions>();
-
             return providerName.ToLowerInvariant() switch
             {
                 "googletrends" or "trends" => new GoogleTrendsProvider(

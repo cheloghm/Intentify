@@ -76,7 +76,7 @@ public sealed class RecurringIntelligenceRefreshOrchestrator(
 
                     await refreshExecutor.ExecuteAsync(
                         tenantId,
-                        new RefreshIntelligenceRequest(profile.SiteId, profile.IndustryCategory, location, timeWindow, limit: 10),
+                        new RefreshIntelligenceRequest(profile.SiteId, profile.IndustryCategory, location, timeWindow, Limit: 10),
                         ct);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
