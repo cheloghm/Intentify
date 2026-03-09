@@ -1,70 +1,94 @@
 # Backend
 
-## What lives here
-`src/backend` contains the .NET backend platform for Intentify:
-- AppHost runtime composition (`app/Intentify.AppHost`)
-- domain capability modules (`modules/Intentify.Modules.*`)
-- cross-cutting shared packages (`shared/Intentify.Shared.*`)
-- backend test projects for AppHost/modules/shared packages
+## Backend purpose and scope
+`src/backend` hosts the .NET backend platform:
+- AppHost web entrypoint/composition layer.
+- capability modules under `modules/Intentify.Modules.*`.
+- reusable shared backend packages under `shared/Intentify.Shared.*`.
+- backend test projects for AppHost/modules/shared packages.
 
-## Architecture and composition (high level)
-- AppHost composes startup, middleware, and module registration.
-- Modules own capability-specific API/Application/Domain/Infrastructure concerns.
-- Shared packages provide reusable building blocks (web, validation, security, data, observability, etc.) consumed by AppHost and modules.
-- Module/layer-level details are documented in module READMEs; this file stays at backend-orientation level.
+## Solution layout and naming conventions
+- Solution: `Intentify.sln`
+- App host project: `app/Intentify.AppHost`
+- Modules: `modules/Intentify.Modules.<ModuleName>`
+  - typical layer projects:
+    - `src/Intentify.Modules.<ModuleName>.Api`
+    - `src/Intentify.Modules.<ModuleName>.Application`
+    - `src/Intentify.Modules.<ModuleName>.Domain` (where present)
+    - `src/Intentify.Modules.<ModuleName>.Infrastructure`
+  - tests: `tests/Intentify.Modules.<ModuleName>.Tests`
+- Shared packages: `shared/Intentify.Shared.<Capability>`
+  - source: `src/Intentify.Shared.<Capability>`
+  - tests: `tests/Intentify.Shared.<Capability>.Tests`
 
-## How modules are organized
-Module roots are under `modules/Intentify.Modules.<ModuleName>`.
-Typical structure per module:
-- `src/Intentify.Modules.<ModuleName>.Api`
-- `src/Intentify.Modules.<ModuleName>.Application`
-- `src/Intentify.Modules.<ModuleName>.Domain` (where present)
-- `src/Intentify.Modules.<ModuleName>.Infrastructure`
-- `tests/Intentify.Modules.<ModuleName>.Tests`
+## AppHost composition model
+AppHost is the runtime composition layer:
+- builds web application startup and middleware.
+- registers modules implementing the shared app-module interface.
+- maps module endpoints through a central registry.
+- applies auth, authorization policy, CORS, health endpoint, and debug endpoint behavior.
 
-Current module set:
-- Ads, Auth, Collector, Engage, Flows, Intelligence, Knowledge, Leads, PlatformAdmin, Promos, Sites, Tickets, Visitors.
+See AppHost source docs (added in later batches) under `app/Intentify.AppHost`.
 
-## Shared package usage (high level)
-Shared package roots are under `shared/Intentify.Shared.<Capability>` with paired test projects under `shared/*/tests/*Tests`.
+## Module catalog
+Current module roots in repository:
+- `Intentify.Modules.Ads`
+- `Intentify.Modules.Auth`
+- `Intentify.Modules.Collector`
+- `Intentify.Modules.Engage`
+- `Intentify.Modules.Flows`
+- `Intentify.Modules.Intelligence`
+- `Intentify.Modules.Knowledge`
+- `Intentify.Modules.Leads`
+- `Intentify.Modules.PlatformAdmin`
+- `Intentify.Modules.Promos`
+- `Intentify.Modules.Sites`
+- `Intentify.Modules.Tickets`
+- `Intentify.Modules.Visitors`
 
-Current shared package set:
-- AI, Abstractions, Data.Mongo, KeyManagement, Messaging, Observability, Security, Testing, Validation, Web.
+Route-level details are intentionally kept out of this high-level README.
 
-## Typical request flow (summary)
-- Request enters AppHost pipeline.
-- Request is routed to a module API endpoint.
-- API delegates use-case execution to Application handlers.
-- Application uses Domain models and Infrastructure adapters/repositories.
-- Shared packages provide common capabilities (validation, web helpers, data, security, etc.).
+## Shared package catalog
+Current shared package roots in repository:
+- `Intentify.Shared.AI`
+- `Intentify.Shared.Abstractions`
+- `Intentify.Shared.Data.Mongo`
+- `Intentify.Shared.KeyManagement`
+- `Intentify.Shared.Messaging`
+- `Intentify.Shared.Observability`
+- `Intentify.Shared.Security`
+- `Intentify.Shared.Testing`
+- `Intentify.Shared.Validation`
+- `Intentify.Shared.Web`
 
-For exact endpoint and handler maps, use module layer READMEs.
+## Dependency/layer boundaries summary
+Backend follows module-layer boundaries and testing guardrails defined in `docs/codex`.
+Use these canonical references instead of duplicating policy text here:
+- architecture boundaries: [`../../docs/codex/01-architecture-boundaries.md`](../../docs/codex/01-architecture-boundaries.md)
+- testing playbook: [`../../docs/codex/03-testing-playbook.md`](../../docs/codex/03-testing-playbook.md)
 
-## Configuration/environment approach
-Use `.env.example` as the baseline for local configuration and set environment variables as needed.
+## Detailed backend configuration
+### Environment variables and key settings
+Use `.env` for local machine values (with `.env.example` as starter reference).
 
-Common backend keys documented by this repo:
-- `ASPNETCORE_ENVIRONMENT`
+Common backend keys used by AppHost and module startup:
+- `ASPNETCORE_ENVIRONMENT` (example in `.env.example`)
 - `Intentify__Jwt__Issuer`
 - `Intentify__Jwt__Audience`
 - `Intentify__Jwt__SigningKey`
 - `Intentify__Jwt__AccessTokenMinutes`
-- `Intentify__Cors__AllowedOrigins`
+- `Intentify__Cors__AllowedOrigins` (comma-separated origins)
 - `Intentify__Mongo__ConnectionString`
 - `Intentify__Mongo__DatabaseName`
 
-## Where to make common backend changes
-- Host-level startup/middleware/module wiring: `app/Intentify.AppHost`
-- Capability behavior/endpoints: `modules/Intentify.Modules.<ModuleName>`
-- Cross-cutting reusable behavior: `shared/Intentify.Shared.<Capability>`
-- Tests: matching `tests/*Tests` project under AppHost/module/shared package roots
+### Behavior notes
+- JWT issuer/audience/signing key are required for authentication setup.
+- CORS allowed origins are required; startup fails when missing.
+- Mongo connection/database:
+  - if explicitly configured, those values are used.
+  - for local/dev scenarios, AppHost may apply fallback defaults when config is absent.
 
-## How to locate API/Application/Domain/Infrastructure concerns
-- Start from the target module root README in `modules/Intentify.Modules.<ModuleName>/README.md`.
-- Then use layer READMEs in that module’s `src/Intentify.Modules.<ModuleName>.*` folders.
-- Shared package-specific concerns are documented in `shared/Intentify.Shared.<Capability>/README.md`.
-
-## Run/build/test pointers (verifiable)
+## Run/build/test commands
 From `src/backend`:
 
 ```bash
@@ -73,22 +97,26 @@ dotnet build -c Debug Intentify.sln --no-restore
 dotnet test -c Debug Intentify.sln --no-build
 ```
 
-Project-specific examples:
+Useful project-scoped examples:
 
 ```bash
 dotnet test app/Intentify.AppHost/tests/Intentify.AppHost.Tests/Intentify.AppHost.Tests.csproj
 dotnet test modules/Intentify.Modules.Auth/tests/Intentify.Modules.Auth.Tests/Intentify.Modules.Auth.Tests.csproj
 ```
 
-## Where deeper docs live
-- AppHost README: [`app/Intentify.AppHost/README.md`](app/Intentify.AppHost/README.md)
-- Modules index: [`modules/README.md`](modules/README.md)
-- Shared packages index: [`shared/README.md`](shared/README.md)
-- Engineering/testing policy: [`../../docs/codex/README.md`](../../docs/codex/README.md)
+## Troubleshooting
+- **Startup error: JWT is not configured**
+  - Ensure `Intentify__Jwt__Issuer`, `Intentify__Jwt__Audience`, and `Intentify__Jwt__SigningKey` are set.
+- **Startup error: CORS is not configured**
+  - Ensure `Intentify__Cors__AllowedOrigins` is set to allowed frontend origins.
+- **Mongo configuration issues**
+  - Set `Intentify__Mongo__ConnectionString` and `Intentify__Mongo__DatabaseName` explicitly for predictable behavior.
+- **Test project package errors**
+  - Ensure test projects keep required test package references (guarded by `Directory.Build.props`).
 
-## Test and approval docs
-- Test docs live in test project READMEs under:
-  - `app/Intentify.AppHost/tests/*/README.md`
-  - `modules/*/tests/*/README.md`
-  - `shared/*/tests/*/README.md`
-- No backend approvals-docs directory is currently verified in this repository tree.
+## Links to AppHost/modules/shared docs
+- AppHost folder: [`app/Intentify.AppHost/`](app/Intentify.AppHost/)
+- Modules folder: [`modules/`](modules/)
+- Shared packages folder: [`shared/`](shared/)
+- Modules overview README (placeholder to be expanded in later batch): [`modules/README.md`](modules/README.md)
+- Shared overview README (placeholder to be expanded in later batch): [`shared/README.md`](shared/README.md)
