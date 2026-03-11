@@ -7,7 +7,7 @@ const resolveApiBaseUrl = () =>
   windowEnv?.__INTENTIFY_API_BASE__ ||
   windowEnv?.NEXT_PUBLIC_API_BASE_URL;
 
-export const getApiBaseUrl = () => resolveApiBaseUrl() || 'http://localhost:5000';
+export const getApiBaseUrl = () => resolveApiBaseUrl() || '';
 
 export const API_BASE = getApiBaseUrl();
 export const API_BASE_URL = API_BASE;

@@ -1,0 +1,58 @@
+services:
+  frontend:
+    build:
+      context: ./src/frontend/web
+      dockerfile: Dockerfile
+    environment:
+      INTENTIFY_API_BASE_URL: ${INTENTIFY_API_BASE_URL}
+    ports:
+      - "${FRONTEND_PORT:-3000}:80"
+    depends_on:
+      backend:
+        condition: service_started
+
+  backend:
+    build:
+      context: ./src/backend
+      dockerfile: app/Intentify.AppHost/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT}
+      ASPNETCORE_URLS: ${ASPNETCORE_URLS}
+      Intentify__Jwt__Issuer: ${Intentify__Jwt__Issuer}
+      Intentify__Jwt__Audience: ${Intentify__Jwt__Audience}
+      Intentify__Jwt__SigningKey: ${Intentify__Jwt__SigningKey}
+      Intentify__Jwt__AccessTokenMinutes: ${Intentify__Jwt__AccessTokenMinutes}
+      Intentify__Cors__AllowedOrigins: ${Intentify__Cors__AllowedOrigins}
+      Intentify__Mongo__ConnectionString: ${Intentify__Mongo__ConnectionString}
+      Intentify__Mongo__DatabaseName: ${Intentify__Mongo__DatabaseName}
+      Intentify__OpenSearch__Enabled: ${Intentify__OpenSearch__Enabled}
+      Intentify__OpenSearch__Url: ${Intentify__OpenSearch__Url}
+      Intentify__OpenSearch__IndexName: ${Intentify__OpenSearch__IndexName}
+      Intentify__OpenSearch__Username: ${Intentify__OpenSearch__Username}
+      Intentify__OpenSearch__Password: ${Intentify__OpenSearch__Password}
+    ports:
+      - "${BACKEND_PORT:-5000}:5000"
+    depends_on:
+      mongo:
+        condition: service_healthy
+      opensearch:
+        condition: service_started
+
+  mongo:
+    image: mongo:7
+    ports:
+      - "${MONGO_PORT:-27017}:27017"
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  opensearch:
+    image: opensearchproject/opensearch:2.15.0
+    environment:
+      discovery.type: single-node
+      DISABLE_SECURITY_PLUGIN: "true"
+      OPENSEARCH_JAVA_OPTS: "-Xms512m -Xmx512m"
+    ports:
+      - "${OPENSEARCH_PORT:-9200}:9200"
