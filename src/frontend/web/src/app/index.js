@@ -72,6 +72,19 @@ const validatePassword = (value) => {
 
 const normalizeFieldKey = (key) => key.toLowerCase().replace(/\s+/g, '');
 
+const AUTH_NAV_ITEMS = [
+  { label: 'Sites', href: '#/sites' },
+  { label: 'Dashboard', href: '#/dashboard' },
+  { label: 'Visitors', href: '#/visitors' },
+  { label: 'Knowledge', href: '#/knowledge' },
+  { label: 'Engage', href: '#/engage' },
+  { label: 'Promos', href: '#/promos' },
+  { label: 'Intelligence', href: '#/intelligence' },
+  { label: 'Ads', href: '#/ads' },
+  { label: 'Leads', href: '#/leads' },
+  { label: 'Tickets', href: '#/tickets' },
+];
+
 const applyFieldErrors = (errors, fields) => {
   if (!errors || typeof errors !== 'object') {
     return false;
@@ -128,6 +141,8 @@ const createNavbar = ({ isAuthenticated, canAccessPlatformAdmin }) => {
   const links = document.createElement('div');
   links.style.display = 'flex';
   links.style.gap = '8px';
+  links.style.flexWrap = 'wrap';
+  links.style.justifyContent = 'flex-end';
 
   links.appendChild(createNavLink({ label: 'Home', href: '#/' }));
 
@@ -135,16 +150,9 @@ const createNavbar = ({ isAuthenticated, canAccessPlatformAdmin }) => {
     links.appendChild(createNavLink({ label: 'Login', href: '#/login' }));
     links.appendChild(createNavLink({ label: 'Register', href: '#/register' }));
   } else {
-    links.appendChild(createNavLink({ label: 'Sites', href: '#/sites' }));
-    links.appendChild(createNavLink({ label: 'Dashboard', href: '#/dashboard' }));
-    links.appendChild(createNavLink({ label: 'Visitors', href: '#/visitors' }));
-    links.appendChild(createNavLink({ label: 'Knowledge', href: '#/knowledge' }));
-    links.appendChild(createNavLink({ label: 'Engage', href: '#/engage' }));
-    links.appendChild(createNavLink({ label: 'Promos', href: '#/promos' }));
-    links.appendChild(createNavLink({ label: 'Intelligence', href: '#/intelligence' }));
-    links.appendChild(createNavLink({ label: 'Ads', href: '#/ads' }));
-    links.appendChild(createNavLink({ label: 'Leads', href: '#/leads' }));
-    links.appendChild(createNavLink({ label: 'Tickets', href: '#/tickets' }));
+    AUTH_NAV_ITEMS.forEach((item) => {
+      links.appendChild(createNavLink(item));
+    });
     if (canAccessPlatformAdmin) {
       links.appendChild(createNavLink({ label: 'Platform Admin', href: '#/platform-admin' }));
     }
@@ -165,6 +173,192 @@ const createNavbar = ({ isAuthenticated, canAccessPlatformAdmin }) => {
 
   nav.append(brand, links);
   return nav;
+};
+
+const createSidebarNavLink = ({ label, href, active }) => {
+  const link = document.createElement('a');
+  link.textContent = label;
+  link.href = href;
+  link.style.textDecoration = 'none';
+  link.style.color = active ? '#0f172a' : '#334155';
+  link.style.fontWeight = active ? '600' : '500';
+  link.style.padding = '10px 12px';
+  link.style.borderRadius = '8px';
+  link.style.background = active ? '#e2e8f0' : 'transparent';
+  link.style.transition = 'background-color 120ms ease';
+  link.addEventListener('mouseover', () => {
+    if (!active) {
+      link.style.background = '#f1f5f9';
+    }
+  });
+  link.addEventListener('mouseout', () => {
+    if (!active) {
+      link.style.background = 'transparent';
+    }
+  });
+  return link;
+};
+
+const createAuthenticatedShell = ({ route, canAccessPlatformAdmin, onLogout }) => {
+  const shell = document.createElement('div');
+  shell.style.display = 'flex';
+  shell.style.minHeight = '100vh';
+  shell.style.width = '100%';
+
+  const sidebar = document.createElement('aside');
+  sidebar.style.width = '250px';
+  sidebar.style.background = '#ffffff';
+  sidebar.style.borderRight = '1px solid #e2e8f0';
+  sidebar.style.padding = '16px 12px';
+  sidebar.style.boxSizing = 'border-box';
+  sidebar.style.display = 'flex';
+  sidebar.style.flexDirection = 'column';
+  sidebar.style.gap = '12px';
+
+  const brand = document.createElement('div');
+  brand.textContent = 'Intentify';
+  brand.style.fontWeight = '700';
+  brand.style.fontSize = '18px';
+  brand.style.color = '#0f172a';
+  brand.style.padding = '4px 8px 10px';
+
+  const nav = document.createElement('nav');
+  nav.style.display = 'flex';
+  nav.style.flexDirection = 'column';
+  nav.style.gap = '4px';
+
+  AUTH_NAV_ITEMS.forEach((item) => {
+    nav.appendChild(createSidebarNavLink({ ...item, active: route === item.href.replace('#', '') }));
+  });
+
+  if (canAccessPlatformAdmin) {
+    nav.appendChild(
+      createSidebarNavLink({
+        label: 'Platform Admin',
+        href: '#/platform-admin',
+        active: route === '/platform-admin' || route === '/platform-admin/tenant/:tenantId',
+      })
+    );
+  }
+
+  const spacer = document.createElement('div');
+  spacer.style.flex = '1';
+
+  const logoutButton = document.createElement('button');
+  logoutButton.type = 'button';
+  logoutButton.textContent = 'Logout';
+  logoutButton.style.padding = '10px 12px';
+  logoutButton.style.borderRadius = '8px';
+  logoutButton.style.border = '1px solid #e2e8f0';
+  logoutButton.style.background = '#ffffff';
+  logoutButton.style.cursor = 'pointer';
+  logoutButton.style.textAlign = 'left';
+  logoutButton.addEventListener('click', onLogout);
+
+  sidebar.append(brand, nav, spacer, logoutButton);
+
+  const contentWrap = document.createElement('div');
+  contentWrap.style.display = 'flex';
+  contentWrap.style.flexDirection = 'column';
+  contentWrap.style.flex = '1';
+  contentWrap.style.minWidth = '0';
+
+  const topbar = document.createElement('div');
+  topbar.style.display = 'none';
+  topbar.style.alignItems = 'center';
+  topbar.style.justifyContent = 'space-between';
+  topbar.style.padding = '12px 16px';
+  topbar.style.borderBottom = '1px solid #e2e8f0';
+  topbar.style.background = '#ffffff';
+
+  const topbarBrand = document.createElement('div');
+  topbarBrand.textContent = 'Intentify';
+  topbarBrand.style.fontWeight = '700';
+  topbarBrand.style.color = '#0f172a';
+
+  const toggleButton = document.createElement('button');
+  toggleButton.type = 'button';
+  toggleButton.textContent = '☰';
+  toggleButton.setAttribute('aria-label', 'Toggle navigation');
+  toggleButton.style.border = '1px solid #e2e8f0';
+  toggleButton.style.background = '#ffffff';
+  toggleButton.style.borderRadius = '8px';
+  toggleButton.style.padding = '6px 10px';
+  toggleButton.style.cursor = 'pointer';
+
+  topbar.append(topbarBrand, toggleButton);
+
+  const main = createMain();
+  main.style.padding = '24px';
+
+  const overlay = document.createElement('button');
+  overlay.type = 'button';
+  overlay.setAttribute('aria-label', 'Close navigation');
+  overlay.style.position = 'fixed';
+  overlay.style.inset = '0';
+  overlay.style.background = 'rgba(15, 23, 42, 0.35)';
+  overlay.style.border = '0';
+  overlay.style.display = 'none';
+  overlay.style.zIndex = '39';
+
+  const mobileQuery = window.matchMedia('(max-width: 1024px)');
+  const applySidebarMode = () => {
+    if (mobileQuery.matches) {
+      topbar.style.display = 'flex';
+      sidebar.style.position = 'fixed';
+      sidebar.style.left = '0';
+      sidebar.style.top = '0';
+      sidebar.style.bottom = '0';
+      sidebar.style.height = '100vh';
+      sidebar.style.zIndex = '40';
+      sidebar.style.transform = 'translateX(-105%)';
+      sidebar.style.transition = 'transform 160ms ease-out';
+    } else {
+      topbar.style.display = 'none';
+      sidebar.style.position = 'static';
+      sidebar.style.height = 'auto';
+      sidebar.style.zIndex = 'auto';
+      sidebar.style.transform = 'translateX(0)';
+      sidebar.style.transition = 'none';
+      overlay.style.display = 'none';
+    }
+  };
+
+  const closeSidebar = () => {
+    if (!mobileQuery.matches) {
+      return;
+    }
+    sidebar.style.transform = 'translateX(-105%)';
+    overlay.style.display = 'none';
+  };
+
+  const openSidebar = () => {
+    if (!mobileQuery.matches) {
+      return;
+    }
+    sidebar.style.transform = 'translateX(0)';
+    overlay.style.display = 'block';
+  };
+
+  toggleButton.addEventListener('click', () => {
+    const isOpen = sidebar.style.transform === 'translateX(0)';
+    if (isOpen) {
+      closeSidebar();
+    } else {
+      openSidebar();
+    }
+  });
+  overlay.addEventListener('click', closeSidebar);
+
+  applySidebarMode();
+  if (typeof mobileQuery.addEventListener === 'function') {
+    mobileQuery.addEventListener('change', applySidebarMode);
+  }
+
+  contentWrap.append(topbar, main);
+  shell.append(sidebar, contentWrap);
+
+  return { shell, main, overlay };
 };
 
 const createMain = () => {
@@ -652,13 +846,20 @@ const renderApp = () => {
   const isPlatformRoute = route === '/platform-admin' || route === '/platform-admin/tenant/:tenantId';
   if (isAuthenticated && isPlatformRoute && !authState.loaded) {
     app.innerHTML = '';
-    const navbar = createNavbar({ isAuthenticated, canAccessPlatformAdmin: false });
-    const main = createMain();
+    const authenticatedShell = createAuthenticatedShell({
+      route,
+      canAccessPlatformAdmin: false,
+      onLogout: () => {
+        clearToken();
+        window.location.hash = '#/login';
+      },
+    });
+    const { shell, main, overlay } = authenticatedShell;
     const loading = document.createElement('div');
     loading.style.color = '#475569';
     loading.textContent = 'Loading access...';
     main.appendChild(loading);
-    app.append(navbar, main);
+    app.append(shell, overlay);
     return;
   }
 
@@ -669,9 +870,25 @@ const renderApp = () => {
 
   const view = routes[route] || routes['/'];
   app.innerHTML = '';
-  const navbar = createNavbar({ isAuthenticated, canAccessPlatformAdmin: hasPlatformAccess() });
-  const main = createMain();
-  app.append(navbar, main);
+  let main;
+
+  if (isAuthenticated) {
+    const authenticatedShell = createAuthenticatedShell({
+      route,
+      canAccessPlatformAdmin: hasPlatformAccess(),
+      onLogout: () => {
+        clearToken();
+        window.location.hash = '#/login';
+      },
+    });
+    main = authenticatedShell.main;
+    app.append(authenticatedShell.shell, authenticatedShell.overlay);
+  } else {
+    const navbar = createNavbar({ isAuthenticated, canAccessPlatformAdmin: false });
+    main = createMain();
+    app.append(navbar, main);
+  }
+
   if (route === '/visitors/:visitorId') {
     renderVisitorProfileView(main, { apiClient, toast, query, params });
     return;

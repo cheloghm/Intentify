@@ -29,6 +29,7 @@ public sealed class SitesModule : IAppModule
         services.AddSingleton<GetSiteKeysHandler>();
         services.AddSingleton<GetInstallationStatusHandler>();
         services.AddSingleton<GetPublicInstallationStatusHandler>();
+        services.AddSingleton<GetInstallationDiagnosticsHandler>();
     }
 
     public void MapEndpoints(IEndpointRouteBuilder endpoints)
@@ -45,6 +46,7 @@ public sealed class SitesModule : IAppModule
         protectedGroup.MapPost("/{siteId}/keys/regenerate", SitesEndpoints.RegenerateKeysAsync);
         protectedGroup.MapGet("/{siteId}/keys", SitesEndpoints.GetSiteKeysAsync);
         protectedGroup.MapGet("/{siteId}/installation-status", SitesEndpoints.GetInstallationStatusAsync);
+        protectedGroup.MapGet("/{siteId}/installation-diagnostics", SitesEndpoints.GetInstallationDiagnosticsAsync);
 
         group.MapGet("/installation/status", SitesEndpoints.GetPublicInstallationStatusAsync);
     }
