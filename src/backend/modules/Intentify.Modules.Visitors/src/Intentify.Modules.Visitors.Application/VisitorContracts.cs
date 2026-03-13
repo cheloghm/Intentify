@@ -69,6 +69,23 @@ public sealed record VisitorDetailResult(
 
 public sealed record VisitCountWindows(int Last7, int Last30, int Last90);
 
+public sealed record OnlineNowQuery(Guid TenantId, Guid SiteId, int WindowMinutes, int Limit);
+
+public sealed record OnlineVisitorItem(
+    Guid VisitorId,
+    DateTime LastSeenAtUtc,
+    int ActiveSessionsCount,
+    string? LastPath,
+    string? LastReferrer);
+
+public sealed record PageAnalyticsQuery(Guid TenantId, Guid SiteId, int Days, int Limit);
+
+public sealed record PageAnalyticsItem(
+    string PageUrl,
+    int PageViews,
+    int UniqueSessions,
+    decimal AvgTimeOnPageSeconds);
+
 public interface IVisitorRepository
 {
     Task<UpsertVisitorResult> UpsertFromCollectorEventAsync(UpsertVisitorFromCollectorEvent command, CancellationToken cancellationToken = default);
@@ -80,6 +97,12 @@ public interface IVisitorRepository
 public interface IVisitorTimelineReader
 {
     Task<IReadOnlyCollection<VisitorTimelineItem>> GetTimelineAsync(VisitorTimelineQuery query, IReadOnlyCollection<string> sessionIds, DateTime? retentionFloorUtc, CancellationToken cancellationToken = default);
+}
+
+public interface IVisitorAnalyticsReader
+{
+    Task<IReadOnlyCollection<OnlineVisitorItem>> GetOnlineNowAsync(Guid tenantId, Guid siteId, DateTime cutoffUtc, int limit, CancellationToken cancellationToken = default);
+    Task<IReadOnlyCollection<PageAnalyticsItem>> GetTopPagesAsync(Guid tenantId, Guid siteId, DateTime sinceUtc, int limit, CancellationToken cancellationToken = default);
 }
 
 public sealed class CollectorVisitorEventObserver : ICollectorEventObserver
