@@ -156,6 +156,7 @@ export const renderInstallView = (container, { apiClient, toast, query } = {}) =
     revealSiteKey: false,
     copyMessage: '',
     status: null,
+    diagnostics: null,
     statusError: '',
     actionError: '',
     sendingTest: false,
@@ -515,6 +516,15 @@ export const renderInstallView = (container, { apiClient, toast, query } = {}) =
   const statusInstalled = document.createElement('div');
   const statusFirstEvent = document.createElement('div');
   const statusCheckedAt = document.createElement('div');
+  const diagnosticsTitle = document.createElement('div');
+  diagnosticsTitle.textContent = 'Diagnostics';
+  diagnosticsTitle.style.fontWeight = '600';
+  diagnosticsTitle.style.marginTop = '6px';
+  const diagnosticsList = document.createElement('ul');
+  diagnosticsList.style.margin = '0';
+  diagnosticsList.style.paddingLeft = '18px';
+  diagnosticsList.style.color = '#334155';
+  diagnosticsList.style.fontSize = '13px';
   const statusError = document.createElement('div');
   statusError.style.color = '#dc2626';
 
@@ -524,14 +534,52 @@ export const renderInstallView = (container, { apiClient, toast, query } = {}) =
   verifyErrorText.style.fontSize = '13px';
   verifyErrorText.style.color = '#dc2626';
 
-  statusRow.append(statusConfigured, statusInstalled, statusFirstEvent, statusCheckedAt, statusError);
+  statusRow.append(statusConfigured, statusInstalled, statusFirstEvent, statusCheckedAt, diagnosticsTitle, diagnosticsList, statusError);
+
+  const renderDiagnosticItem = ({ label, ok, detail }) => {
+    const item = document.createElement('li');
+    const indicator = ok ? '✅' : '❌';
+    item.textContent = `${indicator} ${label}${detail ? ` — ${detail}` : ''}`;
+    return item;
+  };
 
   const updateStatusDisplay = () => {
     const status = state.status || {};
+    const diagnostics = state.diagnostics || {};
     statusConfigured.textContent = `Configured: ${status.isConfigured ? 'Yes' : 'No'}`;
     statusInstalled.textContent = `Installed: ${status.isInstalled ? 'Yes' : 'No'}`;
     statusFirstEvent.textContent = `First event received: ${status.firstEventReceivedAtUtc || 'Not yet'}`;
     statusCheckedAt.textContent = `Last checked: ${new Date().toISOString()}`;
+
+    diagnosticsList.replaceChildren(
+      renderDiagnosticItem({
+        label: 'Site key valid',
+        ok: Boolean(diagnostics.siteKeyValid),
+      }),
+      renderDiagnosticItem({
+        label: 'Widget key valid',
+        ok: Boolean(diagnostics.widgetKeyValid),
+      }),
+      renderDiagnosticItem({
+        label: 'Origin allowed',
+        ok: Boolean(diagnostics.originAllowed),
+        detail: diagnostics.origin || window.location.origin,
+      }),
+      renderDiagnosticItem({
+        label: 'Tracker script expected',
+        ok: diagnostics.trackerScriptExpected !== false,
+      }),
+      renderDiagnosticItem({
+        label: 'Widget script expected',
+        ok: diagnostics.widgetScriptExpected !== false,
+      }),
+      renderDiagnosticItem({
+        label: 'First event seen',
+        ok: Boolean(diagnostics.firstEventSeen),
+        detail: diagnostics.firstEventReceivedAtUtc || 'Not yet',
+      })
+    );
+
     statusError.textContent = state.statusError;
     verifyErrorText.textContent = state.actionError;
     sendTestEventButton.disabled = !state.rawSiteKey || state.sendingTest;
@@ -544,9 +592,20 @@ export const renderInstallView = (container, { apiClient, toast, query } = {}) =
     state.statusError = '';
     try {
       state.status = await client.request(`/sites/${siteId}/installation-status`);
+
+      const params = new URLSearchParams();
+      if (state.rawSiteKey) {
+        params.set('siteKey', state.rawSiteKey);
+      }
+      if (state.rawWidgetKey) {
+        params.set('widgetKey', state.rawWidgetKey);
+      }
+      const diagnosticsQuery = params.toString();
+      state.diagnostics = await client.request(`/sites/${siteId}/installation-diagnostics${diagnosticsQuery ? `?${diagnosticsQuery}` : ''}`);
     } catch (error) {
       const uiError = mapApiError(error);
       state.statusError = uiError.message;
+      state.diagnostics = null;
     } finally {
       refreshStatusButton.disabled = false;
       refreshStatusButton.textContent = 'Refresh status';
