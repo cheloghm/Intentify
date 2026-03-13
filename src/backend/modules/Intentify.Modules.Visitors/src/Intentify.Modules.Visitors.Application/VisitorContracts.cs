@@ -52,6 +52,14 @@ public sealed record VisitorRecentSessionItem(
     string? LastReferrer,
     IReadOnlyDictionary<string, int> TopActions);
 
+public sealed record VisitorIdentificationSummary(
+    bool IsIdentified,
+    DateTime? LastIdentifiedAtUtc,
+    string Source,
+    decimal Confidence,
+    IReadOnlyCollection<string> KnownTraits,
+    string? Context);
+
 public sealed record VisitorDetailResult(
     Guid VisitorId,
     Guid SiteId,
@@ -65,6 +73,7 @@ public sealed record VisitorDetailResult(
     string? UserAgent,
     string? Language,
     string? Platform,
+    VisitorIdentificationSummary Identification,
     IReadOnlyCollection<VisitorRecentSessionItem> RecentSessions);
 
 public sealed record VisitCountWindows(int Last7, int Last30, int Last90);
