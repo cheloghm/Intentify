@@ -1,6 +1,7 @@
 export {
   ensureUiStyles,
   createBadge,
+  createButton,
   createCard,
   createInput,
   createTable,

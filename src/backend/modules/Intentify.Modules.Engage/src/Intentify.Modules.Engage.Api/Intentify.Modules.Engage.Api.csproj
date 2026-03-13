@@ -5,6 +5,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
+
+  <ItemGroup>
+    <EmbeddedResource Include="assets/widget.js" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="../Intentify.Modules.Engage.Domain/Intentify.Modules.Engage.Domain.csproj" />
     <ProjectReference Include="../Intentify.Modules.Engage.Application/Intentify.Modules.Engage.Application.csproj" />

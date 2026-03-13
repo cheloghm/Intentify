@@ -30,3 +30,15 @@ public sealed record InstallationStatusResponse(
     int AllowedOriginsCount,
     bool IsInstalled,
     DateTime? FirstEventReceivedAtUtc);
+
+public sealed record InstallationDiagnosticsResponse(
+    string SiteId,
+    string Domain,
+    bool SiteKeyValid,
+    bool WidgetKeyValid,
+    string? Origin,
+    bool OriginAllowed,
+    bool TrackerScriptExpected,
+    bool WidgetScriptExpected,
+    bool FirstEventSeen,
+    DateTime? FirstEventReceivedAtUtc);
