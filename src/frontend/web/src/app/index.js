@@ -128,6 +128,8 @@ const createNavbar = ({ isAuthenticated, canAccessPlatformAdmin }) => {
   const links = document.createElement('div');
   links.style.display = 'flex';
   links.style.gap = '8px';
+  links.style.flexWrap = 'wrap';
+  links.style.justifyContent = 'flex-end';
 
   links.appendChild(createNavLink({ label: 'Home', href: '#/' }));
 
