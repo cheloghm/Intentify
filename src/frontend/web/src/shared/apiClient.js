@@ -107,6 +107,12 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
   const getVisitCounts = async (siteId) =>
     request(`/visitors/visits/counts${buildQueryString({ siteId })}`);
 
+  const getOnlineNow = async (siteId, windowMinutes = 5, limit = 20) =>
+    request(`/visitors/online-now${buildQueryString({ siteId, windowMinutes, limit })}`);
+
+  const getPageAnalytics = async (siteId, days = 7, limit = 10) =>
+    request(`/visitors/analytics/pages${buildQueryString({ siteId, days, limit })}`);
+
   const listSites = async () => request('/sites');
 
   const createKnowledgeSource = async (payload) =>
@@ -379,6 +385,8 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
       detail: getVisitorDetail,
       timeline: getVisitorTimeline,
       visitCounts: getVisitCounts,
+      onlineNow: getOnlineNow,
+      pageAnalytics: getPageAnalytics,
     },
     knowledge: {
       createSource: createKnowledgeSource,

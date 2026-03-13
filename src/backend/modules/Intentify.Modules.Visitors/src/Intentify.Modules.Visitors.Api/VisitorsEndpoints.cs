@@ -142,6 +142,80 @@ internal static class VisitorsEndpoints
         return Results.Ok(new VisitCountsResponse(result.Last7, result.Last30, result.Last90));
     }
 
+    public static async Task<IResult> GetOnlineNowAsync(
+        HttpContext context,
+        string siteId,
+        int windowMinutes,
+        int limit,
+        GetOnlineNowHandler handler)
+    {
+        var errors = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
+        if (!Guid.TryParse(siteId, out var siteGuid))
+        {
+            errors["siteId"] = ["Site id is invalid."];
+        }
+
+        if (errors.Count > 0)
+        {
+            return Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(errors));
+        }
+
+        var tenantId = TryGetTenantId(context.User);
+        if (tenantId is null)
+        {
+            return Results.Unauthorized();
+        }
+
+        var visitors = await handler.HandleAsync(new OnlineNowQuery(tenantId.Value, siteGuid, windowMinutes, limit), context.RequestAborted);
+        var normalizedWindowMinutes = windowMinutes is <= 0 or > 120 ? 5 : windowMinutes;
+
+        return Results.Ok(new OnlineNowResponse(
+            normalizedWindowMinutes,
+            visitors.Count,
+            visitors.Select(item => new OnlineVisitorResponse(
+                item.VisitorId.ToString("N"),
+                item.LastSeenAtUtc,
+                item.ActiveSessionsCount,
+                item.LastPath,
+                item.LastReferrer)).ToArray()));
+    }
+
+    public static async Task<IResult> GetPageAnalyticsAsync(
+        HttpContext context,
+        string siteId,
+        int days,
+        int limit,
+        GetPageAnalyticsHandler handler)
+    {
+        var errors = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
+        if (!Guid.TryParse(siteId, out var siteGuid))
+        {
+            errors["siteId"] = ["Site id is invalid."];
+        }
+
+        if (errors.Count > 0)
+        {
+            return Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(errors));
+        }
+
+        var tenantId = TryGetTenantId(context.User);
+        if (tenantId is null)
+        {
+            return Results.Unauthorized();
+        }
+
+        var pages = await handler.HandleAsync(new PageAnalyticsQuery(tenantId.Value, siteGuid, days, limit), context.RequestAborted);
+        var normalizedDays = days is <= 0 or > 90 ? 7 : days;
+
+        return Results.Ok(new PageAnalyticsResponse(
+            normalizedDays,
+            pages.Select(item => new PageAnalyticsItemResponse(
+                item.PageUrl,
+                item.PageViews,
+                item.UniqueSessions,
+                item.AvgTimeOnPageSeconds)).ToArray()));
+    }
+
     private static Guid? TryGetTenantId(ClaimsPrincipal user)
     {
         var tenantIdValue = user.FindFirstValue("tenantId");
