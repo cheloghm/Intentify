@@ -239,6 +239,10 @@ export const renderIntelligenceView = (container, { apiClient, toast } = {}) => 
   const summaryBody = document.createElement('div');
   summaryBody.style.color = '#334155';
 
+  const siteInsightsBody = document.createElement('div');
+  siteInsightsBody.style.color = '#334155';
+  siteInsightsBody.style.whiteSpace = 'pre-wrap';
+
   const trendsBody = document.createElement('div');
   trendsBody.style.color = '#334155';
 
@@ -430,6 +434,7 @@ export const renderIntelligenceView = (container, { apiClient, toast } = {}) => 
     if (!state.filters.siteId) {
       statusText.textContent = 'No site found. Create a site to load intelligence data.';
       summaryBody.textContent = '';
+      siteInsightsBody.textContent = '';
       trendsBody.textContent = '';
       return;
     }
@@ -451,6 +456,23 @@ export const renderIntelligenceView = (container, { apiClient, toast } = {}) => 
       statusText.textContent = `Showing trends for ${dashboard.category} in ${dashboard.location} (${dashboard.timeWindow}).`;
       renderSummary(dashboard);
       renderTrends(dashboard);
+
+      try {
+        const siteSummary = await client.intelligence.siteSummary({
+          siteId: state.filters.siteId,
+          category: state.filters.category,
+          location: state.filters.location,
+          timeWindow: state.filters.timeWindow,
+          audienceType: state.filters.audienceType,
+          provider: state.filters.provider,
+          keyword: state.filters.keyword,
+        });
+
+        const source = siteSummary.usedAi ? 'AI-assisted' : 'Deterministic';
+        siteInsightsBody.textContent = `${siteSummary.summary}\n\n(${source} summary • ${formatTimestamp(siteSummary.generatedAtUtc)})`;
+      } catch (summaryError) {
+        siteInsightsBody.textContent = 'Site insights summary is unavailable right now.';
+      }
     } catch (error) {
       const uiError = mapApiError(error);
       if (uiError.status === 401 || uiError.status === 403) {
@@ -461,6 +483,7 @@ export const renderIntelligenceView = (container, { apiClient, toast } = {}) => 
       }
 
       summaryBody.textContent = '';
+      siteInsightsBody.textContent = '';
       trendsBody.textContent = '';
     } finally {
       setLoading(false);
@@ -524,6 +547,7 @@ export const renderIntelligenceView = (container, { apiClient, toast } = {}) => 
       })(),
     }),
     createCard({ title: 'Summary', body: summaryBody }),
+    createCard({ title: 'Site Insights Summary', body: siteInsightsBody }),
     createCard({ title: 'Top Trends', body: trendsBody }),
   );
 
@@ -550,6 +574,7 @@ export const renderIntelligenceView = (container, { apiClient, toast } = {}) => 
         notifier.show({ message: uiError.message, variant: 'danger' });
       }
       summaryBody.textContent = '';
+      siteInsightsBody.textContent = '';
       trendsBody.textContent = '';
     }
   };

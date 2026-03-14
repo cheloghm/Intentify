@@ -7,6 +7,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Intentify.Modules.Intelligence.Domain\Intentify.Modules.Intelligence.Domain.csproj" />
+    <ProjectReference Include="..\..\..\..\shared\Intentify.Shared.AI\src\Intentify.Shared.AI\Intentify.Shared.AI.csproj" />
     <ProjectReference Include="..\..\..\..\shared\Intentify.Shared.Validation\src\Intentify.Shared.Validation\Intentify.Shared.Validation.csproj" />
   </ItemGroup>
 
