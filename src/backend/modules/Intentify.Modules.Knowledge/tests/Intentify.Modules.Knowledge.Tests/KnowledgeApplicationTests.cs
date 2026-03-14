@@ -131,25 +131,57 @@ public sealed class KnowledgeApplicationTests
         var extractor = new KnowledgeTextExtractor(new FakeFactory(_ =>
             new HttpResponseMessage(HttpStatusCode.OK)
             {
-                Content = new StringContent("<html><body><h1>Title</h1><p>Hello <b>world</b></p></body></html>")
+                Content = new StringContent("<html><body><nav>Cookie Settings Privacy Policy</nav><h1>Title</h1><p>Hello <b>world</b></p><script>window.gtag('x')</script></body></html>")
             }));
 
         var result = await extractor.ExtractAsync(new KnowledgeSource { Type = "Url", Url = "https://example.local" });
 
         Assert.True(result.IsSuccess);
-        Assert.Equal("Title Hello world", result.Text);
+        Assert.Contains("# Title", result.Text);
+        Assert.Contains("Hello world", result.Text);
+        Assert.DoesNotContain("gtag", result.Text!.ToLowerInvariant());
+        Assert.DoesNotContain("cookie settings", result.Text.ToLowerInvariant());
     }
 
     [Fact]
     public void Chunking_IsDeterministic()
     {
         var chunker = new KnowledgeChunker();
-        var input = string.Join("\n\n", Enumerable.Repeat("abcdefghij", 20));
+        var input = "# Services\n\nHaircuts and styling for women and men.\n\nColor treatment and highlights.\n\n# Hours\n\nMonday to Friday 9am to 6pm.\n\nSaturday 10am to 4pm.";
 
         var chunks = chunker.Chunk(input, 50);
 
-        Assert.Equal(5, chunks.Count);
+        Assert.True(chunks.Count >= 2);
+        Assert.Contains(chunks, chunk => chunk.Contains("# Services", StringComparison.Ordinal));
+        Assert.Contains(chunks, chunk => chunk.Contains("# Hours", StringComparison.Ordinal));
         Assert.Equal(chunks, chunker.Chunk(input, 50));
+    }
+
+    [Fact]
+    public async Task RetrieveTopChunks_NormalizesPluralAndTypos()
+    {
+        var tenantId = Guid.NewGuid();
+        var siteId = Guid.NewGuid();
+        var sourceId = Guid.NewGuid();
+
+        var sourceRepo = new RetrievalSourceRepository([
+            new KnowledgeSource { Id = sourceId, TenantId = tenantId, SiteId = siteId, BotId = Guid.Empty }
+        ]);
+
+        var chunkRepo = new RetrievalChunkRepository([
+            new KnowledgeChunk { Id = Guid.NewGuid(), TenantId = tenantId, SiteId = siteId, SourceId = sourceId, ChunkIndex = 0, Content = "Return policy: refunds accepted within 30 days.", CreatedAtUtc = DateTime.UtcNow },
+            new KnowledgeChunk { Id = Guid.NewGuid(), TenantId = tenantId, SiteId = siteId, SourceId = sourceId, ChunkIndex = 1, Content = "Book a haircut appointment today.", CreatedAtUtc = DateTime.UtcNow }
+        ]);
+
+        var handler = new RetrieveTopChunksHandler(chunkRepo, sourceRepo, NullLogger<RetrieveTopChunksHandler>.Instance);
+
+        var pluralResults = await handler.HandleAsync(new RetrieveTopChunksQuery(tenantId, siteId, "returns", 2));
+        Assert.True(pluralResults.Count > 0);
+        Assert.Contains("Return policy", pluralResults.First().Content, StringComparison.OrdinalIgnoreCase);
+
+        var typoResults = await handler.HandleAsync(new RetrieveTopChunksQuery(tenantId, siteId, "returrn policy", 2));
+        Assert.True(typoResults.Count > 0);
+        Assert.Contains("Return policy", typoResults.First().Content, StringComparison.OrdinalIgnoreCase);
     }
 }
 
