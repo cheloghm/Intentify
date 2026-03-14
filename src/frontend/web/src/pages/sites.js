@@ -110,9 +110,7 @@ const loadCachedKeys = (siteId) => {
     if (
       parsed &&
       typeof parsed.siteKey === 'string' &&
-      typeof parsed.widgetKey === 'string' &&
-      parsed.siteKey &&
-      parsed.widgetKey
+      parsed.siteKey
     ) {
       return parsed;
     }
@@ -123,8 +121,8 @@ const loadCachedKeys = (siteId) => {
   return null;
 };
 
-const saveCachedKeys = (siteId, { siteKey, widgetKey }) => {
-  if (!siteId || !siteKey || !widgetKey) {
+const saveCachedKeys = (siteId, { siteKey }) => {
+  if (!siteId || !siteKey) {
     return;
   }
 
@@ -132,7 +130,6 @@ const saveCachedKeys = (siteId, { siteKey, widgetKey }) => {
     `intentify.siteKeys.${siteId}`,
     JSON.stringify({
       siteKey,
-      widgetKey,
       cachedAtUtc: new Date().toISOString(),
     })
   );
@@ -182,7 +179,7 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
       return;
     }
 
-    const { domain, siteId, siteKey, widgetKey } = state.keys;
+    const { domain, siteId, siteKey } = state.keys;
 
     const body = document.createElement('div');
     body.style.display = 'flex';
@@ -231,8 +228,7 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
     };
 
     body.append(
-      createKeyRow({ label: 'Site key', value: siteKey }),
-      createKeyRow({ label: 'Widget key', value: widgetKey })
+      createKeyRow({ label: 'Install key', value: siteKey })
     );
 
     const openInstallButton = createButton({ label: 'Open Install' });
@@ -250,9 +246,6 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
       }
       if (siteKey) {
         params.set('siteKey', siteKey);
-      }
-      if (widgetKey) {
-        params.set('widgetKey', widgetKey);
       }
       window.location.hash = `#/install?${params.toString()}`;
     });
@@ -311,11 +304,9 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
           domain: response.domain,
           siteId,
           siteKey: response.siteKey,
-          widgetKey: response.widgetKey,
         };
         saveCachedKeys(siteId, {
           siteKey: response.siteKey,
-          widgetKey: response.widgetKey,
         });
 
         notifier.show({ message: 'Site created.', variant: 'success' });
@@ -436,9 +427,8 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
           params.set('domain', site.domain);
         }
         const cachedKeys = loadCachedKeys(siteId);
-        if (cachedKeys?.siteKey && cachedKeys?.widgetKey) {
+        if (cachedKeys?.siteKey) {
           params.set('siteKey', cachedKeys.siteKey);
-          params.set('widgetKey', cachedKeys.widgetKey);
         }
         window.location.hash = `#/install?${params.toString()}`;
       });
@@ -482,11 +472,9 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
             domain: site.domain,
             siteId,
             siteKey: response.siteKey,
-            widgetKey: response.widgetKey,
           };
           saveCachedKeys(siteId, {
             siteKey: response.siteKey,
-            widgetKey: response.widgetKey,
           });
           renderKeys();
           notifier.show({ message: 'Keys regenerated.', variant: 'success' });

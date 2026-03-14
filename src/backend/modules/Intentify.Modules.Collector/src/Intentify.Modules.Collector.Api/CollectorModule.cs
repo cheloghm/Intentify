@@ -30,6 +30,8 @@ public sealed class CollectorModule : IAppModule
 
         var group = endpoints.MapGroup("/collector");
 
+        group.MapGet("/sdk.js", CollectorEndpoints.GetSdkAsync);
+        group.MapGet("/sdk/bootstrap", CollectorEndpoints.GetSdkBootstrapAsync);
         group.MapGet("/tracker.js", CollectorEndpoints.GetTrackerAsync);
         group.MapPost("/events", CollectorEndpoints.CollectEventAsync);
     }

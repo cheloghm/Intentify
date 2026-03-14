@@ -6,6 +6,7 @@ using Intentify.AppHost;
 using Intentify.Modules.Auth.Api;
 using Intentify.Modules.Collector.Api;
 using Intentify.Modules.Collector.Domain;
+using Intentify.Modules.Flows.Api;
 using Intentify.Modules.Sites.Api;
 using Intentify.Shared.Testing;
 using Microsoft.AspNetCore.Builder;
@@ -65,6 +66,19 @@ public sealed class CollectorIntegrationTests : IAsyncLifetime
 
         var content = await response.Content.ReadAsStringAsync();
         Assert.Contains("/collector/events", content);
+    }
+
+    [Fact]
+    public async Task SdkScript_IsServed()
+    {
+        var response = await _client!.GetAsync("/collector/sdk.js");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("application/javascript", response.Content.Headers.ContentType?.MediaType);
+
+        var content = await response.Content.ReadAsStringAsync();
+        Assert.Contains("/collector/sdk/bootstrap", content);
+        Assert.Contains("/engage/widget.js", content);
     }
 
     [Fact]
@@ -181,6 +195,61 @@ public sealed class CollectorIntegrationTests : IAsyncLifetime
         using var json = JsonDocument.Parse(await collectResponse.Content.ReadAsStringAsync());
         Assert.True(json.RootElement.TryGetProperty("errors", out var errors));
         Assert.True(errors.TryGetProperty("siteKey", out _));
+    }
+
+    [Fact]
+    public async Task PostPageview_TriggersCollectorPageViewFlowRun()
+    {
+        var accessToken = await RegisterUserAsync();
+        var site = await CreateSiteAsync(accessToken);
+
+        var flowCreateResponse = await SendAuthorizedAsync(
+            HttpMethod.Post,
+            "/flows",
+            accessToken,
+            JsonContent.Create(new CreateFlowRequest(
+                site.SiteId,
+                "Collector pageview trigger",
+                new FlowTriggerRequest("CollectorPageView", null),
+                conditions: null,
+                actions: new[] { new FlowActionRequest("LogRun", null) })));
+
+        Assert.Equal(HttpStatusCode.OK, flowCreateResponse.StatusCode);
+
+        using var flowCreateJson = JsonDocument.Parse(await flowCreateResponse.Content.ReadAsStringAsync());
+        var flowId = flowCreateJson.RootElement.GetProperty("id").GetGuid();
+
+        var updateOriginsResponse = await SendAuthorizedAsync(
+            HttpMethod.Put,
+            $"/sites/{site.SiteId}/origins",
+            accessToken,
+            JsonContent.Create(new UpdateAllowedOriginsRequest(new[] { "http://localhost:8088" })));
+
+        Assert.Equal(HttpStatusCode.OK, updateOriginsResponse.StatusCode);
+
+        var collectRequest = new HttpRequestMessage(HttpMethod.Post, "/collector/events")
+        {
+            Content = JsonContent.Create(new CollectorEventRequest(
+                site.SiteKey,
+                "pageview",
+                "http://localhost:8088/pricing",
+                "http://localhost:8088/",
+                DateTime.UtcNow,
+                SessionId: "session-a"))
+        };
+        collectRequest.Headers.TryAddWithoutValidation("Origin", "http://localhost:8088");
+
+        var collectResponse = await _client!.SendAsync(collectRequest);
+        Assert.Equal(HttpStatusCode.OK, collectResponse.StatusCode);
+
+        var runsResponse = await SendAuthorizedAsync(HttpMethod.Get, $"/flows/{flowId:N}/runs", accessToken);
+        Assert.Equal(HttpStatusCode.OK, runsResponse.StatusCode);
+
+        using var runsJson = JsonDocument.Parse(await runsResponse.Content.ReadAsStringAsync());
+        var runs = runsJson.RootElement;
+        Assert.Equal(JsonValueKind.Array, runs.ValueKind);
+        Assert.True(runs.GetArrayLength() > 0);
+        Assert.Equal("CollectorPageView", runs[0].GetProperty("triggerType").GetString());
     }
 
     private async Task<CreateSiteResponse> CreateSiteAsync(string accessToken)

@@ -176,7 +176,6 @@ internal static class SitesEndpoints
     public static async Task<IResult> GetInstallationDiagnosticsAsync(
         string siteId,
         string? siteKey,
-        string? widgetKey,
         HttpContext context,
         GetInstallationDiagnosticsHandler handler)
     {
@@ -198,7 +197,7 @@ internal static class SitesEndpoints
             tenantId.Value,
             siteGuid,
             siteKey,
-            widgetKey,
+            null,
             TryResolveOrigin(context.Request)), context.RequestAborted);
 
         return result.Status switch
@@ -316,11 +315,9 @@ internal static class SitesEndpoints
             result.Site.Id.ToString("N"),
             result.Site.Domain,
             result.SiteKeyValid,
-            result.WidgetKeyValid,
             result.NormalizedOrigin,
             result.OriginAllowed,
-            result.TrackerScriptExpected,
-            result.WidgetScriptExpected,
+            result.SdkScriptExpected,
             result.FirstEventSeen,
             result.Site.FirstEventReceivedAtUtc);
     }

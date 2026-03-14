@@ -1,4 +1,5 @@
 using Intentify.Modules.Auth.Api;
+using Intentify.Modules.Collector.Application;
 using Intentify.Modules.Flows.Application;
 using Intentify.Modules.Flows.Infrastructure;
 using Intentify.Shared.Web;
@@ -28,6 +29,7 @@ public sealed class FlowsModule : IAppModule
         services.AddSingleton<ListFlowsService>();
         services.AddSingleton<ListFlowRunsService>();
         services.AddSingleton<ExecuteFlowsForTriggerService>();
+        services.AddSingleton<ICollectorEventObserver, CollectorPageViewFlowObserver>();
     }
 
     public void MapEndpoints(IEndpointRouteBuilder endpoints)
