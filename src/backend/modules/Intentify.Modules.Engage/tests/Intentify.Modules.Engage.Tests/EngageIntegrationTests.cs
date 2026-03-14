@@ -190,7 +190,7 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         var sessionId = json.RootElement.GetProperty("sessionId").GetString();
-        Assert.Equal("Thanks — we’ll get back to you shortly.", json.RootElement.GetProperty("response").GetString());
+        Assert.Equal("Thanks — I can connect you with our team. Please share your name and best email.", json.RootElement.GetProperty("response").GetString());
         Assert.True(json.RootElement.GetProperty("ticketCreated").GetBoolean());
         if (json.RootElement.TryGetProperty("stage7Decision", out var stage7Decision))
         {
@@ -449,7 +449,7 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task ChatSend_WithoutKnowledge_CreatesLowConfidenceTicket()
+    public async Task ChatSend_WithoutKnowledge_UsesLayeredFallback_WithoutAutoTicket()
     {
         var token = await RegisterUserAsync();
         var site = await CreateSiteAsync(token);
@@ -463,8 +463,8 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         var sessionId = json.RootElement.GetProperty("sessionId").GetString();
-        Assert.Equal("Thanks — we’ll get back to you shortly.", json.RootElement.GetProperty("response").GetString());
-        Assert.True(json.RootElement.GetProperty("ticketCreated").GetBoolean());
+        Assert.Equal("I don’t have that information in our knowledge base yet. If you tell me a bit more, I can help refine the question — or I can create a ticket for our team to follow up.", json.RootElement.GetProperty("response").GetString());
+        Assert.False(json.RootElement.GetProperty("ticketCreated").GetBoolean());
 
         var secondResponse = await _client!.PostAsJsonAsync("/engage/chat/send", new
         {
@@ -476,25 +476,54 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.OK, secondResponse.StatusCode);
         using var secondJson = JsonDocument.Parse(await secondResponse.Content.ReadAsStringAsync());
         Assert.Equal(sessionId, secondJson.RootElement.GetProperty("sessionId").GetString());
-        Assert.Equal("Thanks — we’ll get back to you shortly.", secondJson.RootElement.GetProperty("response").GetString());
+        Assert.Equal("I don’t have that information in our knowledge base yet. If you tell me a bit more, I can help refine the question — or I can create a ticket for our team to follow up.", secondJson.RootElement.GetProperty("response").GetString());
         Assert.False(secondJson.RootElement.GetProperty("ticketCreated").GetBoolean());
 
         var database = new MongoClient(_mongo.ConnectionString).GetDatabase(_mongo.DatabaseName);
         var handoffTickets = database.GetCollection<BsonEngageTicket>("EngageHandoffTickets");
         var parsedSessionId = Guid.Parse(sessionId!);
         var handoffCount = await handoffTickets.CountDocumentsAsync(item => item.SessionId == parsedSessionId);
-        Assert.Equal(1, handoffCount);
+        Assert.Equal(0, handoffCount);
 
         var tickets = database.GetCollection<BsonTicket>("tickets");
         var ticketsCount = await tickets.CountDocumentsAsync(item => item.EngageSessionId == parsedSessionId);
-        Assert.Equal(1, ticketsCount);
+        Assert.Equal(0, ticketsCount);
+    }
 
-        var createdTicket = await tickets.Find(item => item.EngageSessionId == parsedSessionId).FirstOrDefaultAsync();
-        Assert.NotNull(createdTicket);
-        Assert.Equal(site.SiteId, createdTicket!.SiteId.ToString());
-        Assert.Equal("Open", createdTicket.Status);
-        Assert.Equal("Engage handoff: LowConfidence", createdTicket.Subject);
-        Assert.Equal("can you help me", createdTicket.Description);
+    [Fact]
+    public async Task ChatSend_AmbiguousShortPrompt_ReturnsClarification()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var response = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "help"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("Happy to help — are you looking for hours, location, contact details, or services?", json.RootElement.GetProperty("response").GetString());
+        Assert.False(json.RootElement.GetProperty("ticketCreated").GetBoolean());
+    }
+
+    [Fact]
+    public async Task ChatSend_ContactIntent_UsesBusinessAwareFallback()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var response = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "what is your contact number"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("I don’t have a verified contact detail in the knowledge base yet. You can share the best way to reach you and I can pass it to our team.", json.RootElement.GetProperty("response").GetString());
+        Assert.False(json.RootElement.GetProperty("ticketCreated").GetBoolean());
     }
 
     [Fact]

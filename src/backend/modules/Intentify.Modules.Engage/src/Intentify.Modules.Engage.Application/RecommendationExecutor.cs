@@ -209,8 +209,7 @@ public sealed class RecommendationExecutor
             description = "Escalation recommended by Stage7.";
         }
 
-        var duplicate = await FindDuplicateTicketAsync(command, subject, cancellationToken);
-        if (duplicate is { } existingTicketId)
+        if (await ShouldSuppressDuplicateEscalationAsync(command, subject, cancellationToken) is { } existingTicketId)
         {
             return OperationResult<RecommendationExecutionResult>.Success(
                 new RecommendationExecutionResult(
@@ -270,8 +269,7 @@ public sealed class RecommendationExecutor
 
         var subject = subjectPrefix;
 
-        var duplicate = await FindDuplicateTicketAsync(command, subject, cancellationToken);
-        if (duplicate is { } existingTicketId)
+        if (await ShouldSuppressDuplicateEscalationAsync(command, subject, cancellationToken) is { } existingTicketId)
         {
             return OperationResult<RecommendationExecutionResult>.Success(
                 new RecommendationExecutionResult(
@@ -324,6 +322,12 @@ public sealed class RecommendationExecutor
 
         return duplicate?.Id;
     }
+
+    private async Task<Guid?> ShouldSuppressDuplicateEscalationAsync(
+        ExecuteRecommendationCommand command,
+        string subject,
+        CancellationToken cancellationToken)
+        => await FindDuplicateTicketAsync(command, subject, cancellationToken);
 
     private static bool IsMutating(AiRecommendationType type)
         => type is AiRecommendationType.EscalateTicket
