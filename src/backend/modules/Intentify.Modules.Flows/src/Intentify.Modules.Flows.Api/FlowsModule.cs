@@ -5,6 +5,7 @@ using Intentify.Modules.Flows.Infrastructure;
 using Intentify.Modules.Intelligence.Application;
 using Intentify.Shared.Web;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;

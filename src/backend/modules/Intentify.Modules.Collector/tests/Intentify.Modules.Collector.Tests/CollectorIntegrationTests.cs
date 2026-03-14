@@ -211,8 +211,8 @@ public sealed class CollectorIntegrationTests : IAsyncLifetime
                 site.SiteId,
                 "Collector pageview trigger",
                 new FlowTriggerRequest("CollectorPageView", null),
-                conditions: null,
-                actions: new[] { new FlowActionRequest("LogRun", null) })));
+                null,
+                new[] { new FlowActionRequest("LogRun", null) })));
 
         Assert.Equal(HttpStatusCode.OK, flowCreateResponse.StatusCode);
 
