@@ -2,6 +2,7 @@ using Intentify.Modules.Ads.Api;
 using Intentify.Modules.Auth.Api;
 using Intentify.Modules.Collector.Api;
 using Intentify.Modules.Engage.Api;
+using Intentify.Modules.Flows.Api;
 using Intentify.Modules.Intelligence.Api;
 using Intentify.Modules.Knowledge.Api;
 using Intentify.Modules.Leads.Api;
@@ -30,6 +31,7 @@ public static class AppModuleCatalog
         new PromosModule(),
         new LeadsModule(),
         new EngageModule(),
+        new FlowsModule(),
         new VisitorsModule(),
         new TicketsModule(),
         new PlatformAdminModule()

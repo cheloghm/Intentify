@@ -107,6 +107,12 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
   const getVisitCounts = async (siteId) =>
     request(`/visitors/visits/counts${buildQueryString({ siteId })}`);
 
+  const getOnlineNow = async (siteId, windowMinutes = 5, limit = 20) =>
+    request(`/visitors/online-now${buildQueryString({ siteId, windowMinutes, limit })}`);
+
+  const getPageAnalytics = async (siteId, days = 7, limit = 10) =>
+    request(`/visitors/analytics/pages${buildQueryString({ siteId, days, limit })}`);
+
   const listSites = async () => request('/sites');
 
   const createKnowledgeSource = async (payload) =>
@@ -155,6 +161,9 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
 
   const getIntelligenceDashboard = async (params) =>
     request(`/intelligence/dashboard${buildQueryString(params)}`);
+
+  const getIntelligenceSiteSummary = async (params) =>
+    request(`/intelligence/site-summary${buildQueryString(params)}`);
 
   const getIntelligenceProfile = async (siteId) =>
     request(`/intelligence/profiles/${encodeURIComponent(siteId)}`);
@@ -269,13 +278,17 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
   const getEngageBot = async (siteId) =>
     request(`/engage/bot${buildQueryString({ siteId })}`);
 
-  const updateEngageBot = async (siteId, name) =>
+  const updateEngageBot = async (siteId, name, settings = {}) =>
     request(`/engage/bot${buildQueryString({ siteId })}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ name }),
+      body: JSON.stringify({
+        name,
+        primaryColor: settings.primaryColor,
+        launcherVisible: settings.launcherVisible,
+      }),
     });
 
   const listAdsCampaigns = async (siteId) =>
@@ -379,6 +392,8 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
       detail: getVisitorDetail,
       timeline: getVisitorTimeline,
       visitCounts: getVisitCounts,
+      onlineNow: getOnlineNow,
+      pageAnalytics: getPageAnalytics,
     },
     knowledge: {
       createSource: createKnowledgeSource,
@@ -392,6 +407,7 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
       status: getIntelligenceStatus,
       trends: getIntelligenceTrends,
       dashboard: getIntelligenceDashboard,
+      siteSummary: getIntelligenceSiteSummary,
       refresh: refreshIntelligence,
       getProfile: getIntelligenceProfile,
       upsertProfile: upsertIntelligenceProfile,

@@ -13,4 +13,8 @@ public sealed class EngageBot
     public string DisplayName { get; set; } = "Assistant";
 
     public string? Name { get; set; }
+
+    public string? PrimaryColor { get; set; }
+
+    public bool? LauncherVisible { get; set; }
 }

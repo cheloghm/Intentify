@@ -84,18 +84,6 @@ const getCollectorSessionId = (timelineItem) => {
   return normalizeSessionId(timelineItem?.sessionId ?? timelineItem?.SessionId);
 };
 
-const getDateKey = (value) => {
-  const date = new Date(value || 0);
-  if (Number.isNaN(date.getTime())) return 'Unknown date';
-  return date.toISOString().slice(0, 10);
-};
-
-const formatDateHeading = (key) => {
-  const date = new Date(`${key}T00:00:00.000Z`);
-  if (Number.isNaN(date.getTime())) return key;
-  return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-};
-
 const parseNumber = (value) => {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   if (typeof value === 'string') {
@@ -110,6 +98,40 @@ const formatDuration = (secondsValue) => {
   if (seconds === null) return '—';
   const totalSeconds = Math.max(0, Math.round(seconds));
   return `${Math.floor(totalSeconds / 60)}m ${totalSeconds % 60}s`;
+};
+
+const formatIdentificationSource = (value) => {
+  if (!value || value === 'unknown') return 'Unknown';
+  if (value === 'lead_capture') return 'Lead capture';
+  return value;
+};
+
+const formatKnownTraits = (traits) => {
+  if (!Array.isArray(traits) || !traits.length) return '—';
+  return traits.join(', ');
+};
+
+const getSessionNarrative = (events, sessionId) => {
+  if (!Array.isArray(events) || !events.length) {
+    return {
+      firstSeenAtUtc: null,
+      lastSeenAtUtc: null,
+      eventCount: 0,
+      firstPath: '—',
+      lastPath: '—',
+      sessionId,
+    };
+  }
+
+  const ordered = [...events].sort((left, right) => new Date(left?.occurredAtUtc || 0).getTime() - new Date(right?.occurredAtUtc || 0).getTime());
+  return {
+    firstSeenAtUtc: ordered[0]?.occurredAtUtc || null,
+    lastSeenAtUtc: ordered[ordered.length - 1]?.occurredAtUtc || null,
+    eventCount: ordered.length,
+    firstPath: mapPath(ordered[0]),
+    lastPath: mapPath(ordered[ordered.length - 1]),
+    sessionId,
+  };
 };
 
 const summarizePromoAnswers = (answers) => {
@@ -385,6 +407,8 @@ export const renderVisitorProfileView = async (
       0
     );
 
+    const identification = detail?.identification || null;
+
     summaryGrid.innerHTML = '';
     summaryGrid.append(
       createSummaryValue('First seen', formatDate(detail?.firstSeenAtUtc)),
@@ -394,6 +418,12 @@ export const renderVisitorProfileView = async (
       createSummaryValue('Display name', detail?.displayName || '—'),
       createSummaryValue('Primary email', detail?.primaryEmail || '—'),
       createSummaryValue('Phone', detail?.phone || '—'),
+      createSummaryValue('Identified', identification?.isIdentified ? 'Yes' : 'No'),
+      createSummaryValue('Identification source', formatIdentificationSource(identification?.source)),
+      createSummaryValue('Identification confidence', formatConfidencePercent(identification?.confidence)),
+      createSummaryValue('Known traits', formatKnownTraits(identification?.knownTraits)),
+      createSummaryValue('Identified at', formatDate(identification?.lastIdentifiedAtUtc)),
+      createSummaryValue('Identification context', identification?.context || '—'),
       createSummaryValue('User agent', detail?.userAgent || '—'),
       createSummaryValue('Language', detail?.language || '—'),
       createSummaryValue('Platform', detail?.platform || '—'),
@@ -418,27 +448,51 @@ export const renderVisitorProfileView = async (
       return;
     }
 
-    const groupedByDate = new Map();
+    const groupedBySession = new Map();
     items.forEach((item) => {
-      const key = getDateKey(item?.occurredAtUtc);
-      if (!groupedByDate.has(key)) {
-        groupedByDate.set(key, []);
+      const sessionId = getCollectorSessionId(item);
+      if (!groupedBySession.has(sessionId)) {
+        groupedBySession.set(sessionId, []);
       }
-      groupedByDate.get(key).push(item);
+      groupedBySession.get(sessionId).push(item);
     });
 
-    const sortedKeys = Array.from(groupedByDate.keys()).sort((left, right) => right.localeCompare(left));
+    const sortedSessions = Array.from(groupedBySession.entries())
+      .map(([sessionId, sessionEvents]) => ({
+        sessionId,
+        sessionEvents: sortByOccurredDesc(sessionEvents),
+      }))
+      .sort((left, right) => new Date(right.sessionEvents[0]?.occurredAtUtc || 0).getTime() - new Date(left.sessionEvents[0]?.occurredAtUtc || 0).getTime());
 
-    sortedKeys.forEach((key) => {
+    sortedSessions.forEach(({ sessionId, sessionEvents }) => {
       const section = document.createElement('section');
       section.style.display = 'flex';
       section.style.flexDirection = 'column';
       section.style.gap = '8px';
 
+      const narrative = getSessionNarrative(sessionEvents, sessionId);
+
       const heading = document.createElement('div');
-      heading.textContent = formatDateHeading(key);
-      heading.style.fontWeight = '600';
-      heading.style.color = '#0f172a';
+      heading.style.display = 'flex';
+      heading.style.flexWrap = 'wrap';
+      heading.style.gap = '8px';
+      heading.style.alignItems = 'center';
+
+      const badge = document.createElement('span');
+      badge.textContent = `Session ${toShortId(narrative.sessionId)}`;
+      badge.style.padding = '4px 10px';
+      badge.style.borderRadius = '999px';
+      badge.style.border = '1px solid #cbd5e1';
+      badge.style.background = '#f8fafc';
+      badge.style.fontSize = '12px';
+      badge.style.fontWeight = '600';
+
+      const summary = document.createElement('span');
+      summary.style.fontSize = '12px';
+      summary.style.color = '#475569';
+      summary.textContent = `${formatDate(narrative.firstSeenAtUtc)} → ${formatDate(narrative.lastSeenAtUtc)} · ${narrative.eventCount} events · ${narrative.firstPath} → ${narrative.lastPath}`;
+
+      heading.append(badge, summary);
       section.appendChild(heading);
 
       const table = document.createElement('table');
@@ -455,7 +509,7 @@ export const renderVisitorProfileView = async (
       table.appendChild(thead);
 
       const tbody = document.createElement('tbody');
-      groupedByDate.get(key).forEach((item) => {
+      sessionEvents.forEach((item) => {
         const tr = document.createElement('tr');
         [formatDate(item.occurredAtUtc), item.type || '—', mapPath(item), mapReferrer(item), getTimelineDetails(item)].forEach((value) => {
           const td = document.createElement('td');
@@ -931,7 +985,7 @@ export const renderVisitorProfileView = async (
   const recentSessionsCard = createCard({ title: 'Recent sessions', body: recentSessionsBody });
 
   const timelineCard = createCard({
-    title: 'Recent activity by date',
+    title: 'Journey timeline by session',
     body: (() => {
       const wrapper = document.createElement('div');
       wrapper.style.display = 'flex';

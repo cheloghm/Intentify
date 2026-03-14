@@ -75,6 +75,7 @@ public sealed class IntelligenceModule : IAppModule
         services.AddSingleton<RefreshIntelligenceTrendsService>();
         services.AddSingleton<QueryIntelligenceTrendsService>();
         services.AddSingleton<GetIntelligenceStatusService>();
+        services.AddSingleton<GetSiteInsightsSummaryService>();
         services.AddSingleton<UpsertIntelligenceProfileService>();
         services.AddSingleton<GetIntelligenceProfileService>();
         services.AddSingleton(TimeProvider.System);
@@ -94,6 +95,7 @@ public sealed class IntelligenceModule : IAppModule
         group.MapGet("/trends", IntelligenceEndpoints.GetTrendsAsync);
         group.MapGet("/status", IntelligenceEndpoints.GetStatusAsync);
         group.MapGet("/dashboard", IntelligenceEndpoints.GetDashboardAsync);
+        group.MapGet("/site-summary", IntelligenceEndpoints.GetSiteSummaryAsync);
         group.MapPut("/profiles/{siteId}", IntelligenceEndpoints.UpsertProfileAsync);
         group.MapGet("/profiles/{siteId}", IntelligenceEndpoints.GetProfileAsync);
     }
@@ -117,4 +119,3 @@ internal static class IntelligenceHttpClientNames
     public const string GoogleTrends = "intelligence-google-trends";
     public const string GoogleAds = "intelligence-google-ads";
 }
-

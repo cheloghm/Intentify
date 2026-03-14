@@ -1,4 +1,4 @@
-import { createCard, createToastManager } from '../shared/ui/index.js';
+import { createButton, createCard, createToastManager } from '../shared/ui/index.js';
 import { createApiClient, mapApiError } from '../shared/apiClient.js';
 import { API_BASE } from '../shared/config.js';
 
@@ -27,20 +27,6 @@ const copyToClipboardRobust = async (value) => {
   if (!copied) {
     throw new Error('Copy command failed.');
   }
-};
-
-const createButton = ({ label, variant = 'default', type = 'button' } = {}) => {
-  const button = document.createElement('button');
-  button.type = type;
-  button.textContent = label;
-  button.style.padding = '8px 12px';
-  button.style.borderRadius = '6px';
-  button.style.border = variant === 'primary' ? 'none' : '1px solid #e2e8f0';
-  button.style.background = variant === 'primary' ? '#2563eb' : '#ffffff';
-  button.style.color = variant === 'primary' ? '#ffffff' : '#1e293b';
-  button.style.cursor = 'pointer';
-  button.style.fontSize = '13px';
-  return button;
 };
 
 const normalizeOrigin = (value) => {
@@ -107,9 +93,7 @@ const loadCachedKeys = (siteId) => {
     if (
       parsed &&
       typeof parsed.siteKey === 'string' &&
-      typeof parsed.widgetKey === 'string' &&
-      parsed.siteKey &&
-      parsed.widgetKey
+      parsed.siteKey
     ) {
       return parsed;
     }
@@ -120,8 +104,8 @@ const loadCachedKeys = (siteId) => {
   return null;
 };
 
-const saveCachedKeys = (siteId, { siteKey, widgetKey }) => {
-  if (!siteId || !siteKey || !widgetKey) {
+const saveCachedKeys = (siteId, { siteKey }) => {
+  if (!siteId || !siteKey) {
     return;
   }
 
@@ -129,7 +113,6 @@ const saveCachedKeys = (siteId, { siteKey, widgetKey }) => {
     `intentify.siteKeys.${siteId}`,
     JSON.stringify({
       siteKey,
-      widgetKey,
       cachedAtUtc: new Date().toISOString(),
     })
   );
@@ -143,7 +126,6 @@ export const renderInstallView = (container, { apiClient, toast, query } = {}) =
   const siteId = query?.siteId;
   const domain = query?.domain || '';
   const querySiteKey = typeof query?.siteKey === 'string' ? query.siteKey.trim() : '';
-  const queryWidgetKey = typeof query?.widgetKey === 'string' ? query.widgetKey.trim() : '';
 
   if (!siteId) {
     const message = document.createElement('div');
@@ -154,7 +136,7 @@ export const renderInstallView = (container, { apiClient, toast, query } = {}) =
     return;
   }
 
-  const cachedKeys = !querySiteKey || !queryWidgetKey ? loadCachedKeys(siteId) : null;
+  const cachedKeys = !querySiteKey ? loadCachedKeys(siteId) : null;
 
   const state = {
     site: null,
@@ -165,11 +147,11 @@ export const renderInstallView = (container, { apiClient, toast, query } = {}) =
     savingOrigins: false,
     originsError: '',
     rawSiteKey: querySiteKey || cachedKeys?.siteKey || '',
-    rawWidgetKey: queryWidgetKey || cachedKeys?.widgetKey || '',
     keysLoading: false,
     revealSiteKey: false,
     copyMessage: '',
     status: null,
+    diagnostics: null,
     statusError: '',
     actionError: '',
     sendingTest: false,
@@ -392,7 +374,7 @@ export const renderInstallView = (container, { apiClient, toast, query } = {}) =
   siteKeyValue.style.background = '#f1f5f9';
 
   const revealButton = createButton({ label: 'Reveal' });
-  const generateKeysButton = createButton({ label: 'Generate keys for install' });
+  const generateKeysButton = createButton({ label: 'Generate install key' });
   generateKeysButton.style.alignSelf = 'flex-start';
 
   siteKeyRow.append(siteKeyLabel, siteKeyValue, revealButton);
@@ -427,7 +409,7 @@ export const renderInstallView = (container, { apiClient, toast, query } = {}) =
   const updateSnippet = () => {
     const baseUrl = API_BASE.replace(/\/$/, '');
     const key = state.rawSiteKey ? state.rawSiteKey.trim() : '';
-    snippetValue.value = `<script async src="${baseUrl}/collector/tracker.js" data-site-key="${key}"></script>`;
+    snippetValue.value = `<script async src="${baseUrl}/collector/sdk.js" data-site-key="${key}"></script>`;
 
     const masked = key ? '••••••' : '••••••';
     siteKeyValue.textContent = state.revealSiteKey && key ? key : masked;
@@ -438,21 +420,20 @@ export const renderInstallView = (container, { apiClient, toast, query } = {}) =
     copyButton.disabled = missingKey || state.keysLoading;
     generateKeysButton.style.display = missingKey ? 'inline-block' : 'none';
     generateKeysButton.disabled = state.keysLoading;
-    generateKeysButton.textContent = state.keysLoading ? 'Generating...' : 'Generate keys for install';
+    generateKeysButton.textContent = state.keysLoading ? 'Generating...' : 'Generate install key';
 
     snippetHint.textContent = state.keysLoading
-      ? 'Generating keys...'
+      ? 'Generating install key...'
       : missingKey
-      ? 'Generate keys for install to populate data-site-key automatically.'
+      ? 'Generate install key to populate the SDK snippet automatically.'
       : '';
 
     copyStatus.textContent = state.copyMessage;
     actionErrorText.textContent = state.actionError;
   };
 
-  const updateKeys = ({ siteKey, widgetKey } = {}) => {
+  const updateKeys = ({ siteKey } = {}) => {
     state.rawSiteKey = siteKey || '';
-    state.rawWidgetKey = widgetKey || '';
     updateSnippet();
   };
 
@@ -476,9 +457,8 @@ export const renderInstallView = (container, { apiClient, toast, query } = {}) =
     try {
       const response = await regenerateKeys(siteId);
       const siteKey = response?.siteKey || '';
-      const widgetKey = response?.widgetKey || '';
-      updateKeys({ siteKey, widgetKey });
-      saveCachedKeys(siteId, { siteKey, widgetKey });
+      updateKeys({ siteKey });
+      saveCachedKeys(siteId, { siteKey });
       notifier.show({ message: 'Keys generated.', variant: 'success' });
     } catch (error) {
       const uiError = mapApiError(error);
@@ -529,6 +509,15 @@ export const renderInstallView = (container, { apiClient, toast, query } = {}) =
   const statusInstalled = document.createElement('div');
   const statusFirstEvent = document.createElement('div');
   const statusCheckedAt = document.createElement('div');
+  const diagnosticsTitle = document.createElement('div');
+  diagnosticsTitle.textContent = 'Diagnostics';
+  diagnosticsTitle.style.fontWeight = '600';
+  diagnosticsTitle.style.marginTop = '6px';
+  const diagnosticsList = document.createElement('ul');
+  diagnosticsList.style.margin = '0';
+  diagnosticsList.style.paddingLeft = '18px';
+  diagnosticsList.style.color = '#334155';
+  diagnosticsList.style.fontSize = '13px';
   const statusError = document.createElement('div');
   statusError.style.color = '#dc2626';
 
@@ -538,14 +527,44 @@ export const renderInstallView = (container, { apiClient, toast, query } = {}) =
   verifyErrorText.style.fontSize = '13px';
   verifyErrorText.style.color = '#dc2626';
 
-  statusRow.append(statusConfigured, statusInstalled, statusFirstEvent, statusCheckedAt, statusError);
+  statusRow.append(statusConfigured, statusInstalled, statusFirstEvent, statusCheckedAt, diagnosticsTitle, diagnosticsList, statusError);
+
+  const renderDiagnosticItem = ({ label, ok, detail }) => {
+    const item = document.createElement('li');
+    const indicator = ok ? '✅' : '❌';
+    item.textContent = `${indicator} ${label}${detail ? ` — ${detail}` : ''}`;
+    return item;
+  };
 
   const updateStatusDisplay = () => {
     const status = state.status || {};
+    const diagnostics = state.diagnostics || {};
     statusConfigured.textContent = `Configured: ${status.isConfigured ? 'Yes' : 'No'}`;
     statusInstalled.textContent = `Installed: ${status.isInstalled ? 'Yes' : 'No'}`;
     statusFirstEvent.textContent = `First event received: ${status.firstEventReceivedAtUtc || 'Not yet'}`;
     statusCheckedAt.textContent = `Last checked: ${new Date().toISOString()}`;
+
+    diagnosticsList.replaceChildren(
+      renderDiagnosticItem({
+        label: 'Site key valid',
+        ok: Boolean(diagnostics.siteKeyValid),
+      }),
+      renderDiagnosticItem({
+        label: 'Origin allowed',
+        ok: Boolean(diagnostics.originAllowed),
+        detail: diagnostics.origin || window.location.origin,
+      }),
+      renderDiagnosticItem({
+        label: 'SDK script expected',
+        ok: diagnostics.sdkScriptExpected !== false,
+      }),
+      renderDiagnosticItem({
+        label: 'First event seen',
+        ok: Boolean(diagnostics.firstEventSeen),
+        detail: diagnostics.firstEventReceivedAtUtc || 'Not yet',
+      })
+    );
+
     statusError.textContent = state.statusError;
     verifyErrorText.textContent = state.actionError;
     sendTestEventButton.disabled = !state.rawSiteKey || state.sendingTest;
@@ -558,9 +577,17 @@ export const renderInstallView = (container, { apiClient, toast, query } = {}) =
     state.statusError = '';
     try {
       state.status = await client.request(`/sites/${siteId}/installation-status`);
+
+      const params = new URLSearchParams();
+      if (state.rawSiteKey) {
+        params.set('siteKey', state.rawSiteKey);
+      }
+      const diagnosticsQuery = params.toString();
+      state.diagnostics = await client.request(`/sites/${siteId}/installation-diagnostics${diagnosticsQuery ? `?${diagnosticsQuery}` : ''}`);
     } catch (error) {
       const uiError = mapApiError(error);
       state.statusError = uiError.message;
+      state.diagnostics = null;
     } finally {
       refreshStatusButton.disabled = false;
       refreshStatusButton.textContent = 'Refresh status';
@@ -651,7 +678,7 @@ export const renderInstallView = (container, { apiClient, toast, query } = {}) =
   loadInstallationStatus();
   loadSite();
 
-  if (state.rawSiteKey && state.rawWidgetKey) {
-    updateKeys({ siteKey: state.rawSiteKey, widgetKey: state.rawWidgetKey });
+  if (state.rawSiteKey) {
+    updateKeys({ siteKey: state.rawSiteKey });
   }
 };

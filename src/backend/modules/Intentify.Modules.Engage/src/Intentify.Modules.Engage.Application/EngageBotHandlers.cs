@@ -1,5 +1,6 @@
 using Intentify.Modules.Sites.Application;
 using Intentify.Shared.Validation;
+using System.Text.RegularExpressions;
 
 namespace Intentify.Modules.Engage.Application;
 
@@ -29,13 +30,14 @@ public sealed class GetEngageBotHandler
             resolvedName = "Assistant";
         }
 
-        return OperationResult<EngageBotResult>.Success(new EngageBotResult(bot.BotId, resolvedName));
+        return OperationResult<EngageBotResult>.Success(new EngageBotResult(bot.BotId, resolvedName, bot.PrimaryColor, bot.LauncherVisible));
     }
 }
 
 public sealed class UpdateEngageBotHandler
 {
     private const int MaxNameLength = 50;
+    private static readonly Regex PrimaryColorRegex = new("^#[0-9a-fA-F]{6}$", RegexOptions.Compiled);
     private readonly ISiteRepository _siteRepository;
     private readonly IEngageBotRepository _botRepository;
 
@@ -57,6 +59,12 @@ public sealed class UpdateEngageBotHandler
             validationErrors.Add("name", $"Name must be {MaxNameLength} characters or fewer.");
         }
 
+        var primaryColor = string.IsNullOrWhiteSpace(command.PrimaryColor) ? null : command.PrimaryColor.Trim();
+        if (primaryColor is not null && !PrimaryColorRegex.IsMatch(primaryColor))
+        {
+            validationErrors.Add("primaryColor", "Primary color must be a hex color in #RRGGBB format.");
+        }
+
         if (validationErrors.HasErrors)
         {
             return OperationResult<EngageBotResult>.ValidationFailed(validationErrors);
@@ -68,7 +76,7 @@ public sealed class UpdateEngageBotHandler
             return OperationResult<EngageBotResult>.NotFound();
         }
 
-        var updated = await _botRepository.UpdateNameAsync(command.TenantId, command.SiteId, command.Name, cancellationToken)
+        var updated = await _botRepository.UpdateSettingsAsync(command.TenantId, command.SiteId, command.Name, primaryColor, command.LauncherVisible, cancellationToken)
             ?? await _botRepository.GetOrCreateForSiteAsync(command.TenantId, command.SiteId, cancellationToken);
 
         var resolvedName = string.IsNullOrWhiteSpace(updated.Name) ? updated.DisplayName : updated.Name;
@@ -77,6 +85,6 @@ public sealed class UpdateEngageBotHandler
             resolvedName = "Assistant";
         }
 
-        return OperationResult<EngageBotResult>.Success(new EngageBotResult(updated.BotId, resolvedName));
+        return OperationResult<EngageBotResult>.Success(new EngageBotResult(updated.BotId, resolvedName, updated.PrimaryColor, updated.LauncherVisible));
     }
 }

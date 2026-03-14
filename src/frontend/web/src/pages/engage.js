@@ -1,20 +1,5 @@
-import { createCard, createToastManager } from '../shared/ui/index.js';
+import { createButton, createCard, createToastManager } from '../shared/ui/index.js';
 import { createApiClient, mapApiError } from '../shared/apiClient.js';
-import { API_BASE } from '../shared/config.js';
-
-const createButton = ({ label, variant = 'default', type = 'button' } = {}) => {
-  const button = document.createElement('button');
-  button.type = type;
-  button.textContent = label;
-  button.style.padding = '8px 12px';
-  button.style.borderRadius = '6px';
-  button.style.border = variant === 'primary' ? 'none' : '1px solid #e2e8f0';
-  button.style.background = variant === 'primary' ? '#2563eb' : '#ffffff';
-  button.style.color = variant === 'primary' ? '#ffffff' : '#1e293b';
-  button.style.cursor = 'pointer';
-  button.style.fontSize = '13px';
-  return button;
-};
 
 const getSiteId = (site) => site?.siteId || site?.id || '';
 
@@ -133,30 +118,6 @@ const getValidRecommendations = (stage7Decision) => {
   });
 };
 
-const copyToClipboardRobust = async (value) => {
-  if (navigator.clipboard?.writeText) {
-    try {
-      await navigator.clipboard.writeText(value);
-      return;
-    } catch (error) {
-      // Fallback below.
-    }
-  }
-
-  const textarea = document.createElement('textarea');
-  textarea.value = value;
-  textarea.style.position = 'fixed';
-  textarea.style.opacity = '0';
-  document.body.appendChild(textarea);
-  textarea.focus();
-  textarea.select();
-  const copied = document.execCommand('copy');
-  textarea.remove();
-
-  if (!copied) {
-    throw new Error('Copy command failed.');
-  }
-};
 
 export const renderEngageView = (container, { apiClient, toast } = {}) => {
   const client = apiClient || createApiClient();
@@ -171,8 +132,9 @@ export const renderEngageView = (container, { apiClient, toast } = {}) => {
     conversations: [],
     selectedSessionId: '',
     selectedMessages: [],
-    revealWidgetKey: false,
     botName: 'Assistant',
+    primaryColor: '#2563eb',
+    launcherVisible: true,
   };
 
   const page = document.createElement('div');
@@ -252,98 +214,59 @@ export const renderEngageView = (container, { apiClient, toast } = {}) => {
 
   botNameField.append(botNameLabel, botNameInput, saveBotNameButton);
 
-  configBody.append(siteField, widgetWrap, botNameField);
+  const primaryColorField = document.createElement('label');
+  primaryColorField.style.display = 'flex';
+  primaryColorField.style.flexDirection = 'column';
+  primaryColorField.style.gap = '6px';
+
+  const primaryColorLabel = document.createElement('span');
+  primaryColorLabel.textContent = 'Primary color';
+  primaryColorLabel.style.fontSize = '13px';
+
+  const primaryColorInput = document.createElement('input');
+  primaryColorInput.type = 'color';
+  primaryColorInput.value = state.primaryColor;
+  primaryColorInput.style.height = '38px';
+  primaryColorInput.style.padding = '4px';
+  primaryColorInput.style.borderRadius = '6px';
+  primaryColorInput.style.border = '1px solid #cbd5e1';
+
+  const launcherVisibleWrap = document.createElement('label');
+  launcherVisibleWrap.style.display = 'flex';
+  launcherVisibleWrap.style.alignItems = 'center';
+  launcherVisibleWrap.style.gap = '8px';
+
+  const launcherVisibleInput = document.createElement('input');
+  launcherVisibleInput.type = 'checkbox';
+  launcherVisibleInput.checked = state.launcherVisible;
+
+  const launcherVisibleText = document.createElement('span');
+  launcherVisibleText.textContent = 'Show launcher';
+  launcherVisibleText.style.fontSize = '13px';
+
+  launcherVisibleWrap.append(launcherVisibleInput, launcherVisibleText);
+
+  const saveAppearanceButton = createButton({ label: 'Save appearance', variant: 'primary' });
+  saveAppearanceButton.style.width = 'fit-content';
+
+  primaryColorField.append(primaryColorLabel, primaryColorInput, launcherVisibleWrap, saveAppearanceButton);
+
+  configBody.append(siteField, widgetWrap, botNameField, primaryColorField);
 
   const installBody = document.createElement('div');
   installBody.style.display = 'flex';
   installBody.style.flexDirection = 'column';
   installBody.style.gap = '10px';
 
-  const installKeyRow = document.createElement('div');
-  installKeyRow.style.display = 'flex';
-  installKeyRow.style.alignItems = 'center';
-  installKeyRow.style.gap = '8px';
+  const installMessage = document.createElement('p');
+  installMessage.textContent = 'Engage now loads through the unified Intentify SDK snippet. Use the Install page to copy the single snippet and manage allowed origins.';
+  installMessage.style.margin = '0';
+  installMessage.style.fontSize = '13px';
+  installMessage.style.color = '#475569';
 
-  const installKeyLabel = document.createElement('span');
-  installKeyLabel.textContent = 'Widget key:';
-  installKeyLabel.style.fontSize = '13px';
-  installKeyLabel.style.color = '#475569';
+  const updateInstallCard = () => {};
 
-  const installKeyValue = document.createElement('code');
-  installKeyValue.style.fontSize = '12px';
-  installKeyValue.style.padding = '4px 6px';
-  installKeyValue.style.borderRadius = '4px';
-  installKeyValue.style.background = '#f1f5f9';
-
-  const toggleWidgetKeyButton = createButton({ label: 'Reveal' });
-  const copyWidgetKeyButton = createButton({ label: 'Copy key' });
-  installKeyRow.append(installKeyLabel, installKeyValue, toggleWidgetKeyButton, copyWidgetKeyButton);
-
-  const snippetValue = document.createElement('textarea');
-  snippetValue.readOnly = true;
-  snippetValue.rows = 1;
-  snippetValue.style.width = '100%';
-  snippetValue.style.borderRadius = '8px';
-  snippetValue.style.border = '1px solid #e2e8f0';
-  snippetValue.style.padding = '10px 12px';
-  snippetValue.style.fontFamily = 'ui-monospace, SFMono-Regular, SFMono-Regular, Menlo, monospace';
-  snippetValue.style.fontSize = '12px';
-  snippetValue.style.color = '#1e293b';
-  snippetValue.style.background = '#f8fafc';
-
-  const copySnippetButton = createButton({ label: 'Copy snippet' });
-  copySnippetButton.style.alignSelf = 'flex-start';
-
-  const installInstructions = document.createElement('ul');
-  installInstructions.style.margin = '0';
-  installInstructions.style.paddingLeft = '18px';
-  installInstructions.style.color = '#475569';
-  installInstructions.style.fontSize = '13px';
-
-  const htmlInstruction = document.createElement('li');
-  htmlInstruction.textContent = 'Paste before </body>';
-  const wordpressInstruction = document.createElement('li');
-  wordpressInstruction.textContent = 'WordPress: add to footer or a header/footer injection plugin';
-  installInstructions.append(htmlInstruction, wordpressInstruction);
-
-  const updateInstallCard = () => {
-    const hasSite = !!state.siteId;
-    const key = state.widgetKey ? state.widgetKey.trim() : '';
-    const baseUrl = API_BASE.replace(/\/+$/, '');
-    const masked = key ? '••••••' : '••••••';
-
-    installKeyValue.textContent = state.revealWidgetKey && key ? key : masked;
-    toggleWidgetKeyButton.disabled = !hasSite || !key;
-    toggleWidgetKeyButton.textContent = state.revealWidgetKey ? 'Hide' : 'Reveal';
-    copyWidgetKeyButton.disabled = !hasSite || !key;
-    copySnippetButton.disabled = !hasSite || !key;
-    snippetValue.value = `<script async src="${baseUrl}/engage/widget.js" data-widget-key="${key}"></script>`;
-  };
-
-  toggleWidgetKeyButton.addEventListener('click', () => {
-    state.revealWidgetKey = !state.revealWidgetKey;
-    updateInstallCard();
-  });
-
-  copyWidgetKeyButton.addEventListener('click', async () => {
-    try {
-      await copyToClipboardRobust(state.widgetKey || '');
-      notifier.show({ message: 'Widget key copied.', variant: 'success' });
-    } catch (error) {
-      notifier.show({ message: 'Unable to copy widget key.', variant: 'danger' });
-    }
-  });
-
-  copySnippetButton.addEventListener('click', async () => {
-    try {
-      await copyToClipboardRobust(snippetValue.value);
-      notifier.show({ message: 'Snippet copied to clipboard.', variant: 'success' });
-    } catch (error) {
-      notifier.show({ message: 'Unable to copy snippet.', variant: 'danger' });
-    }
-  });
-
-  installBody.append(installKeyRow, snippetValue, copySnippetButton, installInstructions);
+  installBody.append(installMessage);
 
   const chatBody = document.createElement('div');
   chatBody.style.display = 'flex';
@@ -723,7 +646,11 @@ const label = document.createElement('div');
   const loadBotName = async (siteId) => {
     if (!siteId) {
       state.botName = 'Assistant';
+      state.primaryColor = '#2563eb';
+      state.launcherVisible = true;
       botNameInput.value = '';
+      primaryColorInput.value = state.primaryColor;
+      launcherVisibleInput.checked = state.launcherVisible;
       renderTranscript();
       return;
     }
@@ -731,14 +658,49 @@ const label = document.createElement('div');
     try {
       const bot = await client.engage.getBot(siteId);
       state.botName = bot?.name || 'Assistant';
+      state.primaryColor = bot?.primaryColor || '#2563eb';
+      state.launcherVisible = typeof bot?.launcherVisible === 'boolean' ? bot.launcherVisible : true;
       botNameInput.value = state.botName;
+      primaryColorInput.value = state.primaryColor;
+      launcherVisibleInput.checked = state.launcherVisible;
       renderTranscript();
     } catch (error) {
       state.botName = 'Assistant';
+      state.primaryColor = '#2563eb';
+      state.launcherVisible = true;
       botNameInput.value = '';
+      primaryColorInput.value = state.primaryColor;
+      launcherVisibleInput.checked = state.launcherVisible;
       notifier.show({ message: mapApiError(error).message, variant: 'danger' });
     }
   };
+
+  saveAppearanceButton.addEventListener('click', async () => {
+    if (!state.siteId) {
+      notifier.show({ message: 'Select a site first.', variant: 'warning' });
+      return;
+    }
+
+    saveAppearanceButton.disabled = true;
+    try {
+      const updated = await client.engage.updateBot(state.siteId, botNameInput.value.trim() || state.botName || 'Assistant', {
+        primaryColor: primaryColorInput.value,
+        launcherVisible: launcherVisibleInput.checked,
+      });
+      state.botName = updated?.name || botNameInput.value.trim() || state.botName || 'Assistant';
+      state.primaryColor = updated?.primaryColor || primaryColorInput.value || '#2563eb';
+      state.launcherVisible = typeof updated?.launcherVisible === 'boolean' ? updated.launcherVisible : launcherVisibleInput.checked;
+      botNameInput.value = state.botName;
+      primaryColorInput.value = state.primaryColor;
+      launcherVisibleInput.checked = state.launcherVisible;
+      notifier.show({ message: 'Widget appearance saved.', variant: 'success' });
+      renderTranscript();
+    } catch (error) {
+      notifier.show({ message: mapApiError(error).message, variant: 'danger' });
+    } finally {
+      saveAppearanceButton.disabled = false;
+    }
+  });
 
   saveBotNameButton.addEventListener('click', async () => {
     if (!state.siteId) {
@@ -754,10 +716,17 @@ const label = document.createElement('div');
 
     saveBotNameButton.disabled = true;
     try {
-      const updated = await client.engage.updateBot(state.siteId, name);
+      const updated = await client.engage.updateBot(state.siteId, name, {
+        primaryColor: primaryColorInput.value,
+        launcherVisible: launcherVisibleInput.checked,
+      });
       state.botName = updated?.name || name;
+      state.primaryColor = updated?.primaryColor || primaryColorInput.value || '#2563eb';
+      state.launcherVisible = typeof updated?.launcherVisible === 'boolean' ? updated.launcherVisible : launcherVisibleInput.checked;
       botNameInput.value = state.botName;
-      notifier.show({ message: 'Bot name saved.', variant: 'success' });
+      primaryColorInput.value = state.primaryColor;
+      launcherVisibleInput.checked = state.launcherVisible;
+      notifier.show({ message: 'Bot settings saved.', variant: 'success' });
       renderTranscript();
     } catch (error) {
       notifier.show({ message: mapApiError(error).message, variant: 'danger' });
@@ -768,7 +737,6 @@ const label = document.createElement('div');
 
   siteSelect.addEventListener('change', async () => {
     state.siteId = siteSelect.value;
-    state.revealWidgetKey = false;
     state.selectedSessionId = '';
     state.selectedMessages = [];
     state.conversations = [];
