@@ -267,6 +267,63 @@ internal sealed class RecordingOpenSearchKnowledgeClient : IOpenSearchKnowledgeC
 public sealed class IndexingStatusTransitionTests
 {
     [Fact]
+    public async Task Indexing_WhenAlreadyProcessing_DoesNotReprocess()
+    {
+        var source = new KnowledgeSource
+        {
+            TenantId = Guid.NewGuid(),
+            SiteId = Guid.NewGuid(),
+            Type = "Text",
+            TextContent = "alpha beta",
+            Status = IndexStatus.Processing,
+            CreatedAtUtc = DateTime.UtcNow,
+            UpdatedAtUtc = DateTime.UtcNow,
+            IndexedAtUtc = DateTime.UtcNow.AddMinutes(-5)
+        };
+
+        var sourceRepo = new InMemorySourceRepository(source);
+        var chunkRepo = new InMemoryChunkRepository();
+        var handler = new IndexKnowledgeSourceHandler(sourceRepo, chunkRepo, new KnowledgeTextExtractor(new FakeFactory(_ => new HttpResponseMessage(HttpStatusCode.OK))), new KnowledgeChunker());
+
+        var result = await handler.HandleAsync(new IndexKnowledgeSourceCommand(source.TenantId, source.Id));
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("Processing", result.Value!.Status);
+        Assert.Equal(0, result.Value.ChunkCount);
+        Assert.Equal(0, sourceRepo.UpdateStatusCalls);
+        Assert.Empty(chunkRepo.Stored);
+    }
+
+    [Fact]
+    public async Task Indexing_FailedExtraction_PreservesLastIndexedAt()
+    {
+        var previousIndexedAt = DateTime.UtcNow.AddHours(-2);
+        var source = new KnowledgeSource
+        {
+            TenantId = Guid.NewGuid(),
+            SiteId = Guid.NewGuid(),
+            Type = "Url",
+            Url = null,
+            Status = IndexStatus.Indexed,
+            CreatedAtUtc = DateTime.UtcNow,
+            UpdatedAtUtc = DateTime.UtcNow,
+            IndexedAtUtc = previousIndexedAt
+        };
+
+        var sourceRepo = new InMemorySourceRepository(source);
+        var chunkRepo = new InMemoryChunkRepository();
+        var handler = new IndexKnowledgeSourceHandler(sourceRepo, chunkRepo, new KnowledgeTextExtractor(new FakeFactory(_ => new HttpResponseMessage(HttpStatusCode.OK))), new KnowledgeChunker());
+
+        var result = await handler.HandleAsync(new IndexKnowledgeSourceCommand(source.TenantId, source.Id));
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("Failed", result.Value!.Status);
+        Assert.Equal(previousIndexedAt, sourceRepo.Stored.IndexedAtUtc);
+        Assert.Equal(IndexStatus.Failed, sourceRepo.Stored.Status);
+        Assert.Empty(chunkRepo.Stored);
+    }
+
+    [Fact]
     public async Task Indexing_TransitionsQueuedToIndexed()
     {
         var source = new KnowledgeSource
@@ -296,6 +353,8 @@ public sealed class IndexingStatusTransitionTests
     {
         public KnowledgeSource Stored { get; }
 
+        public int UpdateStatusCalls { get; private set; }
+
         public InMemorySourceRepository(KnowledgeSource source)
         {
             Stored = source;
@@ -307,6 +366,7 @@ public sealed class IndexingStatusTransitionTests
 
         public Task UpdateStatusAsync(Guid tenantId, Guid sourceId, IndexStatus status, string? failureReason, DateTime? indexedAtUtc, CancellationToken cancellationToken = default)
         {
+            UpdateStatusCalls++;
             Stored.Status = status;
             Stored.FailureReason = failureReason;
             Stored.IndexedAtUtc = indexedAtUtc;

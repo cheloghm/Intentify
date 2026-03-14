@@ -31,6 +31,30 @@ const getStatusVariant = (status) => {
   return '';
 };
 
+
+const getFreshness = (source) => {
+  const status = String(source?.status || '').toUpperCase();
+  if (status === 'PROCESSING') {
+    return { label: 'Indexing', variant: 'warning' };
+  }
+
+  if (status === 'FAILED') {
+    return { label: 'Error', variant: 'danger' };
+  }
+
+  if (!source?.indexedAtUtc) {
+    return { label: 'Stale', variant: 'warning' };
+  }
+
+  const indexedAt = Date.parse(source.indexedAtUtc);
+  const updatedAt = source?.updatedAtUtc ? Date.parse(source.updatedAtUtc) : Number.NaN;
+  if (Number.isNaN(indexedAt) || (!Number.isNaN(updatedAt) && updatedAt > indexedAt)) {
+    return { label: 'Stale', variant: 'warning' };
+  }
+
+  return { label: 'Fresh', variant: 'success' };
+};
+
 export const renderKnowledgeView = (container, { apiClient, toast } = {}) => {
   const client = apiClient || createApiClient();
   const notifier = toast || createToastManager();
@@ -111,6 +135,7 @@ export const renderKnowledgeView = (container, { apiClient, toast } = {}) => {
   sourcesBody.style.gap = '10px';
 
   const refreshButton = createButton({ label: 'Refresh list' });
+  const reindexStaleButton = createButton({ label: 'Reindex stale' });
 
   const retrieveBody = document.createElement('div');
   retrieveBody.style.display = 'flex';
@@ -324,7 +349,11 @@ export const renderKnowledgeView = (container, { apiClient, toast } = {}) => {
 
   const renderSources = () => {
     sourcesBody.innerHTML = '';
-    sourcesBody.appendChild(refreshButton);
+    const actionRow = document.createElement('div');
+    actionRow.style.display = 'flex';
+    actionRow.style.gap = '8px';
+    actionRow.append(refreshButton, reindexStaleButton);
+    sourcesBody.appendChild(actionRow);
 
     if (state.loadingSources) {
       const loading = document.createElement('div');
@@ -346,7 +375,7 @@ export const renderKnowledgeView = (container, { apiClient, toast } = {}) => {
     table.className = 'ui-table';
     const thead = document.createElement('thead');
     const headerRow = document.createElement('tr');
-    ['Name', 'Type', 'Status', 'Updated', ''].forEach((label) => {
+    ['Name', 'Type', 'Status', 'Freshness', 'Last Indexed', 'Updated', ''].forEach((label) => {
       const th = document.createElement('th');
       th.textContent = label;
       headerRow.appendChild(th);
@@ -364,6 +393,15 @@ export const renderKnowledgeView = (container, { apiClient, toast } = {}) => {
       statusCell.appendChild(
         createBadge({ text: source.status || 'Unknown', variant: getStatusVariant(source.status) })
       );
+      const freshness = getFreshness(source);
+      const freshnessCell = document.createElement('td');
+      freshnessCell.appendChild(createBadge({ text: freshness.label, variant: freshness.variant }));
+
+      const indexedCell = document.createElement('td');
+      indexedCell.textContent = source.indexedAtUtc
+        ? new Date(source.indexedAtUtc).toLocaleString()
+        : '—';
+
       const updatedCell = document.createElement('td');
       updatedCell.textContent = source.updatedAtUtc
         ? new Date(source.updatedAtUtc).toLocaleString()
@@ -388,7 +426,10 @@ export const renderKnowledgeView = (container, { apiClient, toast } = {}) => {
         }
       });
       actionCell.appendChild(indexButton);
-      tr.append(nameCell, typeCell, statusCell, updatedCell, actionCell);
+      if (source.failureReason) {
+        statusCell.title = source.failureReason;
+      }
+      tr.append(nameCell, typeCell, statusCell, freshnessCell, indexedCell, updatedCell, actionCell);
       tbody.appendChild(tr);
     });
 
@@ -429,6 +470,51 @@ export const renderKnowledgeView = (container, { apiClient, toast } = {}) => {
   };
 
   refreshButton.addEventListener('click', loadSources);
+
+  reindexStaleButton.addEventListener('click', async () => {
+    if (!state.siteId) {
+      notifier.show({ message: 'Select a site first.', variant: 'warning' });
+      return;
+    }
+
+    const staleSources = state.sources.filter((source) => {
+      const freshness = getFreshness(source);
+      return freshness.label !== 'Fresh' && String(source.status || '').toUpperCase() !== 'PROCESSING';
+    });
+
+    if (!staleSources.length) {
+      notifier.show({ message: 'No stale sources to reindex.', variant: 'success' });
+      return;
+    }
+
+    reindexStaleButton.disabled = true;
+    reindexStaleButton.textContent = 'Reindexing...';
+    let succeeded = 0;
+    let failed = 0;
+    try {
+      for (const source of staleSources) {
+        try {
+          const response = await client.knowledge.indexSource(source.sourceId);
+          if (String(response.status || '').toUpperCase() === 'FAILED') {
+            failed += 1;
+          } else {
+            succeeded += 1;
+          }
+        } catch (error) {
+          failed += 1;
+        }
+      }
+
+      await loadSources();
+      notifier.show({
+        message: `Reindex complete. Success: ${succeeded}, Failed: ${failed}.`,
+        variant: failed > 0 ? 'warning' : 'success',
+      });
+    } finally {
+      reindexStaleButton.disabled = false;
+      reindexStaleButton.textContent = 'Reindex stale';
+    }
+  });
 
   siteSelect.addEventListener('change', async () => {
     state.siteId = siteSelect.value;
