@@ -413,10 +413,27 @@ export const renderKnowledgeView = (container, { apiClient, toast } = {}) => {
         indexButton.textContent = 'Indexing...';
         try {
           const response = await client.knowledge.indexSource(source.sourceId);
-          notifier.show({
-            message: `Indexed (${response.chunkCount ?? 0} chunks).`,
-            variant: 'success',
-          });
+          const normalizedStatus = String(response.status || '').toUpperCase();
+
+          if (normalizedStatus === 'FAILED') {
+            notifier.show({
+              message: response.failureReason
+                ? `Index failed: ${response.failureReason}`
+                : 'Index failed.',
+              variant: 'danger',
+            });
+          } else if (normalizedStatus === 'PROCESSING') {
+            notifier.show({
+              message: 'Indexing is already in progress for this source.',
+              variant: 'warning',
+            });
+          } else {
+            notifier.show({
+              message: `Indexed (${response.chunkCount ?? 0} chunks).`,
+              variant: 'success',
+            });
+          }
+
           await loadSources();
         } catch (error) {
           notifier.show({ message: mapApiError(error).message, variant: 'danger' });
