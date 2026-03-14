@@ -184,6 +184,30 @@ public sealed partial class RetrieveTopChunksHandler
                     score += 1;
                 }
             }
+
+            var partialMatches = CountSubstringMatches(normalizedContent, term);
+            if (partialMatches > 0)
+            {
+                score += partialMatches;
+                matchedTerms++;
+                continue;
+            }
+
+        }
+
+        if (matchedTerms > 1)
+        {
+            score += matchedTerms * 2;
+        }
+
+        if (normalizedQuery.Length > 4 && normalizedContent.Contains(normalizedQuery, StringComparison.Ordinal))
+        {
+            score += 6;
+        }
+
+        if (LooksLikeHeadingHit(content, terms))
+        {
+            score += 3;
         }
 
         if (matchedTerms > 1)

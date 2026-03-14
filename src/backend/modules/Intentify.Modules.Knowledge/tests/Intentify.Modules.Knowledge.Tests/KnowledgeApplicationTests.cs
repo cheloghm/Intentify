@@ -144,7 +144,7 @@ public sealed class KnowledgeApplicationTests
     }
 
     [Fact]
-    public void Chunking_IsDeterministic()
+    public void Chunking_IsDeterministic_AndRespectsMaxLength()
     {
         var chunker = new KnowledgeChunker();
         var input = "# Services\n\nHaircuts and styling for women and men.\n\nColor treatment and highlights.\n\n# Hours\n\nMonday to Friday 9am to 6pm.\n\nSaturday 10am to 4pm.";
