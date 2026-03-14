@@ -68,6 +68,19 @@ public sealed class CollectorIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task SdkScript_IsServed()
+    {
+        var response = await _client!.GetAsync("/collector/sdk.js");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("application/javascript", response.Content.Headers.ContentType?.MediaType);
+
+        var content = await response.Content.ReadAsStringAsync();
+        Assert.Contains("/collector/sdk/bootstrap", content);
+        Assert.Contains("/engage/widget.js", content);
+    }
+
+    [Fact]
     public async Task PostEvent_StoresEvent_AndMarksInstalled()
     {
         var accessToken = await RegisterUserAsync();
