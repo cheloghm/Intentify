@@ -71,6 +71,7 @@ public sealed class IntelligenceModule : IAppModule
         });
 
         services.AddSingleton<IIntelligenceTrendsRepository, IntelligenceTrendsRepository>();
+        services.AddSingleton<IIntelligenceObserver, NoOpIntelligenceObserver>();
         services.AddSingleton<IIntelligenceProfileRepository, IntelligenceProfileRepository>();
         services.AddSingleton<RefreshIntelligenceTrendsService>();
         services.AddSingleton<QueryIntelligenceTrendsService>();
@@ -118,4 +119,12 @@ internal static class IntelligenceHttpClientNames
 {
     public const string GoogleTrends = "intelligence-google-trends";
     public const string GoogleAds = "intelligence-google-ads";
+}
+
+internal sealed class NoOpIntelligenceObserver : IIntelligenceObserver
+{
+    public Task OnTrendsUpdated(IntelligenceTrendsUpdatedNotification notification, CancellationToken ct)
+    {
+        return Task.CompletedTask;
+    }
 }

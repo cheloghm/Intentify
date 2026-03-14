@@ -10,6 +10,7 @@
     <ProjectReference Include="../Intentify.Modules.Flows.Application/Intentify.Modules.Flows.Application.csproj" />
     <ProjectReference Include="../Intentify.Modules.Flows.Infrastructure/Intentify.Modules.Flows.Infrastructure.csproj" />
     <ProjectReference Include="../../../Intentify.Modules.Collector/src/Intentify.Modules.Collector.Application/Intentify.Modules.Collector.Application.csproj" />
+    <ProjectReference Include="../../../Intentify.Modules.Intelligence/src/Intentify.Modules.Intelligence.Application/Intentify.Modules.Intelligence.Application.csproj" />
     <ProjectReference Include="../../../../shared/Intentify.Shared.Web/src/Intentify.Shared.Web/Intentify.Shared.Web.csproj" />
     <ProjectReference Include="../../../../shared/Intentify.Shared.Validation/src/Intentify.Shared.Validation/Intentify.Shared.Validation.csproj" />
     <ProjectReference Include="../../../Intentify.Modules.Auth/src/Intentify.Modules.Auth.Api/Intentify.Modules.Auth.Api.csproj" />

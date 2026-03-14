@@ -1,8 +1,9 @@
+using Intentify.Modules.Flows.Application;
 using Intentify.Modules.Intelligence.Application;
 
-namespace Intentify.Modules.Flows.Application;
+namespace Intentify.Modules.Flows.Api;
 
-public sealed class IntelligenceFlowObserver(ExecuteFlowsForTriggerService executeFlowsForTriggerService) : IIntelligenceObserver
+internal sealed class IntelligenceFlowObserver(ExecuteFlowsForTriggerService executeFlowsForTriggerService) : IIntelligenceObserver
 {
     private const string IntelligenceTriggerType = "IntelligenceTrendsUpdated";
 
