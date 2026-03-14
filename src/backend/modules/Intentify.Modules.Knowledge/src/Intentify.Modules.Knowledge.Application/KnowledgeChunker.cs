@@ -121,12 +121,7 @@ public sealed class KnowledgeChunker : IKnowledgeChunker
 
     private static string TryBuildOverlap(string paragraph, int maxChunkLength)
     {
-        if (paragraph.Length <= maxChunkLength)
-        {
-            return paragraph;
-        }
-
-        return paragraph[..maxChunkLength].TrimEnd();
+        return paragraph;
     }
 
     private sealed class SectionBuffer(string? heading)

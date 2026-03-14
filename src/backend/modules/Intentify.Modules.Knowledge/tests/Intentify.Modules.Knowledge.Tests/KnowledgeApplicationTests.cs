@@ -144,17 +144,36 @@ public sealed class KnowledgeApplicationTests
     }
 
     [Fact]
-    public void Chunking_IsDeterministic_AndRespectsMaxLength()
+    public void Chunking_SplitBoundary_DoesNotReseedOverflowParagraph()
     {
         var chunker = new KnowledgeChunker();
-        var input = "# Services\n\nHaircuts and styling for women and men.\n\nColor treatment and highlights.\n\n# Hours\n\nMonday to Friday 9am to 6pm.\n\nSaturday 10am to 4pm.";
+        var input = "# Services\n\nParagraph one for boundary behavior.\n\nParagraph two must be its own chunk.\n\nParagraph three must follow chunk two.";
 
-        var chunks = chunker.Chunk(input, 50);
+        var chunks = chunker.Chunk(input, 70);
 
-        Assert.True(chunks.Count >= 2);
-        Assert.Contains(chunks, chunk => chunk.Contains("# Services", StringComparison.Ordinal));
-        Assert.Contains(chunks, chunk => chunk.Contains("# Hours", StringComparison.Ordinal));
-        Assert.Equal(chunks, chunker.Chunk(input, 50));
+        Assert.Equal(
+            [
+                "# Services\n\nParagraph one for boundary behavior.",
+                "# Services\n\nParagraph two must be its own chunk.",
+                "# Services\n\nParagraph three must follow chunk two."
+            ],
+            chunks);
+    }
+
+    [Fact]
+    public void Chunking_LongHeading_DoesNotDropParagraphPayload()
+    {
+        var chunker = new KnowledgeChunker();
+        var veryLongHeading = "# " + new string('H', 90);
+        var firstParagraph = "This payload paragraph must remain intact.";
+        var secondParagraph = "Second payload paragraph also remains intact.";
+        var input = $"{veryLongHeading}\n\n{firstParagraph}\n\n{secondParagraph}";
+
+        var chunks = chunker.Chunk(input, 60);
+
+        Assert.Equal(2, chunks.Count);
+        Assert.Equal($"{veryLongHeading}\n\n{firstParagraph}", chunks[0]);
+        Assert.Equal($"{veryLongHeading}\n\n{secondParagraph}", chunks[1]);
     }
 
     [Fact]
