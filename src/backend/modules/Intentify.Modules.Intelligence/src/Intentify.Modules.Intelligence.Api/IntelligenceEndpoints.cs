@@ -150,6 +150,46 @@ internal static class IntelligenceEndpoints
         };
     }
 
+    public static async Task<IResult> GetSiteSummaryAsync(
+        string siteId,
+        string? category,
+        string? location,
+        string? timeWindow,
+        string? provider,
+        string? keyword,
+        string? audienceType,
+        int? limit,
+        HttpContext context,
+        GetSiteInsightsSummaryService service)
+    {
+        var tenantId = TryGetTenantId(context.User);
+        if (tenantId is null)
+        {
+            return Results.Unauthorized();
+        }
+
+        if (!Guid.TryParse(siteId, out var siteGuid))
+        {
+            return Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(new Dictionary<string, string[]>
+            {
+                ["siteId"] = ["Site id is invalid."]
+            }));
+        }
+
+        var result = await service.HandleAsync(
+            tenantId,
+            new IntelligenceDashboardQuery(siteGuid, category, location, timeWindow, provider, keyword, audienceType, limit),
+            context.RequestAborted);
+
+        return result.Status switch
+        {
+            OperationStatus.Success => Results.Ok(result.Value),
+            OperationStatus.ValidationFailed => Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(result.Errors!.Errors)),
+            OperationStatus.NotFound => Results.NotFound(),
+            _ => Results.StatusCode(StatusCodes.Status500InternalServerError)
+        };
+    }
+
 
     public static async Task<IResult> UpsertProfileAsync(
         string siteId,

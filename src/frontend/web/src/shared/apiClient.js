@@ -162,6 +162,9 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
   const getIntelligenceDashboard = async (params) =>
     request(`/intelligence/dashboard${buildQueryString(params)}`);
 
+  const getIntelligenceSiteSummary = async (params) =>
+    request(`/intelligence/site-summary${buildQueryString(params)}`);
+
   const getIntelligenceProfile = async (siteId) =>
     request(`/intelligence/profiles/${encodeURIComponent(siteId)}`);
 
@@ -404,6 +407,7 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
       status: getIntelligenceStatus,
       trends: getIntelligenceTrends,
       dashboard: getIntelligenceDashboard,
+      siteSummary: getIntelligenceSiteSummary,
       refresh: refreshIntelligence,
       getProfile: getIntelligenceProfile,
       upsertProfile: upsertIntelligenceProfile,
