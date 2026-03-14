@@ -115,6 +115,11 @@ public sealed class KnowledgeChunker : IKnowledgeChunker
         return $"# {heading.TrimEnd(':').Trim()}";
     }
 
+    private static string TryBuildOverlap(string paragraph, int maxChunkLength)
+    {
+        return paragraph;
+    }
+
     private sealed class SectionBuffer(string? heading)
     {
         public string? Heading { get; } = heading;

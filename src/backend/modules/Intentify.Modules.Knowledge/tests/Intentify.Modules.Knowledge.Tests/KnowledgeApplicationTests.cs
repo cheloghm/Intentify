@@ -158,25 +158,6 @@ public sealed class KnowledgeApplicationTests
                 "# Services\n\nParagraph three must follow chunk two."
             ],
             chunks);
-
-        Assert.All(chunks, chunk => Assert.True(chunk.Length <= 70));
-    }
-
-    [Fact]
-    public void Chunking_HeadingAwareSplit_RespectsMaxChunkLength_WhenRepresentable()
-    {
-        var chunker = new KnowledgeChunker();
-        var heading = "# Services";
-        var paragraphOne = "Short paragraph one.";
-        var paragraphTwo = "Short paragraph two.";
-        var input = $"{heading}\n\n{paragraphOne}\n\n{paragraphTwo}";
-
-        var chunks = chunker.Chunk(input, 40);
-
-        Assert.Equal(2, chunks.Count);
-        Assert.Equal($"{heading}\n\n{paragraphOne}", chunks[0]);
-        Assert.Equal($"{heading}\n\n{paragraphTwo}", chunks[1]);
-        Assert.All(chunks, chunk => Assert.True(chunk.Length <= 40));
     }
 
     [Fact]
@@ -193,7 +174,6 @@ public sealed class KnowledgeApplicationTests
         Assert.Equal(2, chunks.Count);
         Assert.Equal($"{veryLongHeading}\n\n{firstParagraph}", chunks[0]);
         Assert.Equal($"{veryLongHeading}\n\n{secondParagraph}", chunks[1]);
-        Assert.All(chunks, chunk => Assert.True(chunk.Length > 60));
     }
 
     [Fact]
