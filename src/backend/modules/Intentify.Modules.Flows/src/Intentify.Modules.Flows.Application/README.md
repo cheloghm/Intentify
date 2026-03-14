@@ -12,7 +12,6 @@ Primary services:
 
 Supporting services:
 - [`FlowConditionEvaluator.cs`](FlowConditionEvaluator.cs)
-- [`IntelligenceFlowObserver.cs`](IntelligenceFlowObserver.cs)
 
 ## Contracts/interfaces map
 Repository contracts are defined in [`FlowsContracts.cs`](FlowsContracts.cs):
@@ -22,7 +21,6 @@ Repository contracts are defined in [`FlowsContracts.cs`](FlowsContracts.cs):
 ## Validation/orchestration points
 - Create/update validation and DTO/domain mapping are centralized in `FlowValidation`/`FlowMapping` usage inside [`FlowsServices.cs`](FlowsServices.cs).
 - Trigger-based condition matching is handled by [`FlowConditionEvaluator.cs`](FlowConditionEvaluator.cs).
-- Intelligence observer trigger integration is handled by [`IntelligenceFlowObserver.cs`](IntelligenceFlowObserver.cs).
 
 ## Configuration options used here if verified
 No Flows-specific options class is bound directly in this layer.

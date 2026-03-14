@@ -12,6 +12,7 @@ Stable route mapping reference: [`FlowsModule.cs`](FlowsModule.cs).
 ## Request/response model location
 - API transport models: [`FlowsModels.cs`](FlowsModels.cs)
 - Endpoint handlers: [`FlowsEndpoints.cs`](FlowsEndpoints.cs)
+- Observer integrations: [`CollectorPageViewFlowObserver.cs`](CollectorPageViewFlowObserver.cs), [`IntelligenceFlowObserver.cs`](IntelligenceFlowObserver.cs)
 
 ## Auth/authorization requirements
 - Flows routes apply `RequireAuthFilter` at the `/flows` route-group level.
