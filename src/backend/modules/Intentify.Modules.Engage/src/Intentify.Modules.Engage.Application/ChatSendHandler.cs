@@ -41,6 +41,7 @@ public sealed class ChatSendHandler
     private const string LowConfidenceClarificationResponse = "I don’t have that information in our knowledge base yet. If you tell me a bit more, I can help refine the question — or I can create a ticket for our team to follow up.";
     private const string PromoCommandPrefix = "/promo";
     private const string PromoResponseText = "Please complete this short promo form.";
+    private const string ContactDetailsNamePrefix = "my name is";
 
     private readonly ISiteRepository _siteRepository;
     private readonly IEngageChatSessionRepository _sessionRepository;
@@ -49,6 +50,7 @@ public sealed class ChatSendHandler
     private readonly IEngageHandoffTicketRepository _ticketRepository;
     private readonly CreateTicketHandler _createTicketHandler;
     private readonly ILeadVisitorLinker _leadVisitorLinker;
+    private readonly UpsertLeadFromPromoEntryHandler _upsertLeadFromPromoEntryHandler;
     private readonly RetrieveTopChunksHandler _retrieveTopChunksHandler;
     private readonly IChatCompletionClient _chatCompletionClient;
     private readonly VisitorContextBundleHandler _stage7VisitorContextBundleHandler;
@@ -64,6 +66,7 @@ public sealed class ChatSendHandler
         IEngageHandoffTicketRepository ticketRepository,
         CreateTicketHandler createTicketHandler,
         ILeadVisitorLinker leadVisitorLinker,
+        UpsertLeadFromPromoEntryHandler upsertLeadFromPromoEntryHandler,
         RetrieveTopChunksHandler retrieveTopChunksHandler,
         IChatCompletionClient chatCompletionClient,
         VisitorContextBundleHandler stage7VisitorContextBundleHandler,
@@ -78,6 +81,7 @@ public sealed class ChatSendHandler
         _ticketRepository = ticketRepository;
         _createTicketHandler = createTicketHandler;
         _leadVisitorLinker = leadVisitorLinker;
+        _upsertLeadFromPromoEntryHandler = upsertLeadFromPromoEntryHandler;
         _retrieveTopChunksHandler = retrieveTopChunksHandler;
         _chatCompletionClient = chatCompletionClient;
         _stage7VisitorContextBundleHandler = stage7VisitorContextBundleHandler;
@@ -167,6 +171,16 @@ public sealed class ChatSendHandler
             await _sessionRepository.TouchAsync(session.Id, now, cancellationToken);
 
             return OperationResult<ChatSendResult>.Success(new ChatSendResult(session.Id, smalltalkResponse, 1m, false, []));
+        }
+
+        if (await IsAwaitingContactDetailsAsync(session.Id, cancellationToken) && ContainsEmail(command.Message))
+        {
+            return await CaptureContactDetailsAsync(site, session, command.Message, now, cancellationToken);
+        }
+
+        if (NeedsHumanHelp(command.Message))
+        {
+            return await CreateHumanHelpResponseAsync(site, session, command.Message, now, cancellationToken);
         }
 
         var retrieved = await _retrieveTopChunksHandler.HandleAsync(
@@ -531,6 +545,8 @@ User question:
         CancellationToken cancellationToken)
     {
         var visitorId = await ResolveVisitorIdAsync(site.TenantId, site.Id, session.CollectorSessionId, cancellationToken);
+        var parsedEmail = TryExtractEmail(userMessage);
+        var parsedName = TryExtractName(userMessage, parsedEmail);
 
         await _createTicketHandler.HandleAsync(
             new CreateTicketCommand(
@@ -543,6 +559,22 @@ User question:
                 null),
             cancellationToken);
 
+        if (!string.IsNullOrWhiteSpace(parsedEmail))
+        {
+            await _upsertLeadFromPromoEntryHandler.HandleAsync(
+                new UpsertLeadFromPromoEntryCommand(
+                    site.TenantId,
+                    site.Id,
+                    Guid.NewGuid(),
+                    visitorId,
+                    null,
+                    session.CollectorSessionId,
+                    parsedEmail,
+                    parsedName,
+                    true),
+                cancellationToken);
+        }
+
         await _messageRepository.InsertAsync(new EngageChatMessage
         {
             SessionId = session.Id,
@@ -554,6 +586,39 @@ User question:
 
         await _sessionRepository.TouchAsync(session.Id, now, cancellationToken);
         return OperationResult<ChatSendResult>.Success(new ChatSendResult(session.Id, ContactDetailsReceivedResponse, 0m, true, []));
+    }
+
+    private static string? TryExtractEmail(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return null;
+        }
+
+        var match = Regex.Match(message, @"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", RegexOptions.IgnoreCase);
+        return match.Success ? match.Value.Trim() : null;
+    }
+
+    private static string? TryExtractName(string message, string? email)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return null;
+        }
+
+        var withoutEmail = !string.IsNullOrWhiteSpace(email)
+            ? message.Replace(email, string.Empty, StringComparison.OrdinalIgnoreCase)
+            : message;
+
+        var normalized = withoutEmail.Trim(' ', ',', '.', ';', ':', '-', '_');
+        if (normalized.StartsWith(ContactDetailsNamePrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            normalized = normalized[ContactDetailsNamePrefix.Length..].Trim(' ', ',', '.', ';', ':', '-', '_');
+        }
+
+        return string.IsNullOrWhiteSpace(normalized)
+            ? null
+            : normalized.Length <= 200 ? normalized : normalized[..200];
     }
 
 

@@ -498,6 +498,42 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ChatSend_CapturesContactDetails_AsLead_WhenHumanHelpFlowTriggered()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var helpResponse = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "the checkout form isn't working"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, helpResponse.StatusCode);
+        using var helpJson = JsonDocument.Parse(await helpResponse.Content.ReadAsStringAsync());
+        var sessionId = helpJson.RootElement.GetProperty("sessionId").GetString();
+        Assert.Equal("Sorry about that — I’ll get someone to help. What’s your name and best email?", helpJson.RootElement.GetProperty("response").GetString());
+
+        var detailsResponse = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            sessionId,
+            message = "my name is Pat Example, pat@example.com"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, detailsResponse.StatusCode);
+        using var detailsJson = JsonDocument.Parse(await detailsResponse.Content.ReadAsStringAsync());
+        Assert.Equal("Thanks — I’ve got your details. Our team will contact you shortly.", detailsJson.RootElement.GetProperty("response").GetString());
+
+        var database = new MongoClient(_mongo.ConnectionString).GetDatabase(_mongo.DatabaseName);
+        var leads = database.GetCollection<BsonLead>("leads");
+        var createdLead = await leads.Find(item => item.SiteId == Guid.Parse(site.SiteId) && item.PrimaryEmail == "pat@example.com").FirstOrDefaultAsync();
+
+        Assert.NotNull(createdLead);
+        Assert.Equal("Pat Example", createdLead!.DisplayName);
+    }
+
+    [Fact]
     public async Task ChatSend_RejectsWidgetKeyMismatchBetweenQueryAndBody()
     {
         var token = await RegisterUserAsync();
@@ -914,6 +950,13 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
         public string Subject { get; init; } = string.Empty;
         public string Description { get; init; } = string.Empty;
         public string Status { get; init; } = string.Empty;
+    }
+
+    private sealed class BsonLead
+    {
+        public Guid SiteId { get; init; }
+        public string? PrimaryEmail { get; init; }
+        public string? DisplayName { get; init; }
     }
 
     private sealed class FakeChatCompletionClient : IChatCompletionClient
