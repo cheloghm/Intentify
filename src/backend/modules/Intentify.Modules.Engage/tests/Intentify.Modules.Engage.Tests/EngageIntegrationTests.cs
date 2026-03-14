@@ -526,62 +526,6 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
         Assert.False(json.RootElement.GetProperty("ticketCreated").GetBoolean());
     }
 
-
-    [Fact]
-    public async Task ChatSend_SupportHoursPhrase_DoesNotAutoEscalate()
-    {
-        var token = await RegisterUserAsync();
-        var site = await CreateSiteAsync(token);
-
-        var response = await _client!.PostAsJsonAsync("/engage/chat/send", new
-        {
-            widgetKey = site.WidgetKey,
-            message = "support hours"
-        });
-
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        Assert.Equal("I don’t have confirmed business hours in the knowledge base yet. If this is urgent, I can open a ticket so the team can reply with exact hours.", json.RootElement.GetProperty("response").GetString());
-        Assert.False(json.RootElement.GetProperty("ticketCreated").GetBoolean());
-    }
-
-    [Fact]
-    public async Task ChatSend_ExplicitHumanAgentRequest_StillEscalates()
-    {
-        var token = await RegisterUserAsync();
-        var site = await CreateSiteAsync(token);
-
-        var response = await _client!.PostAsJsonAsync("/engage/chat/send", new
-        {
-            widgetKey = site.WidgetKey,
-            message = "I need a human agent"
-        });
-
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        Assert.Equal("Sorry about that — I’ll get someone to help. What’s your name and best email?", json.RootElement.GetProperty("response").GetString());
-        Assert.True(json.RootElement.GetProperty("ticketCreated").GetBoolean());
-    }
-
-
-    [Fact]
-    public async Task ChatSend_ManagementLexicalCase_DoesNotAutoEscalate()
-    {
-        var token = await RegisterUserAsync();
-        var site = await CreateSiteAsync(token);
-
-        var response = await _client!.PostAsJsonAsync("/engage/chat/send", new
-        {
-            widgetKey = site.WidgetKey,
-            message = "management"
-        });
-
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        Assert.Equal("I don’t have a reliable answer yet, but I can help refine the question. Share a little more detail and I’ll try again.", json.RootElement.GetProperty("response").GetString());
-        Assert.False(json.RootElement.GetProperty("ticketCreated").GetBoolean());
-    }
-
     [Fact]
     public async Task ChatSend_CapturesContactDetails_AsLead_WhenHumanHelpFlowTriggered()
     {

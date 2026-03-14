@@ -525,17 +525,11 @@ User question:
             return ChatIntent.AmbiguousShortPrompt;
         }
 
-        if (normalized.Contains("human agent", StringComparison.Ordinal)
-            || normalized.Contains("real person", StringComparison.Ordinal)
-            || normalized.Contains("talk to someone", StringComparison.Ordinal)
-            || normalized.Contains("talk to a person", StringComparison.Ordinal)
-            || normalized.Contains("speak to someone", StringComparison.Ordinal)
-            || normalized.Contains("speak to a human", StringComparison.Ordinal)
-            || normalized.Contains("speak with a human", StringComparison.Ordinal)
-            || normalized.Contains("need a human", StringComparison.Ordinal)
-            || normalized.Contains("need an agent", StringComparison.Ordinal)
-            || normalized.Contains("human help", StringComparison.Ordinal)
-            || normalized.Contains("representative", StringComparison.Ordinal))
+        if (normalized.Contains("human", StringComparison.Ordinal)
+            || normalized.Contains("agent", StringComparison.Ordinal)
+            || normalized.Contains("representative", StringComparison.Ordinal)
+            || normalized.Contains("someone", StringComparison.Ordinal)
+            || normalized.Contains("support", StringComparison.Ordinal))
         {
             return ChatIntent.EscalationHelp;
         }
@@ -591,7 +585,6 @@ User question:
 
     private static bool ShouldEscalateFallback(ChatIntent intent, string userMessage, string reason)
     {
-        // Explicit PR2.1 intent: when AI is unavailable for a real question, keep ticket-first handoff to avoid dropping support requests.
         if (reason == "AiUnavailable" && IsRealQuestion(userMessage))
         {
             return true;
