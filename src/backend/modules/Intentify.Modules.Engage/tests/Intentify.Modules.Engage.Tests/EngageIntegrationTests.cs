@@ -174,7 +174,7 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task ChatSend_WithKnowledge_WhenAiNotConfigured_ReturnsFallback_AndCreatesTicket()
+    public async Task ChatSend_WithKnowledge_WhenAiNotConfigured_UsesTicketFirstContactPrompt_ForRealQuestion()
     {
         var token = await RegisterUserAsync();
         var site = await CreateSiteAsync(token);
