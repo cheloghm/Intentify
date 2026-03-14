@@ -26,43 +26,32 @@ public sealed class KnowledgeChunker : IKnowledgeChunker
         foreach (var section in sections)
         {
             var current = string.Empty;
-            var headingPrefix = string.IsNullOrEmpty(section.Heading)
-                ? string.Empty
-                : $"{section.Heading}\n\n";
 
             foreach (var paragraph in section.Paragraphs)
             {
-                var paragraphParts = SplitToLength(paragraph, Math.Max(1, maxChunkLength - headingPrefix.Length));
+                var candidate = string.IsNullOrEmpty(section.Heading)
+                    ? paragraph
+                    : $"{section.Heading}\n\n{paragraph}";
 
-                foreach (var part in paragraphParts)
+                if (current.Length == 0)
                 {
-                    var candidate = headingPrefix + part;
-
-                    if (current.Length == 0)
-                    {
-                        current = candidate.Length <= maxChunkLength
-                            ? candidate
-                            : candidate[..maxChunkLength].TrimEnd();
-                        continue;
-                    }
-
-                    var appended = $"{current}\n\n{part}";
-                    if (appended.Length <= maxChunkLength)
-                    {
-                        current = appended;
-                        continue;
-                    }
-
-                    chunks.Add(current);
-                    current = candidate.Length <= maxChunkLength
-                        ? candidate
-                        : candidate[..maxChunkLength].TrimEnd();
+                    current = candidate;
+                    continue;
                 }
-            }
 
-            if (current.Length > maxChunkLength)
-            {
-                current = current[..maxChunkLength].TrimEnd();
+                if (current.Length + 2 + paragraph.Length <= maxChunkLength)
+                {
+                    current += "\n\n" + paragraph;
+                    continue;
+                }
+
+                chunks.Add(current);
+
+                // Keep a lightweight overlap paragraph to preserve local context.
+                var overlap = TryBuildOverlap(paragraph, maxChunkLength);
+                current = string.IsNullOrEmpty(section.Heading)
+                    ? overlap
+                    : $"{section.Heading}\n\n{overlap}";
             }
 
             if (current.Length > 0)
@@ -130,49 +119,14 @@ public sealed class KnowledgeChunker : IKnowledgeChunker
         return $"# {heading.TrimEnd(':').Trim()}";
     }
 
-    private static IReadOnlyCollection<string> SplitToLength(string value, int maxLength)
+    private static string TryBuildOverlap(string paragraph, int maxChunkLength)
     {
-        if (string.IsNullOrWhiteSpace(value))
+        if (paragraph.Length <= maxChunkLength)
         {
-            return [];
+            return paragraph;
         }
 
-        if (value.Length <= maxLength)
-        {
-            return [value];
-        }
-
-        var parts = new List<string>();
-        var remaining = value.Trim();
-
-        while (remaining.Length > maxLength)
-        {
-            var splitIndex = remaining.LastIndexOf(' ', maxLength);
-            if (splitIndex <= 0)
-            {
-                splitIndex = maxLength;
-            }
-
-            var part = remaining[..splitIndex].Trim();
-            if (part.Length == 0)
-            {
-                part = remaining[..Math.Min(maxLength, remaining.Length)].Trim();
-            }
-
-            if (part.Length > 0)
-            {
-                parts.Add(part);
-            }
-
-            remaining = remaining[Math.Min(splitIndex, remaining.Length)..].TrimStart();
-        }
-
-        if (remaining.Length > 0)
-        {
-            parts.Add(remaining);
-        }
-
-        return parts;
+        return paragraph[..maxChunkLength].TrimEnd();
     }
 
     private sealed class SectionBuffer(string? heading)

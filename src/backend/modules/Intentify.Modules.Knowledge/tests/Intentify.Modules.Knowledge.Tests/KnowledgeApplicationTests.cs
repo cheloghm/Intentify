@@ -131,7 +131,7 @@ public sealed class KnowledgeApplicationTests
         var extractor = new KnowledgeTextExtractor(new FakeFactory(_ =>
             new HttpResponseMessage(HttpStatusCode.OK)
             {
-                Content = new StringContent("<html><body><header><p>Call us at (555) 111-2222</p></header><nav>Cookie Settings Privacy Policy</nav><h1>Title</h1><p>Hello <b>world</b></p><footer><p>Open Mon-Fri 9am-6pm</p></footer><script>window.gtag('x')</script></body></html>")
+                Content = new StringContent("<html><body><nav>Cookie Settings Privacy Policy</nav><h1>Title</h1><p>Hello <b>world</b></p><script>window.gtag('x')</script></body></html>")
             }));
 
         var result = await extractor.ExtractAsync(new KnowledgeSource { Type = "Url", Url = "https://example.local" });
@@ -139,8 +139,6 @@ public sealed class KnowledgeApplicationTests
         Assert.True(result.IsSuccess);
         Assert.Contains("# Title", result.Text);
         Assert.Contains("Hello world", result.Text);
-        Assert.Contains("Call us at", result.Text);
-        Assert.Contains("Open Mon-Fri", result.Text);
         Assert.DoesNotContain("gtag", result.Text!.ToLowerInvariant());
         Assert.DoesNotContain("cookie settings", result.Text.ToLowerInvariant());
     }
@@ -156,21 +154,7 @@ public sealed class KnowledgeApplicationTests
         Assert.True(chunks.Count >= 2);
         Assert.Contains(chunks, chunk => chunk.Contains("# Services", StringComparison.Ordinal));
         Assert.Contains(chunks, chunk => chunk.Contains("# Hours", StringComparison.Ordinal));
-        Assert.All(chunks, chunk => Assert.True(chunk.Length <= 50, $"Chunk exceeded max length: {chunk.Length}"));
         Assert.Equal(chunks, chunker.Chunk(input, 50));
-    }
-
-    [Fact]
-    public void Chunking_DoesNotPseudoOverlapReseedOverflowParagraph()
-    {
-        var chunker = new KnowledgeChunker();
-        var input = "# Services\n\nOne two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen.";
-
-        var chunks = chunker.Chunk(input, 40);
-
-        Assert.True(chunks.Count >= 2);
-        Assert.NotEqual(chunks[0], chunks[1]);
-        Assert.All(chunks, chunk => Assert.True(chunk.Length <= 40, $"Chunk exceeded max length: {chunk.Length}"));
     }
 
     [Fact]

@@ -155,6 +155,7 @@ public sealed partial class RetrieveTopChunksHandler
 
         var score = 0;
         var normalizedContent = NormalizeSearchText(content);
+        HashSet<string>? contentTerms = null;
         var matchedTerms = 0;
 
         foreach (var term in terms)
@@ -175,6 +176,38 @@ public sealed partial class RetrieveTopChunksHandler
                 continue;
             }
 
+            if (term.Length >= 5)
+            {
+                contentTerms ??= Tokenize(normalizedContent).ToHashSet();
+                if (contentTerms.Any(candidate => IsWithinOneEdit(candidate, term)))
+                {
+                    score += 1;
+                }
+            }
+
+            var partialMatches = CountSubstringMatches(normalizedContent, term);
+            if (partialMatches > 0)
+            {
+                score += partialMatches;
+                matchedTerms++;
+                continue;
+            }
+
+        }
+
+        if (matchedTerms > 1)
+        {
+            score += matchedTerms * 2;
+        }
+
+        if (normalizedQuery.Length > 4 && normalizedContent.Contains(normalizedQuery, StringComparison.Ordinal))
+        {
+            score += 6;
+        }
+
+        if (LooksLikeHeadingHit(content, terms))
+        {
+            score += 3;
         }
 
         if (matchedTerms > 1)
@@ -343,6 +376,60 @@ public sealed partial class RetrieveTopChunksHandler
         }
 
         return builder.ToString();
+    }
+
+    private static bool IsWithinOneEdit(string left, string right)
+    {
+        if (left.Length == 0 || right.Length == 0)
+        {
+            return false;
+        }
+
+        if (Math.Abs(left.Length - right.Length) > 1)
+        {
+            return false;
+        }
+
+        var i = 0;
+        var j = 0;
+        var edits = 0;
+
+        while (i < left.Length && j < right.Length)
+        {
+            if (left[i] == right[j])
+            {
+                i++;
+                j++;
+                continue;
+            }
+
+            edits++;
+            if (edits > 1)
+            {
+                return false;
+            }
+
+            if (left.Length > right.Length)
+            {
+                i++;
+            }
+            else if (right.Length > left.Length)
+            {
+                j++;
+            }
+            else
+            {
+                i++;
+                j++;
+            }
+        }
+
+        if (i < left.Length || j < right.Length)
+        {
+            edits++;
+        }
+
+        return edits <= 1;
     }
 
     [GeneratedRegex("\\s+", RegexOptions.Compiled)]

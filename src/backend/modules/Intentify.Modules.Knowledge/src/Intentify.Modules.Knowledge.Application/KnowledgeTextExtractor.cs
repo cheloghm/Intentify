@@ -113,7 +113,7 @@ public sealed partial class KnowledgeTextExtractor : IKnowledgeTextExtractor
     [GeneratedRegex("<!--.*?-->", RegexOptions.Compiled | RegexOptions.Singleline)]
     private static partial Regex HtmlCommentRegex();
 
-    [GeneratedRegex("<(script|style|noscript|template|svg|canvas|iframe|nav)[^>]*>.*?</\\1>", RegexOptions.Compiled | RegexOptions.Singleline | RegexOptions.IgnoreCase)]
+    [GeneratedRegex("<(script|style|noscript|template|svg|canvas|iframe|nav|footer|header|aside)[^>]*>.*?</\\1>", RegexOptions.Compiled | RegexOptions.Singleline | RegexOptions.IgnoreCase)]
     private static partial Regex NoiseBlockRegex();
 
     [GeneratedRegex("<h[1-6][^>]*>", RegexOptions.Compiled | RegexOptions.IgnoreCase)]
