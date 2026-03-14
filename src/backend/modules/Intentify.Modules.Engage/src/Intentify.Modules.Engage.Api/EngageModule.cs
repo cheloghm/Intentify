@@ -83,6 +83,7 @@ public sealed class EngageModule : IAppModule
         services.AddSingleton<ListConversationsHandler>();
         services.AddSingleton<GetConversationMessagesHandler>();
         services.AddSingleton<VisitorContextBundleHandler>();
+        services.AddSingleton<AiDecisionGenerationService>();
         services.AddSingleton<UpsertLeadFromPromoEntryHandler>();
     }
 
