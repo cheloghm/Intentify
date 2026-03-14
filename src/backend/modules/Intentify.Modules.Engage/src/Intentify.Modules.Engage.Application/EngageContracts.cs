@@ -30,6 +30,6 @@ public sealed record ConversationMessageResult(Guid MessageId, string Role, stri
 
 public sealed record GetEngageBotQuery(Guid TenantId, Guid SiteId);
 
-public sealed record EngageBotResult(Guid BotId, string Name);
+public sealed record EngageBotResult(Guid BotId, string Name, string? PrimaryColor = null, bool? LauncherVisible = null);
 
-public sealed record UpdateEngageBotCommand(Guid TenantId, Guid SiteId, string Name);
+public sealed record UpdateEngageBotCommand(Guid TenantId, Guid SiteId, string Name, string? PrimaryColor = null, bool? LauncherVisible = null);

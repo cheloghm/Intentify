@@ -275,13 +275,17 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
   const getEngageBot = async (siteId) =>
     request(`/engage/bot${buildQueryString({ siteId })}`);
 
-  const updateEngageBot = async (siteId, name) =>
+  const updateEngageBot = async (siteId, name, settings = {}) =>
     request(`/engage/bot${buildQueryString({ siteId })}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ name }),
+      body: JSON.stringify({
+        name,
+        primaryColor: settings.primaryColor,
+        launcherVisible: settings.launcherVisible,
+      }),
     });
 
   const listAdsCampaigns = async (siteId) =>
