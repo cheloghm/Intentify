@@ -8,11 +8,9 @@ public sealed record GetInstallationDiagnosticsCommand(Guid TenantId, Guid SiteI
 public sealed record InstallationDiagnosticsResult(
     Site Site,
     bool SiteKeyValid,
-    bool WidgetKeyValid,
     string? NormalizedOrigin,
     bool OriginAllowed,
-    bool TrackerScriptExpected,
-    bool WidgetScriptExpected,
+    bool SdkScriptExpected,
     bool FirstEventSeen);
 
 public sealed class GetInstallationDiagnosticsHandler
@@ -35,15 +33,10 @@ public sealed class GetInstallationDiagnosticsHandler
         }
 
         var normalizedSiteKey = NormalizeOptional(command.SiteKey);
-        var normalizedWidgetKey = NormalizeOptional(command.WidgetKey);
 
         var siteKeyValid = string.IsNullOrWhiteSpace(normalizedSiteKey)
             ? !string.IsNullOrWhiteSpace(site.SiteKey)
             : string.Equals(site.SiteKey, normalizedSiteKey, StringComparison.Ordinal);
-
-        var widgetKeyValid = string.IsNullOrWhiteSpace(normalizedWidgetKey)
-            ? !string.IsNullOrWhiteSpace(site.WidgetKey)
-            : string.Equals(site.WidgetKey, normalizedWidgetKey, StringComparison.Ordinal);
 
         var hasOrigin = OriginNormalizer.TryNormalize(command.Origin, out var normalizedOrigin);
         var originAllowed = hasOrigin && site.AllowedOrigins.Contains(normalizedOrigin, StringComparer.OrdinalIgnoreCase);
@@ -51,11 +44,9 @@ public sealed class GetInstallationDiagnosticsHandler
         var result = new InstallationDiagnosticsResult(
             site,
             siteKeyValid,
-            widgetKeyValid,
             hasOrigin ? normalizedOrigin : null,
             originAllowed,
-            TrackerScriptExpected: true,
-            WidgetScriptExpected: true,
+            SdkScriptExpected: true,
             FirstEventSeen: site.FirstEventReceivedAtUtc is not null);
 
         return OperationResult<InstallationDiagnosticsResult>.Success(result);

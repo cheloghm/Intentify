@@ -35,10 +35,8 @@ public sealed record InstallationDiagnosticsResponse(
     string SiteId,
     string Domain,
     bool SiteKeyValid,
-    bool WidgetKeyValid,
     string? Origin,
     bool OriginAllowed,
-    bool TrackerScriptExpected,
-    bool WidgetScriptExpected,
+    bool SdkScriptExpected,
     bool FirstEventSeen,
     DateTime? FirstEventReceivedAtUtc);
