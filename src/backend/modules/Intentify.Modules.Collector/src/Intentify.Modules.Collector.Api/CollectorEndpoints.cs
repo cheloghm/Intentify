@@ -316,22 +316,4 @@ internal static class CollectorEndpoints
         return true;
     }
 
-    private static string? TryResolveOrigin(HttpRequest request)
-    {
-        if (request.Headers.TryGetValue("Origin", out var originValues))
-        {
-            return originValues.ToString();
-        }
-
-        if (request.Headers.TryGetValue("Referer", out var refererValues))
-        {
-            var referer = refererValues.ToString();
-            if (Uri.TryCreate(referer, UriKind.Absolute, out var uri))
-            {
-                return uri.GetLeftPart(UriPartial.Authority);
-            }
-        }
-
-        return null;
-    }
 }

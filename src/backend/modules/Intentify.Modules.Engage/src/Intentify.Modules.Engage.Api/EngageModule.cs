@@ -69,18 +69,21 @@ public sealed class EngageModule : IAppModule
                 serviceProvider.GetRequiredService<IEngageHandoffTicketRepository>(),
                 serviceProvider.GetRequiredService<CreateTicketHandler>(),
                 serviceProvider.GetRequiredService<ILeadVisitorLinker>(),
+                serviceProvider.GetRequiredService<UpsertLeadFromPromoEntryHandler>(),
                 serviceProvider.GetRequiredService<RetrieveTopChunksHandler>(),
                 serviceProvider.GetRequiredService<IChatCompletionClient>(),
                 serviceProvider.GetRequiredService<VisitorContextBundleHandler>(),
                 serviceProvider.GetRequiredService<AiDecisionGenerationService>(),
                 sessionTimeoutMinutes,
                 serviceProvider.GetRequiredService<Microsoft.Extensions.Logging.ILogger<ChatSendHandler>>());
+
         });
         services.AddSingleton<GetEngageBotHandler>();
         services.AddSingleton<UpdateEngageBotHandler>();
         services.AddSingleton<ListConversationsHandler>();
         services.AddSingleton<GetConversationMessagesHandler>();
         services.AddSingleton<VisitorContextBundleHandler>();
+        services.AddSingleton<UpsertLeadFromPromoEntryHandler>();
     }
 
     public void MapEndpoints(IEndpointRouteBuilder endpoints)

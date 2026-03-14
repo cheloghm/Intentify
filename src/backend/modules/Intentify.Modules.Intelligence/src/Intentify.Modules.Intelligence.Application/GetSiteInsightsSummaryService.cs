@@ -29,7 +29,7 @@ public sealed class GetSiteInsightsSummaryService(
             {
                 OperationStatus.ValidationFailed => OperationResult<SiteInsightsSummaryResponse>.ValidationFailed(dashboardResult.Errors!),
                 OperationStatus.NotFound => OperationResult<SiteInsightsSummaryResponse>.NotFound(),
-                _ => OperationResult<SiteInsightsSummaryResponse>.Failure()
+                _ => OperationResult<SiteInsightsSummaryResponse>.Error()
             };
         }
 

@@ -215,39 +215,3 @@ public sealed class GetPageAnalyticsHandler
         return _analyticsReader.GetTopPagesAsync(query.TenantId, query.SiteId, sinceUtc, limit, cancellationToken);
     }
 }
-
-public sealed class GetOnlineNowHandler
-{
-    private readonly IVisitorAnalyticsReader _analyticsReader;
-
-    public GetOnlineNowHandler(IVisitorAnalyticsReader analyticsReader)
-    {
-        _analyticsReader = analyticsReader;
-    }
-
-    public Task<IReadOnlyCollection<OnlineVisitorItem>> HandleAsync(OnlineNowQuery query, CancellationToken cancellationToken = default)
-    {
-        var windowMinutes = query.WindowMinutes is <= 0 or > 120 ? 5 : query.WindowMinutes;
-        var limit = query.Limit is <= 0 or > 200 ? 20 : query.Limit;
-        var cutoffUtc = DateTime.UtcNow.AddMinutes(-windowMinutes);
-        return _analyticsReader.GetOnlineNowAsync(query.TenantId, query.SiteId, cutoffUtc, limit, cancellationToken);
-    }
-}
-
-public sealed class GetPageAnalyticsHandler
-{
-    private readonly IVisitorAnalyticsReader _analyticsReader;
-
-    public GetPageAnalyticsHandler(IVisitorAnalyticsReader analyticsReader)
-    {
-        _analyticsReader = analyticsReader;
-    }
-
-    public Task<IReadOnlyCollection<PageAnalyticsItem>> HandleAsync(PageAnalyticsQuery query, CancellationToken cancellationToken = default)
-    {
-        var days = query.Days is <= 0 or > 90 ? 7 : query.Days;
-        var limit = query.Limit is <= 0 or > 100 ? 10 : query.Limit;
-        var sinceUtc = DateTime.UtcNow.AddDays(-days);
-        return _analyticsReader.GetTopPagesAsync(query.TenantId, query.SiteId, sinceUtc, limit, cancellationToken);
-    }
-}
