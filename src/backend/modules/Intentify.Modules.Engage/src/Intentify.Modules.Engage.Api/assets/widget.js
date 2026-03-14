@@ -16,6 +16,7 @@
   var storageKey = 'intentify_engage_session_' + widgetKey;
   var sessionId = localStorage.getItem(storageKey) || '';
   var assistantName = 'Assistant';
+  var contactDetailsPrompt = 'Sorry about that — I’ll get someone to help. What’s your name and best email?';
 
   function endpoint(path) { return baseUrl + path; }
 
@@ -97,6 +98,71 @@
       var content = document.createElement('div');
       content.textContent = text;
       bubble.appendChild(content);
+    });
+  }
+
+  function addContactDetailsForm() {
+    addBubble('bot', function(bubble) {
+      var form = document.createElement('form');
+      form.style.display = 'flex';
+      form.style.flexDirection = 'column';
+      form.style.gap = '6px';
+
+      var nameInput = document.createElement('input');
+      nameInput.type = 'text';
+      nameInput.placeholder = 'Name';
+      nameInput.style.cssText = 'padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;';
+      form.appendChild(nameInput);
+
+      var emailInput = document.createElement('input');
+      emailInput.type = 'email';
+      emailInput.required = true;
+      emailInput.placeholder = 'Email';
+      emailInput.style.cssText = 'padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;';
+      form.appendChild(emailInput);
+
+      var consentWrap = document.createElement('label');
+      consentWrap.style.display = 'flex';
+      consentWrap.style.alignItems = 'center';
+      consentWrap.style.gap = '6px';
+      var consentInput = document.createElement('input');
+      consentInput.type = 'checkbox';
+      consentInput.required = true;
+      consentWrap.appendChild(consentInput);
+      consentWrap.appendChild(document.createTextNode('I agree to share my contact details.'));
+      form.appendChild(consentWrap);
+
+      var submit = document.createElement('button');
+      submit.type = 'submit';
+      submit.textContent = 'Share details';
+      submit.style.cssText = 'padding:8px 10px;background:#2563eb;color:#fff;border:none;border-radius:6px;cursor:pointer;';
+      form.appendChild(submit);
+
+      form.addEventListener('submit', function(event) {
+        event.preventDefault();
+
+        if (!consentInput.checked) {
+          addMessage('bot', 'Please confirm consent before sharing details.');
+          return;
+        }
+
+        var email = (emailInput.value || '').trim();
+        if (!email) {
+          addMessage('bot', 'Please provide your email address.');
+          return;
+        }
+
+        var name = (nameInput.value || '').trim();
+        submit.disabled = true;
+        submit.textContent = 'Sending...';
+        sendChatMessage(name ? ('my name is ' + name + ', ' + email) : email)
+          .finally(function() {
+            submit.disabled = false;
+            submit.textContent = 'Share details';
+          });
+      });
+
+      bubble.appendChild(form);
     });
   }
 
@@ -312,10 +378,15 @@
       return;
     }
 
-    addMessage('user', message);
     input.value = '';
 
-    fetch(endpoint('/engage/chat/send?widgetKey=' + encodeURIComponent(widgetKey)), {
+    sendChatMessage(message);
+  }
+
+  function sendChatMessage(message) {
+    addMessage('user', message);
+
+    return fetch(endpoint('/engage/chat/send?widgetKey=' + encodeURIComponent(widgetKey)), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ widgetKey: widgetKey, sessionId: sessionId, message: message, collectorSessionId: readCookie('intentify_sid') })
@@ -332,6 +403,9 @@
           localStorage.setItem(storageKey, sessionId);
         }
         addMessage('bot', payload.response || '');
+        if (payload && payload.response === contactDetailsPrompt) {
+          addContactDetailsForm();
+        }
         if (payload && payload.responseKind === 'promo' && payload.promoPublicKey) {
           addPromoForm(payload);
         }
