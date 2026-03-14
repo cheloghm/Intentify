@@ -47,11 +47,7 @@ public sealed class KnowledgeChunker : IKnowledgeChunker
 
                 chunks.Add(current);
 
-                // Keep a lightweight overlap paragraph to preserve local context.
-                var overlap = TryBuildOverlap(paragraph, maxChunkLength);
-                current = string.IsNullOrEmpty(section.Heading)
-                    ? overlap
-                    : $"{section.Heading}\n\n{overlap}";
+                current = candidate;
             }
 
             if (current.Length > 0)
@@ -117,16 +113,6 @@ public sealed class KnowledgeChunker : IKnowledgeChunker
         }
 
         return $"# {heading.TrimEnd(':').Trim()}";
-    }
-
-    private static string TryBuildOverlap(string paragraph, int maxChunkLength)
-    {
-        if (paragraph.Length <= maxChunkLength)
-        {
-            return paragraph;
-        }
-
-        return paragraph[..maxChunkLength].TrimEnd();
     }
 
     private sealed class SectionBuffer(string? heading)
