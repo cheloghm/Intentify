@@ -39,6 +39,13 @@ public sealed class ChatSendHandler
     private const string GreetingResponse = "Hi! How can I help you today?";
     private const string AckResponse = "Got it — what would you like to know or do next?";
     private const string LowConfidenceClarificationResponse = "I don’t have that information in our knowledge base yet. If you tell me a bit more, I can help refine the question — or I can create a ticket for our team to follow up.";
+    private const string ShortPromptClarificationResponse = "Happy to help — are you looking for hours, location, contact details, or services?";
+    private const string ContactFallbackResponse = "I don’t have a verified contact detail in the knowledge base yet. You can share the best way to reach you and I can pass it to our team.";
+    private const string LocationFallbackResponse = "I don’t have a confirmed location in the knowledge base yet. If you share your city or area, I can help narrow this down or ask our team to follow up.";
+    private const string HoursFallbackResponse = "I don’t have confirmed business hours in the knowledge base yet. If this is urgent, I can open a ticket so the team can reply with exact hours.";
+    private const string ServicesFallbackResponse = "I can help with services or menu questions. Tell me the specific service or item you’re looking for and I’ll narrow it down.";
+    private const string SoftFallbackResponse = "I don’t have a reliable answer yet, but I can help refine the question. Share a little more detail and I’ll try again.";
+    private const string EscalationFallbackResponse = "Thanks — I can connect you with our team. Please share your name and best email.";
     private const string PromoCommandPrefix = "/promo";
     private const string PromoResponseText = "Please complete this short promo form.";
     private const string ContactDetailsNamePrefix = "my name is";
@@ -183,6 +190,17 @@ public sealed class ChatSendHandler
             return await CreateHumanHelpResponseAsync(site, session, command.Message, now, cancellationToken);
         }
 
+        var intent = DetectIntent(command.Message);
+        if (intent == ChatIntent.EscalationHelp)
+        {
+            return await CreateHumanHelpResponseAsync(site, session, command.Message, now, cancellationToken);
+        }
+
+        if (intent == ChatIntent.AmbiguousShortPrompt)
+        {
+            return await CreateAssistantResponseAsync(session.Id, now, ShortPromptClarificationResponse, 0.35m, false, cancellationToken);
+        }
+
         var retrieved = await _retrieveTopChunksHandler.HandleAsync(
             new RetrieveTopChunksQuery(site.TenantId, site.Id, command.Message, 3, bot.BotId),
             cancellationToken);
@@ -195,8 +213,8 @@ public sealed class ChatSendHandler
         var isLowConfidence = retrieved.Count == 0 || topScore < TopChunkScoreThreshold || confidence < LowConfidenceThreshold;
         if (isLowConfidence)
         {
-            _logger.LogInformation("Engage chat decision: fallback ticket path for session {SessionId}.", session.Id);
-            return await CreateFallbackResponseAsync(site, session, command.Message, now, "LowConfidence", cancellationToken);
+            _logger.LogInformation("Engage chat decision: layered fallback path for session {SessionId}.", session.Id);
+            return await CreateLayeredFallbackResponseAsync(site, session, command.Message, intent, now, "LowConfidence", cancellationToken);
         }
 
         var citations = retrieved
@@ -207,7 +225,7 @@ public sealed class ChatSendHandler
         if (!completion.IsSuccess || string.IsNullOrWhiteSpace(completion.Value))
         {
             _logger.LogWarning("Engage AI completion unavailable for session {SessionId}.", session.Id);
-            return await CreateFallbackResponseAsync(site, session, command.Message, now, "AiUnavailable", cancellationToken);
+            return await CreateLayeredFallbackResponseAsync(site, session, command.Message, intent, now, "AiUnavailable", cancellationToken);
         }
 
         _logger.LogInformation("Engage chat decision: grounded answer path for session {SessionId}.", session.Id);
@@ -407,10 +425,11 @@ User question:
         string userMessage,
         DateTime now,
         string reason,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? responseOverride = null)
     {
         const decimal fallbackConfidence = 0m;
-        var fallbackResponse = "Thanks — we’ll get back to you shortly.";
+        var fallbackResponse = responseOverride ?? "Thanks — we’ll get back to you shortly.";
 
         var existingHandoffs = await _ticketRepository.ListBySessionAsync(session.Id, cancellationToken);
         var createdTicket = existingHandoffs.Count == 0;
@@ -455,6 +474,37 @@ User question:
         return OperationResult<ChatSendResult>.Success(new ChatSendResult(session.Id, fallbackResponse, fallbackConfidence, createdTicket, []));
     }
 
+    private async Task<OperationResult<ChatSendResult>> CreateLayeredFallbackResponseAsync(
+        Site site,
+        EngageChatSession session,
+        string userMessage,
+        ChatIntent intent,
+        DateTime now,
+        string reason,
+        CancellationToken cancellationToken)
+    {
+        if (intent == ChatIntent.AmbiguousShortPrompt)
+        {
+            return await CreateAssistantResponseAsync(session.Id, now, ShortPromptClarificationResponse, 0.35m, false, cancellationToken);
+        }
+
+        if (TryBuildBusinessAwareFallback(intent, out var businessFallback))
+        {
+            return await CreateAssistantResponseAsync(session.Id, now, businessFallback, 0.3m, false, cancellationToken);
+        }
+
+        var shouldEscalate = ShouldEscalateFallback(intent, userMessage, reason);
+        if (!shouldEscalate)
+        {
+            var fallback = IsRealQuestion(userMessage)
+                ? LowConfidenceClarificationResponse
+                : SoftFallbackResponse;
+            return await CreateAssistantResponseAsync(session.Id, now, fallback, 0.2m, false, cancellationToken);
+        }
+
+        return await CreateFallbackResponseAsync(site, session, userMessage, now, reason, cancellationToken, EscalationFallbackResponse);
+    }
+
     private static bool NeedsHumanHelp(string message)
     {
         if (string.IsNullOrWhiteSpace(message))
@@ -464,6 +514,111 @@ User question:
 
         return HumanHelpPhrases.Any(phrase =>
             message.Contains(phrase, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static ChatIntent DetectIntent(string message)
+    {
+        var normalized = message.Trim().ToLowerInvariant();
+
+        if (normalized.Length <= 3 || normalized is "help" or "info" or "details" or "price")
+        {
+            return ChatIntent.AmbiguousShortPrompt;
+        }
+
+        if (normalized.Contains("human agent", StringComparison.Ordinal)
+            || normalized.Contains("real person", StringComparison.Ordinal)
+            || normalized.Contains("talk to someone", StringComparison.Ordinal)
+            || normalized.Contains("talk to a person", StringComparison.Ordinal)
+            || normalized.Contains("speak to someone", StringComparison.Ordinal)
+            || normalized.Contains("speak to a human", StringComparison.Ordinal)
+            || normalized.Contains("speak with a human", StringComparison.Ordinal)
+            || normalized.Contains("need a human", StringComparison.Ordinal)
+            || normalized.Contains("need an agent", StringComparison.Ordinal)
+            || normalized.Contains("human help", StringComparison.Ordinal)
+            || normalized.Contains("representative", StringComparison.Ordinal))
+        {
+            return ChatIntent.EscalationHelp;
+        }
+
+        if (normalized.Contains("contact", StringComparison.Ordinal)
+            || normalized.Contains("phone", StringComparison.Ordinal)
+            || normalized.Contains("email", StringComparison.Ordinal)
+            || normalized.Contains("call", StringComparison.Ordinal))
+        {
+            return ChatIntent.Contact;
+        }
+
+        if (normalized.Contains("location", StringComparison.Ordinal)
+            || normalized.Contains("address", StringComparison.Ordinal)
+            || normalized.Contains("where", StringComparison.Ordinal)
+            || normalized.Contains("located", StringComparison.Ordinal))
+        {
+            return ChatIntent.Location;
+        }
+
+        if (normalized.Contains("hours", StringComparison.Ordinal)
+            || normalized.Contains("open", StringComparison.Ordinal)
+            || normalized.Contains("close", StringComparison.Ordinal)
+            || normalized.Contains("time", StringComparison.Ordinal))
+        {
+            return ChatIntent.Hours;
+        }
+
+        if (normalized.Contains("service", StringComparison.Ordinal)
+            || normalized.Contains("menu", StringComparison.Ordinal)
+            || normalized.Contains("offer", StringComparison.Ordinal)
+            || normalized.Contains("pricing", StringComparison.Ordinal))
+        {
+            return ChatIntent.Services;
+        }
+
+        return ChatIntent.General;
+    }
+
+    private static bool TryBuildBusinessAwareFallback(ChatIntent intent, out string response)
+    {
+        response = intent switch
+        {
+            ChatIntent.Contact => ContactFallbackResponse,
+            ChatIntent.Location => LocationFallbackResponse,
+            ChatIntent.Hours => HoursFallbackResponse,
+            ChatIntent.Services => ServicesFallbackResponse,
+            _ => string.Empty
+        };
+
+        return !string.IsNullOrWhiteSpace(response);
+    }
+
+    private static bool ShouldEscalateFallback(ChatIntent intent, string userMessage, string reason)
+    {
+        // Explicit PR2.1 intent: when AI is unavailable for a real question, keep ticket-first handoff to avoid dropping support requests.
+        if (reason == "AiUnavailable" && IsRealQuestion(userMessage))
+        {
+            return true;
+        }
+
+        return intent == ChatIntent.EscalationHelp || NeedsHumanHelp(userMessage);
+    }
+
+    private async Task<OperationResult<ChatSendResult>> CreateAssistantResponseAsync(
+        Guid sessionId,
+        DateTime now,
+        string response,
+        decimal confidence,
+        bool ticketCreated,
+        CancellationToken cancellationToken)
+    {
+        await _messageRepository.InsertAsync(new EngageChatMessage
+        {
+            SessionId = sessionId,
+            Role = "assistant",
+            Content = response,
+            CreatedAtUtc = now,
+            Confidence = confidence
+        }, cancellationToken);
+
+        await _sessionRepository.TouchAsync(sessionId, now, cancellationToken);
+        return OperationResult<ChatSendResult>.Success(new ChatSendResult(sessionId, response, confidence, ticketCreated, []));
     }
 
     private static bool ContainsEmail(string message)
@@ -728,5 +883,16 @@ User question:
         }
 
         return value.Trim();
+    }
+
+    private enum ChatIntent
+    {
+        General,
+        Contact,
+        Location,
+        Hours,
+        Services,
+        EscalationHelp,
+        AmbiguousShortPrompt
     }
 }

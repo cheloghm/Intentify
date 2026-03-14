@@ -209,8 +209,7 @@ public sealed class RecommendationExecutor
             description = "Escalation recommended by Stage7.";
         }
 
-        var duplicate = await FindDuplicateTicketAsync(command, subject, cancellationToken);
-        if (duplicate is { } existingTicketId)
+        if (await FindDuplicateTicketAsync(command, subject, cancellationToken) is { } existingTicketId)
         {
             return OperationResult<RecommendationExecutionResult>.Success(
                 new RecommendationExecutionResult(
@@ -270,8 +269,7 @@ public sealed class RecommendationExecutor
 
         var subject = subjectPrefix;
 
-        var duplicate = await FindDuplicateTicketAsync(command, subject, cancellationToken);
-        if (duplicate is { } existingTicketId)
+        if (await FindDuplicateTicketAsync(command, subject, cancellationToken) is { } existingTicketId)
         {
             return OperationResult<RecommendationExecutionResult>.Success(
                 new RecommendationExecutionResult(
