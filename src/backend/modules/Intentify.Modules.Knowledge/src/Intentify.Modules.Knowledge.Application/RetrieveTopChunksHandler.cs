@@ -1,9 +1,11 @@
 using System.Text;
+using System.Globalization;
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 
 namespace Intentify.Modules.Knowledge.Application;
 
-public sealed class RetrieveTopChunksHandler
+public sealed partial class RetrieveTopChunksHandler
 {
     private readonly IKnowledgeChunkRepository _chunkRepository;
     private readonly IKnowledgeSourceRepository _sourceRepository;
@@ -27,7 +29,10 @@ public sealed class RetrieveTopChunksHandler
 
     public async Task<IReadOnlyCollection<RetrievedChunkResult>> HandleAsync(RetrieveTopChunksQuery query, CancellationToken cancellationToken = default)
     {
-        var terms = Tokenize(query.Query)
+        var normalizedQuery = NormalizeSearchText(query.Query);
+        var terms = Tokenize(normalizedQuery)
+            .SelectMany(ExpandTermVariants)
+            .Where(IsInformativeTerm)
             .Distinct()
             .ToArray();
 
@@ -39,7 +44,7 @@ public sealed class RetrieveTopChunksHandler
                     query.TenantId,
                     query.SiteId,
                     query.BotId,
-                    query.Query,
+                    normalizedQuery,
                     query.TopK,
                     cancellationToken);
 
@@ -49,7 +54,7 @@ public sealed class RetrieveTopChunksHandler
                         item.SourceId,
                         item.ChunkIndex,
                         item.Content,
-                        Math.Max(1, ScoreChunk(item.Content, terms))))
+                        Math.Max(1, ScoreChunk(item.Content, terms, normalizedQuery))))
                     .OrderByDescending(item => item.Score)
                     .ThenBy(item => item.ChunkIndex)
                     .Take(query.TopK)
@@ -94,7 +99,7 @@ public sealed class RetrieveTopChunksHandler
                 chunk.SourceId,
                 chunk.ChunkIndex,
                 chunk.Content,
-                ScoreChunk(chunk.Content, terms)))
+                ScoreChunk(chunk.Content, terms, normalizedQuery)))
             .Where(item => item.Score > 0)
             .OrderByDescending(item => item.Score)
             .ThenBy(item => item.ChunkIndex)
@@ -141,26 +146,205 @@ public sealed class RetrieveTopChunksHandler
         }
     }
 
-    private static int ScoreChunk(string content, IReadOnlyCollection<string> terms)
+    private static int ScoreChunk(string content, IReadOnlyCollection<string> terms, string normalizedQuery)
     {
+        if (terms.Count == 0 || string.IsNullOrWhiteSpace(content))
+        {
+            return 0;
+        }
+
         var score = 0;
-        var lowered = content.ToLowerInvariant();
+        var normalizedContent = NormalizeSearchText(content);
+        var matchedTerms = 0;
+
         foreach (var term in terms)
         {
-            var cursor = 0;
-            while (cursor < lowered.Length)
+            var wholeMatches = CountWholeWordMatches(normalizedContent, term);
+            if (wholeMatches > 0)
             {
-                var index = lowered.IndexOf(term, cursor, StringComparison.Ordinal);
-                if (index < 0)
-                {
-                    break;
-                }
-
-                score++;
-                cursor = index + term.Length;
+                score += wholeMatches * 4;
+                matchedTerms++;
+                continue;
             }
+
+            var partialMatches = CountSubstringMatches(normalizedContent, term);
+            if (partialMatches > 0)
+            {
+                score += partialMatches;
+                matchedTerms++;
+                continue;
+            }
+
+        }
+
+        if (matchedTerms > 1)
+        {
+            score += matchedTerms * 2;
+        }
+
+        if (normalizedQuery.Length > 4 && normalizedContent.Contains(normalizedQuery, StringComparison.Ordinal))
+        {
+            score += 6;
+        }
+
+        if (LooksLikeHeadingHit(content, terms))
+        {
+            score += 3;
         }
 
         return score;
     }
+
+    private static string NormalizeSearchText(string input)
+    {
+        if (string.IsNullOrWhiteSpace(input))
+        {
+            return string.Empty;
+        }
+
+        var decomposed = input.Normalize(NormalizationForm.FormD);
+        var builder = new StringBuilder(decomposed.Length);
+
+        foreach (var character in decomposed)
+        {
+            if (CharUnicodeInfo.GetUnicodeCategory(character) == UnicodeCategory.NonSpacingMark)
+            {
+                continue;
+            }
+
+            if (char.IsLetterOrDigit(character))
+            {
+                builder.Append(char.ToLowerInvariant(character));
+            }
+            else
+            {
+                builder.Append(' ');
+            }
+        }
+
+        return MultiWhitespaceRegex().Replace(builder.ToString(), " ").Trim();
+    }
+
+    private static IEnumerable<string> ExpandTermVariants(string term)
+    {
+        if (string.IsNullOrWhiteSpace(term))
+        {
+            yield break;
+        }
+
+        yield return term;
+
+        if (term.Length > 4 && term.EndsWith("es", StringComparison.Ordinal))
+        {
+            yield return term[..^2];
+        }
+        else if (term.Length > 3 && term.EndsWith('s'))
+        {
+            yield return term[..^1];
+        }
+
+        var deduped = DeduplicateRepeatedLetters(term);
+        if (!string.Equals(deduped, term, StringComparison.Ordinal) && deduped.Length > 2)
+        {
+            yield return deduped;
+        }
+    }
+
+    private static bool IsInformativeTerm(string term)
+    {
+        if (term.Length <= 1)
+        {
+            return false;
+        }
+
+        return term is not "the"
+            and not "a"
+            and not "an"
+            and not "is"
+            and not "are"
+            and not "what"
+            and not "how"
+            and not "when"
+            and not "where"
+            and not "why"
+            and not "can";
+    }
+
+    private static int CountWholeWordMatches(string content, string term)
+    {
+        var count = 0;
+        var cursor = 0;
+
+        while (cursor < content.Length)
+        {
+            var index = content.IndexOf(term, cursor, StringComparison.Ordinal);
+            if (index < 0)
+            {
+                break;
+            }
+
+            var startsAtBoundary = index == 0 || content[index - 1] == ' ';
+            var endIndex = index + term.Length;
+            var endsAtBoundary = endIndex >= content.Length || content[endIndex] == ' ';
+
+            if (startsAtBoundary && endsAtBoundary)
+            {
+                count++;
+            }
+
+            cursor = endIndex;
+        }
+
+        return count;
+    }
+
+    private static int CountSubstringMatches(string content, string term)
+    {
+        var count = 0;
+        var cursor = 0;
+
+        while (cursor < content.Length)
+        {
+            var index = content.IndexOf(term, cursor, StringComparison.Ordinal);
+            if (index < 0)
+            {
+                break;
+            }
+
+            count++;
+            cursor = index + term.Length;
+        }
+
+        return count;
+    }
+
+    private static bool LooksLikeHeadingHit(string content, IReadOnlyCollection<string> terms)
+    {
+        var lowered = content.ToLowerInvariant();
+        return terms.Any(term =>
+            lowered.Contains($"# {term}", StringComparison.Ordinal)
+            || lowered.Contains($"\n{term}:", StringComparison.Ordinal));
+    }
+
+    private static string DeduplicateRepeatedLetters(string term)
+    {
+        var builder = new StringBuilder(term.Length);
+        var previous = '\0';
+
+        foreach (var character in term)
+        {
+            if (character == previous)
+            {
+                continue;
+            }
+
+            builder.Append(character);
+            previous = character;
+        }
+
+        return builder.ToString();
+    }
+
+    [GeneratedRegex("\\s+", RegexOptions.Compiled)]
+    private static partial Regex MultiWhitespaceRegex();
 }

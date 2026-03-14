@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using System.Net;
 using Intentify.Modules.Knowledge.Domain;
 
 namespace Intentify.Modules.Knowledge.Application;
@@ -10,6 +11,20 @@ public interface IKnowledgeTextExtractor
 
 public sealed partial class KnowledgeTextExtractor : IKnowledgeTextExtractor
 {
+    private static readonly string[] BoilerplateMarkers =
+    [
+        "cookie",
+        "privacy policy",
+        "terms of service",
+        "all rights reserved",
+        "google analytics",
+        "gtag(",
+        "subscribe",
+        "newsletter",
+        "advertisement",
+        "powered by"
+    ];
+
     private readonly IHttpClientFactory _httpClientFactory;
 
     public KnowledgeTextExtractor(IHttpClientFactory httpClientFactory)
@@ -58,9 +73,54 @@ public sealed partial class KnowledgeTextExtractor : IKnowledgeTextExtractor
             return string.Empty;
         }
 
-        var withoutTags = HtmlTagRegex().Replace(input, " ");
-        return MultiSpaceRegex().Replace(withoutTags, " ").Trim();
+        var withoutComments = HtmlCommentRegex().Replace(input, " ");
+        var withoutNoiseBlocks = NoiseBlockRegex().Replace(withoutComments, " ");
+        var withHeadingMarkers = HeadingOpenTagRegex().Replace(withoutNoiseBlocks, "\n\n# ");
+        var withLineBreaks = BlockBoundaryTagRegex().Replace(withHeadingMarkers, "\n");
+        var withoutTags = HtmlTagRegex().Replace(withLineBreaks, " ");
+        var decoded = WebUtility.HtmlDecode(withoutTags);
+        var normalizedLines = decoded
+            .Split(['\n', '\r'], StringSplitOptions.RemoveEmptyEntries)
+            .Select(line => MultiSpaceRegex().Replace(line, " ").Trim())
+            .Where(line => line.Length > 0)
+            .Where(line => !IsLikelyBoilerplateLine(line))
+            .ToArray();
+
+        return string.Join("\n", normalizedLines);
     }
+
+    private static bool IsLikelyBoilerplateLine(string line)
+    {
+        var normalized = line.Trim();
+        if (normalized.Length == 0)
+        {
+            return true;
+        }
+
+        var lowered = normalized.ToLowerInvariant();
+        if (lowered.Contains("javascript")
+            || lowered.Contains("utm_")
+            || lowered.Contains("window.")
+            || lowered.Contains("document."))
+        {
+            return true;
+        }
+
+        var markerHits = BoilerplateMarkers.Count(lowered.Contains);
+        return markerHits >= 2;
+    }
+
+    [GeneratedRegex("<!--.*?-->", RegexOptions.Compiled | RegexOptions.Singleline)]
+    private static partial Regex HtmlCommentRegex();
+
+    [GeneratedRegex("<(script|style|noscript|template|svg|canvas|iframe|nav)[^>]*>.*?</\\1>", RegexOptions.Compiled | RegexOptions.Singleline | RegexOptions.IgnoreCase)]
+    private static partial Regex NoiseBlockRegex();
+
+    [GeneratedRegex("<h[1-6][^>]*>", RegexOptions.Compiled | RegexOptions.IgnoreCase)]
+    private static partial Regex HeadingOpenTagRegex();
+
+    [GeneratedRegex("</?(p|div|section|article|main|li|ul|ol|br|hr|table|tr|td|th|h[1-6])[^>]*>", RegexOptions.Compiled | RegexOptions.IgnoreCase)]
+    private static partial Regex BlockBoundaryTagRegex();
 
     [GeneratedRegex("<[^>]+>", RegexOptions.Compiled)]
     private static partial Regex HtmlTagRegex();
