@@ -41,12 +41,17 @@ public sealed class IndexKnowledgeSourceHandler
             return OperationResult<IndexKnowledgeSourceResult>.NotFound();
         }
 
+        if (source.Status == IndexStatus.Processing)
+        {
+            return OperationResult<IndexKnowledgeSourceResult>.Success(new IndexKnowledgeSourceResult(IndexStatus.Processing.ToString(), 0, null));
+        }
+
         await _sourceRepository.UpdateStatusAsync(command.TenantId, source.Id, IndexStatus.Processing, null, null, cancellationToken);
 
         var extracted = await _extractor.ExtractAsync(source, cancellationToken);
         if (!extracted.IsSuccess)
         {
-            await _sourceRepository.UpdateStatusAsync(command.TenantId, source.Id, IndexStatus.Failed, extracted.FailureReason, null, cancellationToken);
+            await _sourceRepository.UpdateStatusAsync(command.TenantId, source.Id, IndexStatus.Failed, extracted.FailureReason, source.IndexedAtUtc, cancellationToken);
             return OperationResult<IndexKnowledgeSourceResult>.Success(new IndexKnowledgeSourceResult(IndexStatus.Failed.ToString(), 0, extracted.FailureReason));
         }
 
