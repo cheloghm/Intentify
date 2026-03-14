@@ -16,6 +16,8 @@
   var storageKey = 'intentify_engage_session_' + widgetKey;
   var sessionId = localStorage.getItem(storageKey) || '';
   var assistantName = 'Assistant';
+  var primaryColor = '#2563eb';
+  var launcherVisible = true;
   var contactDetailsPrompt = 'Sorry about that — I’ll get someone to help. What’s your name and best email?';
 
   function endpoint(path) { return baseUrl + path; }
@@ -64,6 +66,21 @@
   panel.appendChild(composer);
   document.body.appendChild(toggleButton);
   document.body.appendChild(panel);
+
+  function applyTheme() {
+    var safePrimaryColor = /^#[0-9a-fA-F]{6}$/.test(primaryColor) ? primaryColor : '#2563eb';
+    toggleButton.style.background = safePrimaryColor;
+    sendButton.style.background = safePrimaryColor;
+    panel.style.borderColor = safePrimaryColor;
+
+    if (!launcherVisible) {
+      toggleButton.style.display = 'none';
+      panel.style.display = 'none';
+      return;
+    }
+
+    toggleButton.style.display = 'block';
+  }
 
   function addBubble(role, bodyBuilder) {
     var row = document.createElement('div');
@@ -135,7 +152,7 @@
       var submit = document.createElement('button');
       submit.type = 'submit';
       submit.textContent = 'Share details';
-      submit.style.cssText = 'padding:8px 10px;background:#2563eb;color:#fff;border:none;border-radius:6px;cursor:pointer;';
+      submit.style.cssText = 'padding:8px 10px;background:' + primaryColor + ';color:#fff;border:none;border-radius:6px;cursor:pointer;';
       form.appendChild(submit);
 
       form.addEventListener('submit', function(event) {
@@ -276,7 +293,7 @@
           submit.type = 'submit';
           submit.textContent = 'Submit';
           submit.style.padding = '8px 10px';
-          submit.style.background = '#2563eb';
+          submit.style.background = primaryColor;
           submit.style.color = '#fff';
           submit.style.border = 'none';
           submit.style.borderRadius = '6px';
@@ -369,8 +386,17 @@
       if (payload && (payload.botName || payload.displayName)) {
         assistantName = payload.botName || payload.displayName;
       }
+      if (payload && typeof payload.primaryColor === 'string') {
+        primaryColor = payload.primaryColor;
+      }
+      if (payload && typeof payload.launcherVisible === 'boolean') {
+        launcherVisible = payload.launcherVisible;
+      }
+      applyTheme();
     })
     .catch(function(){});
+
+  applyTheme();
 
   function sendMessage() {
     var message = input.value.trim();

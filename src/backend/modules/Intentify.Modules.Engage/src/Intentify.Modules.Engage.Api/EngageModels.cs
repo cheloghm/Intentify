@@ -1,6 +1,6 @@
 namespace Intentify.Modules.Engage.Api;
 
-public sealed record WidgetBootstrapResponse(string SiteId, string Domain, string DisplayName, string BotName);
+public sealed record WidgetBootstrapResponse(string SiteId, string Domain, string DisplayName, string BotName, string? PrimaryColor = null, bool? LauncherVisible = null);
 
 public sealed record EngageChatSendRequest(string WidgetKey, string? SessionId, string Message, string? CollectorSessionId = null);
 
@@ -62,6 +62,6 @@ public sealed record ConversationMessageResponse(
     IReadOnlyCollection<EngageCitationResponse> Citations);
 
 
-public sealed record EngageBotResponse(string SiteId, string Name);
+public sealed record EngageBotResponse(string SiteId, string Name, string? PrimaryColor = null, bool? LauncherVisible = null);
 
-public sealed record UpdateEngageBotRequest(string Name);
+public sealed record UpdateEngageBotRequest(string Name, string? PrimaryColor = null, bool? LauncherVisible = null);

@@ -159,6 +159,8 @@ export const renderEngageView = (container, { apiClient, toast } = {}) => {
     selectedMessages: [],
     revealWidgetKey: false,
     botName: 'Assistant',
+    primaryColor: '#2563eb',
+    launcherVisible: true,
   };
 
   const page = document.createElement('div');
@@ -238,7 +240,44 @@ export const renderEngageView = (container, { apiClient, toast } = {}) => {
 
   botNameField.append(botNameLabel, botNameInput, saveBotNameButton);
 
-  configBody.append(siteField, widgetWrap, botNameField);
+  const primaryColorField = document.createElement('label');
+  primaryColorField.style.display = 'flex';
+  primaryColorField.style.flexDirection = 'column';
+  primaryColorField.style.gap = '6px';
+
+  const primaryColorLabel = document.createElement('span');
+  primaryColorLabel.textContent = 'Primary color';
+  primaryColorLabel.style.fontSize = '13px';
+
+  const primaryColorInput = document.createElement('input');
+  primaryColorInput.type = 'color';
+  primaryColorInput.value = state.primaryColor;
+  primaryColorInput.style.height = '38px';
+  primaryColorInput.style.padding = '4px';
+  primaryColorInput.style.borderRadius = '6px';
+  primaryColorInput.style.border = '1px solid #cbd5e1';
+
+  const launcherVisibleWrap = document.createElement('label');
+  launcherVisibleWrap.style.display = 'flex';
+  launcherVisibleWrap.style.alignItems = 'center';
+  launcherVisibleWrap.style.gap = '8px';
+
+  const launcherVisibleInput = document.createElement('input');
+  launcherVisibleInput.type = 'checkbox';
+  launcherVisibleInput.checked = state.launcherVisible;
+
+  const launcherVisibleText = document.createElement('span');
+  launcherVisibleText.textContent = 'Show launcher';
+  launcherVisibleText.style.fontSize = '13px';
+
+  launcherVisibleWrap.append(launcherVisibleInput, launcherVisibleText);
+
+  const saveAppearanceButton = createButton({ label: 'Save appearance', variant: 'primary' });
+  saveAppearanceButton.style.width = 'fit-content';
+
+  primaryColorField.append(primaryColorLabel, primaryColorInput, launcherVisibleWrap, saveAppearanceButton);
+
+  configBody.append(siteField, widgetWrap, botNameField, primaryColorField);
 
   const installBody = document.createElement('div');
   installBody.style.display = 'flex';
@@ -709,7 +748,11 @@ const label = document.createElement('div');
   const loadBotName = async (siteId) => {
     if (!siteId) {
       state.botName = 'Assistant';
+      state.primaryColor = '#2563eb';
+      state.launcherVisible = true;
       botNameInput.value = '';
+      primaryColorInput.value = state.primaryColor;
+      launcherVisibleInput.checked = state.launcherVisible;
       renderTranscript();
       return;
     }
@@ -717,14 +760,49 @@ const label = document.createElement('div');
     try {
       const bot = await client.engage.getBot(siteId);
       state.botName = bot?.name || 'Assistant';
+      state.primaryColor = bot?.primaryColor || '#2563eb';
+      state.launcherVisible = typeof bot?.launcherVisible === 'boolean' ? bot.launcherVisible : true;
       botNameInput.value = state.botName;
+      primaryColorInput.value = state.primaryColor;
+      launcherVisibleInput.checked = state.launcherVisible;
       renderTranscript();
     } catch (error) {
       state.botName = 'Assistant';
+      state.primaryColor = '#2563eb';
+      state.launcherVisible = true;
       botNameInput.value = '';
+      primaryColorInput.value = state.primaryColor;
+      launcherVisibleInput.checked = state.launcherVisible;
       notifier.show({ message: mapApiError(error).message, variant: 'danger' });
     }
   };
+
+  saveAppearanceButton.addEventListener('click', async () => {
+    if (!state.siteId) {
+      notifier.show({ message: 'Select a site first.', variant: 'warning' });
+      return;
+    }
+
+    saveAppearanceButton.disabled = true;
+    try {
+      const updated = await client.engage.updateBot(state.siteId, botNameInput.value.trim() || state.botName || 'Assistant', {
+        primaryColor: primaryColorInput.value,
+        launcherVisible: launcherVisibleInput.checked,
+      });
+      state.botName = updated?.name || botNameInput.value.trim() || state.botName || 'Assistant';
+      state.primaryColor = updated?.primaryColor || primaryColorInput.value || '#2563eb';
+      state.launcherVisible = typeof updated?.launcherVisible === 'boolean' ? updated.launcherVisible : launcherVisibleInput.checked;
+      botNameInput.value = state.botName;
+      primaryColorInput.value = state.primaryColor;
+      launcherVisibleInput.checked = state.launcherVisible;
+      notifier.show({ message: 'Widget appearance saved.', variant: 'success' });
+      renderTranscript();
+    } catch (error) {
+      notifier.show({ message: mapApiError(error).message, variant: 'danger' });
+    } finally {
+      saveAppearanceButton.disabled = false;
+    }
+  });
 
   saveBotNameButton.addEventListener('click', async () => {
     if (!state.siteId) {
@@ -740,10 +818,17 @@ const label = document.createElement('div');
 
     saveBotNameButton.disabled = true;
     try {
-      const updated = await client.engage.updateBot(state.siteId, name);
+      const updated = await client.engage.updateBot(state.siteId, name, {
+        primaryColor: primaryColorInput.value,
+        launcherVisible: launcherVisibleInput.checked,
+      });
       state.botName = updated?.name || name;
+      state.primaryColor = updated?.primaryColor || primaryColorInput.value || '#2563eb';
+      state.launcherVisible = typeof updated?.launcherVisible === 'boolean' ? updated.launcherVisible : launcherVisibleInput.checked;
       botNameInput.value = state.botName;
-      notifier.show({ message: 'Bot name saved.', variant: 'success' });
+      primaryColorInput.value = state.primaryColor;
+      launcherVisibleInput.checked = state.launcherVisible;
+      notifier.show({ message: 'Bot settings saved.', variant: 'success' });
       renderTranscript();
     } catch (error) {
       notifier.show({ message: mapApiError(error).message, variant: 'danger' });

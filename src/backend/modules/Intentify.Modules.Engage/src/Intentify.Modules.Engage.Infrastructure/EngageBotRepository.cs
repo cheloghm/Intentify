@@ -62,14 +62,36 @@ public sealed class EngageBotRepository : IEngageBotRepository
             .FirstOrDefaultAsync(cancellationToken);
     }
 
-    public async Task<EngageBot?> UpdateNameAsync(Guid tenantId, Guid siteId, string name, CancellationToken cancellationToken = default)
+    public async Task<EngageBot?> UpdateSettingsAsync(Guid tenantId, Guid siteId, string name, string? primaryColor, bool? launcherVisible, CancellationToken cancellationToken = default)
     {
         await _ensureIndexes;
 
         var normalized = name.Trim();
-        var update = Builders<EngageBot>.Update
-            .Set(item => item.Name, normalized)
-            .Set(item => item.DisplayName, normalized);
+        var updates = new List<UpdateDefinition<EngageBot>>
+        {
+            Builders<EngageBot>.Update.Set(item => item.Name, normalized),
+            Builders<EngageBot>.Update.Set(item => item.DisplayName, normalized)
+        };
+
+        if (string.IsNullOrWhiteSpace(primaryColor))
+        {
+            updates.Add(Builders<EngageBot>.Update.Unset(item => item.PrimaryColor));
+        }
+        else
+        {
+            updates.Add(Builders<EngageBot>.Update.Set(item => item.PrimaryColor, primaryColor.Trim()));
+        }
+
+        if (launcherVisible.HasValue)
+        {
+            updates.Add(Builders<EngageBot>.Update.Set(item => item.LauncherVisible, launcherVisible.Value));
+        }
+        else
+        {
+            updates.Add(Builders<EngageBot>.Update.Unset(item => item.LauncherVisible));
+        }
+
+        var update = Builders<EngageBot>.Update.Combine(updates);
 
         return await _bots.FindOneAndUpdateAsync(
             item => item.TenantId == tenantId && item.SiteId == siteId,

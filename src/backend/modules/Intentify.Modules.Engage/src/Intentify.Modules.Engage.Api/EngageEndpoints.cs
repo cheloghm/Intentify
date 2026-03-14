@@ -46,6 +46,8 @@ internal static class EngageEndpoints
         var site = await siteRepository.GetByWidgetKeyAsync(widgetKey, context.RequestAborted);
         var displayName = "Assistant";
         var botName = "Assistant";
+        string? primaryColor = null;
+        bool? launcherVisible = null;
 
         if (site is not null)
         {
@@ -56,9 +58,12 @@ internal static class EngageEndpoints
                 displayName = resolvedName;
                 botName = resolvedName;
             }
+
+            primaryColor = bot.PrimaryColor;
+            launcherVisible = bot.LauncherVisible;
         }
 
-        return Results.Ok(new WidgetBootstrapResponse(result.SiteId.ToString("N"), result.Domain, displayName, botName));
+        return Results.Ok(new WidgetBootstrapResponse(result.SiteId.ToString("N"), result.Domain, displayName, botName, primaryColor, launcherVisible));
     }
 
     public static async Task<IResult> ChatSendAsync(
@@ -148,7 +153,7 @@ internal static class EngageEndpoints
         return result.Status switch
         {
             OperationStatus.NotFound => Results.NotFound(),
-            _ => Results.Ok(new EngageBotResponse(result.Value!.BotId.ToString("N"), result.Value.Name))
+            _ => Results.Ok(new EngageBotResponse(result.Value!.BotId.ToString("N"), result.Value.Name, result.Value.PrimaryColor, result.Value.LauncherVisible))
         };
     }
 
@@ -176,12 +181,12 @@ internal static class EngageEndpoints
             return Results.Unauthorized();
         }
 
-        var result = await handler.HandleAsync(new UpdateEngageBotCommand(tenantId.Value, parsedSiteId, request.Name), context.RequestAborted);
+        var result = await handler.HandleAsync(new UpdateEngageBotCommand(tenantId.Value, parsedSiteId, request.Name, request.PrimaryColor, request.LauncherVisible), context.RequestAborted);
         return result.Status switch
         {
             OperationStatus.ValidationFailed => Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(result.Errors!.Errors)),
             OperationStatus.NotFound => Results.NotFound(),
-            _ => Results.Ok(new EngageBotResponse(result.Value!.BotId.ToString("N"), result.Value.Name))
+            _ => Results.Ok(new EngageBotResponse(result.Value!.BotId.ToString("N"), result.Value.Name, result.Value.PrimaryColor, result.Value.LauncherVisible))
         };
     }
 
