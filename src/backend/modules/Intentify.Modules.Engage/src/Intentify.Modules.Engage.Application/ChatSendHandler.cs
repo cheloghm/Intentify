@@ -586,11 +586,18 @@ User question:
             return ChatIntent.AmbiguousShortPrompt;
         }
 
-        if (normalized.Contains("human", StringComparison.Ordinal)
+        var containsHumanTarget = normalized.Contains("human", StringComparison.Ordinal)
             || normalized.Contains("agent", StringComparison.Ordinal)
             || normalized.Contains("representative", StringComparison.Ordinal)
-            || normalized.Contains("someone", StringComparison.Ordinal)
-            || normalized.Contains("support", StringComparison.Ordinal))
+            || normalized.Contains("person", StringComparison.Ordinal);
+        var containsHandoffVerb = normalized.Contains("need", StringComparison.Ordinal)
+            || normalized.Contains("want", StringComparison.Ordinal)
+            || normalized.Contains("speak", StringComparison.Ordinal)
+            || normalized.Contains("talk", StringComparison.Ordinal)
+            || normalized.Contains("connect", StringComparison.Ordinal)
+            || normalized.Contains("help", StringComparison.Ordinal);
+
+        if (containsHumanTarget && containsHandoffVerb)
         {
             return ChatIntent.EscalationHelp;
         }
