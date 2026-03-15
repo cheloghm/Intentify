@@ -1059,7 +1059,7 @@ Normalized user message:
 
         if (sessionId.HasValue)
         {
-            var existing = await _sessionRepository.GetByIdAsync(sessionId.Value, cancellationToken);
+            var existing = await _sessionRepository.GetByIdAsync(tenantId, siteId, sessionId.Value, cancellationToken);
             if (existing is not null && existing.TenantId == tenantId && existing.SiteId == siteId && existing.BotId == botId)
             {
                 var idleFor = now - existing.UpdatedAtUtc;

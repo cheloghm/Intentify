@@ -39,7 +39,7 @@ public sealed class GetWidgetConversationMessagesHandler
         }
 
         var bot = await _botRepository.GetOrCreateForSiteAsync(site.TenantId, site.Id, cancellationToken);
-        var session = await _sessionRepository.GetByIdAsync(query.SessionId, cancellationToken);
+        var session = await _sessionRepository.GetByIdAsync(site.TenantId, site.Id, query.SessionId, cancellationToken);
         if (session is null)
         {
             return OperationResult<IReadOnlyCollection<ConversationMessageResult>>.NotFound();
@@ -55,7 +55,7 @@ public sealed class GetWidgetConversationMessagesHandler
             return OperationResult<IReadOnlyCollection<ConversationMessageResult>>.NotFound();
         }
 
-        var messages = await _messageRepository.ListBySessionAsync(query.SessionId, cancellationToken);
+        var messages = await _messageRepository.ListBySessionAsync(site.TenantId, site.Id, query.SessionId, cancellationToken);
         return OperationResult<IReadOnlyCollection<ConversationMessageResult>>.Success(messages
             .OrderBy(item => item.CreatedAtUtc)
             .Select(item => new ConversationMessageResult(
