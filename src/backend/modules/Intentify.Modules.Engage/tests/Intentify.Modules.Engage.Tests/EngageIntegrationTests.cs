@@ -521,7 +521,7 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         var sessionId = json.RootElement.GetProperty("sessionId").GetString();
-        Assert.Equal("I don’t have that information in our knowledge base yet. If you tell me a bit more, I can help refine the question — or I can create a ticket for our team to follow up.", json.RootElement.GetProperty("response").GetString());
+        Assert.Equal("I can help with that — are you asking about ordering, the menu, booking, or something else?", json.RootElement.GetProperty("response").GetString());
         Assert.False(json.RootElement.GetProperty("ticketCreated").GetBoolean());
 
         var secondResponse = await _client!.PostAsJsonAsync("/engage/chat/send", new
@@ -534,7 +534,7 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.OK, secondResponse.StatusCode);
         using var secondJson = JsonDocument.Parse(await secondResponse.Content.ReadAsStringAsync());
         Assert.Equal(sessionId, secondJson.RootElement.GetProperty("sessionId").GetString());
-        Assert.Equal("I don’t have that information in our knowledge base yet. If you tell me a bit more, I can help refine the question — or I can create a ticket for our team to follow up.", secondJson.RootElement.GetProperty("response").GetString());
+        Assert.Equal("I can help with that — are you asking about ordering, the menu, booking, or something else?", secondJson.RootElement.GetProperty("response").GetString());
         Assert.False(secondJson.RootElement.GetProperty("ticketCreated").GetBoolean());
 
         var database = new MongoClient(_mongo.ConnectionString).GetDatabase(_mongo.DatabaseName);
@@ -664,6 +664,48 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Contains("- Keep a warm tone.", capturedPrompt, StringComparison.Ordinal);
         Assert.Contains("- Keep verbosity balanced.", capturedPrompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("knowledge base", capturedPrompt, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ChatSend_LowSupportOrderFlow_AsksTargetedClarification()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var first = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "how can i order?"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+        using var firstJson = JsonDocument.Parse(await first.Content.ReadAsStringAsync());
+        var sessionId = firstJson.RootElement.GetProperty("sessionId").GetString();
+
+        var second = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            sessionId,
+            message = "cocktail"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+        using var secondJson = JsonDocument.Parse(await second.Content.ReadAsStringAsync());
+        Assert.Equal("Sure — are you looking for recommendations, prices, or how to place an order?", secondJson.RootElement.GetProperty("response").GetString());
+
+        var third = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            sessionId,
+            message = "something that contains gin"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, third.StatusCode);
+        using var thirdJson = JsonDocument.Parse(await third.Content.ReadAsStringAsync());
+        Assert.Equal("I can help narrow that down. Do you want something refreshing, citrusy, or more spirit-forward?", thirdJson.RootElement.GetProperty("response").GetString());
+        Assert.DoesNotContain("knowledge base", thirdJson.RootElement.GetProperty("response").GetString(), StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("reliable answer", thirdJson.RootElement.GetProperty("response").GetString(), StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -698,7 +740,7 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        Assert.Equal("I don’t see a verified contact detail in the knowledge base yet. If you share how you’d like to be reached, I can pass it to our team.", json.RootElement.GetProperty("response").GetString());
+        Assert.Equal("I can help with contact details — are you looking for a phone number, email, or contact form?", json.RootElement.GetProperty("response").GetString());
         Assert.False(json.RootElement.GetProperty("ticketCreated").GetBoolean());
     }
 
@@ -716,7 +758,7 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        Assert.Equal("I don’t see a verified contact detail in the knowledge base yet. If you share how you’d like to be reached, I can pass it to our team.", json.RootElement.GetProperty("response").GetString());
+        Assert.Equal("I can help with contact details — are you looking for a phone number, email, or contact form?", json.RootElement.GetProperty("response").GetString());
         Assert.False(json.RootElement.GetProperty("ticketCreated").GetBoolean());
     }
 

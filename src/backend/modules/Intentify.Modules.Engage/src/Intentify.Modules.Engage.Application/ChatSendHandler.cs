@@ -58,14 +58,14 @@ public sealed class ChatSendHandler
     private const string ContactDetailsReceivedResponse = "Thanks — I’ve got your details. Our team will contact you shortly.";
     private const string GreetingResponse = "Hi! How can I help you today?";
     private const string AckResponse = "Got it — what would you like to know or do next?";
-    private const string LowConfidenceClarificationResponse = "I don’t have that information in our knowledge base yet. If you tell me a bit more, I can help refine the question — or I can create a ticket for our team to follow up.";
+    private const string LowConfidenceClarificationResponse = "I can help with that — are you asking about ordering, the menu, booking, or something else?";
     private const string ShortPromptClarificationResponse = "Happy to help — are you looking for hours, location, contact details, or services?";
-    private const string ContactFallbackResponse = "I don’t see a verified contact detail in the knowledge base yet. If you share how you’d like to be reached, I can pass it to our team.";
-    private const string LocationFallbackResponse = "I don’t see a confirmed location in the knowledge base yet. Share your city or area and I can help narrow it down or ask the team to follow up.";
-    private const string HoursFallbackResponse = "I don’t see confirmed business hours in the knowledge base yet. If you want, I can open a ticket so the team can reply with exact hours.";
+    private const string ContactFallbackResponse = "I can help with contact details — are you looking for a phone number, email, or contact form?";
+    private const string LocationFallbackResponse = "I can help with locations — are you looking for a specific city or area?";
+    private const string HoursFallbackResponse = "I can help with hours — are you asking about weekday, weekend, or holiday times?";
     private const string ServicesFallbackResponse = "I can help with services or menu questions. Tell me the specific service or item you’re looking for, and I’ll narrow it down.";
     private const string OrganizationFallbackResponse = "If you’re asking about our organization, I can help with the business name, contact details, hours, location, or services. Which one do you need?";
-    private const string SoftFallbackResponse = "I don’t have a reliable answer yet, but I can help refine the question. Share a little more detail and I’ll try again.";
+    private const string SoftFallbackResponse = "I can help with that — what would you like to sort out first?";
     private const string EscalationFallbackResponse = "Thanks — I can connect you with our team. Please share your name and best email.";
     private const string PromoCommandPrefix = "/promo";
     private const string PromoResponseText = "Please complete this short promo form.";
@@ -248,7 +248,7 @@ public sealed class ChatSendHandler
         if (isLowConfidence)
         {
             _logger.LogInformation("Engage chat decision: layered fallback path for session {SessionId}.", session.Id);
-            return await CreateLayeredFallbackResponseAsync(site, bot, session, command.Message, normalizedMessage, intent, now, "LowConfidence", cancellationToken);
+            return await CreateLayeredFallbackResponseAsync(site, bot, session, command.Message, normalizedMessage, intent, recentMessages, now, "LowConfidence", cancellationToken);
         }
 
         var citations = retrieved
@@ -259,7 +259,7 @@ public sealed class ChatSendHandler
         if (!completion.IsSuccess || string.IsNullOrWhiteSpace(completion.Value))
         {
             _logger.LogWarning("Engage AI completion unavailable for session {SessionId}.", session.Id);
-            return await CreateLayeredFallbackResponseAsync(site, bot, session, command.Message, normalizedMessage, intent, now, "AiUnavailable", cancellationToken);
+            return await CreateLayeredFallbackResponseAsync(site, bot, session, command.Message, normalizedMessage, intent, recentMessages, now, "AiUnavailable", cancellationToken);
         }
 
         _logger.LogInformation("Engage chat decision: grounded answer path for session {SessionId}.", session.Id);
@@ -378,7 +378,9 @@ Use only the retrieved knowledge context to answer the user's question in plain 
 - Do not use markdown lists, bullets, or asterisks unless the user explicitly asks for a list.
 - Do not sound robotic.
 - Do not start with: Based on your knowledge base:
-- If the answer is not in the retrieved context, reply exactly: I don’t have that information in our knowledge base yet.
+- If details are incomplete, do not mention internal systems or missing sources.
+- Offer the safest helpful response you can and ask one brief, specific follow-up question.
+- Do not invent unsupported specifics.
 
 Retrieved knowledge context (deduped):
 {context}
@@ -458,7 +460,7 @@ Normalized user question (for typo recovery):
     private static string NormalizeAiResponse(string response)
     {
         var normalized = response.Trim();
-        const string prohibitedPrefix = "Based on your knowledge base:";
+        const string prohibitedPrefix = "Based on available information:";
 
         if (normalized.StartsWith(prohibitedPrefix, StringComparison.OrdinalIgnoreCase))
         {
@@ -536,6 +538,7 @@ Normalized user question (for typo recovery):
         string userMessage,
         string normalizedUserMessage,
         ChatIntent intent,
+        IReadOnlyCollection<EngageChatMessage> messages,
         DateTime now,
         string reason,
         CancellationToken cancellationToken)
@@ -554,7 +557,7 @@ Normalized user question (for typo recovery):
         if (!shouldEscalate)
         {
             var fallback = IsRealQuestion(userMessage)
-                ? LowConfidenceClarificationResponse
+                ? BuildTargetedClarificationResponse(intent, normalizedUserMessage, messages)
                 : BuildSoftFallbackResponse(bot);
             return await CreateAssistantResponseAsync(session.Id, now, fallback, 0.2m, false, "Fallback", reason, cancellationToken);
         }
@@ -683,9 +686,50 @@ Normalized user question (for typo recovery):
         var tone = NormalizeOptional(bot.Tone)?.ToLowerInvariant();
         return tone switch
         {
-            "professional" => "I don’t have a reliable answer yet, but I can help refine your question. Share a bit more detail and I’ll try again.",
-            "casual" => "I don’t have a solid answer yet, but we can figure it out together. Share a little more detail and I’ll try again.",
+            "professional" => "I can help with that — which part should we focus on first?",
+            "casual" => "Sure — what are you trying to do right now?",
             _ => SoftFallbackResponse
+        };
+    }
+
+    private static string BuildTargetedClarificationResponse(
+        ChatIntent intent,
+        string normalizedUserMessage,
+        IReadOnlyCollection<EngageChatMessage> messages)
+    {
+        var recentUserTurns = messages
+            .Where(item => string.Equals(item.Role, "user", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(item => item.CreatedAtUtc)
+            .TakeLast(3)
+            .Select(item => NormalizeUserMessage(item.Content))
+            .Where(item => !string.IsNullOrWhiteSpace(item))
+            .ToArray();
+
+        var orderFlowHint = recentUserTurns.Any(item => item.Contains("order", StringComparison.Ordinal))
+            || recentUserTurns.Any(item => item.Contains("recommend", StringComparison.Ordinal))
+            || recentUserTurns.Any(item => item.Contains("cocktail", StringComparison.Ordinal))
+            || normalizedUserMessage.Contains("order", StringComparison.Ordinal)
+            || normalizedUserMessage.Contains("recommend", StringComparison.Ordinal)
+            || normalizedUserMessage.Contains("cocktail", StringComparison.Ordinal);
+
+        if (orderFlowHint)
+        {
+            var ginHint = recentUserTurns.Any(item => item.Contains("gin", StringComparison.Ordinal))
+                || normalizedUserMessage.Contains("gin", StringComparison.Ordinal);
+
+            return ginHint
+                ? "I can help narrow that down. Do you want something refreshing, citrusy, or more spirit-forward?"
+                : "Sure — are you looking for recommendations, prices, or how to place an order?";
+        }
+
+        return intent switch
+        {
+            ChatIntent.Contact => "I can help with contact details — do you want a phone number, email, or contact form?",
+            ChatIntent.Location => "I can help with locations — which city or area are you interested in?",
+            ChatIntent.Hours => "I can help with hours — are you asking about weekday, weekend, or holiday times?",
+            ChatIntent.Services => "I can help with that — are you asking about ordering, the menu, or booking?",
+            ChatIntent.Organization => "I can help with that — do you need the business name, contact details, or location?",
+            _ => LowConfidenceClarificationResponse
         };
     }
 
