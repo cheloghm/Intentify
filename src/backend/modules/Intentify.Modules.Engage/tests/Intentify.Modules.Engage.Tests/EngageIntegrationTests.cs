@@ -133,6 +133,60 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
+
+    [Fact]
+    public async Task WidgetConversationMessages_ReturnsTranscript_ForMatchingWidgetAndActiveSession()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var sendResponse = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "hello"
+        });
+
+        using var sendJson = JsonDocument.Parse(await sendResponse.Content.ReadAsStringAsync());
+        var sessionId = sendJson.RootElement.GetProperty("sessionId").GetString();
+
+        var response = await _client.GetAsync($"/engage/widget/conversations/{sessionId}/messages?widgetKey={Uri.EscapeDataString(site.WidgetKey)}");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal(JsonValueKind.Array, json.RootElement.ValueKind);
+        Assert.True(json.RootElement.GetArrayLength() >= 2);
+    }
+
+    [Fact]
+    public async Task WidgetConversationMessages_ReturnsNotFound_ForMismatchedWidgetOrExpiredSession()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+        var otherSite = await CreateSiteAsync(token);
+
+        var sendResponse = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "hello"
+        });
+
+        using var sendJson = JsonDocument.Parse(await sendResponse.Content.ReadAsStringAsync());
+        var sessionId = sendJson.RootElement.GetProperty("sessionId").GetString();
+        Assert.False(string.IsNullOrWhiteSpace(sessionId));
+
+        var wrongWidgetResponse = await _client.GetAsync($"/engage/widget/conversations/{sessionId}/messages?widgetKey={Uri.EscapeDataString(otherSite.WidgetKey)}");
+        Assert.Equal(HttpStatusCode.NotFound, wrongWidgetResponse.StatusCode);
+
+        var database = new MongoClient(_mongo.ConnectionString).GetDatabase(_mongo.DatabaseName);
+        var sessions = database.GetCollection<BsonEngageSession>("EngageChatSessions");
+        var expireUpdate = Builders<BsonEngageSession>.Update.Set(item => item.UpdatedAtUtc, DateTime.UtcNow.AddMinutes(-31));
+        await sessions.UpdateOneAsync(item => item.Id == Guid.Parse(sessionId!), expireUpdate);
+
+        var expiredResponse = await _client.GetAsync($"/engage/widget/conversations/{sessionId}/messages?widgetKey={Uri.EscapeDataString(site.WidgetKey)}");
+        Assert.Equal(HttpStatusCode.NotFound, expiredResponse.StatusCode);
+    }
+
     [Fact]
     public async Task BotEndpoints_CanReadAndUpdateName()
     {
@@ -170,6 +224,7 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
         var script = await response.Content.ReadAsStringAsync();
         Assert.Contains("data-widget-key", script);
         Assert.Contains("/engage/chat/send?widgetKey=", script);
+        Assert.Contains("/engage/widget/conversations/", script);
         Assert.Contains("responseKind === 'promo'", script);
         Assert.Contains("/promos/public/", script);
         Assert.Contains("/entries", script);

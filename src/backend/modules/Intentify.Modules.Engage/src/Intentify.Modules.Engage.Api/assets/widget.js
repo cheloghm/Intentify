@@ -19,6 +19,7 @@
   var primaryColor = '#2563eb';
   var launcherVisible = true;
   var isSending = false;
+  var isHydrating = false;
   var typingIndicatorRow = null;
   var contactDetailsPrompt = 'Sorry about that — I’ll get someone to help. What’s your name and best email?';
 
@@ -36,6 +37,14 @@
     } catch (e) {
       return match[1];
     }
+  }
+
+
+  function clearStoredSession() {
+    sessionId = '';
+    try {
+      localStorage.removeItem(storageKey);
+    } catch (e) {}
   }
 
   var toggleButton = document.createElement('button');
@@ -407,6 +416,50 @@
       });
   }
 
+
+  function hydrateConversation() {
+    if (!sessionId) {
+      return Promise.resolve();
+    }
+
+    isHydrating = true;
+    input.disabled = true;
+    sendButton.disabled = true;
+
+    return fetch(endpoint('/engage/widget/conversations/' + encodeURIComponent(sessionId) + '/messages?widgetKey=' + encodeURIComponent(widgetKey)))
+      .then(function(response) {
+        if (response.status === 404) {
+          clearStoredSession();
+          return null;
+        }
+
+        if (!response.ok) {
+          throw new Error('Conversation history request failed with status ' + response.status);
+        }
+
+        return response.json();
+      })
+      .then(function(history) {
+        if (!Array.isArray(history)) {
+          return;
+        }
+
+        messages.innerHTML = '';
+        history.forEach(function(item) {
+          var role = ((item && item.role) || '').toLowerCase() === 'assistant' ? 'bot' : 'user';
+          addMessage(role, (item && item.content) || '');
+        });
+      })
+      .catch(function(error) {
+        console.warn('Intentify Engage widget history hydrate failed:', error);
+      })
+      .finally(function() {
+        isHydrating = false;
+        input.disabled = false;
+        sendButton.disabled = false;
+      });
+  }
+
   toggleButton.addEventListener('click', function() {
     panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
   });
@@ -436,9 +489,10 @@
     .catch(function(){});
 
   applyTheme();
+  hydrateConversation();
 
   function sendMessage() {
-    if (isSending) {
+    if (isSending || isHydrating) {
       return;
     }
 
