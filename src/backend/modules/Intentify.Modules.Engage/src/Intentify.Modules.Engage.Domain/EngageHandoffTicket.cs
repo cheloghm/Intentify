@@ -14,5 +14,11 @@ public sealed class EngageHandoffTicket
 
     public string Reason { get; init; } = string.Empty;
 
+    public string? LastAssistantMessage { get; init; }
+
+    public string? TranscriptExcerpt { get; init; }
+
+    public int CitationCount { get; init; }
+
     public DateTime CreatedAtUtc { get; init; }
 }
