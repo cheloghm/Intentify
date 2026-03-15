@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Intentify.AppHost;
 using Intentify.Modules.Auth.Api;
 using Intentify.Modules.Sites.Api;
@@ -207,7 +208,8 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
         Assert.NotNull(createdTicket);
         Assert.Equal(site.SiteId, createdTicket!.SiteId.ToString());
         Assert.Equal("Engage handoff: AiUnavailable", createdTicket.Subject);
-        Assert.Equal("what is your return policy?", createdTicket.Description);
+        Assert.Contains("what is your return policy?", createdTicket.Description);
+        Assert.Contains("[Engage handoff package]", createdTicket.Description);
     }
 
     [Fact]
@@ -555,11 +557,89 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
         Assert.Equal("Thanks — I’ve got your details. Our team will contact you shortly.", detailsJson.RootElement.GetProperty("response").GetString());
 
         var database = new MongoClient(_mongo.ConnectionString).GetDatabase(_mongo.DatabaseName);
+        var tickets = database.GetCollection<BsonTicket>("tickets");
+        var handoffTicket = await tickets.Find(item => item.EngageSessionId == Guid.Parse(sessionId!)).FirstOrDefaultAsync();
+        Assert.NotNull(handoffTicket);
+        Assert.Equal("Engage handoff: NeedsHumanHelp", handoffTicket!.Subject);
+        Assert.Contains("[Engage handoff package]", handoffTicket.Description);
+        Assert.Contains("Recent transcript:", handoffTicket.Description);
+
         var leads = database.GetCollection<BsonLead>("leads");
         var createdLead = await leads.Find(item => item.SiteId == Guid.Parse(site.SiteId) && item.PrimaryEmail == "pat@example.com").FirstOrDefaultAsync();
 
         Assert.NotNull(createdLead);
         Assert.Equal("Pat Example", createdLead!.DisplayName);
+    }
+
+    [Fact]
+    public async Task ChatSend_DistilledContext_ExcludesCurrentUserTurn()
+    {
+        string? capturedPrompt = null;
+
+        var builder = AppHostApplication.CreateBuilder([], Environments.Development);
+        builder.WebHost.UseTestServer();
+        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Intentify:Jwt:Issuer"] = "intentify",
+            ["Intentify:Jwt:Audience"] = "intentify-users",
+            ["Intentify:Jwt:SigningKey"] = "test-signing-key-1234567890-EXTRA-KEY",
+            ["Intentify:Jwt:AccessTokenMinutes"] = "30",
+            ["Intentify:Mongo:ConnectionString"] = _mongo.ConnectionString,
+            ["Intentify:Mongo:DatabaseName"] = _mongo.DatabaseName
+        });
+
+        builder.WebHost.ConfigureTestServices(services =>
+        {
+            services.RemoveAll<IChatCompletionClient>();
+            services.AddSingleton<IChatCompletionClient>(new FakeChatCompletionClient(prompt =>
+            {
+                if (prompt.Contains("You are an Engage support assistant.", StringComparison.Ordinal))
+                {
+                    capturedPrompt = prompt;
+                    return Result<string>.Success("Return policy is 30 days with original receipt.");
+                }
+
+                return Result<string>.Success("{}");
+            }));
+        });
+
+        await using var app = AppHostApplication.Build(builder);
+        await app.StartAsync();
+        using var client = app.GetTestClient();
+
+        var token = await RegisterUserAsync(client);
+        var site = await CreateSiteAsync(client, token);
+        await AddKnowledgeAsync(client, token, site.SiteId, "Return policy is 30 days with original receipt.");
+
+        var firstResponse = await client.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "what is your return policy?"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, firstResponse.StatusCode);
+
+        using var firstJson = JsonDocument.Parse(await firstResponse.Content.ReadAsStringAsync());
+        var sessionId = firstJson.RootElement.GetProperty("sessionId").GetString();
+
+        var secondMessage = "do you have weekend hours?";
+        var secondResponse = await client.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            sessionId,
+            message = secondMessage
+        });
+
+        Assert.Equal(HttpStatusCode.OK, secondResponse.StatusCode);
+        Assert.NotNull(capturedPrompt);
+
+        var match = Regex.Match(
+            capturedPrompt!,
+            "Distilled prior user context:\\n(?<distilled>[\\s\\S]*?)\\n\\nUser question:",
+            RegexOptions.CultureInvariant);
+
+        Assert.True(match.Success);
+        Assert.DoesNotContain(secondMessage, match.Groups["distilled"].Value, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

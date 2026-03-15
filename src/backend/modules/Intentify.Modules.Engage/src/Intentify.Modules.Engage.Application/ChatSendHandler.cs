@@ -15,6 +15,9 @@ public sealed class ChatSendHandler
 {
     public const decimal LowConfidenceThreshold = 0.50m;
     public const int TopChunkScoreThreshold = 2;
+    private const int PromptReplayMessageLimit = 12;
+    private const int PromptDistilledUserTurnsLimit = 3;
+    private const int HandoffTranscriptLineLimit = 8;
     private static readonly string[] HumanHelpPhrases =
     [
         "contact form",
@@ -154,6 +157,8 @@ public sealed class ChatSendHandler
 
             await _sessionRepository.TouchAsync(session.Id, now, cancellationToken);
 
+            LogChatQualitySignal(session.Id, "Promo", 1m, false, 0, "ManualPromo", null);
+
             return OperationResult<ChatSendResult>.Success(new ChatSendResult(
                 session.Id,
                 PromoResponseText,
@@ -177,6 +182,8 @@ public sealed class ChatSendHandler
 
             await _sessionRepository.TouchAsync(session.Id, now, cancellationToken);
 
+            LogChatQualitySignal(session.Id, "Smalltalk", 1m, false, 0, null, null);
+
             return OperationResult<ChatSendResult>.Success(new ChatSendResult(session.Id, smalltalkResponse, 1m, false, []));
         }
 
@@ -198,7 +205,7 @@ public sealed class ChatSendHandler
 
         if (intent == ChatIntent.AmbiguousShortPrompt)
         {
-            return await CreateAssistantResponseAsync(session.Id, now, ShortPromptClarificationResponse, 0.35m, false, cancellationToken);
+            return await CreateAssistantResponseAsync(session.Id, now, ShortPromptClarificationResponse, 0.35m, false, "Clarification", "AmbiguousShortPrompt", cancellationToken);
         }
 
         var retrieved = await _retrieveTopChunksHandler.HandleAsync(
@@ -247,6 +254,8 @@ public sealed class ChatSendHandler
         }, cancellationToken);
 
         await _sessionRepository.TouchAsync(session.Id, now, cancellationToken);
+
+        LogChatQualitySignal(session.Id, "Grounded", confidence, false, citations.Length, null, intent.ToString());
 
         var stage7Decision = await TryGenerateStage7DecisionAsync(
             site.TenantId,
@@ -324,8 +333,10 @@ public sealed class ChatSendHandler
             .Select((item, index) => $"[{index + 1}] {item}"));
 
         var transcript = string.Join("\n", messages
-            .TakeLast(30)
+            .TakeLast(PromptReplayMessageLimit)
             .Select(item => $"{(string.Equals(item.Role, "assistant", StringComparison.OrdinalIgnoreCase) ? "Assistant" : "User")}: {item.Content.Trim()}"));
+
+        var distilledContext = BuildDistilledContext(messages, message);
 
         return $"""
 You are an Engage support assistant.
@@ -342,6 +353,9 @@ Retrieved knowledge context (deduped):
 
 Conversation transcript (oldest to newest):
 {transcript}
+
+Distilled prior user context:
+{distilledContext}
 
 User question:
 {message}
@@ -433,6 +447,7 @@ User question:
 
         var existingHandoffs = await _ticketRepository.ListBySessionAsync(session.Id, cancellationToken);
         var createdTicket = existingHandoffs.Count == 0;
+        var handoffPackage = await BuildHandoffPackageAsync(session.Id, userMessage, cancellationToken);
 
         if (createdTicket)
         {
@@ -443,6 +458,9 @@ User question:
                 SessionId = session.Id,
                 UserMessage = userMessage,
                 Reason = reason,
+                LastAssistantMessage = handoffPackage.LastAssistantMessage,
+                TranscriptExcerpt = handoffPackage.TranscriptExcerpt,
+                CitationCount = handoffPackage.CitationCount,
                 CreatedAtUtc = now
             }, cancellationToken);
 
@@ -455,7 +473,7 @@ User question:
                     visitorId,
                     session.Id,
                     $"Engage handoff: {reason}",
-                    userMessage,
+                    handoffPackage.TicketDescription,
                     null),
                 cancellationToken);
         }
@@ -471,6 +489,8 @@ User question:
 
         await _sessionRepository.TouchAsync(session.Id, now, cancellationToken);
 
+        LogChatQualitySignal(session.Id, "EscalationFallback", fallbackConfidence, createdTicket, handoffPackage.CitationCount, reason, null);
+
         return OperationResult<ChatSendResult>.Success(new ChatSendResult(session.Id, fallbackResponse, fallbackConfidence, createdTicket, []));
     }
 
@@ -485,12 +505,12 @@ User question:
     {
         if (intent == ChatIntent.AmbiguousShortPrompt)
         {
-            return await CreateAssistantResponseAsync(session.Id, now, ShortPromptClarificationResponse, 0.35m, false, cancellationToken);
+            return await CreateAssistantResponseAsync(session.Id, now, ShortPromptClarificationResponse, 0.35m, false, "Clarification", "AmbiguousShortPrompt", cancellationToken);
         }
 
         if (TryBuildBusinessAwareFallback(intent, out var businessFallback))
         {
-            return await CreateAssistantResponseAsync(session.Id, now, businessFallback, 0.3m, false, cancellationToken);
+            return await CreateAssistantResponseAsync(session.Id, now, businessFallback, 0.3m, false, "BusinessFallback", null, cancellationToken);
         }
 
         var shouldEscalate = ShouldEscalateFallback(intent, userMessage, reason);
@@ -499,7 +519,7 @@ User question:
             var fallback = IsRealQuestion(userMessage)
                 ? LowConfidenceClarificationResponse
                 : SoftFallbackResponse;
-            return await CreateAssistantResponseAsync(session.Id, now, fallback, 0.2m, false, cancellationToken);
+            return await CreateAssistantResponseAsync(session.Id, now, fallback, 0.2m, false, "Fallback", reason, cancellationToken);
         }
 
         return await CreateFallbackResponseAsync(site, session, userMessage, now, reason, cancellationToken, EscalationFallbackResponse);
@@ -599,6 +619,8 @@ User question:
         string response,
         decimal confidence,
         bool ticketCreated,
+        string qualityPath,
+        string? qualityReason,
         CancellationToken cancellationToken)
     {
         await _messageRepository.InsertAsync(new EngageChatMessage
@@ -611,6 +633,7 @@ User question:
         }, cancellationToken);
 
         await _sessionRepository.TouchAsync(sessionId, now, cancellationToken);
+        LogChatQualitySignal(sessionId, qualityPath, confidence, ticketCreated, 0, qualityReason, null);
         return OperationResult<ChatSendResult>.Success(new ChatSendResult(sessionId, response, confidence, ticketCreated, []));
     }
 
@@ -649,6 +672,8 @@ User question:
         DateTime now,
         CancellationToken cancellationToken)
     {
+        var handoffPackage = await BuildHandoffPackageAsync(session.Id, userMessage, cancellationToken);
+
         await _ticketRepository.InsertAsync(new EngageHandoffTicket
         {
             TenantId = site.TenantId,
@@ -656,6 +681,9 @@ User question:
             SessionId = session.Id,
             UserMessage = userMessage,
             Reason = "NeedsHumanHelp",
+            LastAssistantMessage = handoffPackage.LastAssistantMessage,
+            TranscriptExcerpt = handoffPackage.TranscriptExcerpt,
+            CitationCount = handoffPackage.CitationCount,
             CreatedAtUtc = now
         }, cancellationToken);
 
@@ -668,7 +696,7 @@ User question:
                 visitorId,
                 session.Id,
                 "Engage handoff: NeedsHumanHelp",
-                userMessage,
+                handoffPackage.TicketDescription,
                 null),
             cancellationToken);
 
@@ -682,6 +710,7 @@ User question:
         }, cancellationToken);
 
         await _sessionRepository.TouchAsync(session.Id, now, cancellationToken);
+        LogChatQualitySignal(session.Id, "HumanHelp", 0m, true, 0, "NeedsHumanHelp", null);
         return OperationResult<ChatSendResult>.Success(new ChatSendResult(session.Id, AskForContactDetailsResponse, 0m, true, []));
     }
 
@@ -733,7 +762,97 @@ User question:
         }, cancellationToken);
 
         await _sessionRepository.TouchAsync(session.Id, now, cancellationToken);
+        LogChatQualitySignal(session.Id, "ContactCapture", 0m, true, 0, "ContactDetails", null);
         return OperationResult<ChatSendResult>.Success(new ChatSendResult(session.Id, ContactDetailsReceivedResponse, 0m, true, []));
+    }
+
+    private static string BuildDistilledContext(IReadOnlyCollection<EngageChatMessage> messages, string currentUserMessage)
+    {
+        var userMessages = messages
+            .Where(item => string.Equals(item.Role, "user", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(item => item.CreatedAtUtc)
+            .ToList();
+
+        if (userMessages.Count > 0)
+        {
+            userMessages.RemoveAt(userMessages.Count - 1);
+        }
+
+        var currentUserMessageNormalized = currentUserMessage.Trim();
+
+        var distilled = userMessages
+            .Select(item => item.Content.Trim())
+            .Where(item => !string.IsNullOrWhiteSpace(item))
+            .Where(item => !string.Equals(item, currentUserMessageNormalized, StringComparison.OrdinalIgnoreCase))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .TakeLast(PromptDistilledUserTurnsLimit)
+            .ToArray();
+
+        if (distilled.Length == 0)
+        {
+            return "none";
+        }
+
+        return string.Join("\n", distilled.Select((item, index) => $"- priorUser{index + 1}: {item}"));
+    }
+
+    private async Task<(string TicketDescription, string? LastAssistantMessage, string TranscriptExcerpt, int CitationCount)> BuildHandoffPackageAsync(
+        Guid sessionId,
+        string userMessage,
+        CancellationToken cancellationToken)
+    {
+        var messages = await _messageRepository.ListBySessionAsync(sessionId, cancellationToken);
+        var latestMessages = messages
+            .OrderBy(item => item.CreatedAtUtc)
+            .TakeLast(HandoffTranscriptLineLimit)
+            .Select(item => $"{(string.Equals(item.Role, "assistant", StringComparison.OrdinalIgnoreCase) ? "Assistant" : "User")}: {item.Content.Trim()}")
+            .ToArray();
+
+        var transcriptExcerpt = latestMessages.Length == 0
+            ? $"User: {userMessage}"
+            : string.Join("\n", latestMessages);
+
+        var lastAssistantMessage = messages
+            .Where(item => string.Equals(item.Role, "assistant", StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(item => item.CreatedAtUtc)
+            .Select(item => item.Content.Trim())
+            .FirstOrDefault();
+
+        var citationCount = messages
+            .Where(item => string.Equals(item.Role, "assistant", StringComparison.OrdinalIgnoreCase))
+            .Sum(item => item.Citations?.Count ?? 0);
+
+        var ticketDescription = $"{userMessage}\n\n[Engage handoff package]\nRecent transcript:\n{transcriptExcerpt}\nGrounding citations observed in session: {citationCount}";
+        return (ticketDescription, lastAssistantMessage, transcriptExcerpt, citationCount);
+    }
+
+    private void LogChatQualitySignal(
+        Guid sessionId,
+        string path,
+        decimal confidence,
+        bool ticketCreated,
+        int citationCount,
+        string? reason,
+        string? intent)
+    {
+        var confidenceBucket = confidence switch
+        {
+            >= 0.8m => "high",
+            >= 0.5m => "medium",
+            > 0m => "low",
+            _ => "none"
+        };
+
+        _logger.LogInformation(
+            "Engage chat quality signal for session {SessionId}: path={Path}, confidence={Confidence}, confidenceBucket={ConfidenceBucket}, ticketCreated={TicketCreated}, citationCount={CitationCount}, reason={Reason}, intent={Intent}.",
+            sessionId,
+            path,
+            confidence,
+            confidenceBucket,
+            ticketCreated,
+            citationCount,
+            reason ?? string.Empty,
+            intent ?? string.Empty);
     }
 
     private static string? TryExtractEmail(string message)

@@ -539,6 +539,44 @@ const label = document.createElement('div');
       content.style.whiteSpace = 'pre-wrap';
 
       bubble.append(meta, content);
+
+      if (!isUser && Number.isFinite(Number(message.confidence))) {
+        const confidence = document.createElement('div');
+        confidence.style.marginTop = '6px';
+        confidence.style.fontSize = '11px';
+        confidence.style.color = '#475569';
+        confidence.textContent = `Confidence: ${formatConfidence(message.confidence)}`;
+        bubble.appendChild(confidence);
+      }
+
+      if (!isUser && Array.isArray(message.citations) && message.citations.length > 0) {
+        const citationsWrap = document.createElement('details');
+        citationsWrap.style.marginTop = '6px';
+
+        const citationsSummary = document.createElement('summary');
+        citationsSummary.textContent = `Citations (${message.citations.length})`;
+        citationsSummary.style.cursor = 'pointer';
+        citationsSummary.style.fontSize = '11px';
+        citationsSummary.style.color = '#334155';
+        citationsWrap.appendChild(citationsSummary);
+
+        const citationsList = document.createElement('div');
+        citationsList.style.marginTop = '4px';
+        citationsList.style.fontSize = '11px';
+        citationsList.style.color = '#475569';
+        citationsList.style.display = 'flex';
+        citationsList.style.flexDirection = 'column';
+        citationsList.style.gap = '3px';
+
+        message.citations.forEach((citation) => {
+          const item = document.createElement('div');
+          item.textContent = `${citation.sourceId} · chunk ${citation.chunkIndex}`;
+          citationsList.appendChild(item);
+        });
+
+        citationsWrap.appendChild(citationsList);
+        bubble.appendChild(citationsWrap);
+      }
       row.appendChild(bubble);
       modalMessages.appendChild(row);
     });
