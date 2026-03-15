@@ -648,6 +648,42 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ChatSend_TypoContactIntent_UsesBusinessAwareFallback()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var response = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "Contct dtails?"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("I don’t see a verified contact detail in the knowledge base yet. If you share how you’d like to be reached, I can pass it to our team.", json.RootElement.GetProperty("response").GetString());
+        Assert.False(json.RootElement.GetProperty("ticketCreated").GetBoolean());
+    }
+
+    [Fact]
+    public async Task ChatSend_OrganizationNameQuestion_ReturnsHelpfulClarification()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var response = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "The name of your org?"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("If you’re asking about our organization, I can help with the business name, contact details, hours, location, or services. Which one do you need?", json.RootElement.GetProperty("response").GetString());
+        Assert.False(json.RootElement.GetProperty("ticketCreated").GetBoolean());
+    }
+
+    [Fact]
     public async Task ChatSend_InformationalErrorQuery_DoesNotAutoEscalate()
     {
         var token = await RegisterUserAsync();

@@ -64,6 +64,7 @@ public sealed class ChatSendHandler
     private const string LocationFallbackResponse = "I don’t see a confirmed location in the knowledge base yet. Share your city or area and I can help narrow it down or ask the team to follow up.";
     private const string HoursFallbackResponse = "I don’t see confirmed business hours in the knowledge base yet. If you want, I can open a ticket so the team can reply with exact hours.";
     private const string ServicesFallbackResponse = "I can help with services or menu questions. Tell me the specific service or item you’re looking for, and I’ll narrow it down.";
+    private const string OrganizationFallbackResponse = "If you’re asking about our organization, I can help with the business name, contact details, hours, location, or services. Which one do you need?";
     private const string SoftFallbackResponse = "I don’t have a reliable answer yet, but I can help refine the question. Share a little more detail and I’ll try again.";
     private const string EscalationFallbackResponse = "Thanks — I can connect you with our team. Please share your name and best email.";
     private const string PromoCommandPrefix = "/promo";
@@ -74,7 +75,8 @@ public sealed class ChatSendHandler
         [ChatIntent.Contact] = new("ContactFallback", ContactFallbackResponse),
         [ChatIntent.Location] = new("LocationFallback", LocationFallbackResponse),
         [ChatIntent.Hours] = new("HoursFallback", HoursFallbackResponse),
-        [ChatIntent.Services] = new("ServicesFallback", ServicesFallbackResponse)
+        [ChatIntent.Services] = new("ServicesFallback", ServicesFallbackResponse),
+        [ChatIntent.Organization] = new("OrganizationFallback", OrganizationFallbackResponse)
     };
 
     private readonly ISiteRepository _siteRepository;
@@ -221,7 +223,8 @@ public sealed class ChatSendHandler
             return await CreateHumanHelpResponseAsync(site, session, command.Message, now, cancellationToken);
         }
 
-        var intent = DetectIntent(command.Message);
+        var normalizedMessage = NormalizeUserMessage(command.Message);
+        var intent = DetectIntent(normalizedMessage);
         if (intent == ChatIntent.EscalationHelp)
         {
             return await CreateHumanHelpResponseAsync(site, session, command.Message, now, cancellationToken);
@@ -233,7 +236,7 @@ public sealed class ChatSendHandler
         }
 
         var retrieved = await _retrieveTopChunksHandler.HandleAsync(
-            new RetrieveTopChunksQuery(site.TenantId, site.Id, command.Message, 3, bot.BotId),
+            new RetrieveTopChunksQuery(site.TenantId, site.Id, normalizedMessage, 3, bot.BotId),
             cancellationToken);
 
         var topScore = retrieved.Count == 0 ? 0 : retrieved.Max(item => item.Score);
@@ -245,18 +248,18 @@ public sealed class ChatSendHandler
         if (isLowConfidence)
         {
             _logger.LogInformation("Engage chat decision: layered fallback path for session {SessionId}.", session.Id);
-            return await CreateLayeredFallbackResponseAsync(site, bot, session, command.Message, intent, now, "LowConfidence", cancellationToken);
+            return await CreateLayeredFallbackResponseAsync(site, bot, session, command.Message, normalizedMessage, intent, now, "LowConfidence", cancellationToken);
         }
 
         var citations = retrieved
             .Select(item => new EngageCitationResult(item.SourceId, item.ChunkId, item.ChunkIndex))
             .ToArray();
 
-        var completion = await _chatCompletionClient.CompleteAsync(BuildPrompt(bot, command.Message, retrieved, recentMessages), cancellationToken);
+        var completion = await _chatCompletionClient.CompleteAsync(BuildPrompt(bot, command.Message, normalizedMessage, retrieved, recentMessages), cancellationToken);
         if (!completion.IsSuccess || string.IsNullOrWhiteSpace(completion.Value))
         {
             _logger.LogWarning("Engage AI completion unavailable for session {SessionId}.", session.Id);
-            return await CreateLayeredFallbackResponseAsync(site, bot, session, command.Message, intent, now, "AiUnavailable", cancellationToken);
+            return await CreateLayeredFallbackResponseAsync(site, bot, session, command.Message, normalizedMessage, intent, now, "AiUnavailable", cancellationToken);
         }
 
         _logger.LogInformation("Engage chat decision: grounded answer path for session {SessionId}.", session.Id);
@@ -344,7 +347,7 @@ public sealed class ChatSendHandler
         return Math.Min(1m, topScore / 4m);
     }
 
-    private static string BuildPrompt(EngageBot bot, string message, IReadOnlyCollection<RetrievedChunkResult> chunks, IReadOnlyCollection<EngageChatMessage> messages)
+    private static string BuildPrompt(EngageBot bot, string message, string normalizedMessage, IReadOnlyCollection<RetrievedChunkResult> chunks, IReadOnlyCollection<EngageChatMessage> messages)
     {
         var dedupedChunks = chunks
             .Select(item => item.Content.Trim())
@@ -388,6 +391,9 @@ Distilled prior user context:
 
 User question:
 {message}
+
+Normalized user question (for typo recovery):
+{normalizedMessage}
 """;
     }
 
@@ -528,6 +534,7 @@ User question:
         EngageBot bot,
         EngageChatSession session,
         string userMessage,
+        string normalizedUserMessage,
         ChatIntent intent,
         DateTime now,
         string reason,
@@ -543,7 +550,7 @@ User question:
             return await CreateAssistantResponseAsync(session.Id, now, businessTemplate.Response, 0.3m, false, businessTemplate.Path, null, cancellationToken);
         }
 
-        var shouldEscalate = ShouldEscalateFallback(bot, intent, userMessage, reason);
+        var shouldEscalate = ShouldEscalateFallback(bot, intent, normalizedUserMessage, reason);
         if (!shouldEscalate)
         {
             var fallback = IsRealQuestion(userMessage)
@@ -629,9 +636,19 @@ User question:
         if (normalized.Contains("service", StringComparison.Ordinal)
             || normalized.Contains("menu", StringComparison.Ordinal)
             || normalized.Contains("offer", StringComparison.Ordinal)
-            || normalized.Contains("pricing", StringComparison.Ordinal))
+            || normalized.Contains("pricing", StringComparison.Ordinal)
+            || normalized.Contains("order", StringComparison.Ordinal))
         {
             return ChatIntent.Services;
+        }
+
+        if (normalized.Contains("org", StringComparison.Ordinal)
+            || normalized.Contains("organization", StringComparison.Ordinal)
+            || normalized.Contains("business name", StringComparison.Ordinal)
+            || normalized.Contains("company name", StringComparison.Ordinal)
+            || normalized.Contains("name of", StringComparison.Ordinal))
+        {
+            return ChatIntent.Organization;
         }
 
         return ChatIntent.General;
@@ -1062,6 +1079,30 @@ User question:
         return !string.IsNullOrWhiteSpace(promoPublicKey);
     }
 
+
+    private static string NormalizeUserMessage(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return string.Empty;
+        }
+
+        var collapsed = Regex.Replace(message.Trim().ToLowerInvariant(), "[^a-z0-9 ]", " ");
+        var normalized = Regex.Replace(collapsed, "\\s+", " ").Trim();
+
+        var repaired = normalized
+            .Replace("contct", "contact", StringComparison.Ordinal)
+            .Replace("cntact", "contact", StringComparison.Ordinal)
+            .Replace("dtails", "details", StringComparison.Ordinal)
+            .Replace("detals", "details", StringComparison.Ordinal)
+            .Replace("orgnization", "organization", StringComparison.Ordinal)
+            .Replace("organisation", "organization", StringComparison.Ordinal)
+            .Replace("adress", "address", StringComparison.Ordinal)
+            .Replace("locaton", "location", StringComparison.Ordinal);
+
+        return repaired;
+    }
+
     private static string? NormalizeOptional(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
@@ -1081,6 +1122,7 @@ User question:
         Location,
         Hours,
         Services,
+        Organization,
         EscalationHelp,
         AmbiguousShortPrompt
     }

@@ -215,6 +215,29 @@ public sealed class KnowledgeApplicationTests
         Assert.True(typoResults.Count > 0);
         Assert.Contains("Return policy", typoResults.First().Content, StringComparison.OrdinalIgnoreCase);
     }
+    [Fact]
+    public async Task RetrieveTopChunks_OneEditTypoStillProducesUsableScore()
+    {
+        var tenantId = Guid.NewGuid();
+        var siteId = Guid.NewGuid();
+        var sourceId = Guid.NewGuid();
+
+        var sourceRepo = new RetrievalSourceRepository([
+            new KnowledgeSource { Id = sourceId, TenantId = tenantId, SiteId = siteId, BotId = Guid.Empty }
+        ]);
+
+        var chunkRepo = new RetrievalChunkRepository([
+            new KnowledgeChunk { Id = Guid.NewGuid(), TenantId = tenantId, SiteId = siteId, SourceId = sourceId, ChunkIndex = 0, Content = "Contact details: email hello@example.com", CreatedAtUtc = DateTime.UtcNow }
+        ]);
+
+        var handler = new RetrieveTopChunksHandler(chunkRepo, sourceRepo, NullLogger<RetrieveTopChunksHandler>.Instance);
+        var results = await handler.HandleAsync(new RetrieveTopChunksQuery(tenantId, siteId, "contct dtails", 2));
+
+        var top = Assert.Single(results);
+        Assert.True(top.Score >= 2);
+    }
+
+
 }
 
 internal sealed class EnabledOpenSearchOptions : IOpenSearchOptions
