@@ -181,7 +181,8 @@ public sealed partial class RetrieveTopChunksHandler
                 contentTerms ??= Tokenize(normalizedContent).ToHashSet();
                 if (contentTerms.Any(candidate => IsWithinOneEdit(candidate, term)))
                 {
-                    score += 1;
+                    score += 2;
+                    matchedTerms++;
                 }
             }
         }
