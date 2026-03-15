@@ -82,6 +82,16 @@ public sealed class EngageModule : IAppModule
         services.AddSingleton<UpdateEngageBotHandler>();
         services.AddSingleton<ListConversationsHandler>();
         services.AddSingleton<GetConversationMessagesHandler>();
+        services.AddSingleton(serviceProvider =>
+        {
+            var sessionTimeoutMinutes = configuration.GetValue<int?>("Intentify:Engage:SessionTimeoutMinutes") ?? 30;
+            return new GetWidgetConversationMessagesHandler(
+                serviceProvider.GetRequiredService<ISiteRepository>(),
+                serviceProvider.GetRequiredService<IEngageBotRepository>(),
+                serviceProvider.GetRequiredService<IEngageChatSessionRepository>(),
+                serviceProvider.GetRequiredService<IEngageChatMessageRepository>(),
+                sessionTimeoutMinutes);
+        });
         services.AddSingleton<VisitorContextBundleHandler>();
         services.AddSingleton<AiDecisionGenerationService>();
         services.AddSingleton<UpsertLeadFromPromoEntryHandler>();
@@ -95,6 +105,7 @@ public sealed class EngageModule : IAppModule
         publicGroup.MapGet("/widget.js", EngageEndpoints.WidgetScriptAsync);
         publicGroup.MapGet("/widget/bootstrap", EngageEndpoints.WidgetBootstrapAsync);
         publicGroup.MapPost("/chat/send", EngageEndpoints.ChatSendAsync);
+        publicGroup.MapGet("/widget/conversations/{sessionId}/messages", EngageEndpoints.GetWidgetConversationMessagesAsync);
 
         // Admin endpoints (dashboard / authenticated)
         var adminGroup = endpoints.MapGroup("/engage")

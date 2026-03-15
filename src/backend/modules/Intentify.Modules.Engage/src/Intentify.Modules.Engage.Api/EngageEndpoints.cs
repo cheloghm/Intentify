@@ -218,6 +218,28 @@ internal static class EngageEndpoints
         return Results.Ok(results.Select(item => new ConversationSummaryResponse(item.SessionId.ToString("N"), item.CreatedAtUtc, item.UpdatedAtUtc)).ToArray());
     }
 
+
+    public static async Task<IResult> GetWidgetConversationMessagesAsync(string sessionId, string? widgetKey, HttpContext context, GetWidgetConversationMessagesHandler handler)
+    {
+        if (!Guid.TryParse(sessionId, out var parsedSessionId))
+        {
+            return Results.NotFound();
+        }
+
+        var result = await handler.HandleAsync(new GetWidgetConversationMessagesQuery(widgetKey ?? string.Empty, parsedSessionId), context.RequestAborted);
+        return result.Status switch
+        {
+            OperationStatus.NotFound => Results.NotFound(),
+            _ => Results.Ok(result.Value!.Select(item => new ConversationMessageResponse(
+                item.MessageId.ToString("N"),
+                item.Role,
+                item.Content,
+                item.CreatedAtUtc,
+                item.Confidence,
+                item.Citations.Select(c => new EngageCitationResponse(c.SourceId.ToString("N"), c.ChunkId.ToString("N"), c.ChunkIndex)).ToArray())).ToArray())
+        };
+    }
+
     public static async Task<IResult> GetConversationMessagesAsync(string sessionId, string? siteId, HttpContext context, GetConversationMessagesHandler handler)
     {
         if (!Guid.TryParse(sessionId, out var parsedSessionId))
