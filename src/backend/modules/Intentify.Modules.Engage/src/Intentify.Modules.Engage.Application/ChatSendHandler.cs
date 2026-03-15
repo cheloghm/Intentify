@@ -58,27 +58,12 @@ public sealed class ChatSendHandler
     private const string ContactDetailsReceivedResponse = "Thanks — I’ve got your details. Our team will contact you shortly.";
     private const string GreetingResponse = "Hi! How can I help you today?";
     private const string AckResponse = "Got it — what would you like to know or do next?";
-    private const string LowConfidenceClarificationResponse = "I can help with that — are you asking about ordering, the menu, booking, or something else?";
-    private const string ShortPromptClarificationResponse = "Happy to help — are you looking for hours, location, contact details, or services?";
-    private const string ContactFallbackResponse = "I can help with contact details — are you looking for a phone number, email, or contact form?";
-    private const string LocationFallbackResponse = "I can help with locations — are you looking for a specific city or area?";
-    private const string HoursFallbackResponse = "I can help with hours — are you asking about weekday, weekend, or holiday times?";
-    private const string ServicesFallbackResponse = "I can help with services or menu questions. Tell me the specific service or item you’re looking for, and I’ll narrow it down.";
-    private const string OrganizationFallbackResponse = "If you’re asking about our organization, I can help with the business name, contact details, hours, location, or services. Which one do you need?";
+    private const string NeutralClarificationResponse = "Happy to help — could you share a bit more about what you need?";
     private const string SoftFallbackResponse = "I can help with that — what would you like to sort out first?";
     private const string EscalationFallbackResponse = "Thanks — I can connect you with our team. Please share your name and best email.";
     private const string PromoCommandPrefix = "/promo";
     private const string PromoResponseText = "Please complete this short promo form.";
     private const string ContactDetailsNamePrefix = "my name is";
-    private static readonly IReadOnlyDictionary<ChatIntent, BusinessResponseTemplate> BusinessResponseTemplates = new Dictionary<ChatIntent, BusinessResponseTemplate>
-    {
-        [ChatIntent.Contact] = new("ContactFallback", ContactFallbackResponse),
-        [ChatIntent.Location] = new("LocationFallback", LocationFallbackResponse),
-        [ChatIntent.Hours] = new("HoursFallback", HoursFallbackResponse),
-        [ChatIntent.Services] = new("ServicesFallback", ServicesFallbackResponse),
-        [ChatIntent.Organization] = new("OrganizationFallback", OrganizationFallbackResponse)
-    };
-
     private readonly ISiteRepository _siteRepository;
     private readonly IEngageChatSessionRepository _sessionRepository;
     private readonly IEngageBotRepository _botRepository;
@@ -232,7 +217,18 @@ public sealed class ChatSendHandler
 
         if (intent == ChatIntent.AmbiguousShortPrompt)
         {
-            return await CreateAssistantResponseAsync(session.Id, now, ShortPromptClarificationResponse, 0.35m, false, "Clarification", "AmbiguousShortPrompt", cancellationToken);
+            return await CreateLayeredFallbackResponseAsync(
+                site,
+                bot,
+                session,
+                command.Message,
+                normalizedMessage,
+                intent,
+                recentMessages,
+                [],
+                now,
+                "AmbiguousShortPrompt",
+                cancellationToken);
         }
 
         var retrieved = await _retrieveTopChunksHandler.HandleAsync(
@@ -248,7 +244,7 @@ public sealed class ChatSendHandler
         if (isLowConfidence)
         {
             _logger.LogInformation("Engage chat decision: layered fallback path for session {SessionId}.", session.Id);
-            return await CreateLayeredFallbackResponseAsync(site, bot, session, command.Message, normalizedMessage, intent, recentMessages, now, "LowConfidence", cancellationToken);
+            return await CreateLayeredFallbackResponseAsync(site, bot, session, command.Message, normalizedMessage, intent, recentMessages, retrieved, now, "LowConfidence", cancellationToken);
         }
 
         var citations = retrieved
@@ -259,7 +255,7 @@ public sealed class ChatSendHandler
         if (!completion.IsSuccess || string.IsNullOrWhiteSpace(completion.Value))
         {
             _logger.LogWarning("Engage AI completion unavailable for session {SessionId}.", session.Id);
-            return await CreateLayeredFallbackResponseAsync(site, bot, session, command.Message, normalizedMessage, intent, recentMessages, now, "AiUnavailable", cancellationToken);
+            return await CreateLayeredFallbackResponseAsync(site, bot, session, command.Message, normalizedMessage, intent, recentMessages, retrieved, now, "AiUnavailable", cancellationToken);
         }
 
         _logger.LogInformation("Engage chat decision: grounded answer path for session {SessionId}.", session.Id);
@@ -539,25 +535,16 @@ Normalized user question (for typo recovery):
         string normalizedUserMessage,
         ChatIntent intent,
         IReadOnlyCollection<EngageChatMessage> messages,
+        IReadOnlyCollection<RetrievedChunkResult> retrievedChunks,
         DateTime now,
         string reason,
         CancellationToken cancellationToken)
     {
-        if (intent == ChatIntent.AmbiguousShortPrompt)
-        {
-            return await CreateAssistantResponseAsync(session.Id, now, ShortPromptClarificationResponse, 0.35m, false, "Clarification", "AmbiguousShortPrompt", cancellationToken);
-        }
-
-        if (TryBuildBusinessAwareFallback(intent, out var businessTemplate))
-        {
-            return await CreateAssistantResponseAsync(session.Id, now, businessTemplate.Response, 0.3m, false, businessTemplate.Path, null, cancellationToken);
-        }
-
         var shouldEscalate = ShouldEscalateFallback(bot, intent, normalizedUserMessage, reason);
         if (!shouldEscalate)
         {
             var fallback = IsRealQuestion(userMessage)
-                ? BuildTargetedClarificationResponse(intent, normalizedUserMessage, messages)
+                ? await BuildBusinessAwareClarificationResponseAsync(bot, userMessage, normalizedUserMessage, intent, messages, retrievedChunks, cancellationToken)
                 : BuildSoftFallbackResponse(bot);
             return await CreateAssistantResponseAsync(session.Id, now, fallback, 0.2m, false, "Fallback", reason, cancellationToken);
         }
@@ -657,11 +644,6 @@ Normalized user question (for typo recovery):
         return ChatIntent.General;
     }
 
-    private static bool TryBuildBusinessAwareFallback(ChatIntent intent, out BusinessResponseTemplate response)
-    {
-        return BusinessResponseTemplates.TryGetValue(intent, out response!);
-    }
-
     private static bool ShouldEscalateFallback(EngageBot bot, ChatIntent intent, string userMessage, string reason)
     {
         var isActionableHelpIntent = intent == ChatIntent.EscalationHelp || NeedsHumanHelp(userMessage);
@@ -692,45 +674,73 @@ Normalized user question (for typo recovery):
         };
     }
 
-    private static string BuildTargetedClarificationResponse(
-        ChatIntent intent,
+    private async Task<string> BuildBusinessAwareClarificationResponseAsync(
+        EngageBot bot,
+        string userMessage,
         string normalizedUserMessage,
-        IReadOnlyCollection<EngageChatMessage> messages)
+        ChatIntent intent,
+        IReadOnlyCollection<EngageChatMessage> messages,
+        IReadOnlyCollection<RetrievedChunkResult> retrievedChunks,
+        CancellationToken cancellationToken)
     {
-        var recentUserTurns = messages
-            .Where(item => string.Equals(item.Role, "user", StringComparison.OrdinalIgnoreCase))
-            .OrderBy(item => item.CreatedAtUtc)
-            .TakeLast(3)
-            .Select(item => NormalizeUserMessage(item.Content))
-            .Where(item => !string.IsNullOrWhiteSpace(item))
-            .ToArray();
-
-        var orderFlowHint = recentUserTurns.Any(item => item.Contains("order", StringComparison.Ordinal))
-            || recentUserTurns.Any(item => item.Contains("recommend", StringComparison.Ordinal))
-            || recentUserTurns.Any(item => item.Contains("cocktail", StringComparison.Ordinal))
-            || normalizedUserMessage.Contains("order", StringComparison.Ordinal)
-            || normalizedUserMessage.Contains("recommend", StringComparison.Ordinal)
-            || normalizedUserMessage.Contains("cocktail", StringComparison.Ordinal);
-
-        if (orderFlowHint)
+        var prompt = BuildClarificationPrompt(bot, userMessage, normalizedUserMessage, intent, messages, retrievedChunks);
+        var completion = await _chatCompletionClient.CompleteAsync(prompt, cancellationToken);
+        if (!completion.IsSuccess || string.IsNullOrWhiteSpace(completion.Value))
         {
-            var ginHint = recentUserTurns.Any(item => item.Contains("gin", StringComparison.Ordinal))
-                || normalizedUserMessage.Contains("gin", StringComparison.Ordinal);
-
-            return ginHint
-                ? "I can help narrow that down. Do you want something refreshing, citrusy, or more spirit-forward?"
-                : "Sure — are you looking for recommendations, prices, or how to place an order?";
+            return NeutralClarificationResponse;
         }
 
-        return intent switch
-        {
-            ChatIntent.Contact => "I can help with contact details — do you want a phone number, email, or contact form?",
-            ChatIntent.Location => "I can help with locations — which city or area are you interested in?",
-            ChatIntent.Hours => "I can help with hours — are you asking about weekday, weekend, or holiday times?",
-            ChatIntent.Services => "I can help with that — are you asking about ordering, the menu, or booking?",
-            ChatIntent.Organization => "I can help with that — do you need the business name, contact details, or location?",
-            _ => LowConfidenceClarificationResponse
-        };
+        return NormalizeAiResponse(completion.Value);
+    }
+
+    private static string BuildClarificationPrompt(
+        EngageBot bot,
+        string userMessage,
+        string normalizedUserMessage,
+        ChatIntent intent,
+        IReadOnlyCollection<EngageChatMessage> messages,
+        IReadOnlyCollection<RetrievedChunkResult> retrievedChunks)
+    {
+        var tone = ResolvePromptTone(bot.Tone);
+        var recentTurns = string.Join("\n", messages
+            .TakeLast(PromptReplayMessageLimit)
+            .Select(item => $"{(string.Equals(item.Role, "assistant", StringComparison.OrdinalIgnoreCase) ? "Assistant" : "User")}: {item.Content.Trim()}"));
+        var distilledContext = BuildDistilledContext(messages, userMessage);
+        var chunkContext = string.Join("\n", retrievedChunks
+            .Select(item => item.Content.Trim())
+            .Where(item => !string.IsNullOrWhiteSpace(item))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(3)
+            .Select((item, index) => $"[{index + 1}] {item}"));
+
+        return $"""
+You are a human-sounding assistant for a business website chat.
+
+Write exactly one short reply for a low-support situation.
+- Keep a {tone} tone.
+- Do not mention internal systems, confidence, reliability, or knowledge base details.
+- Do not invent unsupported specifics.
+- Use business cues only if supported by the conversation or context snippets.
+- If context is weak or business type is unclear, ask one neutral clarification question.
+- Keep it concise and practical.
+
+Detected intent: {intent}
+
+Retrieved business context snippets:
+{(string.IsNullOrWhiteSpace(chunkContext) ? "none" : chunkContext)}
+
+Conversation transcript (oldest to newest):
+{(string.IsNullOrWhiteSpace(recentTurns) ? "none" : recentTurns)}
+
+Distilled prior user context:
+{distilledContext}
+
+Current user message:
+{userMessage}
+
+Normalized user message:
+{normalizedUserMessage}
+""";
     }
 
     private static string ResolvePromptTone(string? tone)
@@ -1156,8 +1166,6 @@ Normalized user question (for typo recovery):
 
         return value.Trim();
     }
-
-    private sealed record BusinessResponseTemplate(string Path, string Response);
 
     private enum ChatIntent
     {
