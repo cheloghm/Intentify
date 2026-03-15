@@ -62,6 +62,6 @@ public sealed record ConversationMessageResponse(
     IReadOnlyCollection<EngageCitationResponse> Citations);
 
 
-public sealed record EngageBotResponse(string SiteId, string Name, string? PrimaryColor = null, bool? LauncherVisible = null);
+public sealed record EngageBotResponse(string SiteId, string Name, string? PrimaryColor = null, bool? LauncherVisible = null, string? Tone = null, string? Verbosity = null, string? FallbackStyle = null);
 
-public sealed record UpdateEngageBotRequest(string Name, string? PrimaryColor = null, bool? LauncherVisible = null);
+public sealed record UpdateEngageBotRequest(string Name, string? PrimaryColor = null, bool? LauncherVisible = null, string? Tone = null, string? Verbosity = null, string? FallbackStyle = null);

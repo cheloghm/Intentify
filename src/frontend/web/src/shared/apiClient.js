@@ -288,6 +288,9 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
         name,
         primaryColor: settings.primaryColor,
         launcherVisible: settings.launcherVisible,
+        tone: settings.tone,
+        verbosity: settings.verbosity,
+        fallbackStyle: settings.fallbackStyle,
       }),
     });
 

@@ -135,6 +135,9 @@ export const renderEngageView = (container, { apiClient, toast } = {}) => {
     botName: 'Assistant',
     primaryColor: '#2563eb',
     launcherVisible: true,
+    tone: 'warm',
+    verbosity: 'balanced',
+    fallbackStyle: 'refine',
   };
 
   const page = document.createElement('div');
@@ -246,12 +249,59 @@ export const renderEngageView = (container, { apiClient, toast } = {}) => {
 
   launcherVisibleWrap.append(launcherVisibleInput, launcherVisibleText);
 
+  const personalityField = document.createElement('label');
+  personalityField.style.display = 'flex';
+  personalityField.style.flexDirection = 'column';
+  personalityField.style.gap = '6px';
+
+  const personalityLabel = document.createElement('span');
+  personalityLabel.textContent = 'Bot personality';
+  personalityLabel.style.fontSize = '13px';
+
+  const toneInput = document.createElement('select');
+  toneInput.style.padding = '8px 10px';
+  toneInput.style.borderRadius = '6px';
+  toneInput.style.border = '1px solid #cbd5e1';
+  [['warm', 'Warm'], ['professional', 'Professional'], ['casual', 'Casual']].forEach(([value, label]) => {
+    const option = document.createElement('option');
+    option.value = value;
+    option.textContent = label;
+    toneInput.appendChild(option);
+  });
+
+  const verbosityInput = document.createElement('select');
+  verbosityInput.style.padding = '8px 10px';
+  verbosityInput.style.borderRadius = '6px';
+  verbosityInput.style.border = '1px solid #cbd5e1';
+  [['brief', 'Brief'], ['balanced', 'Balanced'], ['detailed', 'Detailed']].forEach(([value, label]) => {
+    const option = document.createElement('option');
+    option.value = value;
+    option.textContent = label;
+    verbosityInput.appendChild(option);
+  });
+
+  const fallbackStyleInput = document.createElement('select');
+  fallbackStyleInput.style.padding = '8px 10px';
+  fallbackStyleInput.style.borderRadius = '6px';
+  fallbackStyleInput.style.border = '1px solid #cbd5e1';
+  [['refine', 'Refine first'], ['handoff', 'Offer handoff first']].forEach(([value, label]) => {
+    const option = document.createElement('option');
+    option.value = value;
+    option.textContent = label;
+    fallbackStyleInput.appendChild(option);
+  });
+
+  const savePersonalityButton = createButton({ label: 'Save personality', variant: 'primary' });
+  savePersonalityButton.style.width = 'fit-content';
+
+  personalityField.append(personalityLabel, toneInput, verbosityInput, fallbackStyleInput, savePersonalityButton);
+
   const saveAppearanceButton = createButton({ label: 'Save appearance', variant: 'primary' });
   saveAppearanceButton.style.width = 'fit-content';
 
   primaryColorField.append(primaryColorLabel, primaryColorInput, launcherVisibleWrap, saveAppearanceButton);
 
-  configBody.append(siteField, widgetWrap, botNameField, primaryColorField);
+  configBody.append(siteField, widgetWrap, botNameField, primaryColorField, personalityField);
 
   const installBody = document.createElement('div');
   installBody.style.display = 'flex';
@@ -686,9 +736,15 @@ const label = document.createElement('div');
       state.botName = 'Assistant';
       state.primaryColor = '#2563eb';
       state.launcherVisible = true;
+      state.tone = 'warm';
+      state.verbosity = 'balanced';
+      state.fallbackStyle = 'refine';
       botNameInput.value = '';
       primaryColorInput.value = state.primaryColor;
       launcherVisibleInput.checked = state.launcherVisible;
+      toneInput.value = state.tone;
+      verbosityInput.value = state.verbosity;
+      fallbackStyleInput.value = state.fallbackStyle;
       renderTranscript();
       return;
     }
@@ -698,17 +754,29 @@ const label = document.createElement('div');
       state.botName = bot?.name || 'Assistant';
       state.primaryColor = bot?.primaryColor || '#2563eb';
       state.launcherVisible = typeof bot?.launcherVisible === 'boolean' ? bot.launcherVisible : true;
+      state.tone = bot?.tone || 'warm';
+      state.verbosity = bot?.verbosity || 'balanced';
+      state.fallbackStyle = bot?.fallbackStyle || 'refine';
       botNameInput.value = state.botName;
       primaryColorInput.value = state.primaryColor;
       launcherVisibleInput.checked = state.launcherVisible;
+      toneInput.value = state.tone;
+      verbosityInput.value = state.verbosity;
+      fallbackStyleInput.value = state.fallbackStyle;
       renderTranscript();
     } catch (error) {
       state.botName = 'Assistant';
       state.primaryColor = '#2563eb';
       state.launcherVisible = true;
+      state.tone = 'warm';
+      state.verbosity = 'balanced';
+      state.fallbackStyle = 'refine';
       botNameInput.value = '';
       primaryColorInput.value = state.primaryColor;
       launcherVisibleInput.checked = state.launcherVisible;
+      toneInput.value = state.tone;
+      verbosityInput.value = state.verbosity;
+      fallbackStyleInput.value = state.fallbackStyle;
       notifier.show({ message: mapApiError(error).message, variant: 'danger' });
     }
   };
@@ -724,13 +792,22 @@ const label = document.createElement('div');
       const updated = await client.engage.updateBot(state.siteId, botNameInput.value.trim() || state.botName || 'Assistant', {
         primaryColor: primaryColorInput.value,
         launcherVisible: launcherVisibleInput.checked,
+        tone: toneInput.value,
+        verbosity: verbosityInput.value,
+        fallbackStyle: fallbackStyleInput.value,
       });
       state.botName = updated?.name || botNameInput.value.trim() || state.botName || 'Assistant';
       state.primaryColor = updated?.primaryColor || primaryColorInput.value || '#2563eb';
       state.launcherVisible = typeof updated?.launcherVisible === 'boolean' ? updated.launcherVisible : launcherVisibleInput.checked;
+      state.tone = updated?.tone || toneInput.value || 'warm';
+      state.verbosity = updated?.verbosity || verbosityInput.value || 'balanced';
+      state.fallbackStyle = updated?.fallbackStyle || fallbackStyleInput.value || 'refine';
       botNameInput.value = state.botName;
       primaryColorInput.value = state.primaryColor;
       launcherVisibleInput.checked = state.launcherVisible;
+      toneInput.value = state.tone;
+      verbosityInput.value = state.verbosity;
+      fallbackStyleInput.value = state.fallbackStyle;
       notifier.show({ message: 'Widget appearance saved.', variant: 'success' });
       renderTranscript();
     } catch (error) {
@@ -757,19 +834,58 @@ const label = document.createElement('div');
       const updated = await client.engage.updateBot(state.siteId, name, {
         primaryColor: primaryColorInput.value,
         launcherVisible: launcherVisibleInput.checked,
+        tone: toneInput.value,
+        verbosity: verbosityInput.value,
+        fallbackStyle: fallbackStyleInput.value,
       });
       state.botName = updated?.name || name;
       state.primaryColor = updated?.primaryColor || primaryColorInput.value || '#2563eb';
       state.launcherVisible = typeof updated?.launcherVisible === 'boolean' ? updated.launcherVisible : launcherVisibleInput.checked;
+      state.tone = updated?.tone || toneInput.value || 'warm';
+      state.verbosity = updated?.verbosity || verbosityInput.value || 'balanced';
+      state.fallbackStyle = updated?.fallbackStyle || fallbackStyleInput.value || 'refine';
       botNameInput.value = state.botName;
       primaryColorInput.value = state.primaryColor;
       launcherVisibleInput.checked = state.launcherVisible;
+      toneInput.value = state.tone;
+      verbosityInput.value = state.verbosity;
+      fallbackStyleInput.value = state.fallbackStyle;
       notifier.show({ message: 'Bot settings saved.', variant: 'success' });
       renderTranscript();
     } catch (error) {
       notifier.show({ message: mapApiError(error).message, variant: 'danger' });
     } finally {
       saveBotNameButton.disabled = false;
+    }
+  });
+
+
+  savePersonalityButton.addEventListener('click', async () => {
+    if (!state.siteId) {
+      notifier.show({ message: 'Select a site first.', variant: 'warning' });
+      return;
+    }
+
+    savePersonalityButton.disabled = true;
+    try {
+      const updated = await client.engage.updateBot(state.siteId, botNameInput.value.trim() || state.botName || 'Assistant', {
+        primaryColor: primaryColorInput.value,
+        launcherVisible: launcherVisibleInput.checked,
+        tone: toneInput.value,
+        verbosity: verbosityInput.value,
+        fallbackStyle: fallbackStyleInput.value,
+      });
+      state.tone = updated?.tone || toneInput.value || 'warm';
+      state.verbosity = updated?.verbosity || verbosityInput.value || 'balanced';
+      state.fallbackStyle = updated?.fallbackStyle || fallbackStyleInput.value || 'refine';
+      toneInput.value = state.tone;
+      verbosityInput.value = state.verbosity;
+      fallbackStyleInput.value = state.fallbackStyle;
+      notifier.show({ message: 'Bot personality saved.', variant: 'success' });
+    } catch (error) {
+      notifier.show({ message: mapApiError(error).message, variant: 'danger' });
+    } finally {
+      savePersonalityButton.disabled = false;
     }
   });
 

@@ -17,6 +17,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
+using MongoDB.Bson;
 using MongoDB.Driver;
 using Xunit;
 
@@ -493,6 +494,124 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ChatSend_FallbackStyleHandoff_DoesNotAutoTicket_VagueLowConfidenceMessage()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var updateBot = await SendAuthorizedAsync(
+            HttpMethod.Put,
+            $"/engage/bot?siteId={site.SiteId}",
+            token,
+            JsonContent.Create(new { name = "Assistant", fallbackStyle = "handoff" }));
+        Assert.Equal(HttpStatusCode.OK, updateBot.StatusCode);
+
+        var response = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "tell me stuff"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var sessionId = Guid.Parse(json.RootElement.GetProperty("sessionId").GetString()!);
+        Assert.False(json.RootElement.GetProperty("ticketCreated").GetBoolean());
+
+        var database = new MongoClient(_mongo.ConnectionString).GetDatabase(_mongo.DatabaseName);
+        var handoffTickets = database.GetCollection<BsonEngageTicket>("EngageHandoffTickets");
+        var handoffCount = await handoffTickets.CountDocumentsAsync(item => item.SessionId == sessionId);
+        Assert.Equal(0, handoffCount);
+
+        var tickets = database.GetCollection<BsonTicket>("tickets");
+        var createdTicket = await tickets.Find(item => item.EngageSessionId == sessionId).FirstOrDefaultAsync();
+        Assert.Null(createdTicket);
+    }
+
+    [Fact]
+    public async Task ChatSend_FallbackStyleHandoff_Escalates_ForRealQuestion()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var updateBot = await SendAuthorizedAsync(
+            HttpMethod.Put,
+            $"/engage/bot?siteId={site.SiteId}",
+            token,
+            JsonContent.Create(new { name = "Assistant", fallbackStyle = "handoff" }));
+        Assert.Equal(HttpStatusCode.OK, updateBot.StatusCode);
+
+        var response = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "what is your cancellation policy?"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var sessionId = Guid.Parse(json.RootElement.GetProperty("sessionId").GetString()!);
+        Assert.True(json.RootElement.GetProperty("ticketCreated").GetBoolean());
+
+        var database = new MongoClient(_mongo.ConnectionString).GetDatabase(_mongo.DatabaseName);
+        var tickets = database.GetCollection<BsonTicket>("tickets");
+        var createdTicket = await tickets.Find(item => item.EngageSessionId == sessionId).FirstOrDefaultAsync();
+        Assert.NotNull(createdTicket);
+    }
+
+    [Fact]
+    public async Task ChatSend_PromptAllowlist_UsesSafeDefaults_ForUnexpectedStoredPersonality()
+    {
+        var capturedPrompt = string.Empty;
+
+        var builder = AppHostApplication.CreateBuilder([], Environments.Development);
+        builder.WebHost.UseTestServer();
+        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Intentify:Jwt:Issuer"] = "intentify",
+            ["Intentify:Jwt:Audience"] = "intentify-users",
+            ["Intentify:Jwt:SigningKey"] = "test-signing-key-1234567890-EXTRA-KEY",
+            ["Intentify:Jwt:AccessTokenMinutes"] = "30",
+            ["Intentify:Mongo:ConnectionString"] = _mongo.ConnectionString,
+            ["Intentify:Mongo:DatabaseName"] = _mongo.DatabaseName
+        });
+
+        builder.WebHost.ConfigureTestServices(services =>
+        {
+            services.RemoveAll<IChatCompletionClient>();
+            services.AddSingleton<IChatCompletionClient>(new FakeChatCompletionClient(prompt =>
+            {
+                capturedPrompt = prompt;
+                return Result<string>.Success("Return policy is 30 days with original receipt.");
+            }));
+        });
+
+        await using var app = AppHostApplication.Build(builder);
+        await app.StartAsync();
+        using var client = app.GetTestClient();
+
+        var token = await RegisterUserAsync(client);
+        var site = await CreateSiteAsync(client, token);
+        await AddKnowledgeAsync(client, token, site.SiteId, "Return policy is 30 days with original receipt.");
+
+        var database = new MongoClient(_mongo.ConnectionString).GetDatabase(_mongo.DatabaseName);
+        var bots = database.GetCollection<BsonDocument>("EngageBots");
+        await bots.UpdateOneAsync(
+            Builders<BsonDocument>.Filter.Eq("siteId", Guid.Parse(site.SiteId)),
+            Builders<BsonDocument>.Update
+                .Set("tone", "!!!unexpected-tone!!!")
+                .Set("verbosity", "!!!unexpected-verbosity!!!"));
+
+        var response = await client.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "what is your return policy?"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("- Keep a warm tone.", capturedPrompt, StringComparison.Ordinal);
+        Assert.Contains("- Keep verbosity balanced.", capturedPrompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ChatSend_AmbiguousShortPrompt_ReturnsClarification()
     {
         var token = await RegisterUserAsync();
@@ -524,7 +643,7 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        Assert.Equal("I don’t have a verified contact detail in the knowledge base yet. You can share the best way to reach you and I can pass it to our team.", json.RootElement.GetProperty("response").GetString());
+        Assert.Equal("I don’t see a verified contact detail in the knowledge base yet. If you share how you’d like to be reached, I can pass it to our team.", json.RootElement.GetProperty("response").GetString());
         Assert.False(json.RootElement.GetProperty("ticketCreated").GetBoolean());
     }
 
