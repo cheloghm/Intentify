@@ -1,3 +1,4 @@
+using Intentify.Modules.Sites.Application;
 using Intentify.Modules.Knowledge.Domain;
 using Intentify.Shared.Validation;
 
@@ -7,11 +8,13 @@ public sealed class CreateKnowledgeSourceHandler
 {
     private readonly IKnowledgeSourceRepository _sourceRepository;
     private readonly IEngageBotResolver _botResolver;
+    private readonly ISiteRepository _siteRepository;
 
-    public CreateKnowledgeSourceHandler(IKnowledgeSourceRepository sourceRepository, IEngageBotResolver botResolver)
+    public CreateKnowledgeSourceHandler(IKnowledgeSourceRepository sourceRepository, IEngageBotResolver botResolver, ISiteRepository siteRepository)
     {
         _sourceRepository = sourceRepository;
         _botResolver = botResolver;
+        _siteRepository = siteRepository;
     }
 
     public async Task<OperationResult<CreateKnowledgeSourceResult>> HandleAsync(CreateKnowledgeSourceCommand command, CancellationToken cancellationToken = default)
@@ -47,6 +50,12 @@ public sealed class CreateKnowledgeSourceHandler
         if (errors.HasErrors)
         {
             return OperationResult<CreateKnowledgeSourceResult>.ValidationFailed(errors);
+        }
+
+        var site = await _siteRepository.GetByTenantAndIdAsync(command.TenantId, command.SiteId, cancellationToken);
+        if (site is null)
+        {
+            return OperationResult<CreateKnowledgeSourceResult>.NotFound();
         }
 
         var botId = await _botResolver.GetOrCreateForSiteAsync(command.TenantId, command.SiteId, cancellationToken);

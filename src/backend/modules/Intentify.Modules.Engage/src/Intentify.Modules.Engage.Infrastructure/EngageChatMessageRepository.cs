@@ -8,11 +8,13 @@ namespace Intentify.Modules.Engage.Infrastructure;
 public sealed class EngageChatMessageRepository : IEngageChatMessageRepository
 {
     private readonly IMongoCollection<EngageChatMessage> _messages;
+    private readonly IMongoCollection<EngageChatSession> _sessions;
     private readonly Task _ensureIndexes;
 
     public EngageChatMessageRepository(IMongoDatabase database)
     {
         _messages = database.GetCollection<EngageChatMessage>(EngageMongoCollections.ChatMessages);
+        _sessions = database.GetCollection<EngageChatSession>(EngageMongoCollections.ChatSessions);
         _ensureIndexes = EnsureIndexesAsync();
     }
 
@@ -25,6 +27,25 @@ public sealed class EngageChatMessageRepository : IEngageChatMessageRepository
     public async Task<IReadOnlyCollection<EngageChatMessage>> ListBySessionAsync(Guid sessionId, CancellationToken cancellationToken = default)
     {
         await _ensureIndexes;
+        var results = await _messages.Find(item => item.SessionId == sessionId)
+            .SortBy(item => item.CreatedAtUtc)
+            .ToListAsync(cancellationToken);
+        return results;
+    }
+
+    public async Task<IReadOnlyCollection<EngageChatMessage>> ListBySessionAsync(Guid tenantId, Guid siteId, Guid sessionId, CancellationToken cancellationToken = default)
+    {
+        await _ensureIndexes;
+
+        var hasScopedSession = await _sessions.Find(item => item.Id == sessionId && item.TenantId == tenantId && item.SiteId == siteId)
+            .Limit(1)
+            .AnyAsync(cancellationToken);
+
+        if (!hasScopedSession)
+        {
+            return [];
+        }
+
         var results = await _messages.Find(item => item.SessionId == sessionId)
             .SortBy(item => item.CreatedAtUtc)
             .ToListAsync(cancellationToken);

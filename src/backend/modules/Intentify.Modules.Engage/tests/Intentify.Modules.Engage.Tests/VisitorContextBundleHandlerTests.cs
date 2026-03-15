@@ -265,6 +265,9 @@ public sealed class VisitorContextBundleHandlerTests
         public Task<EngageChatSession?> GetByIdAsync(Guid sessionId, CancellationToken cancellationToken = default)
             => Task.FromResult(sessions.FirstOrDefault(item => item.Id == sessionId));
 
+        public Task<EngageChatSession?> GetByIdAsync(Guid tenantId, Guid siteId, Guid sessionId, CancellationToken cancellationToken = default)
+            => Task.FromResult(sessions.FirstOrDefault(item => item.Id == sessionId && item.TenantId == tenantId && item.SiteId == siteId));
+
         public Task InsertAsync(EngageChatSession session, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task TouchAsync(Guid sessionId, DateTime timestampUtc, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task SetCollectorSessionIdIfEmptyAsync(Guid sessionId, string collectorSessionId, CancellationToken cancellationToken = default) => Task.CompletedTask;
@@ -278,6 +281,9 @@ public sealed class VisitorContextBundleHandlerTests
         public Task InsertAsync(EngageChatMessage message, CancellationToken cancellationToken = default) => Task.CompletedTask;
 
         public Task<IReadOnlyCollection<EngageChatMessage>> ListBySessionAsync(Guid sessionId, CancellationToken cancellationToken = default)
+            => Task.FromResult((IReadOnlyCollection<EngageChatMessage>)messages.Where(item => item.SessionId == sessionId).ToArray());
+
+        public Task<IReadOnlyCollection<EngageChatMessage>> ListBySessionAsync(Guid tenantId, Guid siteId, Guid sessionId, CancellationToken cancellationToken = default)
             => Task.FromResult((IReadOnlyCollection<EngageChatMessage>)messages.Where(item => item.SessionId == sessionId).ToArray());
     }
 

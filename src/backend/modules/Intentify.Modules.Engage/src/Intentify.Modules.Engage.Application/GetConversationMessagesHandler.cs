@@ -15,13 +15,13 @@ public sealed class GetConversationMessagesHandler
 
     public async Task<OperationResult<IReadOnlyCollection<ConversationMessageResult>>> HandleAsync(GetConversationMessagesQuery query, CancellationToken cancellationToken = default)
     {
-        var session = await _sessionRepository.GetByIdAsync(query.SessionId, cancellationToken);
+        var session = await _sessionRepository.GetByIdAsync(query.TenantId, query.SiteId, query.SessionId, cancellationToken);
         if (session is null || session.TenantId != query.TenantId || session.SiteId != query.SiteId)
         {
             return OperationResult<IReadOnlyCollection<ConversationMessageResult>>.NotFound();
         }
 
-        var messages = await _messageRepository.ListBySessionAsync(query.SessionId, cancellationToken);
+        var messages = await _messageRepository.ListBySessionAsync(query.TenantId, query.SiteId, query.SessionId, cancellationToken);
         return OperationResult<IReadOnlyCollection<ConversationMessageResult>>.Success(messages
             .OrderBy(item => item.CreatedAtUtc)
             .Select(item => new ConversationMessageResult(

@@ -265,6 +265,16 @@ public sealed class RecommendationExecutorTests
                 UpdatedAtUtc = DateTime.UtcNow
             });
         }
+        public Task<EngageChatSession?> GetByIdAsync(Guid tenantIdArg, Guid siteIdArg, Guid sessionId, CancellationToken cancellationToken = default)
+        {
+            if (tenantIdArg != tenantId || siteIdArg != siteId)
+            {
+                return Task.FromResult<EngageChatSession?>(null);
+            }
+
+            return GetByIdAsync(sessionId, cancellationToken);
+        }
+
 
         public Task InsertAsync(EngageChatSession session, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task TouchAsync(Guid sessionId, DateTime timestampUtc, CancellationToken cancellationToken = default) => Task.CompletedTask;

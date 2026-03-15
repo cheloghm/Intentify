@@ -4,6 +4,8 @@ using Intentify.Modules.Sites.Application;
 using Intentify.Shared.Validation;
 using Intentify.Shared.Web;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
 
 namespace Intentify.Modules.Engage.Api;
 
@@ -25,14 +27,14 @@ internal static class EngageEndpoints
         return Results.Text(content, "application/javascript; charset=utf-8");
     }
 
-    public static async Task<IResult> WidgetBootstrapAsync(string widgetKey, WidgetBootstrapHandler handler, IEngageBotRepository botRepository, ISiteRepository siteRepository, HttpContext context)
+    public static async Task<IResult> WidgetBootstrapAsync(string widgetKey, WidgetBootstrapHandler handler, IEngageBotRepository botRepository, ISiteRepository siteRepository, HttpContext context, IHostEnvironment environment, IConfiguration configuration)
     {
         var result = await handler.HandleAsync(new WidgetBootstrapQuery(widgetKey), context.RequestAborted);
         return result.Status switch
         {
             OperationStatus.ValidationFailed => Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(result.Errors!.Errors)),
             OperationStatus.NotFound => Results.NotFound(),
-            _ => await BuildWidgetBootstrapOkAsync(result.Value!, widgetKey, botRepository, siteRepository, context)
+            _ => await BuildWidgetBootstrapOkAsync(result.Value!, widgetKey, botRepository, siteRepository, context, environment, configuration)
         };
     }
 
@@ -41,9 +43,16 @@ internal static class EngageEndpoints
         string widgetKey,
         IEngageBotRepository botRepository,
         ISiteRepository siteRepository,
-        HttpContext context)
+        HttpContext context,
+        IHostEnvironment environment,
+        IConfiguration configuration)
     {
         var site = await siteRepository.GetByWidgetKeyAsync(widgetKey, context.RequestAborted);
+        var originCheck = EnsurePublicOriginAllowed(site, context, environment, configuration);
+        if (originCheck is not null)
+        {
+            return originCheck;
+        }
         var displayName = "Assistant";
         var botName = "Assistant";
         string? primaryColor = null;
@@ -70,7 +79,10 @@ internal static class EngageEndpoints
         EngageChatSendRequest request,
         string? widgetKey,
         ChatSendHandler handler,
-        HttpContext context)
+        ISiteRepository siteRepository,
+        HttpContext context,
+        IHostEnvironment environment,
+        IConfiguration configuration)
     {
         var queryWidgetKey = NormalizeOptional(widgetKey);
         var bodyWidgetKey = NormalizeOptional(request.WidgetKey);
@@ -86,6 +98,16 @@ internal static class EngageEndpoints
         }
 
         var resolvedWidgetKey = bodyWidgetKey ?? queryWidgetKey;
+
+        if (!string.IsNullOrWhiteSpace(resolvedWidgetKey))
+        {
+            var site = await siteRepository.GetByWidgetKeyAsync(resolvedWidgetKey, context.RequestAborted);
+            var originCheck = EnsurePublicOriginAllowed(site, context, environment, configuration);
+            if (originCheck is not null)
+            {
+                return originCheck;
+            }
+        }
 
         Guid? sessionId = null;
         var normalizedSessionId = NormalizeOptional(request.SessionId);
@@ -219,11 +241,21 @@ internal static class EngageEndpoints
     }
 
 
-    public static async Task<IResult> GetWidgetConversationMessagesAsync(string sessionId, string? widgetKey, HttpContext context, GetWidgetConversationMessagesHandler handler)
+    public static async Task<IResult> GetWidgetConversationMessagesAsync(string sessionId, string? widgetKey, HttpContext context, GetWidgetConversationMessagesHandler handler, ISiteRepository siteRepository, IHostEnvironment environment, IConfiguration configuration)
     {
         if (!Guid.TryParse(sessionId, out var parsedSessionId))
         {
             return Results.NotFound();
+        }
+
+        if (!string.IsNullOrWhiteSpace(widgetKey))
+        {
+            var site = await siteRepository.GetByWidgetKeyAsync(widgetKey, context.RequestAborted);
+            var originCheck = EnsurePublicOriginAllowed(site, context, environment, configuration);
+            if (originCheck is not null)
+            {
+                return originCheck;
+            }
         }
 
         var result = await handler.HandleAsync(new GetWidgetConversationMessagesQuery(widgetKey ?? string.Empty, parsedSessionId), context.RequestAborted);
@@ -287,6 +319,72 @@ internal static class EngageEndpoints
     }
 
 
+
+    private static IResult? EnsurePublicOriginAllowed(
+        Intentify.Modules.Sites.Domain.Site? site,
+        HttpContext context,
+        IHostEnvironment environment,
+        IConfiguration configuration)
+    {
+        if (site is null)
+        {
+            return Results.NotFound();
+        }
+
+        if (!OriginNormalizer.TryNormalize(TryResolveOrigin(context.Request), out var normalizedOrigin))
+        {
+            return Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(new Dictionary<string, string[]>
+            {
+                ["origin"] = ["Origin or Referer header is required to determine the request origin."]
+            }));
+        }
+
+        if (!site.AllowedOrigins.Contains(normalizedOrigin, StringComparer.OrdinalIgnoreCase)
+            && !CanBypassOriginValidation(normalizedOrigin, environment, configuration))
+        {
+            return Results.StatusCode(StatusCodes.Status403Forbidden);
+        }
+
+        return null;
+    }
+
+    private static bool CanBypassOriginValidation(string normalizedOrigin, IHostEnvironment environment, IConfiguration configuration)
+    {
+        if (!environment.IsDevelopment())
+        {
+            var allowLocalhost = configuration.GetValue<bool>("Intentify:Sites:AllowLocalhostInstallStatus");
+            if (!allowLocalhost)
+            {
+                return false;
+            }
+        }
+
+        if (!Uri.TryCreate(normalizedOrigin, UriKind.Absolute, out var uri))
+        {
+            return false;
+        }
+
+        return uri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase) || uri.Host == "127.0.0.1";
+    }
+
+    private static string? TryResolveOrigin(HttpRequest request)
+    {
+        if (request.Headers.TryGetValue("Origin", out var originValues))
+        {
+            return originValues.ToString();
+        }
+
+        if (request.Headers.TryGetValue("Referer", out var refererValues))
+        {
+            var referer = refererValues.ToString();
+            if (Uri.TryCreate(referer, UriKind.Absolute, out var uri))
+            {
+                return uri.GetLeftPart(UriPartial.Authority);
+            }
+        }
+
+        return null;
+    }
 
     private static EngageAiDecisionResponse? ToStage7DecisionResponse(AiDecisionContract? decision)
     {

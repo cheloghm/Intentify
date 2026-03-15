@@ -4,6 +4,8 @@ using System.Reflection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Intentify.Modules.Knowledge.Application;
 using Intentify.Modules.Knowledge.Domain;
+using Intentify.Modules.Sites.Application;
+using Intentify.Modules.Sites.Domain;
 using Xunit;
 
 namespace Intentify.Modules.Knowledge.Tests;
@@ -15,7 +17,7 @@ public sealed class KnowledgeApplicationTests
     {
         var sourceRepo = new RecordingSourceRepository();
         var botId = Guid.NewGuid();
-        var handler = new CreateKnowledgeSourceHandler(sourceRepo, new StubBotResolver(botId));
+        var handler = new CreateKnowledgeSourceHandler(sourceRepo, new StubBotResolver(botId), new StubSiteRepository());
 
         var result = await handler.HandleAsync(new CreateKnowledgeSourceCommand(Guid.NewGuid(), Guid.NewGuid(), "Text", "name", null, "content"));
 
@@ -319,7 +321,7 @@ public sealed class IndexingStatusTransitionTests
 
         var sourceRepo = new InMemorySourceRepository(source);
         var chunkRepo = new InMemoryChunkRepository();
-        var handler = new IndexKnowledgeSourceHandler(sourceRepo, chunkRepo, new KnowledgeTextExtractor(new FakeFactory(_ => new HttpResponseMessage(HttpStatusCode.OK))), new KnowledgeChunker());
+        var handler = new IndexKnowledgeSourceHandler(sourceRepo, chunkRepo, new KnowledgeTextExtractor(new FakeFactory(_ => new HttpResponseMessage(HttpStatusCode.OK))), new KnowledgeChunker(), new StubSiteRepository());
 
         var result = await handler.HandleAsync(new IndexKnowledgeSourceCommand(source.TenantId, source.Id));
 
@@ -348,7 +350,7 @@ public sealed class IndexingStatusTransitionTests
 
         var sourceRepo = new InMemorySourceRepository(source);
         var chunkRepo = new InMemoryChunkRepository();
-        var handler = new IndexKnowledgeSourceHandler(sourceRepo, chunkRepo, new KnowledgeTextExtractor(new FakeFactory(_ => new HttpResponseMessage(HttpStatusCode.OK))), new KnowledgeChunker());
+        var handler = new IndexKnowledgeSourceHandler(sourceRepo, chunkRepo, new KnowledgeTextExtractor(new FakeFactory(_ => new HttpResponseMessage(HttpStatusCode.OK))), new KnowledgeChunker(), new StubSiteRepository());
 
         var result = await handler.HandleAsync(new IndexKnowledgeSourceCommand(source.TenantId, source.Id));
 
@@ -375,7 +377,7 @@ public sealed class IndexingStatusTransitionTests
 
         var sourceRepo = new InMemorySourceRepository(source);
         var chunkRepo = new InMemoryChunkRepository();
-        var handler = new IndexKnowledgeSourceHandler(sourceRepo, chunkRepo, new KnowledgeTextExtractor(new FakeFactory(_ => new HttpResponseMessage(HttpStatusCode.OK))), new KnowledgeChunker());
+        var handler = new IndexKnowledgeSourceHandler(sourceRepo, chunkRepo, new KnowledgeTextExtractor(new FakeFactory(_ => new HttpResponseMessage(HttpStatusCode.OK))), new KnowledgeChunker(), new StubSiteRepository());
 
         var result = await handler.HandleAsync(new IndexKnowledgeSourceCommand(source.TenantId, source.Id));
 
@@ -517,4 +519,19 @@ internal sealed class FakeMessageHandler : HttpMessageHandler
     {
         return Task.FromResult(_handler(request));
     }
+
+    private sealed class StubSiteRepository : ISiteRepository
+    {
+        public Task<Site?> GetByTenantAndDomainAsync(Guid tenantId, string domain, CancellationToken cancellationToken = default) => Task.FromResult<Site?>(null);
+        public Task<Site?> GetByTenantAndIdAsync(Guid tenantId, Guid siteId, CancellationToken cancellationToken = default)
+            => Task.FromResult<Site?>(new Site { TenantId = tenantId, Id = siteId, Domain = "example.com", SiteKey = "site-key", WidgetKey = "widget-key" });
+        public Task<Site?> GetByWidgetKeyAsync(string widgetKey, CancellationToken cancellationToken = default) => Task.FromResult<Site?>(null);
+        public Task<Site?> GetBySiteKeyAsync(string siteKey, CancellationToken cancellationToken = default) => Task.FromResult<Site?>(null);
+        public Task<IReadOnlyCollection<Site>> ListByTenantAsync(Guid tenantId, CancellationToken cancellationToken = default) => Task.FromResult((IReadOnlyCollection<Site>)Array.Empty<Site>());
+        public Task InsertAsync(Site site, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task<Site?> UpdateAllowedOriginsAsync(Guid tenantId, Guid siteId, IReadOnlyCollection<string> allowedOrigins, CancellationToken cancellationToken = default) => Task.FromResult<Site?>(null);
+        public Task<Site?> RotateKeysAsync(Guid tenantId, Guid siteId, string siteKey, string widgetKey, CancellationToken cancellationToken = default) => Task.FromResult<Site?>(null);
+        public Task<Site?> UpdateFirstEventReceivedAsync(Guid siteId, DateTime timestampUtc, CancellationToken cancellationToken = default) => Task.FromResult<Site?>(null);
+    }
+
 }
