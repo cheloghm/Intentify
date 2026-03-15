@@ -25,7 +25,22 @@ public sealed class ChatSendHandler
         "form is not working",
         "can't submit",
         "cannot submit",
-        "doesn't submit",
+        "doesn't submit"
+    ];
+    private static readonly string[] HumanHelpRequestPhrases =
+    [
+        "help me",
+        "need help",
+        "someone help",
+        "talk to",
+        "speak to",
+        "human",
+        "agent",
+        "representative",
+        "support"
+    ];
+    private static readonly string[] HumanHelpProblemTerms =
+    [
         "broken",
         "error",
         "failed",
@@ -34,7 +49,9 @@ public sealed class ChatSendHandler
         "checkout",
         "payment",
         "refund",
-        "complaint"
+        "complaint",
+        "issue",
+        "problem"
     ];
 
     private const string AskForContactDetailsResponse = "Sorry about that — I’ll get someone to help. What’s your name and best email?";
@@ -545,8 +562,19 @@ User question:
             return false;
         }
 
-        return HumanHelpPhrases.Any(phrase =>
-            message.Contains(phrase, StringComparison.OrdinalIgnoreCase));
+        if (HumanHelpPhrases.Any(phrase => message.Contains(phrase, StringComparison.OrdinalIgnoreCase)))
+        {
+            return true;
+        }
+
+        var normalized = message.Trim().ToLowerInvariant();
+        var requestedHumanHelp = HumanHelpRequestPhrases.Any(phrase => normalized.Contains(phrase, StringComparison.Ordinal));
+        if (!requestedHumanHelp)
+        {
+            return false;
+        }
+
+        return HumanHelpProblemTerms.Any(term => normalized.Contains(term, StringComparison.Ordinal));
     }
 
     private static ChatIntent DetectIntent(string message)

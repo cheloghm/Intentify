@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http;
+using System.Reflection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Intentify.Modules.Knowledge.Application;
 using Intentify.Modules.Knowledge.Domain;
@@ -74,6 +75,18 @@ public sealed class KnowledgeApplicationTests
         var results = await handler.HandleAsync(new RetrieveTopChunksQuery(tenantId, siteId, "returns?", 5));
 
         Assert.Single(results);
+    }
+
+    [Fact]
+    public void RetrieveTopChunks_ScoreChunk_AppliesBonusBlocksOnce()
+    {
+        var method = typeof(RetrieveTopChunksHandler).GetMethod("ScoreChunk", BindingFlags.NonPublic | BindingFlags.Static);
+        Assert.NotNull(method);
+
+        const string content = "# Return Policy\n\nReturn policy details.";
+        var score = (int)method!.Invoke(null, new object[] { content, new[] { "return", "policy" }, "return policy" })!;
+
+        Assert.Equal(29, score);
     }
 
     [Fact]
