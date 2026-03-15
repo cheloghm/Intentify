@@ -18,6 +18,8 @@
   var assistantName = 'Assistant';
   var primaryColor = '#2563eb';
   var launcherVisible = true;
+  var isSending = false;
+  var typingIndicatorRow = null;
   var contactDetailsPrompt = 'Sorry about that — I’ll get someone to help. What’s your name and best email?';
 
   function endpoint(path) { return baseUrl + path; }
@@ -42,23 +44,23 @@
   toggleButton.style.cssText = 'position:fixed;right:16px;bottom:16px;z-index:999999;padding:10px 14px;background:#111827;color:#fff;border:none;border-radius:999px;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,.2);';
 
   var panel = document.createElement('div');
-  panel.style.cssText = 'position:fixed;right:16px;bottom:68px;z-index:999999;width:300px;height:380px;background:#fff;border:1px solid #e5e7eb;border-radius:10px;box-shadow:0 10px 24px rgba(0,0,0,.18);display:none;font-family:Arial,sans-serif;';
+  panel.style.cssText = 'position:fixed;right:16px;bottom:68px;z-index:999999;width:320px;height:400px;background:#fff;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 14px 30px rgba(15,23,42,.22);display:none;font-family:Arial,sans-serif;overflow:hidden;';
 
   var messages = document.createElement('div');
-  messages.style.cssText = 'height:300px;overflow:auto;padding:10px;font-size:13px;line-height:1.4;';
+  messages.style.cssText = 'height:320px;overflow:auto;padding:12px;font-size:13px;line-height:1.45;background:#f8fafc;';
 
   var composer = document.createElement('div');
-  composer.style.cssText = 'display:flex;gap:8px;padding:10px;border-top:1px solid #e5e7eb;';
+  composer.style.cssText = 'display:flex;gap:8px;padding:10px;border-top:1px solid #e5e7eb;background:#fff;';
 
   var input = document.createElement('input');
   input.type = 'text';
   input.placeholder = 'Type a message...';
-  input.style.cssText = 'flex:1;padding:8px;border:1px solid #d1d5db;border-radius:6px;';
+  input.style.cssText = 'flex:1;padding:8px;border:1px solid #d1d5db;border-radius:8px;';
 
   var sendButton = document.createElement('button');
   sendButton.type = 'button';
   sendButton.textContent = 'Send';
-  sendButton.style.cssText = 'padding:8px 10px;background:#2563eb;color:#fff;border:none;border-radius:6px;cursor:pointer;';
+  sendButton.style.cssText = 'padding:8px 12px;background:#2563eb;color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600;';
 
   composer.appendChild(input);
   composer.appendChild(sendButton);
@@ -72,6 +74,7 @@
     toggleButton.style.background = safePrimaryColor;
     sendButton.style.background = safePrimaryColor;
     panel.style.borderColor = safePrimaryColor;
+    input.style.borderColor = '#cbd5e1';
 
     if (!launcherVisible) {
       toggleButton.style.display = 'none';
@@ -82,6 +85,13 @@
     toggleButton.style.display = 'block';
   }
 
+  function setSendingState(pending) {
+    isSending = pending;
+    input.disabled = pending;
+    sendButton.disabled = pending;
+    sendButton.textContent = pending ? 'Sending...' : 'Send';
+  }
+
   function addBubble(role, bodyBuilder) {
     var row = document.createElement('div');
     row.style.display = 'flex';
@@ -90,11 +100,13 @@
 
     var bubble = document.createElement('div');
     bubble.style.maxWidth = '85%';
-    bubble.style.padding = '8px 10px';
-    bubble.style.borderRadius = '10px';
+    bubble.style.padding = '9px 11px';
+    bubble.style.borderRadius = role === 'user' ? '12px 12px 4px 12px' : '12px 12px 12px 4px';
     bubble.style.whiteSpace = 'pre-wrap';
-    bubble.style.background = role === 'user' ? '#dbeafe' : '#f3f4f6';
+    bubble.style.background = role === 'user' ? '#dbeafe' : '#ffffff';
+    bubble.style.border = role === 'user' ? '1px solid #bfdbfe' : '1px solid #e2e8f0';
     bubble.style.color = '#111827';
+    bubble.style.boxShadow = role === 'user' ? 'none' : '0 2px 8px rgba(15,23,42,.06)';
 
     var label = document.createElement('div');
     label.style.fontSize = '11px';
@@ -108,6 +120,33 @@
     messages.appendChild(row);
     messages.scrollTop = messages.scrollHeight;
     return bubble;
+  }
+
+  function removeTypingIndicator() {
+    if (typingIndicatorRow && typingIndicatorRow.parentNode) {
+      typingIndicatorRow.parentNode.removeChild(typingIndicatorRow);
+    }
+    typingIndicatorRow = null;
+  }
+
+  function showTypingIndicator() {
+    removeTypingIndicator();
+    typingIndicatorRow = document.createElement('div');
+    typingIndicatorRow.style.display = 'flex';
+    typingIndicatorRow.style.marginBottom = '8px';
+    typingIndicatorRow.style.justifyContent = 'flex-start';
+
+    var indicator = document.createElement('div');
+    indicator.textContent = assistantName + ' is typing…';
+    indicator.style.fontSize = '12px';
+    indicator.style.color = '#475569';
+    indicator.style.padding = '6px 10px';
+    indicator.style.borderRadius = '999px';
+    indicator.style.background = '#e2e8f0';
+
+    typingIndicatorRow.appendChild(indicator);
+    messages.appendChild(typingIndicatorRow);
+    messages.scrollTop = messages.scrollHeight;
   }
 
   function addMessage(role, text) {
@@ -399,6 +438,10 @@
   applyTheme();
 
   function sendMessage() {
+    if (isSending) {
+      return;
+    }
+
     var message = input.value.trim();
     if (!message) {
       return;
@@ -411,6 +454,8 @@
 
   function sendChatMessage(message) {
     addMessage('user', message);
+    setSendingState(true);
+    showTypingIndicator();
 
     return fetch(endpoint('/engage/chat/send?widgetKey=' + encodeURIComponent(widgetKey)), {
       method: 'POST',
@@ -424,6 +469,7 @@
         return response.json();
       })
       .then(function(payload) {
+        removeTypingIndicator();
         sessionId = payload.sessionId || sessionId;
         if (sessionId) {
           localStorage.setItem(storageKey, sessionId);
@@ -438,7 +484,11 @@
       })
       .catch(function(error) {
         console.warn('Intentify Engage widget send failed:', error);
+        removeTypingIndicator();
         addMessage('bot', 'Sorry, something went wrong. Please try again.');
+      })
+      .finally(function() {
+        setSendingState(false);
       });
   }
 })();

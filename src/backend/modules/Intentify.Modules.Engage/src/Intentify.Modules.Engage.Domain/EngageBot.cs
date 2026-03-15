@@ -17,4 +17,10 @@ public sealed class EngageBot
     public string? PrimaryColor { get; set; }
 
     public bool? LauncherVisible { get; set; }
+
+    public string? Tone { get; set; }
+
+    public string? Verbosity { get; set; }
+
+    public string? FallbackStyle { get; set; }
 }

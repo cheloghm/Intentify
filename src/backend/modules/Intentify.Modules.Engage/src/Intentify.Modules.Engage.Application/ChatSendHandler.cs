@@ -43,15 +43,22 @@ public sealed class ChatSendHandler
     private const string AckResponse = "Got it — what would you like to know or do next?";
     private const string LowConfidenceClarificationResponse = "I don’t have that information in our knowledge base yet. If you tell me a bit more, I can help refine the question — or I can create a ticket for our team to follow up.";
     private const string ShortPromptClarificationResponse = "Happy to help — are you looking for hours, location, contact details, or services?";
-    private const string ContactFallbackResponse = "I don’t have a verified contact detail in the knowledge base yet. You can share the best way to reach you and I can pass it to our team.";
-    private const string LocationFallbackResponse = "I don’t have a confirmed location in the knowledge base yet. If you share your city or area, I can help narrow this down or ask our team to follow up.";
-    private const string HoursFallbackResponse = "I don’t have confirmed business hours in the knowledge base yet. If this is urgent, I can open a ticket so the team can reply with exact hours.";
-    private const string ServicesFallbackResponse = "I can help with services or menu questions. Tell me the specific service or item you’re looking for and I’ll narrow it down.";
+    private const string ContactFallbackResponse = "I don’t see a verified contact detail in the knowledge base yet. If you share how you’d like to be reached, I can pass it to our team.";
+    private const string LocationFallbackResponse = "I don’t see a confirmed location in the knowledge base yet. Share your city or area and I can help narrow it down or ask the team to follow up.";
+    private const string HoursFallbackResponse = "I don’t see confirmed business hours in the knowledge base yet. If you want, I can open a ticket so the team can reply with exact hours.";
+    private const string ServicesFallbackResponse = "I can help with services or menu questions. Tell me the specific service or item you’re looking for, and I’ll narrow it down.";
     private const string SoftFallbackResponse = "I don’t have a reliable answer yet, but I can help refine the question. Share a little more detail and I’ll try again.";
     private const string EscalationFallbackResponse = "Thanks — I can connect you with our team. Please share your name and best email.";
     private const string PromoCommandPrefix = "/promo";
     private const string PromoResponseText = "Please complete this short promo form.";
     private const string ContactDetailsNamePrefix = "my name is";
+    private static readonly IReadOnlyDictionary<ChatIntent, BusinessResponseTemplate> BusinessResponseTemplates = new Dictionary<ChatIntent, BusinessResponseTemplate>
+    {
+        [ChatIntent.Contact] = new("ContactFallback", ContactFallbackResponse),
+        [ChatIntent.Location] = new("LocationFallback", LocationFallbackResponse),
+        [ChatIntent.Hours] = new("HoursFallback", HoursFallbackResponse),
+        [ChatIntent.Services] = new("ServicesFallback", ServicesFallbackResponse)
+    };
 
     private readonly ISiteRepository _siteRepository;
     private readonly IEngageChatSessionRepository _sessionRepository;
@@ -221,18 +228,18 @@ public sealed class ChatSendHandler
         if (isLowConfidence)
         {
             _logger.LogInformation("Engage chat decision: layered fallback path for session {SessionId}.", session.Id);
-            return await CreateLayeredFallbackResponseAsync(site, session, command.Message, intent, now, "LowConfidence", cancellationToken);
+            return await CreateLayeredFallbackResponseAsync(site, bot, session, command.Message, intent, now, "LowConfidence", cancellationToken);
         }
 
         var citations = retrieved
             .Select(item => new EngageCitationResult(item.SourceId, item.ChunkId, item.ChunkIndex))
             .ToArray();
 
-        var completion = await _chatCompletionClient.CompleteAsync(BuildPrompt(command.Message, retrieved, recentMessages), cancellationToken);
+        var completion = await _chatCompletionClient.CompleteAsync(BuildPrompt(bot, command.Message, retrieved, recentMessages), cancellationToken);
         if (!completion.IsSuccess || string.IsNullOrWhiteSpace(completion.Value))
         {
             _logger.LogWarning("Engage AI completion unavailable for session {SessionId}.", session.Id);
-            return await CreateLayeredFallbackResponseAsync(site, session, command.Message, intent, now, "AiUnavailable", cancellationToken);
+            return await CreateLayeredFallbackResponseAsync(site, bot, session, command.Message, intent, now, "AiUnavailable", cancellationToken);
         }
 
         _logger.LogInformation("Engage chat decision: grounded answer path for session {SessionId}.", session.Id);
@@ -320,7 +327,7 @@ public sealed class ChatSendHandler
         return Math.Min(1m, topScore / 4m);
     }
 
-    private static string BuildPrompt(string message, IReadOnlyCollection<RetrievedChunkResult> chunks, IReadOnlyCollection<EngageChatMessage> messages)
+    private static string BuildPrompt(EngageBot bot, string message, IReadOnlyCollection<RetrievedChunkResult> chunks, IReadOnlyCollection<EngageChatMessage> messages)
     {
         var dedupedChunks = chunks
             .Select(item => item.Content.Trim())
@@ -337,14 +344,19 @@ public sealed class ChatSendHandler
             .Select(item => $"{(string.Equals(item.Role, "assistant", StringComparison.OrdinalIgnoreCase) ? "Assistant" : "User")}: {item.Content.Trim()}"));
 
         var distilledContext = BuildDistilledContext(messages, message);
+        var tone = ResolvePromptTone(bot.Tone);
+        var verbosity = ResolvePromptVerbosity(bot.Verbosity);
 
         return $"""
 You are an Engage support assistant.
 
 Use only the retrieved knowledge context to answer the user's question in plain English.
-- Keep the answer concise: 1-2 short paragraphs.
+- Keep a {tone} tone.
+- Keep verbosity {verbosity}.
+- Keep the answer concise and practical.
 - Rephrase the content naturally; do not copy/paste raw website text.
 - Do not use markdown lists, bullets, or asterisks unless the user explicitly asks for a list.
+- Do not sound robotic.
 - Do not start with: Based on your knowledge base:
 - If the answer is not in the retrieved context, reply exactly: I don’t have that information in our knowledge base yet.
 
@@ -496,6 +508,7 @@ User question:
 
     private async Task<OperationResult<ChatSendResult>> CreateLayeredFallbackResponseAsync(
         Site site,
+        EngageBot bot,
         EngageChatSession session,
         string userMessage,
         ChatIntent intent,
@@ -508,17 +521,17 @@ User question:
             return await CreateAssistantResponseAsync(session.Id, now, ShortPromptClarificationResponse, 0.35m, false, "Clarification", "AmbiguousShortPrompt", cancellationToken);
         }
 
-        if (TryBuildBusinessAwareFallback(intent, out var businessFallback))
+        if (TryBuildBusinessAwareFallback(intent, out var businessTemplate))
         {
-            return await CreateAssistantResponseAsync(session.Id, now, businessFallback, 0.3m, false, "BusinessFallback", null, cancellationToken);
+            return await CreateAssistantResponseAsync(session.Id, now, businessTemplate.Response, 0.3m, false, businessTemplate.Path, null, cancellationToken);
         }
 
-        var shouldEscalate = ShouldEscalateFallback(intent, userMessage, reason);
+        var shouldEscalate = ShouldEscalateFallback(bot, intent, userMessage, reason);
         if (!shouldEscalate)
         {
             var fallback = IsRealQuestion(userMessage)
                 ? LowConfidenceClarificationResponse
-                : SoftFallbackResponse;
+                : BuildSoftFallbackResponse(bot);
             return await CreateAssistantResponseAsync(session.Id, now, fallback, 0.2m, false, "Fallback", reason, cancellationToken);
         }
 
@@ -589,28 +602,55 @@ User question:
         return ChatIntent.General;
     }
 
-    private static bool TryBuildBusinessAwareFallback(ChatIntent intent, out string response)
+    private static bool TryBuildBusinessAwareFallback(ChatIntent intent, out BusinessResponseTemplate response)
     {
-        response = intent switch
-        {
-            ChatIntent.Contact => ContactFallbackResponse,
-            ChatIntent.Location => LocationFallbackResponse,
-            ChatIntent.Hours => HoursFallbackResponse,
-            ChatIntent.Services => ServicesFallbackResponse,
-            _ => string.Empty
-        };
-
-        return !string.IsNullOrWhiteSpace(response);
+        return BusinessResponseTemplates.TryGetValue(intent, out response!);
     }
 
-    private static bool ShouldEscalateFallback(ChatIntent intent, string userMessage, string reason)
+    private static bool ShouldEscalateFallback(EngageBot bot, ChatIntent intent, string userMessage, string reason)
     {
-        if (reason == "AiUnavailable" && IsRealQuestion(userMessage))
+        var isActionableHelpIntent = intent == ChatIntent.EscalationHelp || NeedsHumanHelp(userMessage);
+        var isRealQuestion = IsRealQuestion(userMessage);
+
+        if (string.Equals(NormalizeOptional(bot.FallbackStyle), "handoff", StringComparison.OrdinalIgnoreCase)
+            && (isActionableHelpIntent || isRealQuestion))
         {
             return true;
         }
 
-        return intent == ChatIntent.EscalationHelp || NeedsHumanHelp(userMessage);
+        if (reason == "AiUnavailable" && isRealQuestion)
+        {
+            return true;
+        }
+
+        return isActionableHelpIntent;
+    }
+
+    private static string BuildSoftFallbackResponse(EngageBot bot)
+    {
+        var tone = NormalizeOptional(bot.Tone)?.ToLowerInvariant();
+        return tone switch
+        {
+            "professional" => "I don’t have a reliable answer yet, but I can help refine your question. Share a bit more detail and I’ll try again.",
+            "casual" => "I don’t have a solid answer yet, but we can figure it out together. Share a little more detail and I’ll try again.",
+            _ => SoftFallbackResponse
+        };
+    }
+
+    private static string ResolvePromptTone(string? tone)
+    {
+        var normalized = NormalizeOptional(tone)?.ToLowerInvariant();
+        return normalized is "warm" or "professional" or "casual"
+            ? normalized
+            : "warm";
+    }
+
+    private static string ResolvePromptVerbosity(string? verbosity)
+    {
+        var normalized = NormalizeOptional(verbosity)?.ToLowerInvariant();
+        return normalized is "brief" or "balanced" or "detailed"
+            ? normalized
+            : "balanced";
     }
 
     private async Task<OperationResult<ChatSendResult>> CreateAssistantResponseAsync(
@@ -996,6 +1036,8 @@ User question:
 
         return value.Trim();
     }
+
+    private sealed record BusinessResponseTemplate(string Path, string Response);
 
     private enum ChatIntent
     {

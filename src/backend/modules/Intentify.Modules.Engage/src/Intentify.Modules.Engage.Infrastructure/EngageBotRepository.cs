@@ -62,7 +62,7 @@ public sealed class EngageBotRepository : IEngageBotRepository
             .FirstOrDefaultAsync(cancellationToken);
     }
 
-    public async Task<EngageBot?> UpdateSettingsAsync(Guid tenantId, Guid siteId, string name, string? primaryColor, bool? launcherVisible, CancellationToken cancellationToken = default)
+    public async Task<EngageBot?> UpdateSettingsAsync(Guid tenantId, Guid siteId, string name, string? primaryColor, bool? launcherVisible, string? tone, string? verbosity, string? fallbackStyle, CancellationToken cancellationToken = default)
     {
         await _ensureIndexes;
 
@@ -89,6 +89,33 @@ public sealed class EngageBotRepository : IEngageBotRepository
         else
         {
             updates.Add(Builders<EngageBot>.Update.Unset(item => item.LauncherVisible));
+        }
+
+        if (string.IsNullOrWhiteSpace(tone))
+        {
+            updates.Add(Builders<EngageBot>.Update.Unset(item => item.Tone));
+        }
+        else
+        {
+            updates.Add(Builders<EngageBot>.Update.Set(item => item.Tone, tone.Trim().ToLowerInvariant()));
+        }
+
+        if (string.IsNullOrWhiteSpace(verbosity))
+        {
+            updates.Add(Builders<EngageBot>.Update.Unset(item => item.Verbosity));
+        }
+        else
+        {
+            updates.Add(Builders<EngageBot>.Update.Set(item => item.Verbosity, verbosity.Trim().ToLowerInvariant()));
+        }
+
+        if (string.IsNullOrWhiteSpace(fallbackStyle))
+        {
+            updates.Add(Builders<EngageBot>.Update.Unset(item => item.FallbackStyle));
+        }
+        else
+        {
+            updates.Add(Builders<EngageBot>.Update.Set(item => item.FallbackStyle, fallbackStyle.Trim().ToLowerInvariant()));
         }
 
         var update = Builders<EngageBot>.Update.Combine(updates);
