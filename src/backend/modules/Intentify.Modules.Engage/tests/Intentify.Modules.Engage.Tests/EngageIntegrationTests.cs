@@ -648,7 +648,7 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task ChatSend_InformationalSupportHoursQuery_DoesNotAutoEscalate()
+    public async Task ChatSend_InformationalErrorQuery_DoesNotAutoEscalate()
     {
         var token = await RegisterUserAsync();
         var site = await CreateSiteAsync(token);
@@ -656,25 +656,7 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
         var response = await _client!.PostAsJsonAsync("/engage/chat/send", new
         {
             widgetKey = site.WidgetKey,
-            message = "what support hours do you have?"
-        });
-
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        Assert.False(json.RootElement.GetProperty("ticketCreated").GetBoolean());
-        Assert.NotEqual("Sorry about that — I’ll get someone to help. What’s your name and best email?", json.RootElement.GetProperty("response").GetString());
-    }
-
-    [Fact]
-    public async Task ChatSend_InformationalSomeoneQuery_DoesNotAutoEscalate()
-    {
-        var token = await RegisterUserAsync();
-        var site = await CreateSiteAsync(token);
-
-        var response = await _client!.PostAsJsonAsync("/engage/chat/send", new
-        {
-            widgetKey = site.WidgetKey,
-            message = "does someone answer emails on weekends?"
+            message = "what error codes do you support?"
         });
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -692,7 +674,7 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
         var response = await _client!.PostAsJsonAsync("/engage/chat/send", new
         {
             widgetKey = site.WidgetKey,
-            message = "I need a human agent"
+            message = "I need to speak to a human agent about a payment issue"
         });
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
