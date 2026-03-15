@@ -14,7 +14,12 @@
   }
 
   var storageKey = 'intentify_engage_session_' + widgetKey;
+  var uiStateStorageKey = 'intentify_engage_ui_state_' + widgetKey;
   var sessionId = localStorage.getItem(storageKey) || '';
+  var isPanelOpen = false;
+  try {
+    isPanelOpen = localStorage.getItem(uiStateStorageKey) === 'open';
+  } catch (e) {}
   var assistantName = 'Assistant';
   var primaryColor = '#2563eb';
   var launcherVisible = true;
@@ -99,6 +104,17 @@
     input.disabled = pending;
     sendButton.disabled = pending;
     sendButton.textContent = pending ? 'Sending...' : 'Send';
+  }
+
+  function persistPanelState(open) {
+    isPanelOpen = open;
+    try {
+      localStorage.setItem(uiStateStorageKey, open ? 'open' : 'closed');
+    } catch (e) {}
+  }
+
+  function renderPanelState() {
+    panel.style.display = isPanelOpen ? 'block' : 'none';
   }
 
   function addBubble(role, bodyBuilder) {
@@ -461,7 +477,8 @@
   }
 
   toggleButton.addEventListener('click', function() {
-    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+    persistPanelState(!isPanelOpen);
+    renderPanelState();
   });
 
   sendButton.addEventListener('click', sendMessage);
@@ -489,6 +506,7 @@
     .catch(function(){});
 
   applyTheme();
+  renderPanelState();
   hydrateConversation();
 
   function sendMessage() {
