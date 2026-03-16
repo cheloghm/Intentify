@@ -96,17 +96,6 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
   };
 
 
-  const getCurrentProfile = async () => request('/auth/me');
-
-  const updateCurrentProfile = async (payload) =>
-    request('/auth/profile', {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    });
-
   const createInvite = async (payload) =>
     request('/auth/invites', {
       method: 'POST',
@@ -486,8 +475,6 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
       get: getLead,
     },
     auth: {
-      me: getCurrentProfile,
-      updateProfile: updateCurrentProfile,
       createInvite,
       acceptInvite,
     },

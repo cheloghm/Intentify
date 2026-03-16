@@ -43,7 +43,6 @@ public sealed class AuthModule : IAppModule
         services.AddSingleton<LoginUserHandler>();
         services.AddSingleton<CreateInviteHandler>();
         services.AddSingleton<AcceptInviteHandler>();
-        services.AddSingleton<UpdateCurrentUserProfileHandler>();
     }
 
     public void MapEndpoints(IEndpointRouteBuilder endpoints)
@@ -58,8 +57,6 @@ public sealed class AuthModule : IAppModule
         group.MapGet("/me", AuthEndpoints.GetCurrentUser)
             .AddEndpointFilter<RequireAuthFilter>();
         group.MapPost("/invites", AuthEndpoints.CreateInviteAsync)
-            .AddEndpointFilter<RequireAuthFilter>();
-        group.MapPut("/profile", AuthEndpoints.UpdateCurrentProfileAsync)
             .AddEndpointFilter<RequireAuthFilter>();
     }
 }
