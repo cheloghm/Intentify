@@ -141,7 +141,7 @@ public sealed class KnowledgeIntegrationTests : IAsyncLifetime
     private async Task<string> RegisterUserAsync()
     {
         var email = $"knowledge-{Guid.NewGuid():N}@intentify.local";
-        var response = await _client!.PostAsJsonAsync("/auth/register", new RegisterRequest("Knowledge Tester", email, "password-123"));
+        var response = await _client!.PostAsJsonAsync("/auth/register", new RegisterRequest("Knowledge Tester", email, "password-123", "Default Org"));
         var payload = await response.Content.ReadFromJsonAsync<LoginResponse>();
         return payload!.AccessToken;
     }
@@ -166,7 +166,7 @@ public sealed class KnowledgeIntegrationTests : IAsyncLifetime
     private static async Task<string> RegisterUserAsync(HttpClient client)
     {
         var email = $"knowledge-{Guid.NewGuid():N}@intentify.local";
-        var response = await client.PostAsJsonAsync("/auth/register", new RegisterRequest("Knowledge Tester", email, "password-123"));
+        var response = await client.PostAsJsonAsync("/auth/register", new RegisterRequest("Knowledge Tester", email, "password-123", "Default Org"));
         var payload = await response.Content.ReadFromJsonAsync<LoginResponse>();
         return payload!.AccessToken;
     }

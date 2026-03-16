@@ -16,6 +16,12 @@ public sealed class UserRepository : IUserRepository
         _ensureIndexes = EnsureIndexesAsync();
     }
 
+    public async Task<User?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        await _ensureIndexes;
+        return await _users.Find(user => user.Id == id).FirstOrDefaultAsync(cancellationToken);
+    }
+
     public async Task<User?> FindByEmailAsync(string email, CancellationToken cancellationToken = default)
     {
         await _ensureIndexes;
@@ -26,6 +32,18 @@ public sealed class UserRepository : IUserRepository
     {
         await _ensureIndexes;
         await _users.InsertOneAsync(user, cancellationToken: cancellationToken);
+    }
+
+    public async Task UpdateDisplayNameAsync(Guid id, string displayName, DateTime updatedAt, CancellationToken cancellationToken = default)
+    {
+        await _ensureIndexes;
+
+        var filter = Builders<User>.Filter.Eq(user => user.Id, id);
+        var update = Builders<User>.Update
+            .Set(user => user.DisplayName, displayName)
+            .Set(user => user.UpdatedAt, updatedAt);
+
+        await _users.UpdateOneAsync(filter, update, cancellationToken: cancellationToken);
     }
 
     private Task EnsureIndexesAsync()
