@@ -95,6 +95,25 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
     return queryString ? `?${queryString}` : '';
   };
 
+
+  const createInvite = async (payload) =>
+    request('/auth/invites', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+  const acceptInvite = async (payload) =>
+    request('/auth/invites/accept', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
   const listVisitors = async (siteId, page = 1, pageSize = 50) =>
     request(`/visitors${buildQueryString({ siteId, page, pageSize })}`);
 
@@ -454,6 +473,10 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
     leads: {
       list: listLeads,
       get: getLead,
+    },
+    auth: {
+      createInvite,
+      acceptInvite,
     },
     platformAdmin: {
       getSummary: getPlatformSummary,
