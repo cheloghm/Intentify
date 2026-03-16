@@ -492,6 +492,11 @@ const renderRegisterView = (container) => {
     type: 'text',
     placeholder: 'Jane Doe',
   });
+  const organizationNameField = createField({
+    label: 'Organization name',
+    type: 'text',
+    placeholder: 'Acme Inc',
+  });
   const emailField = createField({
     label: 'Email',
     type: 'email',
@@ -527,6 +532,7 @@ const renderRegisterView = (container) => {
   form.style.gap = '12px';
   form.append(
     displayNameField.wrapper,
+    organizationNameField.wrapper,
     emailField.wrapper,
     passwordField.wrapper,
     submitButton,
@@ -536,10 +542,12 @@ const renderRegisterView = (container) => {
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
     displayNameField.error.textContent = '';
+    organizationNameField.error.textContent = '';
     emailField.error.textContent = '';
     passwordField.error.textContent = '';
 
     const displayName = displayNameField.input.value.trim();
+    const organizationName = organizationNameField.input.value.trim();
     const email = emailField.input.value.trim();
     const password = passwordField.input.value;
 
@@ -547,6 +555,11 @@ const renderRegisterView = (container) => {
 
     if (!displayName) {
       displayNameField.error.textContent = 'Display name is required.';
+      hasError = true;
+    }
+
+    if (!organizationName) {
+      organizationNameField.error.textContent = 'Organization name is required.';
       hasError = true;
     }
 
@@ -576,7 +589,7 @@ const renderRegisterView = (container) => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ displayName, email, password }),
+        body: JSON.stringify({ displayName, organizationName, email, password }),
       });
 
       setToken(response.accessToken);
@@ -585,6 +598,7 @@ const renderRegisterView = (container) => {
       const uiError = mapApiError(error);
       const applied = applyFieldErrors(uiError.details?.errors, {
         displayName: displayNameField,
+        organizationName: organizationNameField,
         email: emailField,
         password: passwordField,
       });
@@ -600,6 +614,122 @@ const renderRegisterView = (container) => {
 
   const card = createCard({
     title: 'Register',
+    body: form,
+  });
+  card.style.width = '100%';
+  card.style.maxWidth = '460px';
+
+  container.appendChild(card);
+};
+
+
+const renderAcceptInviteView = (container, { query } = {}) => {
+  const tokenField = createField({
+    label: 'Invitation token',
+    type: 'text',
+    placeholder: 'Paste invitation token',
+  });
+  tokenField.input.value = query?.token || '';
+
+  const displayNameField = createField({
+    label: 'Display name',
+    type: 'text',
+    placeholder: 'Jane Doe',
+  });
+  const emailField = createField({
+    label: 'Email',
+    type: 'email',
+    placeholder: 'you@example.com',
+  });
+  const passwordField = createField({
+    label: 'Password',
+    type: 'password',
+    placeholder: 'At least 10 characters',
+  });
+
+  const submitButton = document.createElement('button');
+  submitButton.type = 'submit';
+  submitButton.textContent = 'Accept invite';
+  submitButton.style.marginTop = '12px';
+  submitButton.style.padding = '10px 14px';
+  submitButton.style.borderRadius = '6px';
+  submitButton.style.border = 'none';
+  submitButton.style.background = '#2563eb';
+  submitButton.style.color = '#fff';
+  submitButton.style.cursor = 'pointer';
+
+  const form = document.createElement('form');
+  form.style.display = 'flex';
+  form.style.flexDirection = 'column';
+  form.style.gap = '12px';
+  form.append(tokenField.wrapper, displayNameField.wrapper, emailField.wrapper, passwordField.wrapper, submitButton);
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    tokenField.error.textContent = '';
+    displayNameField.error.textContent = '';
+    emailField.error.textContent = '';
+    passwordField.error.textContent = '';
+
+    const token = tokenField.input.value.trim();
+    const displayName = displayNameField.input.value.trim();
+    const email = emailField.input.value.trim();
+    const password = passwordField.input.value;
+
+    let hasError = false;
+    if (!token) {
+      tokenField.error.textContent = 'Invitation token is required.';
+      hasError = true;
+    }
+    if (!displayName) {
+      displayNameField.error.textContent = 'Display name is required.';
+      hasError = true;
+    }
+
+    const emailError = validateEmail(email);
+    if (emailError) {
+      emailField.error.textContent = emailError;
+      hasError = true;
+    }
+
+    const passwordError = validatePassword(password);
+    if (passwordError) {
+      passwordField.error.textContent = passwordError;
+      hasError = true;
+    }
+
+    if (hasError) {
+      toast.show({ message: 'Please fix the highlighted fields.', variant: 'warning' });
+      return;
+    }
+
+    submitButton.disabled = true;
+    submitButton.textContent = 'Accepting...';
+
+    try {
+      const response = await apiClient.auth.acceptInvite({ token, displayName, email, password });
+      setToken(response.accessToken);
+      window.location.hash = '#/dashboard';
+    } catch (error) {
+      const uiError = mapApiError(error);
+      const applied = applyFieldErrors(uiError.details?.errors, {
+        token: tokenField,
+        displayName: displayNameField,
+        email: emailField,
+        password: passwordField,
+      });
+      toast.show({
+        message: applied ? 'Please review the highlighted errors.' : uiError.message,
+        variant: 'danger',
+      });
+    } finally {
+      submitButton.disabled = false;
+      submitButton.textContent = 'Accept invite';
+    }
+  });
+
+  const card = createCard({
+    title: 'Accept invitation',
     body: form,
   });
   card.style.width = '100%';
@@ -719,6 +849,7 @@ const routes = {
   '/': renderHomeView,
   '/login': renderLoginView,
   '/register': renderRegisterView,
+  '/accept-invite': renderAcceptInviteView,
   '/dashboard': renderDashboardView,
   '/sites': renderSitesView,
   '/install': renderInstallView,
@@ -829,7 +960,7 @@ const renderApp = () => {
     return;
   }
 
-  if ((route === '/login' || route === '/register') && isAuthenticated) {
+  if ((route === '/login' || route === '/register' || route === '/accept-invite') && isAuthenticated) {
     window.location.hash = '#/dashboard';
     return;
   }

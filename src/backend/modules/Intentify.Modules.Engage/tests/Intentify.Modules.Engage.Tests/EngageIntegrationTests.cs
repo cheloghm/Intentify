@@ -1277,7 +1277,7 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
     private async Task<string> RegisterUserAsync()
     {
         var email = $"engage-{Guid.NewGuid():N}@intentify.local";
-        var response = await _client!.PostAsJsonAsync("/auth/register", new RegisterRequest("Engage Tester", email, "password-123"));
+        var response = await _client!.PostAsJsonAsync("/auth/register", new RegisterRequest("Engage Tester", email, "password-123", "Default Org"));
         var payload = await response.Content.ReadFromJsonAsync<LoginResponse>();
         return payload!.AccessToken;
     }
@@ -1302,7 +1302,7 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
     private static async Task<string> RegisterUserAsync(HttpClient client)
     {
         var email = $"engage-{Guid.NewGuid():N}@intentify.local";
-        var response = await client.PostAsJsonAsync("/auth/register", new RegisterRequest("Engage Tester", email, "password-123"));
+        var response = await client.PostAsJsonAsync("/auth/register", new RegisterRequest("Engage Tester", email, "password-123", "Default Org"));
         var payload = await response.Content.ReadFromJsonAsync<LoginResponse>();
         return payload!.AccessToken;
     }

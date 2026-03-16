@@ -38,8 +38,11 @@ public sealed class AuthModule : IAppModule
         services.AddSingleton<PasswordHasher>();
         services.AddSingleton<IUserRepository, UserRepository>();
         services.AddSingleton<ITenantRepository, TenantRepository>();
+        services.AddSingleton<IInvitationRepository, InvitationRepository>();
         services.AddSingleton<RegisterUserHandler>();
         services.AddSingleton<LoginUserHandler>();
+        services.AddSingleton<CreateInviteHandler>();
+        services.AddSingleton<AcceptInviteHandler>();
     }
 
     public void MapEndpoints(IEndpointRouteBuilder endpoints)
@@ -50,7 +53,10 @@ public sealed class AuthModule : IAppModule
 
         group.MapPost("/register", AuthEndpoints.RegisterAsync);
         group.MapPost("/login", AuthEndpoints.LoginAsync);
+        group.MapPost("/invites/accept", AuthEndpoints.AcceptInviteAsync);
         group.MapGet("/me", AuthEndpoints.GetCurrentUser)
+            .AddEndpointFilter<RequireAuthFilter>();
+        group.MapPost("/invites", AuthEndpoints.CreateInviteAsync)
             .AddEndpointFilter<RequireAuthFilter>();
     }
 }
