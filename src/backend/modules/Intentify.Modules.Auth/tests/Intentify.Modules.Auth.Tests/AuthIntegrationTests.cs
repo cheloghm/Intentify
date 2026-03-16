@@ -74,7 +74,7 @@ public sealed class AuthIntegrationTests : IAsyncLifetime
     [Fact]
     public async Task Register_ReturnsJwt()
     {
-        var request = new RegisterRequest("New Tester", "newtester@intentify.local", "password-456");
+        var request = new RegisterRequest("New Tester", "newtester@intentify.local", "password-456", "New Tester Org");
 
         var response = await _client!.PostAsJsonAsync("/auth/register", request);
 
@@ -88,7 +88,7 @@ public sealed class AuthIntegrationTests : IAsyncLifetime
     [Fact]
     public async Task Register_DuplicateEmail_ReturnsClientError()
     {
-        var request = new RegisterRequest("Dup Tester", "tester@intentify.local", "password-456");
+        var request = new RegisterRequest("Dup Tester", "tester@intentify.local", "password-456", "Dup Org");
 
         var response = await _client!.PostAsJsonAsync("/auth/register", request);
 
@@ -100,7 +100,7 @@ public sealed class AuthIntegrationTests : IAsyncLifetime
     [Fact]
     public async Task Register_InvalidEmail_ReturnsValidationError()
     {
-        var request = new RegisterRequest("Bad Email", "invalid-email", "password-456");
+        var request = new RegisterRequest("Bad Email", "invalid-email", "password-456", "Bad Email Org");
 
         var response = await _client!.PostAsJsonAsync("/auth/register", request);
 
@@ -112,7 +112,7 @@ public sealed class AuthIntegrationTests : IAsyncLifetime
     [Fact]
     public async Task Register_WeakPassword_ReturnsValidationError()
     {
-        var request = new RegisterRequest("Weak Password", "weakpass@intentify.local", "short1");
+        var request = new RegisterRequest("Weak Password", "weakpass@intentify.local", "short1", "Weak Org");
 
         var response = await _client!.PostAsJsonAsync("/auth/register", request);
 

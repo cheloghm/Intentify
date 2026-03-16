@@ -168,7 +168,7 @@ public sealed class SitesIntegrationTests : IAsyncLifetime
     private async Task<string> RegisterUserAsync()
     {
         var email = $"tester-{Guid.NewGuid():N}@intentify.local";
-        var request = new RegisterRequest("Sites Tester", email, "password-123");
+        var request = new RegisterRequest("Sites Tester", email, "password-123", "Default Org");
 
         var response = await _client!.PostAsJsonAsync("/auth/register", request);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);

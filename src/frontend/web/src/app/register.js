@@ -95,6 +95,11 @@ const render = () => {
     type: 'text',
     placeholder: 'Jane Doe',
   });
+  const organizationNameField = createField({
+    label: 'Organization name',
+    type: 'text',
+    placeholder: 'Acme Inc',
+  });
   const emailField = createField({
     label: 'Email',
     type: 'email',
@@ -130,6 +135,7 @@ const render = () => {
   form.style.gap = '12px';
   form.append(
     displayNameField.wrapper,
+    organizationNameField.wrapper,
     emailField.wrapper,
     passwordField.wrapper,
     submitButton,
@@ -139,10 +145,12 @@ const render = () => {
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
     displayNameField.error.textContent = '';
+    organizationNameField.error.textContent = '';
     emailField.error.textContent = '';
     passwordField.error.textContent = '';
 
     const displayName = displayNameField.input.value.trim();
+    const organizationName = organizationNameField.input.value.trim();
     const email = emailField.input.value.trim();
     const password = passwordField.input.value;
 
@@ -150,6 +158,11 @@ const render = () => {
 
     if (!displayName) {
       displayNameField.error.textContent = 'Display name is required.';
+      hasError = true;
+    }
+
+    if (!organizationName) {
+      organizationNameField.error.textContent = 'Organization name is required.';
       hasError = true;
     }
 
@@ -179,7 +192,7 @@ const render = () => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ displayName, email, password }),
+        body: JSON.stringify({ displayName, organizationName, email, password }),
       });
 
       setToken(response.accessToken);
@@ -188,6 +201,7 @@ const render = () => {
       const uiError = mapApiError(error);
       const applied = applyFieldErrors(uiError.details?.errors, {
         displayName: displayNameField,
+        organizationName: organizationNameField,
         email: emailField,
         password: passwordField,
       });

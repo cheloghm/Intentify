@@ -6,29 +6,29 @@ using Microsoft.Extensions.Options;
 
 namespace Intentify.Modules.Auth.Application;
 
-public sealed class RegisterUserHandler
+public sealed class AcceptInviteHandler
 {
+    private readonly IInvitationRepository _invitations;
     private readonly IUserRepository _users;
-    private readonly ITenantRepository _tenants;
     private readonly PasswordHasher _hasher;
     private readonly JwtTokenIssuer _tokenIssuer;
     private readonly IOptions<JwtOptions> _jwtOptions;
 
-    public RegisterUserHandler(
+    public AcceptInviteHandler(
+        IInvitationRepository invitations,
         IUserRepository users,
-        ITenantRepository tenants,
         PasswordHasher hasher,
         JwtTokenIssuer tokenIssuer,
         IOptions<JwtOptions> jwtOptions)
     {
+        _invitations = invitations;
         _users = users;
-        _tenants = tenants;
         _hasher = hasher;
         _tokenIssuer = tokenIssuer;
         _jwtOptions = jwtOptions;
     }
 
-    public async Task<OperationResult<AuthTokenResult>> HandleAsync(RegisterUserCommand command, CancellationToken cancellationToken = default)
+    public async Task<OperationResult<AuthTokenResult>> HandleAsync(AcceptInviteCommand command, CancellationToken cancellationToken = default)
     {
         var errors = Validate(command);
         if (errors.HasErrors)
@@ -36,7 +36,19 @@ public sealed class RegisterUserHandler
             return OperationResult<AuthTokenResult>.ValidationFailed(errors);
         }
 
+        var invite = await _invitations.GetByTokenAsync(command.Token.Trim(), cancellationToken);
+        if (invite is null || invite.AcceptedAtUtc is not null || invite.RevokedAtUtc is not null || invite.ExpiresAtUtc <= DateTime.UtcNow)
+        {
+            return OperationResult<AuthTokenResult>.Unauthorized();
+        }
+
         var trimmedEmail = command.Email.Trim();
+        if (!string.Equals(trimmedEmail, invite.Email, StringComparison.OrdinalIgnoreCase))
+        {
+            errors.Add("email", "Email does not match invitation.");
+            return OperationResult<AuthTokenResult>.ValidationFailed(errors);
+        }
+
         var existingUser = await _users.FindByEmailAsync(trimmedEmail, cancellationToken);
         if (existingUser is not null)
         {
@@ -45,31 +57,19 @@ public sealed class RegisterUserHandler
         }
 
         var now = DateTime.UtcNow;
-        var tenant = new Tenant
-        {
-            Name = command.OrganizationName.Trim(),
-            Domain = $"{Guid.NewGuid():N}.tenant.local",
-            Plan = "dev",
-            Industry = "software",
-            Category = "default",
-            CreatedAt = now,
-            UpdatedAt = now
-        };
-
-        await _tenants.InsertAsync(tenant, cancellationToken);
-
         var user = new User
         {
-            TenantId = tenant.Id,
+            TenantId = invite.TenantId,
             Email = trimmedEmail,
             PasswordHash = _hasher.HashPassword(command.Password),
             DisplayName = command.DisplayName.Trim(),
-            Roles = new[] { AuthRoles.Admin },
+            Roles = [invite.Role],
             CreatedAt = now,
             UpdatedAt = now
         };
 
         await _users.InsertAsync(user, cancellationToken);
+        await _invitations.MarkAcceptedAsync(invite.Id, now, cancellationToken);
 
         var tokenResult = _tokenIssuer.IssueAccessToken(
             user.Id.ToString("N"),
@@ -85,12 +85,12 @@ public sealed class RegisterUserHandler
         return OperationResult<AuthTokenResult>.Success(new AuthTokenResult(tokenResult.Value));
     }
 
-    private static ValidationErrors Validate(RegisterUserCommand command)
+    private static ValidationErrors Validate(AcceptInviteCommand command)
     {
         var errors = new ValidationErrors();
 
+        Guard.AgainstNullOrWhiteSpace(errors, command.Token, "token", "Invitation token is required.");
         Guard.AgainstNullOrWhiteSpace(errors, command.DisplayName, "displayName", "Display name is required.");
-        Guard.AgainstNullOrWhiteSpace(errors, command.OrganizationName, "organizationName", "Organization name is required.");
 
         if (!IsValidEmail(command.Email))
         {

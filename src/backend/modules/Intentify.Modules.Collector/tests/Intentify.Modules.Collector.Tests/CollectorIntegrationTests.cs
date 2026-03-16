@@ -270,7 +270,7 @@ public sealed class CollectorIntegrationTests : IAsyncLifetime
     private async Task<string> RegisterUserAsync()
     {
         var email = $"collector-{Guid.NewGuid():N}@intentify.local";
-        var request = new RegisterRequest("Collector Tester", email, "password-123");
+        var request = new RegisterRequest("Collector Tester", email, "password-123", "Default Org");
 
         var response = await _client!.PostAsJsonAsync("/auth/register", request);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
