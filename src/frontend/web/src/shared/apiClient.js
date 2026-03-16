@@ -114,6 +114,17 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
       body: JSON.stringify(payload),
     });
 
+  const getCurrentUser = async () => request('/auth/me');
+
+  const updateCurrentUserProfile = async (payload) =>
+    request('/auth/me', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
   const listVisitors = async (siteId, page = 1, pageSize = 50) =>
     request(`/visitors${buildQueryString({ siteId, page, pageSize })}`);
 
@@ -477,6 +488,8 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
     auth: {
       createInvite,
       acceptInvite,
+      me: getCurrentUser,
+      updateProfile: updateCurrentUserProfile,
     },
     platformAdmin: {
       getSummary: getPlatformSummary,
