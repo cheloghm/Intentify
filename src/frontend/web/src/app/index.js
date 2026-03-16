@@ -336,7 +336,10 @@ const createProfileModal = ({ profile, onClose, onSave }) => {
   });
   organizationField.input.value = profile?.organizationName || '';
 
-  const isAdmin = Boolean(profile?.isAdmin);
+  const roles = Array.isArray(profile?.roles) ? profile.roles : [];
+  const isAdmin = Boolean(profile?.isAdmin)
+    || roles.includes('admin')
+    || roles.includes('super_admin');
   if (!isAdmin) {
     organizationField.input.disabled = true;
     organizationField.input.style.background = '#f8fafc';
