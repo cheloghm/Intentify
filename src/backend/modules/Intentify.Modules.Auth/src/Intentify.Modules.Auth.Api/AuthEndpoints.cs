@@ -109,6 +109,39 @@ internal static class AuthEndpoints
         return Results.Ok(response);
     }
 
+    public static async Task<IResult> UpdateCurrentUserProfileAsync(
+        UpdateCurrentUserProfileRequest request,
+        HttpContext context,
+        UpdateCurrentUserProfileHandler handler)
+    {
+        var userId = TryGetUserId(context.User);
+        var tenantId = TryGetTenantId(context.User);
+        if (userId is null || tenantId is null)
+        {
+            return Results.Unauthorized();
+        }
+
+        var roles = context.User.FindAll(ClaimTypes.Role).Select(role => role.Value).ToArray();
+
+        var result = await handler.HandleAsync(new UpdateCurrentUserProfileCommand(
+            userId.Value,
+            tenantId.Value,
+            roles,
+            request.DisplayName,
+            request.OrganizationName));
+
+        return result.Status switch
+        {
+            Intentify.Shared.Validation.OperationStatus.ValidationFailed => Results.BadRequest(
+                ProblemDetailsHelpers.CreateValidationProblemDetails(result.Errors!.Errors)),
+            Intentify.Shared.Validation.OperationStatus.Unauthorized => Results.Unauthorized(),
+            Intentify.Shared.Validation.OperationStatus.Forbidden => Results.StatusCode(StatusCodes.Status403Forbidden),
+            Intentify.Shared.Validation.OperationStatus.Error => Results.Problem(
+                statusCode: StatusCodes.Status500InternalServerError),
+            _ => Results.NoContent()
+        };
+    }
+
     private static Guid? TryGetUserId(ClaimsPrincipal user)
     {
         var userIdValue = user.FindFirstValue(ClaimTypes.NameIdentifier)
