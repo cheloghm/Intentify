@@ -6,7 +6,16 @@ public sealed record RegisterRequest(string DisplayName, string Email, string Pa
 
 public sealed record LoginResponse(string AccessToken);
 
-public sealed record CurrentUserResponse(string UserId, string TenantId, IReadOnlyCollection<string> Roles, string? DisplayName);
+public sealed record CurrentUserResponse(
+    string UserId,
+    string TenantId,
+    IReadOnlyCollection<string> Roles,
+    string? DisplayName,
+    string? Email,
+    string? OrganizationName,
+    bool IsAdmin);
+
+public sealed record UpdateCurrentUserProfileRequest(string DisplayName, string? OrganizationName);
 
 public sealed record CreateInviteRequest(string Email, string Role);
 
