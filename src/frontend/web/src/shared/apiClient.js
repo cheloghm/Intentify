@@ -125,6 +125,22 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
       body: JSON.stringify(payload),
     });
 
+  const listTenantUsers = async () => request('/auth/users');
+
+  const updateTenantUserRole = async (userId, role) =>
+    request(`/auth/users/${encodeURIComponent(userId)}/role`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ role }),
+    });
+
+  const removeTenantUser = async (userId) =>
+    request(`/auth/users/${encodeURIComponent(userId)}`, {
+      method: 'DELETE',
+    });
+
   const listVisitors = async (siteId, page = 1, pageSize = 50) =>
     request(`/visitors${buildQueryString({ siteId, page, pageSize })}`);
 
@@ -490,6 +506,9 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
       acceptInvite,
       me: getCurrentUser,
       updateProfile: updateCurrentUserProfile,
+      listUsers: listTenantUsers,
+      updateUserRole: updateTenantUserRole,
+      removeUser: removeTenantUser,
     },
     platformAdmin: {
       getSummary: getPlatformSummary,

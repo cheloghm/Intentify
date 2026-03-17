@@ -14,7 +14,9 @@ public sealed class UpdateCurrentUserProfileHandler
         _tenants = tenants;
     }
 
-    public async Task<OperationResult> HandleAsync(UpdateCurrentUserProfileCommand command, CancellationToken cancellationToken = default)
+    public async Task<OperationResult<UpdateCurrentUserProfileResult>> HandleAsync(
+        UpdateCurrentUserProfileCommand command,
+        CancellationToken cancellationToken = default)
     {
         var errors = new ValidationErrors();
 
@@ -23,33 +25,42 @@ public sealed class UpdateCurrentUserProfileHandler
         var wantsOrganizationChange = !string.IsNullOrWhiteSpace(command.OrganizationName);
         if (wantsOrganizationChange && !CanUpdateOrganization(command.Roles))
         {
-            return OperationResult.Forbidden();
+            return OperationResult<UpdateCurrentUserProfileResult>.Forbidden();
         }
 
         if (errors.HasErrors)
         {
-            return OperationResult.ValidationFailed(errors);
+            return OperationResult<UpdateCurrentUserProfileResult>.ValidationFailed(errors);
         }
 
         var user = await _users.GetByIdAsync(command.UserId, cancellationToken);
         if (user is null || user.TenantId != command.TenantId)
         {
-            return OperationResult.Unauthorized();
+            return OperationResult<UpdateCurrentUserProfileResult>.Unauthorized();
         }
 
-        await _users.UpdateDisplayNameAsync(command.UserId, command.DisplayName.Trim(), DateTime.UtcNow, cancellationToken);
+        await _users.UpdateDisplayNameAsync(
+            command.UserId,
+            command.DisplayName.Trim(),
+            DateTime.UtcNow,
+            cancellationToken);
 
         if (wantsOrganizationChange)
         {
-            await _tenants.UpdateNameAsync(command.TenantId, command.OrganizationName!.Trim(), DateTime.UtcNow, cancellationToken);
+            await _tenants.UpdateNameAsync(
+                command.TenantId,
+                command.OrganizationName!.Trim(),
+                DateTime.UtcNow,
+                cancellationToken);
         }
 
-        return OperationResult.Success();
+        return OperationResult<UpdateCurrentUserProfileResult>.Success(new UpdateCurrentUserProfileResult());
     }
 
     private static bool CanUpdateOrganization(IReadOnlyCollection<string> roles)
     {
-        return roles.Any(role => string.Equals(role, AuthRoles.Admin, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(role, AuthRoles.SuperAdmin, StringComparison.OrdinalIgnoreCase));
+        return roles.Any(role =>
+            string.Equals(role, AuthRoles.Admin, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(role, AuthRoles.SuperAdmin, StringComparison.OrdinalIgnoreCase));
     }
 }

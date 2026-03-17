@@ -1,4 +1,4 @@
-import { createCard, createInput, createTable, createToastManager } from '../shared/ui/index.js';
+import { createBadge, createCard, createInput, createTable, createToastManager } from '../shared/ui/index.js';
 import { createApiClient, mapApiError } from '../shared/apiClient.js';
 import { clearToken, getToken, setToken } from '../shared/auth.js';
 import { renderSitesView } from '../pages/sites.js';
@@ -12,6 +12,7 @@ import { renderLeadsView } from '../pages/leads.js';
 import { renderTicketsView } from '../pages/tickets.js';
 import { renderIntelligenceView } from '../pages/intelligence.js';
 import { renderAdsView } from '../pages/ads.js';
+import { renderTeamView } from '../pages/team.js';
 import { renderPlatformAdminTenantDetailView, renderPlatformAdminView } from '../pages/platformAdmin.js';
 
 const app = document.getElementById('app');
@@ -75,6 +76,7 @@ const normalizeFieldKey = (key) => key.toLowerCase().replace(/\s+/g, '');
 const AUTH_NAV_ITEMS = [
   { label: 'Sites', href: '#/sites' },
   { label: 'Dashboard', href: '#/dashboard' },
+  { label: 'Team', href: '#/team' },
   { label: 'Visitors', href: '#/visitors' },
   { label: 'Knowledge', href: '#/knowledge' },
   { label: 'Engage', href: '#/engage' },
@@ -124,7 +126,7 @@ const createNavLink = ({ label, href }) => {
   return link;
 };
 
-const createNavbar = ({ isAuthenticated, canAccessPlatformAdmin }) => {
+const createNavbar = ({ isAuthenticated, canAccessPlatformAdmin, canAccessTeam }) => {
   const nav = document.createElement('nav');
   nav.style.display = 'flex';
   nav.style.alignItems = 'center';
@@ -150,7 +152,7 @@ const createNavbar = ({ isAuthenticated, canAccessPlatformAdmin }) => {
     links.appendChild(createNavLink({ label: 'Login', href: '#/login' }));
     links.appendChild(createNavLink({ label: 'Register', href: '#/register' }));
   } else {
-    AUTH_NAV_ITEMS.forEach((item) => {
+    AUTH_NAV_ITEMS.filter((item) => item.href !== '#/team' || canAccessTeam).forEach((item) => {
       links.appendChild(createNavLink(item));
     });
     if (canAccessPlatformAdmin) {
@@ -282,7 +284,14 @@ const createUserMenuTrigger = ({ firstName, onProfile, onLogout }) => {
   return { container, close };
 };
 
-const createProfileModal = ({ profile, onClose, onSave }) => {
+const createProfileModal = ({
+  profile,
+  canManageTeam,
+  isAdministrator,
+  onManageTeam,
+  onClose,
+  onSave,
+}) => {
   const overlay = document.createElement('div');
   overlay.setAttribute('role', 'dialog');
   overlay.setAttribute('aria-modal', 'true');
@@ -306,6 +315,11 @@ const createProfileModal = ({ profile, onClose, onSave }) => {
   card.style.display = 'flex';
   card.style.flexDirection = 'column';
   card.style.gap = '12px';
+
+  const titleRow = document.createElement('div');
+  titleRow.style.display = 'flex';
+  titleRow.style.alignItems = 'center';
+  titleRow.style.justifyContent = 'space-between';
 
   const title = document.createElement('h3');
   title.textContent = 'Profile';
@@ -336,11 +350,30 @@ const createProfileModal = ({ profile, onClose, onSave }) => {
   });
   organizationField.input.value = profile?.organizationName || '';
 
-  const isAdmin = Boolean(profile?.isAdmin);
-  if (!isAdmin) {
+  if (isAdministrator) {
+    titleRow.appendChild(createBadge({ text: 'Administrator', variant: 'info' }));
+  }
+
+  titleRow.prepend(title);
+
+  if (!isAdministrator) {
     organizationField.input.disabled = true;
     organizationField.input.style.background = '#f8fafc';
     organizationField.input.style.cursor = 'not-allowed';
+  }
+
+  let manageTeamButton;
+  if (canManageTeam) {
+    manageTeamButton = document.createElement('button');
+    manageTeamButton.type = 'button';
+    manageTeamButton.textContent = 'Manage team';
+    manageTeamButton.style.alignSelf = 'flex-start';
+    manageTeamButton.style.padding = '8px 12px';
+    manageTeamButton.style.border = '1px solid #cbd5e1';
+    manageTeamButton.style.borderRadius = '8px';
+    manageTeamButton.style.background = '#ffffff';
+    manageTeamButton.style.cursor = 'pointer';
+    manageTeamButton.addEventListener('click', onManageTeam);
   }
 
   const buttons = document.createElement('div');
@@ -387,7 +420,7 @@ const createProfileModal = ({ profile, onClose, onSave }) => {
     try {
       await onSave({
         displayName,
-        organizationName: isAdmin ? organizationName : undefined,
+        organizationName: isAdministrator ? organizationName : undefined,
       });
       onClose();
     } catch (error) {
@@ -407,7 +440,11 @@ const createProfileModal = ({ profile, onClose, onSave }) => {
   });
 
   buttons.append(cancel, save);
-  card.append(title, displayNameField.wrapper, emailField.wrapper, organizationField.wrapper, buttons);
+  card.append(titleRow, displayNameField.wrapper, emailField.wrapper, organizationField.wrapper);
+  if (manageTeamButton) {
+    card.append(manageTeamButton);
+  }
+  card.append(buttons);
 
   overlay.addEventListener('click', (event) => {
     if (event.target === overlay) {
@@ -436,7 +473,7 @@ const createProfileModal = ({ profile, onClose, onSave }) => {
   };
 };
 
-const createAuthenticatedShell = ({ route, canAccessPlatformAdmin, onLogout, onOpenProfile, firstName }) => {
+const createAuthenticatedShell = ({ route, canAccessPlatformAdmin, canAccessTeam, onLogout, onOpenProfile, firstName }) => {
   const shell = document.createElement('div');
   shell.style.display = 'flex';
   shell.style.minHeight = '100vh';
@@ -464,7 +501,7 @@ const createAuthenticatedShell = ({ route, canAccessPlatformAdmin, onLogout, onO
   nav.style.flexDirection = 'column';
   nav.style.gap = '4px';
 
-  AUTH_NAV_ITEMS.forEach((item) => {
+  AUTH_NAV_ITEMS.filter((item) => item.href !== '#/team' || canAccessTeam).forEach((item) => {
     nav.appendChild(createSidebarNavLink({ ...item, active: route === item.href.replace('#', '') }));
   });
 
@@ -1095,6 +1132,7 @@ const routes = {
   '/register': renderRegisterView,
   '/accept-invite': renderAcceptInviteView,
   '/dashboard': renderDashboardView,
+  '/team': renderTeamView,
   '/sites': renderSitesView,
   '/install': renderInstallView,
   '/visitors': renderVisitorsView,
@@ -1152,6 +1190,72 @@ const authState = {
   profileModalOpen: false,
 };
 
+const getPrimaryRole = (roles) => {
+  if (!Array.isArray(roles)) {
+    return 'user';
+  }
+
+  if (roles.includes('super_admin')) {
+    return 'super_admin';
+  }
+
+  if (roles.includes('platform_admin')) {
+    return 'admin';
+  }
+
+  if (roles.includes('admin')) {
+    return 'admin';
+  }
+
+  if (roles.includes('manager')) {
+    return 'manager';
+  }
+
+  return 'user';
+};
+
+const canManageUsers = (role) => role === 'super_admin' || role === 'admin' || role === 'manager';
+
+const isAdministratorRole = (role) => role === 'super_admin' || role === 'admin';
+
+const canInviteRole = (actorRole, targetRole) => {
+  if (actorRole === 'super_admin') {
+    return targetRole === 'admin' || targetRole === 'manager' || targetRole === 'user';
+  }
+
+  if (actorRole === 'admin') {
+    return targetRole === 'manager' || targetRole === 'user';
+  }
+
+  if (actorRole === 'manager') {
+    return targetRole === 'user';
+  }
+
+  return false;
+};
+
+const canChangeRole = (actorRole, targetRole) => {
+  if (targetRole === 'super_admin') {
+    return false;
+  }
+
+  if (actorRole === 'super_admin') {
+    return targetRole === 'admin' || targetRole === 'manager' || targetRole === 'user';
+  }
+
+  if (actorRole === 'admin') {
+    return targetRole === 'manager' || targetRole === 'user';
+  }
+
+  if (actorRole === 'manager') {
+    return targetRole === 'user';
+  }
+
+  return false;
+};
+
+const canRemoveRole = (actorRole, targetRole) => canChangeRole(actorRole, targetRole);
+
 const hasPlatformAccess = () =>
   Array.isArray(authState.roles)
   && (authState.roles.includes('super_admin') || authState.roles.includes('platform_admin'));
@@ -1188,6 +1292,7 @@ const renderApp = () => {
 
   const protectedRoutes = [
     '/dashboard',
+    '/team',
     '/sites',
     '/install',
     '/visitors',
@@ -1225,11 +1330,13 @@ const renderApp = () => {
   }
 
   const isPlatformRoute = route === '/platform-admin' || route === '/platform-admin/tenant/:tenantId';
+  const isTeamRoute = route === '/team';
   if (isAuthenticated && isPlatformRoute && !authState.loaded) {
     app.innerHTML = '';
     const authenticatedShell = createAuthenticatedShell({
       route,
       canAccessPlatformAdmin: false,
+      canAccessTeam: false,
       firstName: getFirstName(authState.profile?.displayName),
       onOpenProfile: () => {
         authState.profileModalOpen = true;
@@ -1254,6 +1361,11 @@ const renderApp = () => {
     return;
   }
 
+  if (isAuthenticated && isTeamRoute && authState.loaded && !canManageUsers(getPrimaryRole(authState.roles))) {
+    window.location.hash = '#/dashboard';
+    return;
+  }
+
   const view = routes[route] || routes['/'];
   app.innerHTML = '';
   let main;
@@ -1262,6 +1374,7 @@ const renderApp = () => {
     const authenticatedShell = createAuthenticatedShell({
       route,
       canAccessPlatformAdmin: hasPlatformAccess(),
+      canAccessTeam: canManageUsers(getPrimaryRole(authState.roles)),
       firstName: getFirstName(authState.profile?.displayName),
       onOpenProfile: () => {
         authState.profileModalOpen = true;
@@ -1275,7 +1388,7 @@ const renderApp = () => {
     main = authenticatedShell.main;
     app.append(authenticatedShell.shell, authenticatedShell.overlay);
   } else {
-    const navbar = createNavbar({ isAuthenticated, canAccessPlatformAdmin: false });
+    const navbar = createNavbar({ isAuthenticated, canAccessPlatformAdmin: false, canAccessTeam: false });
     main = createMain();
     app.append(navbar, main);
   }
@@ -1290,9 +1403,24 @@ const renderApp = () => {
     return;
   }
 
-  view(main, { apiClient, toast, query, params });
+  view(main, {
+    apiClient,
+    toast,
+    query,
+    params,
+    currentUser: authState.profile,
+    capabilities: {
+      canManageUsers,
+      canInviteRole,
+      canChangeRole,
+      canRemoveRole,
+    },
+  });
 
   if (isAuthenticated && authState.profileModalOpen && authState.profile) {
+    const primaryRole = getPrimaryRole(authState.roles);
+    const canManageTeam = canManageUsers(primaryRole);
+    const isAdministrator = isAdministratorRole(primaryRole);
     let modal;
     const closeModal = () => {
       if (modal) {
@@ -1304,6 +1432,12 @@ const renderApp = () => {
 
     modal = createProfileModal({
       profile: authState.profile,
+      canManageTeam,
+      isAdministrator,
+      onManageTeam: () => {
+        authState.profileModalOpen = false;
+        window.location.hash = '#/team';
+      },
       onClose: closeModal,
       onSave: async ({ displayName, organizationName }) => {
         await apiClient.auth.updateProfile({ displayName, organizationName });

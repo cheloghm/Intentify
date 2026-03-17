@@ -22,3 +22,14 @@ public sealed record CreateInviteRequest(string Email, string Role);
 public sealed record CreateInviteResponse(string Token, string Email, string Role, DateTime ExpiresAtUtc);
 
 public sealed record AcceptInviteRequest(string Token, string DisplayName, string Email, string Password);
+
+public sealed record TenantUserResponse(
+    string UserId,
+    string Email,
+    string DisplayName,
+    IReadOnlyCollection<string> Roles,
+    bool IsActive,
+    DateTime CreatedAt,
+    DateTime UpdatedAt);
+
+public sealed record ChangeTenantUserRoleRequest(string Role);
