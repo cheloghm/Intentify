@@ -31,7 +31,11 @@ public sealed class EngageModule : IAppModule
         var aiOptions = new AiOptions
         {
             ApiBaseUrl = configuration["Intentify:AI:ApiBaseUrl"],
-            ApiKey = configuration["Intentify:AI:ApiKey"]
+            ApiKey = configuration["Intentify:AI:ApiKey"],
+            ChatModel = configuration["Intentify:AI:ChatModel"],
+            EmbeddingModel = configuration["Intentify:AI:EmbeddingModel"],
+            TimeoutSeconds = configuration.GetValue<int?>("Intentify:AI:TimeoutSeconds") ?? 30,
+            MaxPromptChars = configuration.GetValue<int?>("Intentify:AI:MaxPromptChars") ?? 0
         };
         services.TryAddSingleton(aiOptions);
         services.AddHttpClient(HttpChatCompletionClient.ClientName, (serviceProvider, client) =>

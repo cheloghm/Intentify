@@ -21,6 +21,10 @@ Engage manages chat/widget interactions, bot configuration, conversation history
 Verified module-specific keys in API registration:
 - `Intentify:AI:ApiBaseUrl`
 - `Intentify:AI:ApiKey`
+- `Intentify:AI:ChatModel`
+- `Intentify:AI:EmbeddingModel`
+- `Intentify:AI:TimeoutSeconds`
+- `Intentify:AI:MaxPromptChars`
 - `Intentify:Engage:SessionTimeoutMinutes`
 
 ## Key integrations and dependencies
