@@ -4,16 +4,34 @@ public sealed record WidgetBootstrapQuery(string WidgetKey);
 
 public sealed record WidgetBootstrapResult(Guid SiteId, string Domain);
 
-public sealed record ChatSendCommand(string WidgetKey, Guid? SessionId, string Message);
+public sealed record ChatSendCommand(string WidgetKey, Guid? SessionId, string Message, string? CollectorSessionId);
 
 public sealed record EngageCitationResult(Guid SourceId, Guid ChunkId, int ChunkIndex);
 
-public sealed record ChatSendResult(Guid SessionId, string Response, decimal Confidence, bool TicketCreated, IReadOnlyCollection<EngageCitationResult> Sources);
+public sealed record ChatSendResult(
+    Guid SessionId,
+    string Response,
+    decimal Confidence,
+    bool TicketCreated,
+    IReadOnlyCollection<EngageCitationResult> Sources,
+    string? ResponseKind = null,
+    string? PromoPublicKey = null,
+    string? PromoTitle = null,
+    string? PromoDescription = null,
+    AiDecisionContract? Stage7Decision = null);
 
-public sealed record ListConversationsQuery(Guid TenantId, Guid SiteId);
+public sealed record ListConversationsQuery(Guid TenantId, Guid SiteId, string? CollectorSessionId);
 
 public sealed record ConversationSummaryResult(Guid SessionId, DateTime CreatedAtUtc, DateTime UpdatedAtUtc);
 
 public sealed record GetConversationMessagesQuery(Guid TenantId, Guid SiteId, Guid SessionId);
 
+public sealed record GetWidgetConversationMessagesQuery(string WidgetKey, Guid SessionId);
+
 public sealed record ConversationMessageResult(Guid MessageId, string Role, string Content, DateTime CreatedAtUtc, decimal? Confidence, IReadOnlyCollection<EngageCitationResult> Citations);
+
+public sealed record GetEngageBotQuery(Guid TenantId, Guid SiteId);
+
+public sealed record EngageBotResult(Guid BotId, string Name, string? PrimaryColor = null, bool? LauncherVisible = null, string? Tone = null, string? Verbosity = null, string? FallbackStyle = null);
+
+public sealed record UpdateEngageBotCommand(Guid TenantId, Guid SiteId, string Name, string? PrimaryColor = null, bool? LauncherVisible = null, string? Tone = null, string? Verbosity = null, string? FallbackStyle = null);

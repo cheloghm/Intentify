@@ -26,7 +26,8 @@ public sealed class VisitorTimelineReader : IVisitorTimelineReader
 
         await _ensureIndexes;
 
-        var filter = Builders<CollectorEvent>.Filter.Eq(item => item.SiteId, query.SiteId)
+        var filter = Builders<CollectorEvent>.Filter.Eq(item => item.TenantId, query.TenantId)
+            & Builders<CollectorEvent>.Filter.Eq(item => item.SiteId, query.SiteId)
             & Builders<CollectorEvent>.Filter.In(item => item.SessionId, sessionIds);
 
         if (retentionFloorUtc is { } floor)
@@ -42,6 +43,7 @@ public sealed class VisitorTimelineReader : IVisitorTimelineReader
         return events.Select(item => new VisitorTimelineItem(
             item.OccurredAtUtc,
             item.Type,
+            item.SessionId,
             item.Url,
             item.Referrer,
             ToSummary(item.Data))).ToArray();

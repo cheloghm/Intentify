@@ -5,6 +5,7 @@
     <ProjectReference Include="..\Intentify.Modules.Promos.Domain\Intentify.Modules.Promos.Domain.csproj" />
     <ProjectReference Include="..\Intentify.Modules.Promos.Application\Intentify.Modules.Promos.Application.csproj" />
     <ProjectReference Include="..\..\..\Intentify.Modules.Visitors\src\Intentify.Modules.Visitors.Domain\Intentify.Modules.Visitors.Domain.csproj" />
+    <ProjectReference Include="..\..\..\Intentify.Modules.Leads\src\Intentify.Modules.Leads.Application\Intentify.Modules.Leads.Application.csproj" />
     <ProjectReference Include="..\..\..\..\shared\Intentify.Shared.Data.Mongo\src\Intentify.Shared.Data.Mongo\Intentify.Shared.Data.Mongo.csproj" />
   </ItemGroup>
 </Project>

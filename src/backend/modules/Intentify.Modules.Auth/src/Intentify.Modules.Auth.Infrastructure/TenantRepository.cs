@@ -16,6 +16,12 @@ public sealed class TenantRepository : ITenantRepository
         _ensureIndexes = EnsureIndexesAsync();
     }
 
+    public async Task<Tenant?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        await _ensureIndexes;
+        return await _tenants.Find(tenant => tenant.Id == id).FirstOrDefaultAsync(cancellationToken);
+    }
+
     public async Task<Tenant?> GetByDomainAsync(string domain, CancellationToken cancellationToken = default)
     {
         await _ensureIndexes;
@@ -26,6 +32,18 @@ public sealed class TenantRepository : ITenantRepository
     {
         await _ensureIndexes;
         await _tenants.InsertOneAsync(tenant, cancellationToken: cancellationToken);
+    }
+
+    public async Task UpdateNameAsync(Guid id, string name, DateTime updatedAt, CancellationToken cancellationToken = default)
+    {
+        await _ensureIndexes;
+
+        var filter = Builders<Tenant>.Filter.Eq(tenant => tenant.Id, id);
+        var update = Builders<Tenant>.Update
+            .Set(tenant => tenant.Name, name)
+            .Set(tenant => tenant.UpdatedAt, updatedAt);
+
+        await _tenants.UpdateOneAsync(filter, update, cancellationToken: cancellationToken);
     }
 
     private Task EnsureIndexesAsync()

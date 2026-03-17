@@ -1,47 +1,123 @@
-import { createCard, createToastManager } from '../shared/ui/index.js';
+import { createButton, createCard, createToastManager } from '../shared/ui/index.js';
 import { createApiClient, mapApiError } from '../shared/apiClient.js';
-import { API_BASE } from '../shared/config.js';
-
-const createButton = ({ label, variant = 'default', type = 'button' } = {}) => {
-  const button = document.createElement('button');
-  button.type = type;
-  button.textContent = label;
-  button.style.padding = '8px 12px';
-  button.style.borderRadius = '6px';
-  button.style.border = variant === 'primary' ? 'none' : '1px solid #e2e8f0';
-  button.style.background = variant === 'primary' ? '#2563eb' : '#ffffff';
-  button.style.color = variant === 'primary' ? '#ffffff' : '#1e293b';
-  button.style.cursor = 'pointer';
-  button.style.fontSize = '13px';
-  return button;
-};
 
 const getSiteId = (site) => site?.siteId || site?.id || '';
 
-const copyToClipboardRobust = async (value) => {
-  if (navigator.clipboard?.writeText) {
-    try {
-      await navigator.clipboard.writeText(value);
-      return;
-    } catch (error) {
-      // Fallback below.
+const conversationTimestampFields = [
+  'updatedAtUtc',
+  'updatedAt',
+  'createdAtUtc',
+  'createdAt',
+  'lastActivityAtUtc',
+  'lastActivityAt',
+];
+
+const getConversationTimestamp = (conversation) => {
+  for (const field of conversationTimestampFields) {
+    const rawValue = conversation?.[field];
+    if (!rawValue) {
+      continue;
+    }
+
+    const value = new Date(rawValue).getTime();
+    if (!Number.isNaN(value)) {
+      return value;
     }
   }
 
-  const textarea = document.createElement('textarea');
-  textarea.value = value;
-  textarea.style.position = 'fixed';
-  textarea.style.opacity = '0';
-  document.body.appendChild(textarea);
-  textarea.focus();
-  textarea.select();
-  const copied = document.execCommand('copy');
-  textarea.remove();
-
-  if (!copied) {
-    throw new Error('Copy command failed.');
-  }
+  return null;
 };
+
+const sortConversationsNewestFirst = (conversations) => {
+  if (!Array.isArray(conversations) || !conversations.length) {
+    return [];
+  }
+
+  const hasSortableTimestamp = conversations.some((conversation) =>
+    conversationTimestampFields.some((field) => {
+      const rawValue = conversation?.[field];
+      if (!rawValue) {
+        return false;
+      }
+
+      return !Number.isNaN(new Date(rawValue).getTime());
+    })
+  );
+
+  if (!hasSortableTimestamp) {
+    return conversations;
+  }
+
+  return [...conversations].sort((left, right) => {
+    const rightTimestamp = getConversationTimestamp(right);
+    const leftTimestamp = getConversationTimestamp(left);
+
+    if (rightTimestamp === null && leftTimestamp === null) {
+      return 0;
+    }
+    if (rightTimestamp === null) {
+      return 1;
+    }
+    if (leftTimestamp === null) {
+      return -1;
+    }
+
+    return rightTimestamp - leftTimestamp;
+  });
+};
+
+
+const formatConfidence = (value) => {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return 'n/a';
+  }
+
+  return `${Math.round(numeric * 100)}%`;
+};
+
+const buildRecommendationTargetSummary = (targetRefs) => {
+  if (!targetRefs || typeof targetRefs !== 'object') {
+    return '';
+  }
+
+  const targets = [
+    targetRefs.promoId ? `promoId: ${targetRefs.promoId}` : null,
+    targetRefs.promoPublicKey ? `promoKey: ${targetRefs.promoPublicKey}` : null,
+    targetRefs.knowledgeSourceId ? `knowledgeSourceId: ${targetRefs.knowledgeSourceId}` : null,
+    targetRefs.ticketId ? `ticketId: ${targetRefs.ticketId}` : null,
+    targetRefs.visitorId ? `visitorId: ${targetRefs.visitorId}` : null,
+  ].filter(Boolean);
+
+  return targets.join(' · ');
+};
+
+const getValidRecommendations = (stage7Decision) => {
+  if (!stage7Decision || stage7Decision.validationStatus !== 'Valid') {
+    return [];
+  }
+
+  if (!Array.isArray(stage7Decision.recommendations)) {
+    return [];
+  }
+
+  return stage7Decision.recommendations.filter((item) => {
+    if (!item || typeof item !== 'object') {
+      return false;
+    }
+
+    if (typeof item.type !== 'string' || !item.type.trim()) {
+      return false;
+    }
+
+    if (typeof item.rationale !== 'string' || !item.rationale.trim()) {
+      return false;
+    }
+
+    return true;
+  });
+};
+
 
 export const renderEngageView = (container, { apiClient, toast } = {}) => {
   const client = apiClient || createApiClient();
@@ -56,7 +132,12 @@ export const renderEngageView = (container, { apiClient, toast } = {}) => {
     conversations: [],
     selectedSessionId: '',
     selectedMessages: [],
-    revealWidgetKey: false,
+    botName: 'Assistant',
+    primaryColor: '#2563eb',
+    launcherVisible: true,
+    tone: 'warm',
+    verbosity: 'balanced',
+    fallbackStyle: 'refine',
   };
 
   const page = document.createElement('div');
@@ -113,98 +194,129 @@ export const renderEngageView = (container, { apiClient, toast } = {}) => {
   widgetValue.textContent = 'select site';
   widgetWrap.append(widgetLabel, widgetValue);
 
-  configBody.append(siteField, widgetWrap);
+
+  const botNameField = document.createElement('label');
+  botNameField.style.display = 'flex';
+  botNameField.style.flexDirection = 'column';
+  botNameField.style.gap = '6px';
+
+  const botNameLabel = document.createElement('span');
+  botNameLabel.textContent = 'Bot name';
+  botNameLabel.style.fontSize = '13px';
+
+  const botNameInput = document.createElement('input');
+  botNameInput.type = 'text';
+  botNameInput.placeholder = 'Assistant';
+  botNameInput.maxLength = 50;
+  botNameInput.style.padding = '8px 10px';
+  botNameInput.style.borderRadius = '6px';
+  botNameInput.style.border = '1px solid #cbd5e1';
+
+  const saveBotNameButton = createButton({ label: 'Save name', variant: 'primary' });
+  saveBotNameButton.style.width = 'fit-content';
+
+  botNameField.append(botNameLabel, botNameInput, saveBotNameButton);
+
+  const primaryColorField = document.createElement('label');
+  primaryColorField.style.display = 'flex';
+  primaryColorField.style.flexDirection = 'column';
+  primaryColorField.style.gap = '6px';
+
+  const primaryColorLabel = document.createElement('span');
+  primaryColorLabel.textContent = 'Primary color';
+  primaryColorLabel.style.fontSize = '13px';
+
+  const primaryColorInput = document.createElement('input');
+  primaryColorInput.type = 'color';
+  primaryColorInput.value = state.primaryColor;
+  primaryColorInput.style.height = '38px';
+  primaryColorInput.style.padding = '4px';
+  primaryColorInput.style.borderRadius = '6px';
+  primaryColorInput.style.border = '1px solid #cbd5e1';
+
+  const launcherVisibleWrap = document.createElement('label');
+  launcherVisibleWrap.style.display = 'flex';
+  launcherVisibleWrap.style.alignItems = 'center';
+  launcherVisibleWrap.style.gap = '8px';
+
+  const launcherVisibleInput = document.createElement('input');
+  launcherVisibleInput.type = 'checkbox';
+  launcherVisibleInput.checked = state.launcherVisible;
+
+  const launcherVisibleText = document.createElement('span');
+  launcherVisibleText.textContent = 'Show launcher';
+  launcherVisibleText.style.fontSize = '13px';
+
+  launcherVisibleWrap.append(launcherVisibleInput, launcherVisibleText);
+
+  const personalityField = document.createElement('label');
+  personalityField.style.display = 'flex';
+  personalityField.style.flexDirection = 'column';
+  personalityField.style.gap = '6px';
+
+  const personalityLabel = document.createElement('span');
+  personalityLabel.textContent = 'Bot personality';
+  personalityLabel.style.fontSize = '13px';
+
+  const toneInput = document.createElement('select');
+  toneInput.style.padding = '8px 10px';
+  toneInput.style.borderRadius = '6px';
+  toneInput.style.border = '1px solid #cbd5e1';
+  [['warm', 'Warm'], ['professional', 'Professional'], ['casual', 'Casual']].forEach(([value, label]) => {
+    const option = document.createElement('option');
+    option.value = value;
+    option.textContent = label;
+    toneInput.appendChild(option);
+  });
+
+  const verbosityInput = document.createElement('select');
+  verbosityInput.style.padding = '8px 10px';
+  verbosityInput.style.borderRadius = '6px';
+  verbosityInput.style.border = '1px solid #cbd5e1';
+  [['brief', 'Brief'], ['balanced', 'Balanced'], ['detailed', 'Detailed']].forEach(([value, label]) => {
+    const option = document.createElement('option');
+    option.value = value;
+    option.textContent = label;
+    verbosityInput.appendChild(option);
+  });
+
+  const fallbackStyleInput = document.createElement('select');
+  fallbackStyleInput.style.padding = '8px 10px';
+  fallbackStyleInput.style.borderRadius = '6px';
+  fallbackStyleInput.style.border = '1px solid #cbd5e1';
+  [['refine', 'Refine first'], ['handoff', 'Offer handoff first']].forEach(([value, label]) => {
+    const option = document.createElement('option');
+    option.value = value;
+    option.textContent = label;
+    fallbackStyleInput.appendChild(option);
+  });
+
+  const savePersonalityButton = createButton({ label: 'Save personality', variant: 'primary' });
+  savePersonalityButton.style.width = 'fit-content';
+
+  personalityField.append(personalityLabel, toneInput, verbosityInput, fallbackStyleInput, savePersonalityButton);
+
+  const saveAppearanceButton = createButton({ label: 'Save appearance', variant: 'primary' });
+  saveAppearanceButton.style.width = 'fit-content';
+
+  primaryColorField.append(primaryColorLabel, primaryColorInput, launcherVisibleWrap, saveAppearanceButton);
+
+  configBody.append(siteField, widgetWrap, botNameField, primaryColorField, personalityField);
 
   const installBody = document.createElement('div');
   installBody.style.display = 'flex';
   installBody.style.flexDirection = 'column';
   installBody.style.gap = '10px';
 
-  const installKeyRow = document.createElement('div');
-  installKeyRow.style.display = 'flex';
-  installKeyRow.style.alignItems = 'center';
-  installKeyRow.style.gap = '8px';
+  const installMessage = document.createElement('p');
+  installMessage.textContent = 'Engage now loads through the unified Intentify SDK snippet. Use the Install page to copy the single snippet and manage allowed origins.';
+  installMessage.style.margin = '0';
+  installMessage.style.fontSize = '13px';
+  installMessage.style.color = '#475569';
 
-  const installKeyLabel = document.createElement('span');
-  installKeyLabel.textContent = 'Widget key:';
-  installKeyLabel.style.fontSize = '13px';
-  installKeyLabel.style.color = '#475569';
+  const updateInstallCard = () => {};
 
-  const installKeyValue = document.createElement('code');
-  installKeyValue.style.fontSize = '12px';
-  installKeyValue.style.padding = '4px 6px';
-  installKeyValue.style.borderRadius = '4px';
-  installKeyValue.style.background = '#f1f5f9';
-
-  const toggleWidgetKeyButton = createButton({ label: 'Reveal' });
-  const copyWidgetKeyButton = createButton({ label: 'Copy key' });
-  installKeyRow.append(installKeyLabel, installKeyValue, toggleWidgetKeyButton, copyWidgetKeyButton);
-
-  const snippetValue = document.createElement('textarea');
-  snippetValue.readOnly = true;
-  snippetValue.rows = 1;
-  snippetValue.style.width = '100%';
-  snippetValue.style.borderRadius = '8px';
-  snippetValue.style.border = '1px solid #e2e8f0';
-  snippetValue.style.padding = '10px 12px';
-  snippetValue.style.fontFamily = 'ui-monospace, SFMono-Regular, SFMono-Regular, Menlo, monospace';
-  snippetValue.style.fontSize = '12px';
-  snippetValue.style.color = '#1e293b';
-  snippetValue.style.background = '#f8fafc';
-
-  const copySnippetButton = createButton({ label: 'Copy snippet' });
-  copySnippetButton.style.alignSelf = 'flex-start';
-
-  const installInstructions = document.createElement('ul');
-  installInstructions.style.margin = '0';
-  installInstructions.style.paddingLeft = '18px';
-  installInstructions.style.color = '#475569';
-  installInstructions.style.fontSize = '13px';
-
-  const htmlInstruction = document.createElement('li');
-  htmlInstruction.textContent = 'Paste before </body>';
-  const wordpressInstruction = document.createElement('li');
-  wordpressInstruction.textContent = 'WordPress: add to footer or a header/footer injection plugin';
-  installInstructions.append(htmlInstruction, wordpressInstruction);
-
-  const updateInstallCard = () => {
-    const hasSite = !!state.siteId;
-    const key = state.widgetKey ? state.widgetKey.trim() : '';
-    const baseUrl = API_BASE.replace(/\/+$/, '');
-    const masked = key ? '••••••' : '••••••';
-
-    installKeyValue.textContent = state.revealWidgetKey && key ? key : masked;
-    toggleWidgetKeyButton.disabled = !hasSite || !key;
-    toggleWidgetKeyButton.textContent = state.revealWidgetKey ? 'Hide' : 'Reveal';
-    copyWidgetKeyButton.disabled = !hasSite || !key;
-    copySnippetButton.disabled = !hasSite || !key;
-    snippetValue.value = `<script async src="${baseUrl}/engage/widget.js" data-widget-key="${key}"></script>`;
-  };
-
-  toggleWidgetKeyButton.addEventListener('click', () => {
-    state.revealWidgetKey = !state.revealWidgetKey;
-    updateInstallCard();
-  });
-
-  copyWidgetKeyButton.addEventListener('click', async () => {
-    try {
-      await copyToClipboardRobust(state.widgetKey || '');
-      notifier.show({ message: 'Widget key copied.', variant: 'success' });
-    } catch (error) {
-      notifier.show({ message: 'Unable to copy widget key.', variant: 'danger' });
-    }
-  });
-
-  copySnippetButton.addEventListener('click', async () => {
-    try {
-      await copyToClipboardRobust(snippetValue.value);
-      notifier.show({ message: 'Snippet copied to clipboard.', variant: 'success' });
-    } catch (error) {
-      notifier.show({ message: 'Unable to copy snippet.', variant: 'danger' });
-    }
-  });
-
-  installBody.append(installKeyRow, snippetValue, copySnippetButton, installInstructions);
+  installBody.append(installMessage);
 
   const chatBody = document.createElement('div');
   chatBody.style.display = 'flex';
@@ -235,8 +347,8 @@ export const renderEngageView = (container, { apiClient, toast } = {}) => {
   chatBody.append(transcript, chatForm);
 
   const conversationsBody = document.createElement('div');
-  conversationsBody.style.display = 'grid';
-  conversationsBody.style.gridTemplateColumns = '280px 1fr';
+  conversationsBody.style.display = 'flex';
+  conversationsBody.style.flexDirection = 'column';
   conversationsBody.style.gap = '12px';
 
   const sessionsList = document.createElement('div');
@@ -244,12 +356,63 @@ export const renderEngageView = (container, { apiClient, toast } = {}) => {
   sessionsList.style.flexDirection = 'column';
   sessionsList.style.gap = '8px';
 
-  const messagesPanel = document.createElement('div');
-  messagesPanel.style.display = 'flex';
-  messagesPanel.style.flexDirection = 'column';
-  messagesPanel.style.gap = '8px';
+  conversationsBody.appendChild(sessionsList);
 
-  conversationsBody.append(sessionsList, messagesPanel);
+  const modalOverlay = document.createElement('div');
+  modalOverlay.style.position = 'fixed';
+  modalOverlay.style.inset = '0';
+  modalOverlay.style.background = 'rgba(15, 23, 42, 0.55)';
+  modalOverlay.style.display = 'none';
+  modalOverlay.style.alignItems = 'center';
+  modalOverlay.style.justifyContent = 'center';
+  modalOverlay.style.zIndex = '999999';
+  modalOverlay.style.padding = '20px';
+
+  const modal = document.createElement('div');
+  modal.style.width = '100%';
+  modal.style.maxWidth = '760px';
+  modal.style.maxHeight = '85vh';
+  modal.style.background = '#ffffff';
+  modal.style.borderRadius = '12px';
+  modal.style.border = '1px solid #e2e8f0';
+  modal.style.display = 'flex';
+  modal.style.flexDirection = 'column';
+  modal.style.overflow = 'hidden';
+
+  const modalHeader = document.createElement('div');
+  modalHeader.style.display = 'flex';
+  modalHeader.style.alignItems = 'center';
+  modalHeader.style.justifyContent = 'space-between';
+  modalHeader.style.gap = '8px';
+  modalHeader.style.padding = '12px 14px';
+  modalHeader.style.borderBottom = '1px solid #e2e8f0';
+
+  const modalTitle = document.createElement('div');
+  modalTitle.style.fontWeight = '600';
+  modalTitle.style.color = '#0f172a';
+  modalTitle.textContent = 'Conversation';
+
+  const modalActions = document.createElement('div');
+  modalActions.style.display = 'flex';
+  modalActions.style.alignItems = 'center';
+  modalActions.style.gap = '8px';
+
+  const jumpLatestButton = createButton({ label: 'Jump to latest' });
+  const closeModalButton = createButton({ label: 'Close' });
+
+  modalActions.append(jumpLatestButton, closeModalButton);
+  modalHeader.append(modalTitle, modalActions);
+
+  const modalMessages = document.createElement('div');
+  modalMessages.style.padding = '12px 14px';
+  modalMessages.style.overflowY = 'auto';
+  modalMessages.style.display = 'flex';
+  modalMessages.style.flexDirection = 'column';
+  modalMessages.style.gap = '8px';
+
+  modal.append(modalHeader, modalMessages);
+  modalOverlay.appendChild(modal);
+  document.body.appendChild(modalOverlay);
 
   const setSiteOptions = () => {
     siteSelect.innerHTML = '';
@@ -287,7 +450,75 @@ export const renderEngageView = (container, { apiClient, toast } = {}) => {
       bubble.style.background = entry.role === 'user' ? '#dbeafe' : '#f1f5f9';
       bubble.style.color = '#0f172a';
       bubble.style.whiteSpace = 'pre-wrap';
-      bubble.textContent = entry.content;
+const label = document.createElement('div');
+      label.style.fontSize = '11px';
+      label.style.fontWeight = '600';
+      label.style.marginBottom = '4px';
+      label.textContent = entry.role === 'user' ? 'You' : (state.botName || 'Assistant');
+
+      const content = document.createElement('div');
+      content.textContent = entry.content;
+      content.style.whiteSpace = 'pre-wrap';
+
+      bubble.append(label, content);
+
+      if (entry.role === 'assistant') {
+        const recommendations = getValidRecommendations(entry.stage7Decision);
+        if (recommendations.length > 0) {
+          const recommendationPanel = document.createElement('div');
+          recommendationPanel.style.marginTop = '8px';
+          recommendationPanel.style.paddingTop = '8px';
+          recommendationPanel.style.borderTop = '1px solid #cbd5e1';
+          recommendationPanel.style.display = 'flex';
+          recommendationPanel.style.flexDirection = 'column';
+          recommendationPanel.style.gap = '6px';
+
+          const recommendationTitle = document.createElement('div');
+          recommendationTitle.textContent = 'Recommendations';
+          recommendationTitle.style.fontSize = '11px';
+          recommendationTitle.style.fontWeight = '600';
+          recommendationTitle.style.color = '#334155';
+          recommendationPanel.appendChild(recommendationTitle);
+
+          recommendations.forEach((recommendation) => {
+            const item = document.createElement('div');
+            item.style.padding = '6px 8px';
+            item.style.border = '1px solid #cbd5e1';
+            item.style.borderRadius = '6px';
+            item.style.background = '#ffffff';
+            item.style.display = 'flex';
+            item.style.flexDirection = 'column';
+            item.style.gap = '4px';
+
+            const meta = document.createElement('div');
+            meta.style.fontSize = '11px';
+            meta.style.fontWeight = '600';
+            meta.style.color = '#0f172a';
+            meta.textContent = `${recommendation.type} · Confidence ${formatConfidence(recommendation.confidence)} · ${recommendation.requiresApproval ? 'Approval required' : 'No approval required'}`;
+
+            const rationale = document.createElement('div');
+            rationale.style.fontSize = '12px';
+            rationale.style.color = '#1e293b';
+            rationale.textContent = recommendation.rationale;
+
+            item.append(meta, rationale);
+
+            const targetSummary = buildRecommendationTargetSummary(recommendation.targetRefs);
+            if (targetSummary) {
+              const target = document.createElement('div');
+              target.style.fontSize = '11px';
+              target.style.color = '#475569';
+              target.textContent = `Target: ${targetSummary}`;
+              item.appendChild(target);
+            }
+
+            recommendationPanel.appendChild(item);
+          });
+
+          bubble.appendChild(recommendationPanel);
+        }
+      }
+
       transcript.appendChild(bubble);
     });
   };
@@ -310,40 +541,45 @@ export const renderEngageView = (container, { apiClient, toast } = {}) => {
         button.style.borderColor = '#bfdbfe';
       }
       button.addEventListener('click', async () => {
-      state.selectedSessionId = conversation.sessionId;
-      await loadConversationMessages();
+        state.selectedSessionId = conversation.sessionId;
+        await loadConversationMessages({ openModal: true });
       });
       sessionsList.appendChild(button);
     });
   };
 
-  const renderConversationMessages = () => {
-    messagesPanel.innerHTML = '';
-    if (!state.selectedSessionId) {
-      const empty = document.createElement('div');
-      empty.textContent = 'Select a conversation to view messages.';
-      empty.style.color = '#64748b';
-      messagesPanel.appendChild(empty);
-      return;
-    }
+  const renderConversationMessagesModal = () => {
+    modalMessages.innerHTML = '';
+
+    modalTitle.textContent = state.selectedSessionId
+      ? `Conversation ${state.selectedSessionId}`
+      : 'Conversation';
 
     if (!state.selectedMessages.length) {
       const empty = document.createElement('div');
       empty.textContent = 'No messages for this session.';
       empty.style.color = '#64748b';
-      messagesPanel.appendChild(empty);
+      modalMessages.appendChild(empty);
       return;
     }
 
     state.selectedMessages.forEach((message) => {
+      const isUser = message.role === 'user';
       const row = document.createElement('div');
-      row.style.border = '1px solid #e2e8f0';
-      row.style.borderRadius = '8px';
-      row.style.padding = '10px 12px';
-      row.style.background = '#ffffff';
+      row.style.display = 'flex';
+      row.style.justifyContent = isUser ? 'flex-end' : 'flex-start';
+
+      const bubble = document.createElement('div');
+      bubble.style.maxWidth = '82%';
+      bubble.style.padding = '10px 12px';
+      bubble.style.borderRadius = '10px';
+      bubble.style.background = isUser ? '#dbeafe' : '#f1f5f9';
+      bubble.style.color = '#0f172a';
+      bubble.style.border = isUser ? '1px solid #bfdbfe' : '1px solid #e2e8f0';
 
       const meta = document.createElement('div');
-      meta.textContent = `${message.role} • ${new Date(message.createdAtUtc).toLocaleString()}`;
+      const roleLabel = isUser ? 'You' : (state.botName || 'Assistant');
+      meta.textContent = `${roleLabel} • ${new Date(message.createdAtUtc).toLocaleString()}`;
       meta.style.fontSize = '12px';
       meta.style.color = '#64748b';
 
@@ -352,23 +588,84 @@ export const renderEngageView = (container, { apiClient, toast } = {}) => {
       content.style.marginTop = '6px';
       content.style.whiteSpace = 'pre-wrap';
 
-      row.append(meta, content);
-      messagesPanel.appendChild(row);
+      bubble.append(meta, content);
+
+      if (!isUser && Number.isFinite(Number(message.confidence))) {
+        const confidence = document.createElement('div');
+        confidence.style.marginTop = '6px';
+        confidence.style.fontSize = '11px';
+        confidence.style.color = '#475569';
+        confidence.textContent = `Confidence: ${formatConfidence(message.confidence)}`;
+        bubble.appendChild(confidence);
+      }
+
+      if (!isUser && Array.isArray(message.citations) && message.citations.length > 0) {
+        const citationsWrap = document.createElement('details');
+        citationsWrap.style.marginTop = '6px';
+
+        const citationsSummary = document.createElement('summary');
+        citationsSummary.textContent = `Citations (${message.citations.length})`;
+        citationsSummary.style.cursor = 'pointer';
+        citationsSummary.style.fontSize = '11px';
+        citationsSummary.style.color = '#334155';
+        citationsWrap.appendChild(citationsSummary);
+
+        const citationsList = document.createElement('div');
+        citationsList.style.marginTop = '4px';
+        citationsList.style.fontSize = '11px';
+        citationsList.style.color = '#475569';
+        citationsList.style.display = 'flex';
+        citationsList.style.flexDirection = 'column';
+        citationsList.style.gap = '3px';
+
+        message.citations.forEach((citation) => {
+          const item = document.createElement('div');
+          item.textContent = `${citation.sourceId} · chunk ${citation.chunkIndex}`;
+          citationsList.appendChild(item);
+        });
+
+        citationsWrap.appendChild(citationsList);
+        bubble.appendChild(citationsWrap);
+      }
+      row.appendChild(bubble);
+      modalMessages.appendChild(row);
     });
   };
+
+  const closeModal = () => {
+    modalOverlay.style.display = 'none';
+  };
+
+  const openModal = () => {
+    modalOverlay.style.display = 'flex';
+    modalMessages.scrollTop = modalMessages.scrollHeight;
+  };
+
+  closeModalButton.addEventListener('click', closeModal);
+  modalOverlay.addEventListener('click', (event) => {
+    if (event.target === modalOverlay) {
+      closeModal();
+    }
+  });
+
+  jumpLatestButton.addEventListener('click', () => {
+    modalMessages.scrollTop = modalMessages.scrollHeight;
+  });
 
   const loadConversations = async () => {
     if (!state.siteId) {
       state.conversations = [];
       state.selectedSessionId = '';
       state.selectedMessages = [];
+      closeModal();
       renderConversations();
-      renderConversationMessages();
       return;
     }
 
     try {
-      state.conversations = await client.engage.getConversations(state.siteId);
+      state.conversations = sortConversationsNewestFirst(
+        await client.engage.getConversations(state.siteId)
+      );
       const selectedExists = state.conversations.some(
         (conversation) => conversation.sessionId === state.selectedSessionId
       );
@@ -383,27 +680,30 @@ export const renderEngageView = (container, { apiClient, toast } = {}) => {
         await loadConversationMessages();
       } else {
         state.selectedMessages = [];
-        renderConversationMessages();
       }
     } catch (error) {
       notifier.show({ message: mapApiError(error).message, variant: 'danger' });
     }
   };
 
-  const loadConversationMessages = async () => {
+  const loadConversationMessages = async ({ openModal: shouldOpenModal = false } = {}) => {
     if (!state.siteId || !state.selectedSessionId) {
       state.selectedMessages = [];
-      renderConversationMessages();
       return;
     }
 
     try {
-      state.selectedMessages = await client.engage.getConversationMessages(
-        state.selectedSessionId,
-        state.siteId
+      state.selectedMessages = (
+        await client.engage.getConversationMessages(state.selectedSessionId, state.siteId)
+      ).sort(
+        (left, right) =>
+          new Date(left.createdAtUtc).getTime() - new Date(right.createdAtUtc).getTime()
       );
       renderConversations();
-      renderConversationMessages();
+      renderConversationMessagesModal();
+      if (shouldOpenModal) {
+        openModal();
+      }
     } catch (error) {
       notifier.show({ message: mapApiError(error).message, variant: 'danger' });
     }
@@ -430,18 +730,177 @@ export const renderEngageView = (container, { apiClient, toast } = {}) => {
     }
   };
 
+
+  const loadBotName = async (siteId) => {
+    if (!siteId) {
+      state.botName = 'Assistant';
+      state.primaryColor = '#2563eb';
+      state.launcherVisible = true;
+      state.tone = 'warm';
+      state.verbosity = 'balanced';
+      state.fallbackStyle = 'refine';
+      botNameInput.value = '';
+      primaryColorInput.value = state.primaryColor;
+      launcherVisibleInput.checked = state.launcherVisible;
+      toneInput.value = state.tone;
+      verbosityInput.value = state.verbosity;
+      fallbackStyleInput.value = state.fallbackStyle;
+      renderTranscript();
+      return;
+    }
+
+    try {
+      const bot = await client.engage.getBot(siteId);
+      state.botName = bot?.name || 'Assistant';
+      state.primaryColor = bot?.primaryColor || '#2563eb';
+      state.launcherVisible = typeof bot?.launcherVisible === 'boolean' ? bot.launcherVisible : true;
+      state.tone = bot?.tone || 'warm';
+      state.verbosity = bot?.verbosity || 'balanced';
+      state.fallbackStyle = bot?.fallbackStyle || 'refine';
+      botNameInput.value = state.botName;
+      primaryColorInput.value = state.primaryColor;
+      launcherVisibleInput.checked = state.launcherVisible;
+      toneInput.value = state.tone;
+      verbosityInput.value = state.verbosity;
+      fallbackStyleInput.value = state.fallbackStyle;
+      renderTranscript();
+    } catch (error) {
+      state.botName = 'Assistant';
+      state.primaryColor = '#2563eb';
+      state.launcherVisible = true;
+      state.tone = 'warm';
+      state.verbosity = 'balanced';
+      state.fallbackStyle = 'refine';
+      botNameInput.value = '';
+      primaryColorInput.value = state.primaryColor;
+      launcherVisibleInput.checked = state.launcherVisible;
+      toneInput.value = state.tone;
+      verbosityInput.value = state.verbosity;
+      fallbackStyleInput.value = state.fallbackStyle;
+      notifier.show({ message: mapApiError(error).message, variant: 'danger' });
+    }
+  };
+
+  saveAppearanceButton.addEventListener('click', async () => {
+    if (!state.siteId) {
+      notifier.show({ message: 'Select a site first.', variant: 'warning' });
+      return;
+    }
+
+    saveAppearanceButton.disabled = true;
+    try {
+      const updated = await client.engage.updateBot(state.siteId, botNameInput.value.trim() || state.botName || 'Assistant', {
+        primaryColor: primaryColorInput.value,
+        launcherVisible: launcherVisibleInput.checked,
+        tone: toneInput.value,
+        verbosity: verbosityInput.value,
+        fallbackStyle: fallbackStyleInput.value,
+      });
+      state.botName = updated?.name || botNameInput.value.trim() || state.botName || 'Assistant';
+      state.primaryColor = updated?.primaryColor || primaryColorInput.value || '#2563eb';
+      state.launcherVisible = typeof updated?.launcherVisible === 'boolean' ? updated.launcherVisible : launcherVisibleInput.checked;
+      state.tone = updated?.tone || toneInput.value || 'warm';
+      state.verbosity = updated?.verbosity || verbosityInput.value || 'balanced';
+      state.fallbackStyle = updated?.fallbackStyle || fallbackStyleInput.value || 'refine';
+      botNameInput.value = state.botName;
+      primaryColorInput.value = state.primaryColor;
+      launcherVisibleInput.checked = state.launcherVisible;
+      toneInput.value = state.tone;
+      verbosityInput.value = state.verbosity;
+      fallbackStyleInput.value = state.fallbackStyle;
+      notifier.show({ message: 'Widget appearance saved.', variant: 'success' });
+      renderTranscript();
+    } catch (error) {
+      notifier.show({ message: mapApiError(error).message, variant: 'danger' });
+    } finally {
+      saveAppearanceButton.disabled = false;
+    }
+  });
+
+  saveBotNameButton.addEventListener('click', async () => {
+    if (!state.siteId) {
+      notifier.show({ message: 'Select a site first.', variant: 'warning' });
+      return;
+    }
+
+    const name = botNameInput.value.trim();
+    if (name.length < 1 || name.length > 50) {
+      notifier.show({ message: 'Bot name must be 1-50 characters.', variant: 'warning' });
+      return;
+    }
+
+    saveBotNameButton.disabled = true;
+    try {
+      const updated = await client.engage.updateBot(state.siteId, name, {
+        primaryColor: primaryColorInput.value,
+        launcherVisible: launcherVisibleInput.checked,
+        tone: toneInput.value,
+        verbosity: verbosityInput.value,
+        fallbackStyle: fallbackStyleInput.value,
+      });
+      state.botName = updated?.name || name;
+      state.primaryColor = updated?.primaryColor || primaryColorInput.value || '#2563eb';
+      state.launcherVisible = typeof updated?.launcherVisible === 'boolean' ? updated.launcherVisible : launcherVisibleInput.checked;
+      state.tone = updated?.tone || toneInput.value || 'warm';
+      state.verbosity = updated?.verbosity || verbosityInput.value || 'balanced';
+      state.fallbackStyle = updated?.fallbackStyle || fallbackStyleInput.value || 'refine';
+      botNameInput.value = state.botName;
+      primaryColorInput.value = state.primaryColor;
+      launcherVisibleInput.checked = state.launcherVisible;
+      toneInput.value = state.tone;
+      verbosityInput.value = state.verbosity;
+      fallbackStyleInput.value = state.fallbackStyle;
+      notifier.show({ message: 'Bot settings saved.', variant: 'success' });
+      renderTranscript();
+    } catch (error) {
+      notifier.show({ message: mapApiError(error).message, variant: 'danger' });
+    } finally {
+      saveBotNameButton.disabled = false;
+    }
+  });
+
+
+  savePersonalityButton.addEventListener('click', async () => {
+    if (!state.siteId) {
+      notifier.show({ message: 'Select a site first.', variant: 'warning' });
+      return;
+    }
+
+    savePersonalityButton.disabled = true;
+    try {
+      const updated = await client.engage.updateBot(state.siteId, botNameInput.value.trim() || state.botName || 'Assistant', {
+        primaryColor: primaryColorInput.value,
+        launcherVisible: launcherVisibleInput.checked,
+        tone: toneInput.value,
+        verbosity: verbosityInput.value,
+        fallbackStyle: fallbackStyleInput.value,
+      });
+      state.tone = updated?.tone || toneInput.value || 'warm';
+      state.verbosity = updated?.verbosity || verbosityInput.value || 'balanced';
+      state.fallbackStyle = updated?.fallbackStyle || fallbackStyleInput.value || 'refine';
+      toneInput.value = state.tone;
+      verbosityInput.value = state.verbosity;
+      fallbackStyleInput.value = state.fallbackStyle;
+      notifier.show({ message: 'Bot personality saved.', variant: 'success' });
+    } catch (error) {
+      notifier.show({ message: mapApiError(error).message, variant: 'danger' });
+    } finally {
+      savePersonalityButton.disabled = false;
+    }
+  });
+
   siteSelect.addEventListener('change', async () => {
     state.siteId = siteSelect.value;
-    state.revealWidgetKey = false;
     state.selectedSessionId = '';
     state.selectedMessages = [];
     state.conversations = [];
     state.sessionId = '';
     state.transcript = [];
+    closeModal();
     await loadSiteWidgetKey(state.siteId);
+    await loadBotName(state.siteId);
     renderTranscript();
     renderConversations();
-    renderConversationMessages();
     await loadConversations();
   });
 
@@ -470,7 +929,11 @@ export const renderEngageView = (container, { apiClient, toast } = {}) => {
       );
       state.sessionId = response.sessionId || state.sessionId;
       state.transcript.push({ role: 'user', content: message });
-      state.transcript.push({ role: 'assistant', content: response.response || '' });
+      state.transcript.push({
+        role: 'assistant',
+        content: response.response || '',
+        stage7Decision: response.stage7Decision || null,
+      });
       renderTranscript();
       await loadConversations();
     } catch (error) {
@@ -489,6 +952,7 @@ export const renderEngageView = (container, { apiClient, toast } = {}) => {
       }
       setSiteOptions();
       await loadSiteWidgetKey(state.siteId);
+      await loadBotName(state.siteId);
       await loadConversations();
     } catch (error) {
       notifier.show({ message: mapApiError(error).message, variant: 'danger' });
@@ -507,7 +971,6 @@ export const renderEngageView = (container, { apiClient, toast } = {}) => {
 
   renderTranscript();
   renderConversations();
-  renderConversationMessages();
   updateInstallCard();
   void loadSites();
 };

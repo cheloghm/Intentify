@@ -208,6 +208,13 @@ public sealed class TransitionTicketStatusHandler
         }
 
         ticket.Status = command.ToStatus;
+        if (string.Equals(command.ToStatus, TicketStatuses.InProgress, StringComparison.Ordinal)
+            && ticket.AssignedToUserId is null
+            && command.CurrentUserId is { } currentUserId)
+        {
+            ticket.AssignedToUserId = currentUserId;
+        }
+
         ticket.UpdatedAtUtc = DateTime.UtcNow;
         await _repository.ReplaceAsync(ticket, cancellationToken);
         return OperationResult<Ticket>.Success(ticket);

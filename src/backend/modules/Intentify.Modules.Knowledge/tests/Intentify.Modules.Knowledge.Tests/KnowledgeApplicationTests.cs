@@ -1,7 +1,11 @@
 using System.Net;
 using System.Net.Http;
+using System.Reflection;
+using Microsoft.Extensions.Logging.Abstractions;
 using Intentify.Modules.Knowledge.Application;
 using Intentify.Modules.Knowledge.Domain;
+using Intentify.Modules.Sites.Application;
+using Intentify.Modules.Sites.Domain;
 using Xunit;
 
 namespace Intentify.Modules.Knowledge.Tests;
@@ -13,7 +17,7 @@ public sealed class KnowledgeApplicationTests
     {
         var sourceRepo = new RecordingSourceRepository();
         var botId = Guid.NewGuid();
-        var handler = new CreateKnowledgeSourceHandler(sourceRepo, new StubBotResolver(botId));
+        var handler = new CreateKnowledgeSourceHandler(sourceRepo, new StubBotResolver(botId), new StubSiteRepository());
 
         var result = await handler.HandleAsync(new CreateKnowledgeSourceCommand(Guid.NewGuid(), Guid.NewGuid(), "Text", "name", null, "content"));
 
@@ -45,11 +49,83 @@ public sealed class KnowledgeApplicationTests
             new KnowledgeChunk { Id = Guid.NewGuid(), TenantId = tenantId, SiteId = siteId, SourceId = otherSourceId, ChunkIndex = 2, Content = "alpha other", CreatedAtUtc = DateTime.UtcNow }
         ]);
 
-        var handler = new RetrieveTopChunksHandler(chunkRepo, sourceRepo);
+        var handler = new RetrieveTopChunksHandler(chunkRepo, sourceRepo, NullLogger<RetrieveTopChunksHandler>.Instance);
         var results = await handler.HandleAsync(new RetrieveTopChunksQuery(tenantId, siteId, "alpha", 5, matchingBotId));
 
         Assert.Equal(2, results.Count);
         Assert.DoesNotContain(results, item => item.SourceId == otherSourceId);
+    }
+
+
+
+    [Fact]
+    public async Task RetrieveTopChunks_NormalizesPunctuationInQueryTerms()
+    {
+        var tenantId = Guid.NewGuid();
+        var siteId = Guid.NewGuid();
+        var sourceId = Guid.NewGuid();
+
+        var sourceRepo = new RetrievalSourceRepository([
+            new KnowledgeSource { Id = sourceId, TenantId = tenantId, SiteId = siteId, BotId = Guid.Empty }
+        ]);
+
+        var chunkRepo = new RetrievalChunkRepository([
+            new KnowledgeChunk { Id = Guid.NewGuid(), TenantId = tenantId, SiteId = siteId, SourceId = sourceId, ChunkIndex = 0, Content = "Returns are accepted in 30 days", CreatedAtUtc = DateTime.UtcNow }
+        ]);
+
+        var handler = new RetrieveTopChunksHandler(chunkRepo, sourceRepo, NullLogger<RetrieveTopChunksHandler>.Instance);
+        var results = await handler.HandleAsync(new RetrieveTopChunksQuery(tenantId, siteId, "returns?", 5));
+
+        Assert.Single(results);
+    }
+
+    [Fact]
+    public void RetrieveTopChunks_ScoreChunk_AppliesBonusBlocksOnce()
+    {
+        var method = typeof(RetrieveTopChunksHandler).GetMethod("ScoreChunk", BindingFlags.NonPublic | BindingFlags.Static);
+        Assert.NotNull(method);
+
+        const string content = "# Return Policy\n\nReturn policy details.";
+        var score = (int)method!.Invoke(null, new object[] { content, new[] { "return", "policy" }, "return policy" })!;
+
+        Assert.Equal(29, score);
+    }
+
+    [Fact]
+    public async Task RetrieveTopChunks_UsesOpenSearch_WhenEnabled()
+    {
+        var tenantId = Guid.NewGuid();
+        var siteId = Guid.NewGuid();
+        var botId = Guid.NewGuid();
+        var sourceId = Guid.NewGuid();
+        var chunkId = Guid.NewGuid();
+        var sourceRepo = new CountingSourceRepository();
+        var chunkRepo = new CountingChunkRepository();
+        var openSearchClient = new RecordingOpenSearchKnowledgeClient([
+            new OpenSearchChunkDocument(sourceId, chunkId, 2, "open search alpha answer", botId)
+        ]);
+
+        var handler = new RetrieveTopChunksHandler(
+            chunkRepo,
+            sourceRepo,
+            NullLogger<RetrieveTopChunksHandler>.Instance,
+            new EnabledOpenSearchOptions(),
+            openSearchClient);
+
+        var results = await handler.HandleAsync(new RetrieveTopChunksQuery(tenantId, siteId, "alpha", 3, botId));
+
+        Assert.Single(results);
+        Assert.Equal(chunkId, results.First().ChunkId);
+        Assert.Equal(sourceId, results.First().SourceId);
+        Assert.Equal(0, sourceRepo.ListSourcesCallCount);
+        Assert.Equal(0, chunkRepo.ListBySiteCallCount);
+
+        Assert.NotNull(openSearchClient.LastSearch);
+        Assert.Equal(tenantId, openSearchClient.LastSearch!.TenantId);
+        Assert.Equal(siteId, openSearchClient.LastSearch.SiteId);
+        Assert.Equal(botId, openSearchClient.LastSearch.BotId);
+        Assert.Equal("alpha", openSearchClient.LastSearch.Query);
+        Assert.Equal(3, openSearchClient.LastSearch.TopK);
     }
 
     [Fact]
@@ -70,30 +146,221 @@ public sealed class KnowledgeApplicationTests
         var extractor = new KnowledgeTextExtractor(new FakeFactory(_ =>
             new HttpResponseMessage(HttpStatusCode.OK)
             {
-                Content = new StringContent("<html><body><h1>Title</h1><p>Hello <b>world</b></p></body></html>")
+                Content = new StringContent("<html><body><nav>Cookie Settings Privacy Policy</nav><h1>Title</h1><p>Hello <b>world</b></p><script>window.gtag('x')</script></body></html>")
             }));
 
         var result = await extractor.ExtractAsync(new KnowledgeSource { Type = "Url", Url = "https://example.local" });
 
         Assert.True(result.IsSuccess);
-        Assert.Equal("Title Hello world", result.Text);
+        Assert.Contains("# Title", result.Text);
+        Assert.Contains("Hello world", result.Text);
+        Assert.DoesNotContain("gtag", result.Text!.ToLowerInvariant());
+        Assert.DoesNotContain("cookie settings", result.Text.ToLowerInvariant());
     }
 
     [Fact]
-    public void Chunking_IsDeterministic()
+    public void Chunking_SplitBoundary_DoesNotReseedOverflowParagraph()
     {
         var chunker = new KnowledgeChunker();
-        var input = string.Join("\n\n", Enumerable.Repeat("abcdefghij", 20));
+        var input = "# Services\n\nParagraph one for boundary behavior.\n\nParagraph two must be its own chunk.\n\nParagraph three must follow chunk two.";
 
-        var chunks = chunker.Chunk(input, 50);
+        var chunks = chunker.Chunk(input, 70);
 
-        Assert.Equal(5, chunks.Count);
-        Assert.Equal(chunks, chunker.Chunk(input, 50));
+        Assert.Equal(
+            [
+                "# Services\n\nParagraph one for boundary behavior.",
+                "# Services\n\nParagraph two must be its own chunk.",
+                "# Services\n\nParagraph three must follow chunk two."
+            ],
+            chunks);
     }
+
+    [Fact]
+    public void Chunking_LongHeading_DoesNotDropParagraphPayload()
+    {
+        var chunker = new KnowledgeChunker();
+        var veryLongHeading = "# " + new string('H', 90);
+        var firstParagraph = "This payload paragraph must remain intact.";
+        var secondParagraph = "Second payload paragraph also remains intact.";
+        var input = $"{veryLongHeading}\n\n{firstParagraph}\n\n{secondParagraph}";
+
+        var chunks = chunker.Chunk(input, 60);
+
+        Assert.Equal(2, chunks.Count);
+        Assert.Equal($"{veryLongHeading}\n\n{firstParagraph}", chunks[0]);
+        Assert.Equal($"{veryLongHeading}\n\n{secondParagraph}", chunks[1]);
+    }
+
+    [Fact]
+    public async Task RetrieveTopChunks_NormalizesPluralAndTypos()
+    {
+        var tenantId = Guid.NewGuid();
+        var siteId = Guid.NewGuid();
+        var sourceId = Guid.NewGuid();
+
+        var sourceRepo = new RetrievalSourceRepository([
+            new KnowledgeSource { Id = sourceId, TenantId = tenantId, SiteId = siteId, BotId = Guid.Empty }
+        ]);
+
+        var chunkRepo = new RetrievalChunkRepository([
+            new KnowledgeChunk { Id = Guid.NewGuid(), TenantId = tenantId, SiteId = siteId, SourceId = sourceId, ChunkIndex = 0, Content = "Return policy: refunds accepted within 30 days.", CreatedAtUtc = DateTime.UtcNow },
+            new KnowledgeChunk { Id = Guid.NewGuid(), TenantId = tenantId, SiteId = siteId, SourceId = sourceId, ChunkIndex = 1, Content = "Book a haircut appointment today.", CreatedAtUtc = DateTime.UtcNow }
+        ]);
+
+        var handler = new RetrieveTopChunksHandler(chunkRepo, sourceRepo, NullLogger<RetrieveTopChunksHandler>.Instance);
+
+        var pluralResults = await handler.HandleAsync(new RetrieveTopChunksQuery(tenantId, siteId, "returns", 2));
+        Assert.True(pluralResults.Count > 0);
+        Assert.Contains("Return policy", pluralResults.First().Content, StringComparison.OrdinalIgnoreCase);
+
+        var typoResults = await handler.HandleAsync(new RetrieveTopChunksQuery(tenantId, siteId, "returrn policy", 2));
+        Assert.True(typoResults.Count > 0);
+        Assert.Contains("Return policy", typoResults.First().Content, StringComparison.OrdinalIgnoreCase);
+    }
+    [Fact]
+    public async Task RetrieveTopChunks_OneEditTypoStillProducesUsableScore()
+    {
+        var tenantId = Guid.NewGuid();
+        var siteId = Guid.NewGuid();
+        var sourceId = Guid.NewGuid();
+
+        var sourceRepo = new RetrievalSourceRepository([
+            new KnowledgeSource { Id = sourceId, TenantId = tenantId, SiteId = siteId, BotId = Guid.Empty }
+        ]);
+
+        var chunkRepo = new RetrievalChunkRepository([
+            new KnowledgeChunk { Id = Guid.NewGuid(), TenantId = tenantId, SiteId = siteId, SourceId = sourceId, ChunkIndex = 0, Content = "Contact details: email hello@example.com", CreatedAtUtc = DateTime.UtcNow }
+        ]);
+
+        var handler = new RetrieveTopChunksHandler(chunkRepo, sourceRepo, NullLogger<RetrieveTopChunksHandler>.Instance);
+        var results = await handler.HandleAsync(new RetrieveTopChunksQuery(tenantId, siteId, "contct dtails", 2));
+
+        var top = Assert.Single(results);
+        Assert.True(top.Score >= 2);
+    }
+
+
+}
+
+internal sealed class EnabledOpenSearchOptions : IOpenSearchOptions
+{
+    public bool Enabled => true;
+}
+
+internal sealed class CountingSourceRepository : IKnowledgeSourceRepository
+{
+    public int ListSourcesCallCount { get; private set; }
+
+    public Task InsertSourceAsync(KnowledgeSource source, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public Task<KnowledgeSource?> GetSourceByIdAsync(Guid tenantId, Guid sourceId, CancellationToken cancellationToken = default) => Task.FromResult<KnowledgeSource?>(null);
+
+    public Task<IReadOnlyCollection<KnowledgeSource>> ListSourcesAsync(Guid tenantId, Guid siteId, CancellationToken cancellationToken = default)
+    {
+        ListSourcesCallCount++;
+        return Task.FromResult<IReadOnlyCollection<KnowledgeSource>>([]);
+    }
+
+    public Task UpdateStatusAsync(Guid tenantId, Guid sourceId, IndexStatus status, string? failureReason, DateTime? indexedAtUtc, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public Task ReplaceSourceContentAsync(Guid tenantId, Guid sourceId, byte[] pdfBytes, IndexStatus status, DateTime updatedAtUtc, CancellationToken cancellationToken = default) => Task.CompletedTask;
+}
+
+internal sealed class CountingChunkRepository : IKnowledgeChunkRepository
+{
+    public int ListBySiteCallCount { get; private set; }
+
+    public Task UpsertChunksAsync(Guid tenantId, Guid sourceId, IReadOnlyCollection<KnowledgeChunk> chunks, CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+    public Task<IReadOnlyCollection<KnowledgeChunk>> ListBySiteAsync(Guid tenantId, Guid siteId, CancellationToken cancellationToken = default)
+    {
+        ListBySiteCallCount++;
+        return Task.FromResult<IReadOnlyCollection<KnowledgeChunk>>([]);
+    }
+}
+
+internal sealed class RecordingOpenSearchKnowledgeClient : IOpenSearchKnowledgeClient
+{
+    private readonly IReadOnlyCollection<OpenSearchChunkDocument> _results;
+
+    public RecordingOpenSearchKnowledgeClient(IReadOnlyCollection<OpenSearchChunkDocument> results)
+    {
+        _results = results;
+    }
+
+    public SearchCall? LastSearch { get; private set; }
+
+    public Task EnsureIndexExistsAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+    public Task BulkUpsertChunksAsync(Guid tenantId, Guid siteId, Guid? botId, IReadOnlyCollection<OpenSearchChunkDocument> chunkDocs, CancellationToken cancellationToken = default)
+        => Task.CompletedTask;
+
+    public Task<IReadOnlyCollection<OpenSearchChunkDocument>> SearchTopChunksAsync(Guid tenantId, Guid siteId, Guid? botId, string query, int topK, CancellationToken cancellationToken = default)
+    {
+        LastSearch = new SearchCall(tenantId, siteId, botId, query, topK);
+        return Task.FromResult(_results);
+    }
+
+    internal sealed record SearchCall(Guid TenantId, Guid SiteId, Guid? BotId, string Query, int TopK);
 }
 
 public sealed class IndexingStatusTransitionTests
 {
+    [Fact]
+    public async Task Indexing_WhenAlreadyProcessing_DoesNotReprocess()
+    {
+        var source = new KnowledgeSource
+        {
+            TenantId = Guid.NewGuid(),
+            SiteId = Guid.NewGuid(),
+            Type = "Text",
+            TextContent = "alpha beta",
+            Status = IndexStatus.Processing,
+            CreatedAtUtc = DateTime.UtcNow,
+            UpdatedAtUtc = DateTime.UtcNow,
+            IndexedAtUtc = DateTime.UtcNow.AddMinutes(-5)
+        };
+
+        var sourceRepo = new InMemorySourceRepository(source);
+        var chunkRepo = new InMemoryChunkRepository();
+        var handler = new IndexKnowledgeSourceHandler(sourceRepo, chunkRepo, new KnowledgeTextExtractor(new FakeFactory(_ => new HttpResponseMessage(HttpStatusCode.OK))), new KnowledgeChunker(), new StubSiteRepository());
+
+        var result = await handler.HandleAsync(new IndexKnowledgeSourceCommand(source.TenantId, source.Id));
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("Processing", result.Value!.Status);
+        Assert.Equal(0, result.Value.ChunkCount);
+        Assert.Equal(0, sourceRepo.UpdateStatusCalls);
+        Assert.Empty(chunkRepo.Stored);
+    }
+
+    [Fact]
+    public async Task Indexing_FailedExtraction_PreservesLastIndexedAt()
+    {
+        var previousIndexedAt = DateTime.UtcNow.AddHours(-2);
+        var source = new KnowledgeSource
+        {
+            TenantId = Guid.NewGuid(),
+            SiteId = Guid.NewGuid(),
+            Type = "Url",
+            Url = null,
+            Status = IndexStatus.Indexed,
+            CreatedAtUtc = DateTime.UtcNow,
+            UpdatedAtUtc = DateTime.UtcNow,
+            IndexedAtUtc = previousIndexedAt
+        };
+
+        var sourceRepo = new InMemorySourceRepository(source);
+        var chunkRepo = new InMemoryChunkRepository();
+        var handler = new IndexKnowledgeSourceHandler(sourceRepo, chunkRepo, new KnowledgeTextExtractor(new FakeFactory(_ => new HttpResponseMessage(HttpStatusCode.OK))), new KnowledgeChunker(), new StubSiteRepository());
+
+        var result = await handler.HandleAsync(new IndexKnowledgeSourceCommand(source.TenantId, source.Id));
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("Failed", result.Value!.Status);
+        Assert.Equal(previousIndexedAt, sourceRepo.Stored.IndexedAtUtc);
+        Assert.Equal(IndexStatus.Failed, sourceRepo.Stored.Status);
+        Assert.Empty(chunkRepo.Stored);
+    }
+
     [Fact]
     public async Task Indexing_TransitionsQueuedToIndexed()
     {
@@ -110,7 +377,7 @@ public sealed class IndexingStatusTransitionTests
 
         var sourceRepo = new InMemorySourceRepository(source);
         var chunkRepo = new InMemoryChunkRepository();
-        var handler = new IndexKnowledgeSourceHandler(sourceRepo, chunkRepo, new KnowledgeTextExtractor(new FakeFactory(_ => new HttpResponseMessage(HttpStatusCode.OK))), new KnowledgeChunker());
+        var handler = new IndexKnowledgeSourceHandler(sourceRepo, chunkRepo, new KnowledgeTextExtractor(new FakeFactory(_ => new HttpResponseMessage(HttpStatusCode.OK))), new KnowledgeChunker(), new StubSiteRepository());
 
         var result = await handler.HandleAsync(new IndexKnowledgeSourceCommand(source.TenantId, source.Id));
 
@@ -124,6 +391,8 @@ public sealed class IndexingStatusTransitionTests
     {
         public KnowledgeSource Stored { get; }
 
+        public int UpdateStatusCalls { get; private set; }
+
         public InMemorySourceRepository(KnowledgeSource source)
         {
             Stored = source;
@@ -135,6 +404,7 @@ public sealed class IndexingStatusTransitionTests
 
         public Task UpdateStatusAsync(Guid tenantId, Guid sourceId, IndexStatus status, string? failureReason, DateTime? indexedAtUtc, CancellationToken cancellationToken = default)
         {
+            UpdateStatusCalls++;
             Stored.Status = status;
             Stored.FailureReason = failureReason;
             Stored.IndexedAtUtc = indexedAtUtc;
@@ -249,4 +519,19 @@ internal sealed class FakeMessageHandler : HttpMessageHandler
     {
         return Task.FromResult(_handler(request));
     }
+
+    private sealed class StubSiteRepository : ISiteRepository
+    {
+        public Task<Site?> GetByTenantAndDomainAsync(Guid tenantId, string domain, CancellationToken cancellationToken = default) => Task.FromResult<Site?>(null);
+        public Task<Site?> GetByTenantAndIdAsync(Guid tenantId, Guid siteId, CancellationToken cancellationToken = default)
+            => Task.FromResult<Site?>(new Site { TenantId = tenantId, Id = siteId, Domain = "example.com", SiteKey = "site-key", WidgetKey = "widget-key" });
+        public Task<Site?> GetByWidgetKeyAsync(string widgetKey, CancellationToken cancellationToken = default) => Task.FromResult<Site?>(null);
+        public Task<Site?> GetBySiteKeyAsync(string siteKey, CancellationToken cancellationToken = default) => Task.FromResult<Site?>(null);
+        public Task<IReadOnlyCollection<Site>> ListByTenantAsync(Guid tenantId, CancellationToken cancellationToken = default) => Task.FromResult((IReadOnlyCollection<Site>)Array.Empty<Site>());
+        public Task InsertAsync(Site site, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task<Site?> UpdateAllowedOriginsAsync(Guid tenantId, Guid siteId, IReadOnlyCollection<string> allowedOrigins, CancellationToken cancellationToken = default) => Task.FromResult<Site?>(null);
+        public Task<Site?> RotateKeysAsync(Guid tenantId, Guid siteId, string siteKey, string widgetKey, CancellationToken cancellationToken = default) => Task.FromResult<Site?>(null);
+        public Task<Site?> UpdateFirstEventReceivedAsync(Guid siteId, DateTime timestampUtc, CancellationToken cancellationToken = default) => Task.FromResult<Site?>(null);
+    }
+
 }

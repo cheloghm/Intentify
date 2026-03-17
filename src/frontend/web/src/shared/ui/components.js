@@ -117,6 +117,21 @@ export const createBadge = ({ text, variant } = {}) => {
   return badge;
 };
 
+export const createButton = ({ label, variant = 'default', type = 'button' } = {}) => {
+  ensureUiStyles();
+  const button = document.createElement('button');
+  button.type = type;
+  button.textContent = label;
+  button.style.padding = '8px 12px';
+  button.style.borderRadius = '6px';
+  button.style.border = variant === 'primary' ? 'none' : '1px solid #e2e8f0';
+  button.style.background = variant === 'primary' ? '#2563eb' : '#ffffff';
+  button.style.color = variant === 'primary' ? '#ffffff' : '#1e293b';
+  button.style.cursor = 'pointer';
+  button.style.fontSize = '13px';
+  return button;
+};
+
 export const createToastManager = () => {
   ensureUiStyles();
 

@@ -3,6 +3,8 @@ using Intentify.Modules.Collector.Application;
 using Intentify.Shared.Validation;
 using Intentify.Shared.Web;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
 
 namespace Intentify.Modules.Collector.Api;
 
@@ -18,6 +20,71 @@ internal static class CollectorEndpoints
     private const int MaxDataKeyLength = 64;
     private const int MaxDataStringLength = 256;
     private const string TrackerResourceName = "Intentify.Modules.Collector.Api.assets.tracker.js";
+    private const string SdkResourceName = "Intentify.Modules.Collector.Api.assets.sdk.js";
+
+
+    public static async Task<IResult> GetSdkAsync()
+    {
+        var assembly = typeof(CollectorModule).Assembly;
+        await using var stream = assembly.GetManifestResourceStream(SdkResourceName);
+        if (stream is null)
+        {
+            return Results.NotFound();
+        }
+
+        using var reader = new StreamReader(stream);
+        var content = await reader.ReadToEndAsync();
+        return Results.Text(content, "application/javascript; charset=utf-8");
+    }
+
+    public static async Task<IResult> GetSdkBootstrapAsync(
+        string? siteKey,
+        HttpContext context,
+        ISiteLookupRepository siteLookupRepository,
+        IConfiguration configuration,
+        IHostEnvironment environment)
+    {
+        var normalizedSiteKey = NormalizeOptional(siteKey);
+        if (string.IsNullOrWhiteSpace(normalizedSiteKey))
+        {
+            return Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(new Dictionary<string, string[]>
+            {
+                ["siteKey"] = ["Site key is required."]
+            }));
+        }
+
+        if (!OriginNormalizer.TryNormalize(TryResolveOrigin(context.Request), out var normalizedOrigin))
+        {
+            return Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(new Dictionary<string, string[]>
+            {
+                ["origin"] = ["Origin or Referer header is required to determine the request origin."]
+            }));
+        }
+
+        var site = await siteLookupRepository.GetBySiteKeyAsync(normalizedSiteKey, context.RequestAborted);
+        if (site is null)
+        {
+            return Results.NotFound();
+        }
+
+        var allowLocalhost = environment.IsDevelopment() || configuration.GetValue<bool>("Intentify:Sites:AllowLocalhostInstallStatus");
+        var originAllowed = site.AllowedOrigins.Contains(normalizedOrigin, StringComparer.OrdinalIgnoreCase)
+            || (allowLocalhost && IsLocalhostOrigin(normalizedOrigin));
+
+        if (!originAllowed)
+        {
+            return Results.StatusCode(StatusCodes.Status403Forbidden);
+        }
+
+        context.Response.Headers["Access-Control-Allow-Origin"] = normalizedOrigin;
+        context.Response.Headers["Vary"] = "Origin";
+
+        return Results.Ok(new
+        {
+            siteKey = site.SiteKey,
+            widgetKey = site.WidgetKey
+        });
+    }
 
     public static async Task<IResult> GetTrackerAsync()
     {
@@ -35,31 +102,33 @@ internal static class CollectorEndpoints
 
     public static async Task<IResult> CollectEventAsync(
         CollectorEventRequest? request,
-        string? widgetKey,
+        string? siteKey,
         HttpContext context,
         IngestCollectorEventHandler handler)
     {
-        _ = widgetKey;
-
         if (context.Request.ContentLength is > MaxContentLengthBytes)
         {
             return Results.StatusCode(StatusCodes.Status413PayloadTooLarge);
         }
 
         var requestErrors = ValidateRequest(request);
+
+        var resolvedSiteKey = ResolveSiteKey(request?.SiteKey, siteKey, requestErrors);
+        var resolvedSessionId = NormalizeOptional(request?.SessionId);
+
         if (requestErrors.Count > 0)
         {
             return Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(requestErrors));
         }
 
         var result = await handler.HandleAsync(new CollectEventCommand(
-            request!.SiteKey,
+            resolvedSiteKey,
             request.Type,
             request.Url,
             request.Referrer,
             request.TsUtc,
             TryResolveOrigin(context.Request),
-            request.SessionId,
+            resolvedSessionId,
             request.Data),
             context.RequestAborted);
 
@@ -71,6 +140,31 @@ internal static class CollectorEndpoints
             OperationStatus.Forbidden => Results.StatusCode(StatusCodes.Status403Forbidden),
             _ => Results.StatusCode(StatusCodes.Status500InternalServerError)
         };
+    }
+
+    private static string? ResolveSiteKey(string? bodySiteKey, string? querySiteKey, IDictionary<string, string[]> errors)
+    {
+        var normalizedBodySiteKey = NormalizeOptional(bodySiteKey);
+        var normalizedQuerySiteKey = NormalizeOptional(querySiteKey);
+
+        if (!string.IsNullOrWhiteSpace(normalizedBodySiteKey) && !string.IsNullOrWhiteSpace(normalizedQuerySiteKey)
+            && !string.Equals(normalizedBodySiteKey, normalizedQuerySiteKey, StringComparison.Ordinal))
+        {
+            errors["siteKey"] = ["Site key mismatch between query and request body."];
+        }
+
+        // Body is authoritative; query remains compatibility-only.
+        return normalizedBodySiteKey;
+    }
+
+    private static string? NormalizeOptional(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        return value.Trim();
     }
 
     private static Dictionary<string, string[]> ValidateRequest(CollectorEventRequest? request)
@@ -169,6 +263,35 @@ internal static class CollectorEndpoints
         return errors;
     }
 
+    private static string? TryResolveOrigin(HttpRequest request)
+    {
+        if (request.Headers.TryGetValue("Origin", out var originValues))
+        {
+            return originValues.ToString();
+        }
+
+        if (request.Headers.TryGetValue("Referer", out var refererValues))
+        {
+            var referer = refererValues.ToString();
+            if (Uri.TryCreate(referer, UriKind.Absolute, out var uri))
+            {
+                return uri.GetLeftPart(UriPartial.Authority);
+            }
+        }
+
+        return null;
+    }
+
+    private static bool IsLocalhostOrigin(string origin)
+    {
+        if (!Uri.TryCreate(origin, UriKind.Absolute, out var uri))
+        {
+            return false;
+        }
+
+        return uri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase) || uri.Host == "127.0.0.1";
+    }
+
     private static bool TryNormalizeAbsoluteUrl(string value, out string normalized)
     {
         normalized = string.Empty;
@@ -193,22 +316,4 @@ internal static class CollectorEndpoints
         return true;
     }
 
-    private static string? TryResolveOrigin(HttpRequest request)
-    {
-        if (request.Headers.TryGetValue("Origin", out var originValues))
-        {
-            return originValues.ToString();
-        }
-
-        if (request.Headers.TryGetValue("Referer", out var refererValues))
-        {
-            var referer = refererValues.ToString();
-            if (Uri.TryCreate(referer, UriKind.Absolute, out var uri))
-            {
-                return uri.GetLeftPart(UriPartial.Authority);
-            }
-        }
-
-        return null;
-    }
 }

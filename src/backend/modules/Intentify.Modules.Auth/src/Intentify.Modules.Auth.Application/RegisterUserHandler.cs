@@ -44,13 +44,16 @@ public sealed class RegisterUserHandler
             return OperationResult<AuthTokenResult>.ValidationFailed(errors);
         }
 
+        var now = DateTime.UtcNow;
         var tenant = new Tenant
         {
-            Name = command.DisplayName.Trim(),
-            Domain = trimmedEmail.Split('@')[1],
+            Name = command.OrganizationName.Trim(),
+            Domain = $"{Guid.NewGuid():N}.tenant.local",
             Plan = "dev",
             Industry = "software",
-            Category = "default"
+            Category = "default",
+            CreatedAt = now,
+            UpdatedAt = now
         };
 
         await _tenants.InsertAsync(tenant, cancellationToken);
@@ -61,7 +64,9 @@ public sealed class RegisterUserHandler
             Email = trimmedEmail,
             PasswordHash = _hasher.HashPassword(command.Password),
             DisplayName = command.DisplayName.Trim(),
-            Roles = new[] { AuthRoles.User }
+            Roles = new[] { AuthRoles.Admin },
+            CreatedAt = now,
+            UpdatedAt = now
         };
 
         await _users.InsertAsync(user, cancellationToken);
@@ -85,6 +90,7 @@ public sealed class RegisterUserHandler
         var errors = new ValidationErrors();
 
         Guard.AgainstNullOrWhiteSpace(errors, command.DisplayName, "displayName", "Display name is required.");
+        Guard.AgainstNullOrWhiteSpace(errors, command.OrganizationName, "organizationName", "Organization name is required.");
 
         if (!IsValidEmail(command.Email))
         {

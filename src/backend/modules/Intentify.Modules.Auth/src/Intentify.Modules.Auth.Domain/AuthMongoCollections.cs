@@ -4,4 +4,5 @@ public static class AuthMongoCollections
 {
     public const string Users = "auth.users";
     public const string Tenants = "auth.tenants";
+    public const string Invitations = "auth.invitations";
 }

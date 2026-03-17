@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Intentify.Modules.Intelligence.Domain\Intentify.Modules.Intelligence.Domain.csproj" />
+    <ProjectReference Include="..\..\..\..\shared\Intentify.Shared.AI\src\Intentify.Shared.AI\Intentify.Shared.AI.csproj" />
+    <ProjectReference Include="..\..\..\..\shared\Intentify.Shared.Validation\src\Intentify.Shared.Validation\Intentify.Shared.Validation.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Options" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+</Project>

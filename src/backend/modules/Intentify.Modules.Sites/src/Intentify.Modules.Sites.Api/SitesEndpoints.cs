@@ -173,6 +173,40 @@ internal static class SitesEndpoints
         };
     }
 
+    public static async Task<IResult> GetInstallationDiagnosticsAsync(
+        string siteId,
+        string? siteKey,
+        HttpContext context,
+        GetInstallationDiagnosticsHandler handler)
+    {
+        if (!Guid.TryParse(siteId, out var siteGuid))
+        {
+            return Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(new Dictionary<string, string[]>
+            {
+                ["siteId"] = ["Site id is invalid."]
+            }));
+        }
+
+        var tenantId = TryGetTenantId(context.User);
+        if (tenantId is null)
+        {
+            return Results.Unauthorized();
+        }
+
+        var result = await handler.HandleAsync(new GetInstallationDiagnosticsCommand(
+            tenantId.Value,
+            siteGuid,
+            siteKey,
+            null,
+            TryResolveOrigin(context.Request)), context.RequestAborted);
+
+        return result.Status switch
+        {
+            OperationStatus.NotFound => Results.NotFound(),
+            _ => Results.Ok(ToInstallationDiagnosticsResponse(result.Value!))
+        };
+    }
+
     public static async Task<IResult> GetPublicInstallationStatusAsync(
         HttpContext context,
         GetPublicInstallationStatusHandler handler)
@@ -273,5 +307,18 @@ internal static class SitesEndpoints
             allowedCount,
             isInstalled,
             firstEventReceivedAtUtc);
+    }
+
+    private static InstallationDiagnosticsResponse ToInstallationDiagnosticsResponse(InstallationDiagnosticsResult result)
+    {
+        return new InstallationDiagnosticsResponse(
+            result.Site.Id.ToString("N"),
+            result.Site.Domain,
+            result.SiteKeyValid,
+            result.NormalizedOrigin,
+            result.OriginAllowed,
+            result.SdkScriptExpected,
+            result.FirstEventSeen,
+            result.Site.FirstEventReceivedAtUtc);
     }
 }

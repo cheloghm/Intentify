@@ -19,6 +19,24 @@ public sealed class KnowledgeModule : IAppModule
         ArgumentNullException.ThrowIfNull(configuration);
 
         services.AddHttpClient("knowledge");
+
+        var openSearchOptions = new OpenSearchOptions();
+        configuration.GetSection(OpenSearchOptions.ConfigurationSection).Bind(openSearchOptions);
+        services.AddSingleton(openSearchOptions);
+
+        services.AddHttpClient(OpenSearchServiceCollectionExtensions.ClientName, (serviceProvider, client) =>
+        {
+            var options = serviceProvider.GetRequiredService<OpenSearchOptions>();
+            client.BaseAddress = new Uri(options.Url);
+
+            if (options.RequestTimeoutSeconds > 0)
+            {
+                client.Timeout = TimeSpan.FromSeconds(options.RequestTimeoutSeconds);
+            }
+        });
+
+        services.AddKnowledgeOpenSearchClient();
+
         services.AddSingleton<IKnowledgeSourceRepository, KnowledgeSourceRepository>();
         services.AddSingleton<IKnowledgeChunkRepository, KnowledgeChunkRepository>();
         services.AddSingleton<IEngageBotResolver, EngageBotResolver>();

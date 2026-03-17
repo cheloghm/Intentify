@@ -70,9 +70,39 @@ public sealed class PromosIntegrationTests : IAsyncLifetime
         var logs = db.GetCollection<BsonPromoConsentLog>("promo_consent_logs");
         var entry = await entries.Find(item => item.PromoId == promo.Id).FirstOrDefaultAsync();
         Assert.NotNull(entry);
-        var log = await logs.Find(item => item.PromoEntryId == entry!.Id).FirstOrDefaultAsync();
+        Assert.Equal(Guid.Parse(site.SiteId), entry!.SiteId);
+        Assert.Null(entry.EngageSessionId);
+        var log = await logs.Find(item => item.PromoEntryId == entry.Id).FirstOrDefaultAsync();
         Assert.NotNull(log);
         Assert.True(log!.ConsentGiven);
+    }
+
+
+
+    [Fact]
+    public async Task PublicEntry_PersistsEngageSessionId_WhenProvided()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+        var promo = await CreatePromoAsync(token, site.SiteId, "Engage Link Promo");
+        var engageSessionId = Guid.NewGuid();
+
+        var response = await _client!.PostAsJsonAsync($"/promos/public/{promo.PublicKey}/entries", new
+        {
+            email = "user@example.com",
+            consentGiven = true,
+            consentStatement = "I agree",
+            engageSessionId = engageSessionId.ToString("N")
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var db = new MongoClient(_mongo.ConnectionString).GetDatabase(_mongo.DatabaseName);
+        var entries = db.GetCollection<BsonPromoEntry>("promo_entries");
+        var entry = await entries.Find(item => item.PromoId == promo.Id).SortByDescending(i => i.CreatedAtUtc).FirstOrDefaultAsync();
+        Assert.NotNull(entry);
+        Assert.Equal(engageSessionId, entry!.EngageSessionId);
+        Assert.Equal(Guid.Parse(site.SiteId), entry.SiteId);
     }
 
     [Fact]
@@ -85,6 +115,57 @@ public sealed class PromosIntegrationTests : IAsyncLifetime
         });
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Entry_UsesVisitorResolutionPrecedence_VisitorId_OverFirstPartyAndSession()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+        var tenantId = Guid.Parse((await GetCurrentUserAsync(token)).TenantId);
+        var siteGuid = Guid.Parse(site.SiteId);
+
+        var db = new MongoClient(_mongo.ConnectionString).GetDatabase(_mongo.DatabaseName);
+        var visitors = db.GetCollection<Visitor>(VisitorsMongoCollections.Visitors);
+
+        var explicitVisitor = new Visitor
+        {
+            TenantId = tenantId,
+            SiteId = siteGuid,
+            FirstPartyId = "fp-explicit",
+            CreatedAtUtc = DateTime.UtcNow,
+            LastSeenAtUtc = DateTime.UtcNow,
+            Sessions = [new VisitorSession { SessionId = "sess-explicit", FirstSeenAtUtc = DateTime.UtcNow, LastSeenAtUtc = DateTime.UtcNow }]
+        };
+
+        var firstPartyVisitor = new Visitor
+        {
+            TenantId = tenantId,
+            SiteId = siteGuid,
+            FirstPartyId = "fp-shared",
+            CreatedAtUtc = DateTime.UtcNow,
+            LastSeenAtUtc = DateTime.UtcNow,
+            Sessions = [new VisitorSession { SessionId = "sess-shared", FirstSeenAtUtc = DateTime.UtcNow, LastSeenAtUtc = DateTime.UtcNow }]
+        };
+
+        await visitors.InsertManyAsync([explicitVisitor, firstPartyVisitor]);
+
+        var promo = await CreatePromoAsync(token, site.SiteId, "Precedence Promo");
+        var response = await _client!.PostAsJsonAsync($"/promos/public/{promo.PublicKey}/entries", new
+        {
+            visitorId = explicitVisitor.Id.ToString("N"),
+            firstPartyId = "fp-shared",
+            sessionId = "sess-shared",
+            consentGiven = true,
+            consentStatement = "I agree"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var entries = db.GetCollection<BsonPromoEntry>("promo_entries");
+        var entry = await entries.Find(item => item.PromoId == promo.Id).SortByDescending(i => i.CreatedAtUtc).FirstOrDefaultAsync();
+        Assert.NotNull(entry);
+        Assert.Equal(explicitVisitor.Id, entry!.VisitorId);
     }
 
     [Fact]
@@ -121,6 +202,144 @@ public sealed class PromosIntegrationTests : IAsyncLifetime
     }
 
 
+    [Fact]
+    public async Task CreatePromo_WithFlyerAndQuestions_Persists()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        using var content = new MultipartFormDataContent();
+        content.Add(new StringContent(site.SiteId), "siteId");
+        content.Add(new StringContent("Summer Promo"), "name");
+        content.Add(new StringContent("Summer description"), "description");
+        content.Add(new StringContent("true"), "isActive");
+        content.Add(new StringContent("[{\"key\":\"email\",\"label\":\"Email\",\"type\":\"email\",\"required\":true,\"order\":0}]"), "questions");
+        content.Add(new ByteArrayContent(System.Text.Encoding.UTF8.GetBytes("flyer-content")), "flyer", "flyer.txt");
+
+        var response = await SendAuthorizedAsync(HttpMethod.Post, "/promos", token, content);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var promoId = json.RootElement.GetProperty("id").GetGuid();
+
+        var db = new MongoClient(_mongo.ConnectionString).GetDatabase(_mongo.DatabaseName);
+        var promos = db.GetCollection<BsonPromo>("promos");
+        var promo = await promos.Find(item => item.Id == promoId).FirstOrDefaultAsync();
+        Assert.NotNull(promo);
+        Assert.Equal("flyer.txt", promo!.FlyerFileName);
+        Assert.True(promo.FlyerBytes?.Length > 0);
+        Assert.Single(promo.Questions);
+        Assert.Equal("email", promo.Questions[0].Key);
+    }
+
+    [Fact]
+    public async Task PublicEntry_EnforcesRequiredAnswers_AndPersistsAnswers()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        using var content = new MultipartFormDataContent();
+        content.Add(new StringContent(site.SiteId), "siteId");
+        content.Add(new StringContent("Qualified Leads"), "name");
+        content.Add(new StringContent("[{\"key\":\"email\",\"label\":\"Email\",\"type\":\"email\",\"required\":true,\"order\":0}]"), "questions");
+        var createResponse = await SendAuthorizedAsync(HttpMethod.Post, "/promos", token, content);
+        using var createJson = JsonDocument.Parse(await createResponse.Content.ReadAsStringAsync());
+        var publicKey = createJson.RootElement.GetProperty("publicKey").GetString();
+
+        var invalidResponse = await _client!.PostAsJsonAsync($"/promos/public/{publicKey}/entries", new
+        {
+            consentGiven = true,
+            consentStatement = "I agree",
+            answers = new Dictionary<string, string>()
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, invalidResponse.StatusCode);
+
+        var validResponse = await _client!.PostAsJsonAsync($"/promos/public/{publicKey}/entries", new
+        {
+            consentGiven = true,
+            consentStatement = "I agree",
+            answers = new Dictionary<string, string> { ["email"] = "user@example.com" }
+        });
+
+        Assert.Equal(HttpStatusCode.OK, validResponse.StatusCode);
+
+        var db = new MongoClient(_mongo.ConnectionString).GetDatabase(_mongo.DatabaseName);
+        var entries = db.GetCollection<BsonPromoEntry>("promo_entries");
+        var entry = await entries.Find(_ => true).SortByDescending(item => item.CreatedAtUtc).FirstOrDefaultAsync();
+        Assert.NotNull(entry);
+        Assert.NotNull(entry!.Answers);
+        Assert.Equal("user@example.com", entry.Answers!["email"]);
+    }
+
+    [Fact]
+    public async Task ListAndDetailEndpoints_StillReturnPromoAndEntries()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+        var promo = await CreatePromoAsync(token, site.SiteId, "List Detail Promo");
+
+        var entryResponse = await _client!.PostAsJsonAsync($"/promos/public/{promo.PublicKey}/entries", new
+        {
+            email = "list-detail@example.com",
+            consentGiven = true,
+            consentStatement = "I agree"
+        });
+        Assert.Equal(HttpStatusCode.OK, entryResponse.StatusCode);
+
+        var listResponse = await SendAuthorizedAsync(HttpMethod.Get, $"/promos?siteId={site.SiteId}", token);
+        Assert.Equal(HttpStatusCode.OK, listResponse.StatusCode);
+        using var listJson = JsonDocument.Parse(await listResponse.Content.ReadAsStringAsync());
+        Assert.Equal(JsonValueKind.Array, listJson.RootElement.ValueKind);
+        Assert.Contains(listJson.RootElement.EnumerateArray(), item => item.GetProperty("id").GetString() == promo.Id.ToString("N"));
+
+        var detailResponse = await SendAuthorizedAsync(HttpMethod.Get, $"/promos/{promo.Id:N}", token);
+        Assert.Equal(HttpStatusCode.OK, detailResponse.StatusCode);
+        using var detailJson = JsonDocument.Parse(await detailResponse.Content.ReadAsStringAsync());
+        var detailRoot = detailJson.RootElement;
+        Assert.Equal(promo.Id, detailRoot.GetProperty("promo").GetProperty("id").GetGuid());
+        Assert.True(detailRoot.GetProperty("entries").GetArrayLength() >= 1);
+    }
+
+    [Fact]
+    public async Task ExportCsv_ReturnsFixedAndDynamicColumns()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        using var content = new MultipartFormDataContent();
+        content.Add(new StringContent(site.SiteId), "siteId");
+        content.Add(new StringContent("Export Promo"), "name");
+        content.Add(new StringContent("[{\"key\":\"favorite\",\"label\":\"Favorite\",\"type\":\"text\",\"required\":false,\"order\":0}]"), "questions");
+        var createResponse = await SendAuthorizedAsync(HttpMethod.Post, "/promos", token, content);
+        using var createJson = JsonDocument.Parse(await createResponse.Content.ReadAsStringAsync());
+        var promoId = createJson.RootElement.GetProperty("id").GetString();
+        var publicKey = createJson.RootElement.GetProperty("publicKey").GetString();
+
+        var engageSessionId = Guid.NewGuid();
+        var entryResponse = await _client!.PostAsJsonAsync($"/promos/public/{publicKey}/entries", new
+        {
+            email = "user@example.com",
+            consentGiven = true,
+            consentStatement = "I agree",
+            engageSessionId = engageSessionId.ToString("N"),
+            answers = new Dictionary<string, string> { ["favorite"] = "Blue" }
+        });
+        Assert.Equal(HttpStatusCode.OK, entryResponse.StatusCode);
+
+        var csvResponse = await SendAuthorizedAsync(HttpMethod.Get, $"/promos/{promoId}/export.csv", token);
+        Assert.Equal(HttpStatusCode.OK, csvResponse.StatusCode);
+        var csv = await csvResponse.Content.ReadAsStringAsync();
+        Assert.Contains("siteId", csv);
+        Assert.Contains("engageSessionId", csv);
+        Assert.Contains(Guid.Parse(site.SiteId).ToString("N"), csv);
+        Assert.Contains(engageSessionId.ToString("N"), csv);
+        Assert.Contains("q_favorite", csv);
+        Assert.Contains("Blue", csv);
+    }
+
+
+
     private async Task<CurrentUserResponse> GetCurrentUserAsync(string token)
     {
         var response = await SendAuthorizedAsync(HttpMethod.Get, "/auth/me", token);
@@ -145,7 +364,7 @@ public sealed class PromosIntegrationTests : IAsyncLifetime
 
     private async Task<string> RegisterUserAsync()
     {
-        var response = await _client!.PostAsJsonAsync("/auth/register", new RegisterRequest("Promos Tester", $"promo-{Guid.NewGuid():N}@intentify.local", "password-123"));
+        var response = await _client!.PostAsJsonAsync("/auth/register", new RegisterRequest("Promos Tester", $"promo-{Guid.NewGuid():N}@intentify.local", "password-123", "Default Org"));
         var payload = await response.Content.ReadFromJsonAsync<LoginResponse>();
         return payload!.AccessToken;
     }
@@ -158,11 +377,27 @@ public sealed class PromosIntegrationTests : IAsyncLifetime
         return await _client!.SendAsync(request);
     }
 
+    private sealed class BsonPromo
+    {
+        public Guid Id { get; init; }
+        public string? FlyerFileName { get; init; }
+        public byte[]? FlyerBytes { get; init; }
+        public List<BsonPromoQuestion> Questions { get; init; } = [];
+    }
+
+    private sealed class BsonPromoQuestion
+    {
+        public string Key { get; init; } = string.Empty;
+    }
+
     private sealed class BsonPromoEntry
     {
         public Guid Id { get; init; }
         public Guid PromoId { get; init; }
+        public Guid SiteId { get; init; }
+        public Guid? EngageSessionId { get; init; }
         public Guid? VisitorId { get; init; }
+        public Dictionary<string, string>? Answers { get; init; }
         public DateTime CreatedAtUtc { get; init; }
     }
 

@@ -6,11 +6,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <FrameworkReference Include="Microsoft.AspNetCore.App" />
-  </ItemGroup>
-
-  <ItemGroup>
     <EmbeddedResource Include="assets/tracker.js" />
+    <EmbeddedResource Include="assets/sdk.js" />
   </ItemGroup>
 
   <ItemGroup>

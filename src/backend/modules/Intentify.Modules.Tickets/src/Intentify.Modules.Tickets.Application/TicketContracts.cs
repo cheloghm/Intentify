@@ -9,7 +9,7 @@ public sealed record UpdateTicketCommand(Guid TenantId, Guid TicketId, string Su
 public sealed record SetTicketAssignmentCommand(Guid TenantId, Guid TicketId, Guid? AssignedToUserId);
 public sealed record AddTicketNoteCommand(Guid TenantId, Guid TicketId, Guid AuthorUserId, string Content);
 public sealed record ListTicketNotesQuery(Guid TenantId, Guid TicketId, int Page, int PageSize);
-public sealed record TransitionTicketStatusCommand(Guid TenantId, Guid TicketId, string ToStatus);
+public sealed record TransitionTicketStatusCommand(Guid TenantId, Guid TicketId, string ToStatus, Guid? CurrentUserId);
 
 public sealed record TicketListItem(
     Guid Id,

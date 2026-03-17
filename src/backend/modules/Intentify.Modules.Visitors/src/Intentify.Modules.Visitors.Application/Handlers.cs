@@ -98,3 +98,120 @@ public sealed class GetVisitCountWindowsHandler
 
     private static DateTime Max(DateTime left, DateTime right) => left > right ? left : right;
 }
+
+public sealed class GetVisitorDetailHandler
+{
+    private const int DefaultRecentSessionCount = 5;
+    private readonly IVisitorRepository _repository;
+
+    public GetVisitorDetailHandler(IVisitorRepository repository)
+    {
+        _repository = repository;
+    }
+
+    public async Task<VisitorDetailResult?> HandleAsync(GetVisitorDetailQuery query, CancellationToken cancellationToken = default)
+    {
+        var visitor = await _repository.GetByIdAsync(query.TenantId, query.SiteId, query.VisitorId, cancellationToken);
+        if (visitor is null)
+        {
+            return null;
+        }
+
+        var firstSeenAtUtc = visitor.Sessions.Count > 0
+            ? visitor.Sessions.Min(session => session.FirstSeenAtUtc)
+            : visitor.CreatedAtUtc;
+
+        var recentSessions = visitor.Sessions
+            .OrderByDescending(session => session.LastSeenAtUtc)
+            .Take(DefaultRecentSessionCount)
+            .Select(session => new VisitorRecentSessionItem(
+                session.SessionId,
+                session.FirstSeenAtUtc,
+                session.LastSeenAtUtc,
+                session.PagesVisited,
+                session.TimeOnSiteSeconds,
+                session.EngagementScore,
+                session.LastPath,
+                session.LastReferrer,
+                new Dictionary<string, int>(session.TopActions, StringComparer.OrdinalIgnoreCase)))
+            .ToArray();
+
+        return new VisitorDetailResult(
+            visitor.Id,
+            visitor.SiteId,
+            firstSeenAtUtc,
+            visitor.LastSeenAtUtc,
+            visitor.Sessions.Count,
+            visitor.Sessions.Sum(session => session.PagesVisited),
+            visitor.PrimaryEmail,
+            visitor.DisplayName,
+            visitor.Phone,
+            visitor.UserAgentHint,
+            visitor.Language,
+            visitor.Platform,
+            BuildIdentificationSummary(visitor),
+            recentSessions);
+    }
+
+    private static VisitorIdentificationSummary BuildIdentificationSummary(Domain.Visitor visitor)
+    {
+        var knownTraits = new List<string>(3);
+        if (!string.IsNullOrWhiteSpace(visitor.PrimaryEmail)) knownTraits.Add("email");
+        if (!string.IsNullOrWhiteSpace(visitor.DisplayName)) knownTraits.Add("name");
+        if (!string.IsNullOrWhiteSpace(visitor.Phone)) knownTraits.Add("phone");
+
+        var isIdentified = knownTraits.Count > 0;
+        var source = visitor.LastIdentifiedAtUtc.HasValue
+            ? "lead_capture"
+            : "unknown";
+
+        var confidence = knownTraits.Count / 3m;
+        var context = isIdentified
+            ? "Identity traits were enriched through existing consented lead-linking flow."
+            : null;
+
+        return new VisitorIdentificationSummary(
+            isIdentified,
+            visitor.LastIdentifiedAtUtc,
+            source,
+            confidence,
+            knownTraits,
+            context);
+    }
+}
+
+public sealed class GetOnlineNowHandler
+{
+    private readonly IVisitorAnalyticsReader _analyticsReader;
+
+    public GetOnlineNowHandler(IVisitorAnalyticsReader analyticsReader)
+    {
+        _analyticsReader = analyticsReader;
+    }
+
+    public Task<IReadOnlyCollection<OnlineVisitorItem>> HandleAsync(OnlineNowQuery query, CancellationToken cancellationToken = default)
+    {
+        var windowMinutes = query.WindowMinutes is <= 0 or > 120 ? 5 : query.WindowMinutes;
+        var limit = query.Limit is <= 0 or > 200 ? 20 : query.Limit;
+        var cutoffUtc = DateTime.UtcNow.AddMinutes(-windowMinutes);
+        return _analyticsReader.GetOnlineNowAsync(query.TenantId, query.SiteId, cutoffUtc, limit, cancellationToken);
+    }
+}
+
+public sealed class GetPageAnalyticsHandler
+{
+    private readonly IVisitorAnalyticsReader _analyticsReader;
+
+    public GetPageAnalyticsHandler(IVisitorAnalyticsReader analyticsReader)
+    {
+        _analyticsReader = analyticsReader;
+    }
+
+    public Task<IReadOnlyCollection<PageAnalyticsItem>> HandleAsync(PageAnalyticsQuery query, CancellationToken cancellationToken = default)
+    {
+        var days = query.Days is <= 0 or > 90 ? 7 : query.Days;
+        var limit = query.Limit is <= 0 or > 100 ? 10 : query.Limit;
+        var sinceUtc = DateTime.UtcNow.AddDays(-days);
+        return _analyticsReader.GetTopPagesAsync(query.TenantId, query.SiteId, sinceUtc, limit, cancellationToken);
+    }
+}

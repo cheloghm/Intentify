@@ -238,7 +238,7 @@ public sealed class LeadsIntegrationTests : IAsyncLifetime
 
     private async Task<string> RegisterUserAsync(string prefix)
     {
-        var response = await _client!.PostAsJsonAsync("/auth/register", new RegisterRequest("Leads Tester", $"{prefix}-{Guid.NewGuid():N}@intentify.local", "password-123"));
+        var response = await _client!.PostAsJsonAsync("/auth/register", new RegisterRequest("Leads Tester", $"{prefix}-{Guid.NewGuid():N}@intentify.local", "password-123", "Default Org"));
         var payload = await response.Content.ReadFromJsonAsync<LoginResponse>();
         return payload!.AccessToken;
     }

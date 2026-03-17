@@ -84,6 +84,7 @@ public sealed class VisitorsIntegrationTests : IAsyncLifetime
         var firstOccurred = timeline[0].GetProperty("occurredAtUtc").GetDateTime();
         var secondOccurred = timeline[1].GetProperty("occurredAtUtc").GetDateTime();
         Assert.True(firstOccurred >= secondOccurred);
+        Assert.Equal("sess-a", timeline[0].GetProperty("sessionId").GetString());
 
         var mongoClient = new MongoClient(_mongo.ConnectionString);
         var database = mongoClient.GetDatabase(_mongo.DatabaseName);
@@ -92,6 +93,57 @@ public sealed class VisitorsIntegrationTests : IAsyncLifetime
         Assert.NotNull(storedVisitor);
         Assert.NotEmpty(storedVisitor!.Sessions);
         Assert.True(storedVisitor.Sessions[0].EngagementScore > 0);
+    }
+
+    [Fact]
+    public async Task GetVisitorDetail_ReturnsComputedSummary_AndRecentSessionsOrderedByRecency()
+    {
+        var accessToken = await RegisterUserAsync();
+        var site = await CreateSiteAsync(accessToken);
+        await SetAllowedOriginAsync(accessToken, site.SiteId, "http://localhost:8088");
+
+        var now = DateTime.UtcNow;
+        await PostCollectorEventAsync(site.SiteKey, "page_view", "http://localhost:8088/a", null, now.AddMinutes(-30), "sess-old");
+        await PostCollectorEventAsync(site.SiteKey, "click", "http://localhost:8088/a", null, now.AddMinutes(-29), "sess-old");
+
+        await PostCollectorEventAsync(site.SiteKey, "page_view", "http://localhost:8088/b", null, now.AddMinutes(-20), "sess-mid");
+
+        await PostCollectorEventAsync(site.SiteKey, "page_view", "http://localhost:8088/c", null, now.AddMinutes(-10), "sess-new");
+        await PostCollectorEventAsync(site.SiteKey, "time_on_page", "http://localhost:8088/c", null, now.AddMinutes(-9), "sess-new");
+
+        var visitorsResponse = await SendAuthorizedAsync(HttpMethod.Get, $"/visitors?siteId={site.SiteId}&page=1&pageSize=10", accessToken);
+        Assert.Equal(HttpStatusCode.OK, visitorsResponse.StatusCode);
+
+        using var visitorsDoc = JsonDocument.Parse(await visitorsResponse.Content.ReadAsStringAsync());
+        var visitorId = visitorsDoc.RootElement[0].GetProperty("visitorId").GetString();
+        Assert.False(string.IsNullOrWhiteSpace(visitorId));
+
+        var detailResponse = await SendAuthorizedAsync(HttpMethod.Get, $"/visitors/{visitorId}?siteId={site.SiteId}", accessToken);
+        Assert.Equal(HttpStatusCode.OK, detailResponse.StatusCode);
+
+        using var detailDoc = JsonDocument.Parse(await detailResponse.Content.ReadAsStringAsync());
+        var root = detailDoc.RootElement;
+
+        Assert.Equal(visitorId, root.GetProperty("visitorId").GetString());
+        Assert.Equal(site.SiteId, root.GetProperty("siteId").GetString());
+        Assert.Equal(3, root.GetProperty("visitCount").GetInt32());
+        Assert.Equal(3, root.GetProperty("totalPagesVisited").GetInt32());
+
+        var firstSeenAtUtc = root.GetProperty("firstSeenAtUtc").GetDateTime();
+        var lastSeenAtUtc = root.GetProperty("lastSeenAtUtc").GetDateTime();
+        Assert.True(firstSeenAtUtc <= lastSeenAtUtc);
+
+        var recentSessions = root.GetProperty("recentSessions");
+        Assert.Equal(3, recentSessions.GetArrayLength());
+        Assert.Equal("sess-new", recentSessions[0].GetProperty("sessionId").GetString());
+        Assert.Equal("sess-mid", recentSessions[1].GetProperty("sessionId").GetString());
+        Assert.Equal("sess-old", recentSessions[2].GetProperty("sessionId").GetString());
+
+        var firstRecent = recentSessions[0].GetProperty("lastSeenAtUtc").GetDateTime();
+        var secondRecent = recentSessions[1].GetProperty("lastSeenAtUtc").GetDateTime();
+        var thirdRecent = recentSessions[2].GetProperty("lastSeenAtUtc").GetDateTime();
+        Assert.True(firstRecent >= secondRecent);
+        Assert.True(secondRecent >= thirdRecent);
     }
 
     [Fact]
@@ -116,6 +168,25 @@ public sealed class VisitorsIntegrationTests : IAsyncLifetime
         Assert.Equal(3, json.RootElement.GetProperty("last90").GetInt32());
     }
 
+    [Fact]
+    public async Task CollectorEvents_WithoutSessionAndFirstParty_DoNotCollapseIntoSharedVisitor()
+    {
+        var accessToken = await RegisterUserAsync();
+        var site = await CreateSiteAsync(accessToken);
+        await SetAllowedOriginAsync(accessToken, site.SiteId, "http://localhost:8088");
+
+        var now = DateTime.UtcNow;
+        await PostCollectorEventAsync(site.SiteKey, "page_view", "http://localhost:8088/one", null, now, null);
+        await PostCollectorEventAsync(site.SiteKey, "page_view", "http://localhost:8088/two", null, now.AddSeconds(1), null);
+
+        var mongoClient = new MongoClient(_mongo.ConnectionString);
+        var database = mongoClient.GetDatabase(_mongo.DatabaseName);
+        var visitorsCollection = database.GetCollection<Visitor>(VisitorsMongoCollections.Visitors);
+        var visitorCount = await visitorsCollection.CountDocumentsAsync(item => item.SiteId == Guid.Parse(site.SiteId));
+
+        Assert.Equal(2, visitorCount);
+    }
+
     private async Task SetAllowedOriginAsync(string accessToken, string siteId, string origin)
     {
         var updateResponse = await SendAuthorizedAsync(
@@ -127,7 +198,7 @@ public sealed class VisitorsIntegrationTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.OK, updateResponse.StatusCode);
     }
 
-    private async Task PostCollectorEventAsync(string siteKey, string eventType, string url, string? referrer, DateTime tsUtc, string sessionId)
+    private async Task PostCollectorEventAsync(string siteKey, string eventType, string url, string? referrer, DateTime tsUtc, string? sessionId)
     {
         var request = new HttpRequestMessage(HttpMethod.Post, "/collector/events")
         {
@@ -154,7 +225,7 @@ public sealed class VisitorsIntegrationTests : IAsyncLifetime
     private async Task<string> RegisterUserAsync()
     {
         var email = $"visitors-{Guid.NewGuid():N}@intentify.local";
-        var response = await _client!.PostAsJsonAsync("/auth/register", new RegisterRequest("Visitors Tester", email, "password-123"));
+        var response = await _client!.PostAsJsonAsync("/auth/register", new RegisterRequest("Visitors Tester", email, "password-123", "Default Org"));
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
         var payload = await response.Content.ReadFromJsonAsync<LoginResponse>();

@@ -71,6 +71,8 @@ export const renderVisitorsView = async (container, { apiClient, toast, query } 
     siteId: query?.siteId || '',
     visitors: [],
     counts: null,
+    onlineNow: null,
+    pageAnalytics: null,
     error: '',
   };
 
@@ -131,6 +133,16 @@ export const renderVisitorsView = async (container, { apiClient, toast, query } 
   listBody.style.display = 'flex';
   listBody.style.flexDirection = 'column';
   listBody.style.gap = '10px';
+
+  const onlineNowBody = document.createElement('div');
+  onlineNowBody.style.display = 'flex';
+  onlineNowBody.style.flexDirection = 'column';
+  onlineNowBody.style.gap = '8px';
+
+  const pagesBody = document.createElement('div');
+  pagesBody.style.display = 'flex';
+  pagesBody.style.flexDirection = 'column';
+  pagesBody.style.gap = '8px';
 
   const renderCounts = () => {
     countsRow.innerHTML = '';
@@ -248,6 +260,120 @@ export const renderVisitorsView = async (container, { apiClient, toast, query } 
     listBody.appendChild(table);
   };
 
+  const renderOnlineNow = () => {
+    onlineNowBody.innerHTML = '';
+
+    if (!state.siteId) {
+      const empty = document.createElement('div');
+      empty.textContent = 'Select a site to view online visitors.';
+      empty.style.color = '#64748b';
+      onlineNowBody.appendChild(empty);
+      return;
+    }
+
+    const payload = state.onlineNow || {};
+    const count = Number.isFinite(payload.count) ? payload.count : 0;
+    const visitors = Array.isArray(payload.visitors) ? payload.visitors : [];
+
+    const summary = document.createElement('div');
+    summary.textContent = `Online now: ${count}`;
+    summary.style.fontWeight = '600';
+    summary.style.color = '#0f172a';
+    onlineNowBody.appendChild(summary);
+
+    if (!visitors.length) {
+      const empty = document.createElement('div');
+      empty.textContent = 'No active visitors in the recent window.';
+      empty.style.color = '#64748b';
+      onlineNowBody.appendChild(empty);
+      return;
+    }
+
+    const list = document.createElement('div');
+    list.style.display = 'flex';
+    list.style.flexDirection = 'column';
+    list.style.gap = '6px';
+
+    visitors.slice(0, 8).forEach((visitor) => {
+      const row = document.createElement('div');
+      row.style.display = 'flex';
+      row.style.justifyContent = 'space-between';
+      row.style.gap = '10px';
+      row.style.padding = '8px 10px';
+      row.style.border = '1px solid #e2e8f0';
+      row.style.borderRadius = '8px';
+      row.style.background = '#ffffff';
+
+      const left = document.createElement('div');
+      left.textContent = `${toShortId(visitor.visitorId)} • ${visitor.lastPath || '—'}`;
+      left.style.color = '#1e293b';
+      left.style.fontSize = '13px';
+
+      const right = document.createElement('div');
+      right.textContent = formatDate(visitor.lastSeenAtUtc);
+      right.style.color = '#64748b';
+      right.style.fontSize = '12px';
+
+      row.append(left, right);
+      list.appendChild(row);
+    });
+
+    onlineNowBody.appendChild(list);
+  };
+
+  const renderPageAnalytics = () => {
+    pagesBody.innerHTML = '';
+
+    if (!state.siteId) {
+      const empty = document.createElement('div');
+      empty.textContent = 'Select a site to view page analytics.';
+      empty.style.color = '#64748b';
+      pagesBody.appendChild(empty);
+      return;
+    }
+
+    const payload = state.pageAnalytics || {};
+    const pages = Array.isArray(payload.pages) ? payload.pages : [];
+
+    if (!pages.length) {
+      const empty = document.createElement('div');
+      empty.textContent = 'No page analytics data yet. Install snippet and send pageview events.';
+      empty.style.color = '#64748b';
+      pagesBody.appendChild(empty);
+      return;
+    }
+
+    const table = document.createElement('table');
+    table.className = 'ui-table';
+    const thead = document.createElement('thead');
+    const headerRow = document.createElement('tr');
+    ['Page', 'Views', 'Unique sessions', 'Avg time on page (s)'].forEach((label) => {
+      const th = document.createElement('th');
+      th.textContent = label;
+      headerRow.appendChild(th);
+    });
+    thead.appendChild(headerRow);
+    table.appendChild(thead);
+
+    const tbody = document.createElement('tbody');
+    pages.forEach((item) => {
+      const tr = document.createElement('tr');
+      [
+        item.pageUrl || '—',
+        item.pageViews ?? 0,
+        item.uniqueSessions ?? 0,
+        item.avgTimeOnPageSeconds ?? 0,
+      ].forEach((value) => {
+        const td = document.createElement('td');
+        td.textContent = String(value);
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    pagesBody.appendChild(table);
+  };
+
   const setSiteOptions = () => {
     siteSelect.innerHTML = '';
 
@@ -273,7 +399,11 @@ export const renderVisitorsView = async (container, { apiClient, toast, query } 
     if (!state.siteId) {
       state.visitors = [];
       state.counts = null;
+      state.onlineNow = null;
+      state.pageAnalytics = null;
       renderCounts();
+      renderOnlineNow();
+      renderPageAnalytics();
       renderVisitors();
       return;
     }
@@ -283,17 +413,25 @@ export const renderVisitorsView = async (container, { apiClient, toast, query } 
     renderVisitors();
 
     try {
-      const [visitors, counts] = await Promise.all([
+      const [visitors, counts, onlineNow, pageAnalytics] = await Promise.all([
         client.visitors?.list
           ? client.visitors.list(state.siteId, 1, 50)
           : client.request(`/visitors?siteId=${encodeURIComponent(state.siteId)}&page=1&pageSize=50`),
         client.visitors?.visitCounts
           ? client.visitors.visitCounts(state.siteId)
           : client.request(`/visitors/visits/counts?siteId=${encodeURIComponent(state.siteId)}`),
+        client.visitors?.onlineNow
+          ? client.visitors.onlineNow(state.siteId, 5, 20)
+          : client.request(`/visitors/online-now?siteId=${encodeURIComponent(state.siteId)}&windowMinutes=5&limit=20`),
+        client.visitors?.pageAnalytics
+          ? client.visitors.pageAnalytics(state.siteId, 7, 10)
+          : client.request(`/visitors/analytics/pages?siteId=${encodeURIComponent(state.siteId)}&days=7&limit=10`),
       ]);
 
       state.visitors = Array.isArray(visitors) ? visitors : [];
       state.counts = counts || null;
+      state.onlineNow = onlineNow || null;
+      state.pageAnalytics = pageAnalytics || null;
     } catch (error) {
       const uiError = mapApiError(error);
       state.error = uiError.message;
@@ -301,10 +439,14 @@ export const renderVisitorsView = async (container, { apiClient, toast, query } 
       notifier.show({ message: uiError.message, variant: 'danger' });
       state.visitors = [];
       state.counts = null;
+      state.onlineNow = null;
+      state.pageAnalytics = null;
     } finally {
       state.loadingVisitors = false;
       state.loadingCounts = false;
       renderCounts();
+      renderOnlineNow();
+      renderPageAnalytics();
       renderVisitors();
     }
   };
@@ -331,10 +473,22 @@ export const renderVisitorsView = async (container, { apiClient, toast, query } 
     body: listBody,
   });
 
-  page.append(header, controls, errorText, countsCard, visitorsCard);
+  const onlineNowCard = createCard({
+    title: 'Visitors online right now',
+    body: onlineNowBody,
+  });
+
+  const pageAnalyticsCard = createCard({
+    title: 'Top pages (last 7 days)',
+    body: pagesBody,
+  });
+
+  page.append(header, controls, errorText, countsCard, onlineNowCard, pageAnalyticsCard, visitorsCard);
   container.appendChild(page);
 
   renderCounts();
+  renderOnlineNow();
+  renderPageAnalytics();
   renderVisitors();
   setSiteOptions();
 
