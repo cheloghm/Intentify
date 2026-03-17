@@ -1,5 +1,7 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Net;
+using System.Security.Claims;
+using System.Text;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Security.Claims;
@@ -75,7 +77,7 @@ public sealed class TicketsIntegrationTests : IAsyncLifetime
         await CreateTicketAsync(secondTenantToken,
             new CreateTicketRequest(Guid.NewGuid(), null, null, "Tenant B", "Ticket B", null));
 
-        var firstTenantListResponse = await SendAuthorizedAsync(HttpMethod.Get, "/tickets?page=1&pageSize=10", firstTenantToken);
+        var firstTenantListResponse = await SendAuthorizedAsync(HttpMethod.Get, "/tickets?page=1&pageSize=10", tokenA);
         Assert.Equal(HttpStatusCode.OK, firstTenantListResponse.StatusCode);
 
         using var listJson = JsonDocument.Parse(await firstTenantListResponse.Content.ReadAsStringAsync());
@@ -84,7 +86,7 @@ public sealed class TicketsIntegrationTests : IAsyncLifetime
         Assert.Single(items.EnumerateArray(), item => item.GetProperty("subject").GetString() == "Tenant A");
         Assert.DoesNotContain(items.EnumerateArray(), item => item.GetProperty("subject").GetString() == "Tenant B");
 
-        var forbiddenGet = await SendAuthorizedAsync(HttpMethod.Get, $"/tickets/{firstTicket.Id}", secondTenantToken);
+        var forbiddenGet = await SendAuthorizedAsync(HttpMethod.Get, $"/tickets/{firstTicket.Id}", tokenB);
         Assert.Equal(HttpStatusCode.NotFound, forbiddenGet.StatusCode);
     }
 
