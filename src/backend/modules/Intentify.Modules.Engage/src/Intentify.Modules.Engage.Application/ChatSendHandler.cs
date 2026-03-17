@@ -25,7 +25,22 @@ public sealed class ChatSendHandler
         "form is not working",
         "can't submit",
         "cannot submit",
-        "doesn't submit",
+        "doesn't submit"
+    ];
+    private static readonly string[] HumanHelpRequestPhrases =
+    [
+        "help me",
+        "need help",
+        "someone help",
+        "talk to",
+        "speak to",
+        "human",
+        "agent",
+        "representative",
+        "support"
+    ];
+    private static readonly string[] HumanHelpProblemTerms =
+    [
         "broken",
         "error",
         "failed",
@@ -34,25 +49,21 @@ public sealed class ChatSendHandler
         "checkout",
         "payment",
         "refund",
-        "complaint"
+        "complaint",
+        "issue",
+        "problem"
     ];
 
     private const string AskForContactDetailsResponse = "Sorry about that — I’ll get someone to help. What’s your name and best email?";
     private const string ContactDetailsReceivedResponse = "Thanks — I’ve got your details. Our team will contact you shortly.";
     private const string GreetingResponse = "Hi! How can I help you today?";
     private const string AckResponse = "Got it — what would you like to know or do next?";
-    private const string LowConfidenceClarificationResponse = "I don’t have that information in our knowledge base yet. If you tell me a bit more, I can help refine the question — or I can create a ticket for our team to follow up.";
-    private const string ShortPromptClarificationResponse = "Happy to help — are you looking for hours, location, contact details, or services?";
-    private const string ContactFallbackResponse = "I don’t have a verified contact detail in the knowledge base yet. You can share the best way to reach you and I can pass it to our team.";
-    private const string LocationFallbackResponse = "I don’t have a confirmed location in the knowledge base yet. If you share your city or area, I can help narrow this down or ask our team to follow up.";
-    private const string HoursFallbackResponse = "I don’t have confirmed business hours in the knowledge base yet. If this is urgent, I can open a ticket so the team can reply with exact hours.";
-    private const string ServicesFallbackResponse = "I can help with services or menu questions. Tell me the specific service or item you’re looking for and I’ll narrow it down.";
-    private const string SoftFallbackResponse = "I don’t have a reliable answer yet, but I can help refine the question. Share a little more detail and I’ll try again.";
+    private const string NeutralClarificationResponse = "Happy to help — could you share a bit more about what you need?";
+    private const string SoftFallbackResponse = "I can help with that — what would you like to sort out first?";
     private const string EscalationFallbackResponse = "Thanks — I can connect you with our team. Please share your name and best email.";
     private const string PromoCommandPrefix = "/promo";
     private const string PromoResponseText = "Please complete this short promo form.";
     private const string ContactDetailsNamePrefix = "my name is";
-
     private readonly ISiteRepository _siteRepository;
     private readonly IEngageChatSessionRepository _sessionRepository;
     private readonly IEngageBotRepository _botRepository;
@@ -197,7 +208,8 @@ public sealed class ChatSendHandler
             return await CreateHumanHelpResponseAsync(site, session, command.Message, now, cancellationToken);
         }
 
-        var intent = DetectIntent(command.Message);
+        var normalizedMessage = NormalizeUserMessage(command.Message);
+        var intent = DetectIntent(normalizedMessage);
         if (intent == ChatIntent.EscalationHelp)
         {
             return await CreateHumanHelpResponseAsync(site, session, command.Message, now, cancellationToken);
@@ -205,11 +217,22 @@ public sealed class ChatSendHandler
 
         if (intent == ChatIntent.AmbiguousShortPrompt)
         {
-            return await CreateAssistantResponseAsync(session.Id, now, ShortPromptClarificationResponse, 0.35m, false, "Clarification", "AmbiguousShortPrompt", cancellationToken);
+            return await CreateLayeredFallbackResponseAsync(
+                site,
+                bot,
+                session,
+                command.Message,
+                normalizedMessage,
+                intent,
+                recentMessages,
+                [],
+                now,
+                "AmbiguousShortPrompt",
+                cancellationToken);
         }
 
         var retrieved = await _retrieveTopChunksHandler.HandleAsync(
-            new RetrieveTopChunksQuery(site.TenantId, site.Id, command.Message, 3, bot.BotId),
+            new RetrieveTopChunksQuery(site.TenantId, site.Id, normalizedMessage, 3, bot.BotId),
             cancellationToken);
 
         var topScore = retrieved.Count == 0 ? 0 : retrieved.Max(item => item.Score);
@@ -221,18 +244,18 @@ public sealed class ChatSendHandler
         if (isLowConfidence)
         {
             _logger.LogInformation("Engage chat decision: layered fallback path for session {SessionId}.", session.Id);
-            return await CreateLayeredFallbackResponseAsync(site, session, command.Message, intent, now, "LowConfidence", cancellationToken);
+            return await CreateLayeredFallbackResponseAsync(site, bot, session, command.Message, normalizedMessage, intent, recentMessages, retrieved, now, "LowConfidence", cancellationToken);
         }
 
         var citations = retrieved
             .Select(item => new EngageCitationResult(item.SourceId, item.ChunkId, item.ChunkIndex))
             .ToArray();
 
-        var completion = await _chatCompletionClient.CompleteAsync(BuildPrompt(command.Message, retrieved, recentMessages), cancellationToken);
+        var completion = await _chatCompletionClient.CompleteAsync(BuildPrompt(bot, command.Message, normalizedMessage, retrieved, recentMessages), cancellationToken);
         if (!completion.IsSuccess || string.IsNullOrWhiteSpace(completion.Value))
         {
             _logger.LogWarning("Engage AI completion unavailable for session {SessionId}.", session.Id);
-            return await CreateLayeredFallbackResponseAsync(site, session, command.Message, intent, now, "AiUnavailable", cancellationToken);
+            return await CreateLayeredFallbackResponseAsync(site, bot, session, command.Message, normalizedMessage, intent, recentMessages, retrieved, now, "AiUnavailable", cancellationToken);
         }
 
         _logger.LogInformation("Engage chat decision: grounded answer path for session {SessionId}.", session.Id);
@@ -320,7 +343,7 @@ public sealed class ChatSendHandler
         return Math.Min(1m, topScore / 4m);
     }
 
-    private static string BuildPrompt(string message, IReadOnlyCollection<RetrievedChunkResult> chunks, IReadOnlyCollection<EngageChatMessage> messages)
+    private static string BuildPrompt(EngageBot bot, string message, string normalizedMessage, IReadOnlyCollection<RetrievedChunkResult> chunks, IReadOnlyCollection<EngageChatMessage> messages)
     {
         var dedupedChunks = chunks
             .Select(item => item.Content.Trim())
@@ -337,16 +360,23 @@ public sealed class ChatSendHandler
             .Select(item => $"{(string.Equals(item.Role, "assistant", StringComparison.OrdinalIgnoreCase) ? "Assistant" : "User")}: {item.Content.Trim()}"));
 
         var distilledContext = BuildDistilledContext(messages, message);
+        var tone = ResolvePromptTone(bot.Tone);
+        var verbosity = ResolvePromptVerbosity(bot.Verbosity);
 
         return $"""
 You are an Engage support assistant.
 
 Use only the retrieved knowledge context to answer the user's question in plain English.
-- Keep the answer concise: 1-2 short paragraphs.
+- Keep a {tone} tone.
+- Keep verbosity {verbosity}.
+- Keep the answer concise and practical.
 - Rephrase the content naturally; do not copy/paste raw website text.
 - Do not use markdown lists, bullets, or asterisks unless the user explicitly asks for a list.
+- Do not sound robotic.
 - Do not start with: Based on your knowledge base:
-- If the answer is not in the retrieved context, reply exactly: I don’t have that information in our knowledge base yet.
+- If details are incomplete, do not mention internal systems or missing sources.
+- Offer the safest helpful response you can and ask one brief, specific follow-up question.
+- Do not invent unsupported specifics.
 
 Retrieved knowledge context (deduped):
 {context}
@@ -359,6 +389,9 @@ Distilled prior user context:
 
 User question:
 {message}
+
+Normalized user question (for typo recovery):
+{normalizedMessage}
 """;
     }
 
@@ -423,7 +456,7 @@ User question:
     private static string NormalizeAiResponse(string response)
     {
         var normalized = response.Trim();
-        const string prohibitedPrefix = "Based on your knowledge base:";
+        const string prohibitedPrefix = "Based on available information:";
 
         if (normalized.StartsWith(prohibitedPrefix, StringComparison.OrdinalIgnoreCase))
         {
@@ -496,29 +529,23 @@ User question:
 
     private async Task<OperationResult<ChatSendResult>> CreateLayeredFallbackResponseAsync(
         Site site,
+        EngageBot bot,
         EngageChatSession session,
         string userMessage,
+        string normalizedUserMessage,
         ChatIntent intent,
+        IReadOnlyCollection<EngageChatMessage> messages,
+        IReadOnlyCollection<RetrievedChunkResult> retrievedChunks,
         DateTime now,
         string reason,
         CancellationToken cancellationToken)
     {
-        if (intent == ChatIntent.AmbiguousShortPrompt)
-        {
-            return await CreateAssistantResponseAsync(session.Id, now, ShortPromptClarificationResponse, 0.35m, false, "Clarification", "AmbiguousShortPrompt", cancellationToken);
-        }
-
-        if (TryBuildBusinessAwareFallback(intent, out var businessFallback))
-        {
-            return await CreateAssistantResponseAsync(session.Id, now, businessFallback, 0.3m, false, "BusinessFallback", null, cancellationToken);
-        }
-
-        var shouldEscalate = ShouldEscalateFallback(intent, userMessage, reason);
+        var shouldEscalate = ShouldEscalateFallback(bot, intent, normalizedUserMessage, reason);
         if (!shouldEscalate)
         {
             var fallback = IsRealQuestion(userMessage)
-                ? LowConfidenceClarificationResponse
-                : SoftFallbackResponse;
+                ? await BuildBusinessAwareClarificationResponseAsync(bot, userMessage, normalizedUserMessage, intent, messages, retrievedChunks, cancellationToken)
+                : BuildSoftFallbackResponse(bot);
             return await CreateAssistantResponseAsync(session.Id, now, fallback, 0.2m, false, "Fallback", reason, cancellationToken);
         }
 
@@ -532,8 +559,19 @@ User question:
             return false;
         }
 
-        return HumanHelpPhrases.Any(phrase =>
-            message.Contains(phrase, StringComparison.OrdinalIgnoreCase));
+        if (HumanHelpPhrases.Any(phrase => message.Contains(phrase, StringComparison.OrdinalIgnoreCase)))
+        {
+            return true;
+        }
+
+        var normalized = message.Trim().ToLowerInvariant();
+        var requestedHumanHelp = HumanHelpRequestPhrases.Any(phrase => normalized.Contains(phrase, StringComparison.Ordinal));
+        if (!requestedHumanHelp)
+        {
+            return false;
+        }
+
+        return HumanHelpProblemTerms.Any(term => normalized.Contains(term, StringComparison.Ordinal));
     }
 
     private static ChatIntent DetectIntent(string message)
@@ -545,11 +583,18 @@ User question:
             return ChatIntent.AmbiguousShortPrompt;
         }
 
-        if (normalized.Contains("human", StringComparison.Ordinal)
+        var containsHumanTarget = normalized.Contains("human", StringComparison.Ordinal)
             || normalized.Contains("agent", StringComparison.Ordinal)
             || normalized.Contains("representative", StringComparison.Ordinal)
-            || normalized.Contains("someone", StringComparison.Ordinal)
-            || normalized.Contains("support", StringComparison.Ordinal))
+            || normalized.Contains("person", StringComparison.Ordinal);
+        var containsHandoffVerb = normalized.Contains("need", StringComparison.Ordinal)
+            || normalized.Contains("want", StringComparison.Ordinal)
+            || normalized.Contains("speak", StringComparison.Ordinal)
+            || normalized.Contains("talk", StringComparison.Ordinal)
+            || normalized.Contains("connect", StringComparison.Ordinal)
+            || normalized.Contains("help", StringComparison.Ordinal);
+
+        if (containsHumanTarget && containsHandoffVerb)
         {
             return ChatIntent.EscalationHelp;
         }
@@ -581,36 +626,137 @@ User question:
         if (normalized.Contains("service", StringComparison.Ordinal)
             || normalized.Contains("menu", StringComparison.Ordinal)
             || normalized.Contains("offer", StringComparison.Ordinal)
-            || normalized.Contains("pricing", StringComparison.Ordinal))
+            || normalized.Contains("pricing", StringComparison.Ordinal)
+            || normalized.Contains("order", StringComparison.Ordinal))
         {
             return ChatIntent.Services;
+        }
+
+        if (normalized.Contains("org", StringComparison.Ordinal)
+            || normalized.Contains("organization", StringComparison.Ordinal)
+            || normalized.Contains("business name", StringComparison.Ordinal)
+            || normalized.Contains("company name", StringComparison.Ordinal)
+            || normalized.Contains("name of", StringComparison.Ordinal))
+        {
+            return ChatIntent.Organization;
         }
 
         return ChatIntent.General;
     }
 
-    private static bool TryBuildBusinessAwareFallback(ChatIntent intent, out string response)
+    private static bool ShouldEscalateFallback(EngageBot bot, ChatIntent intent, string userMessage, string reason)
     {
-        response = intent switch
-        {
-            ChatIntent.Contact => ContactFallbackResponse,
-            ChatIntent.Location => LocationFallbackResponse,
-            ChatIntent.Hours => HoursFallbackResponse,
-            ChatIntent.Services => ServicesFallbackResponse,
-            _ => string.Empty
-        };
+        var isActionableHelpIntent = intent == ChatIntent.EscalationHelp || NeedsHumanHelp(userMessage);
+        var isRealQuestion = IsRealQuestion(userMessage);
 
-        return !string.IsNullOrWhiteSpace(response);
-    }
-
-    private static bool ShouldEscalateFallback(ChatIntent intent, string userMessage, string reason)
-    {
-        if (reason == "AiUnavailable" && IsRealQuestion(userMessage))
+        if (string.Equals(NormalizeOptional(bot.FallbackStyle), "handoff", StringComparison.OrdinalIgnoreCase)
+            && (isActionableHelpIntent || isRealQuestion))
         {
             return true;
         }
 
-        return intent == ChatIntent.EscalationHelp || NeedsHumanHelp(userMessage);
+        if (reason == "AiUnavailable" && isRealQuestion)
+        {
+            return true;
+        }
+
+        return isActionableHelpIntent;
+    }
+
+    private static string BuildSoftFallbackResponse(EngageBot bot)
+    {
+        var tone = NormalizeOptional(bot.Tone)?.ToLowerInvariant();
+        return tone switch
+        {
+            "professional" => "I can help with that — which part should we focus on first?",
+            "casual" => "Sure — what are you trying to do right now?",
+            _ => SoftFallbackResponse
+        };
+    }
+
+    private async Task<string> BuildBusinessAwareClarificationResponseAsync(
+        EngageBot bot,
+        string userMessage,
+        string normalizedUserMessage,
+        ChatIntent intent,
+        IReadOnlyCollection<EngageChatMessage> messages,
+        IReadOnlyCollection<RetrievedChunkResult> retrievedChunks,
+        CancellationToken cancellationToken)
+    {
+        var prompt = BuildClarificationPrompt(bot, userMessage, normalizedUserMessage, intent, messages, retrievedChunks);
+        var completion = await _chatCompletionClient.CompleteAsync(prompt, cancellationToken);
+        if (!completion.IsSuccess || string.IsNullOrWhiteSpace(completion.Value))
+        {
+            return NeutralClarificationResponse;
+        }
+
+        return NormalizeAiResponse(completion.Value);
+    }
+
+    private static string BuildClarificationPrompt(
+        EngageBot bot,
+        string userMessage,
+        string normalizedUserMessage,
+        ChatIntent intent,
+        IReadOnlyCollection<EngageChatMessage> messages,
+        IReadOnlyCollection<RetrievedChunkResult> retrievedChunks)
+    {
+        var tone = ResolvePromptTone(bot.Tone);
+        var recentTurns = string.Join("\n", messages
+            .TakeLast(PromptReplayMessageLimit)
+            .Select(item => $"{(string.Equals(item.Role, "assistant", StringComparison.OrdinalIgnoreCase) ? "Assistant" : "User")}: {item.Content.Trim()}"));
+        var distilledContext = BuildDistilledContext(messages, userMessage);
+        var chunkContext = string.Join("\n", retrievedChunks
+            .Select(item => item.Content.Trim())
+            .Where(item => !string.IsNullOrWhiteSpace(item))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(3)
+            .Select((item, index) => $"[{index + 1}] {item}"));
+
+        return $"""
+You are a human-sounding assistant for a business website chat.
+
+Write exactly one short reply for a low-support situation.
+- Keep a {tone} tone.
+- Do not mention internal systems, confidence, reliability, or knowledge base details.
+- Do not invent unsupported specifics.
+- Use business cues only if supported by the conversation or context snippets.
+- If context is weak or business type is unclear, ask one neutral clarification question.
+- Keep it concise and practical.
+
+Detected intent: {intent}
+
+Retrieved business context snippets:
+{(string.IsNullOrWhiteSpace(chunkContext) ? "none" : chunkContext)}
+
+Conversation transcript (oldest to newest):
+{(string.IsNullOrWhiteSpace(recentTurns) ? "none" : recentTurns)}
+
+Distilled prior user context:
+{distilledContext}
+
+Current user message:
+{userMessage}
+
+Normalized user message:
+{normalizedUserMessage}
+""";
+    }
+
+    private static string ResolvePromptTone(string? tone)
+    {
+        var normalized = NormalizeOptional(tone)?.ToLowerInvariant();
+        return normalized is "warm" or "professional" or "casual"
+            ? normalized
+            : "warm";
+    }
+
+    private static string ResolvePromptVerbosity(string? verbosity)
+    {
+        var normalized = NormalizeOptional(verbosity)?.ToLowerInvariant();
+        return normalized is "brief" or "balanced" or "detailed"
+            ? normalized
+            : "balanced";
     }
 
     private async Task<OperationResult<ChatSendResult>> CreateAssistantResponseAsync(
@@ -913,7 +1059,7 @@ User question:
 
         if (sessionId.HasValue)
         {
-            var existing = await _sessionRepository.GetByIdAsync(sessionId.Value, cancellationToken);
+            var existing = await _sessionRepository.GetByIdAsync(tenantId, siteId, sessionId.Value, cancellationToken);
             if (existing is not null && existing.TenantId == tenantId && existing.SiteId == siteId && existing.BotId == botId)
             {
                 var idleFor = now - existing.UpdatedAtUtc;
@@ -987,6 +1133,30 @@ User question:
         return !string.IsNullOrWhiteSpace(promoPublicKey);
     }
 
+
+    private static string NormalizeUserMessage(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return string.Empty;
+        }
+
+        var collapsed = Regex.Replace(message.Trim().ToLowerInvariant(), "[^a-z0-9 ]", " ");
+        var normalized = Regex.Replace(collapsed, "\\s+", " ").Trim();
+
+        var repaired = normalized
+            .Replace("contct", "contact", StringComparison.Ordinal)
+            .Replace("cntact", "contact", StringComparison.Ordinal)
+            .Replace("dtails", "details", StringComparison.Ordinal)
+            .Replace("detals", "details", StringComparison.Ordinal)
+            .Replace("orgnization", "organization", StringComparison.Ordinal)
+            .Replace("organisation", "organization", StringComparison.Ordinal)
+            .Replace("adress", "address", StringComparison.Ordinal)
+            .Replace("locaton", "location", StringComparison.Ordinal);
+
+        return repaired;
+    }
+
     private static string? NormalizeOptional(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
@@ -1004,6 +1174,7 @@ User question:
         Location,
         Hours,
         Services,
+        Organization,
         EscalationHelp,
         AmbiguousShortPrompt
     }

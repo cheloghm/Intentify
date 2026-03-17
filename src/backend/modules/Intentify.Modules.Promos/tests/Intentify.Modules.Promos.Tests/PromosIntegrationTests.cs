@@ -364,7 +364,7 @@ public sealed class PromosIntegrationTests : IAsyncLifetime
 
     private async Task<string> RegisterUserAsync()
     {
-        var response = await _client!.PostAsJsonAsync("/auth/register", new RegisterRequest("Promos Tester", $"promo-{Guid.NewGuid():N}@intentify.local", "password-123"));
+        var response = await _client!.PostAsJsonAsync("/auth/register", new RegisterRequest("Promos Tester", $"promo-{Guid.NewGuid():N}@intentify.local", "password-123", "Default Org"));
         var payload = await response.Content.ReadFromJsonAsync<LoginResponse>();
         return payload!.AccessToken;
     }

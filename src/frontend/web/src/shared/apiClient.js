@@ -95,6 +95,52 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
     return queryString ? `?${queryString}` : '';
   };
 
+
+  const createInvite = async (payload) =>
+    request('/auth/invites', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+  const acceptInvite = async (payload) =>
+    request('/auth/invites/accept', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+  const getCurrentUser = async () => request('/auth/me');
+
+  const updateCurrentUserProfile = async (payload) =>
+    request('/auth/me', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+  const listTenantUsers = async () => request('/auth/users');
+
+  const updateTenantUserRole = async (userId, role) =>
+    request(`/auth/users/${encodeURIComponent(userId)}/role`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ role }),
+    });
+
+  const removeTenantUser = async (userId) =>
+    request(`/auth/users/${encodeURIComponent(userId)}`, {
+      method: 'DELETE',
+    });
+
   const listVisitors = async (siteId, page = 1, pageSize = 50) =>
     request(`/visitors${buildQueryString({ siteId, page, pageSize })}`);
 
@@ -288,6 +334,9 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
         name,
         primaryColor: settings.primaryColor,
         launcherVisible: settings.launcherVisible,
+        tone: settings.tone,
+        verbosity: settings.verbosity,
+        fallbackStyle: settings.fallbackStyle,
       }),
     });
 
@@ -451,6 +500,15 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
     leads: {
       list: listLeads,
       get: getLead,
+    },
+    auth: {
+      createInvite,
+      acceptInvite,
+      me: getCurrentUser,
+      updateProfile: updateCurrentUserProfile,
+      listUsers: listTenantUsers,
+      updateUserRole: updateTenantUserRole,
+      removeUser: removeTenantUser,
     },
     platformAdmin: {
       getSummary: getPlatformSummary,

@@ -12,5 +12,6 @@
   <ItemGroup>
     <ProjectReference Include="..\Intentify.Modules.Knowledge.Domain\Intentify.Modules.Knowledge.Domain.csproj" />
     <ProjectReference Include="..\..\..\..\shared\Intentify.Shared.Validation\src\Intentify.Shared.Validation\Intentify.Shared.Validation.csproj" />
+    <ProjectReference Include="..\..\..\Intentify.Modules.Sites\src\Intentify.Modules.Sites.Application\Intentify.Modules.Sites.Application.csproj" />
   </ItemGroup>
 </Project>

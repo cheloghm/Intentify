@@ -101,8 +101,8 @@ public sealed class KnowledgeChunker : IKnowledgeChunker
         }
 
         return paragraph.Length <= 80
-            && paragraph.EndsWith(':', StringComparison.Ordinal)
-            && !paragraph.Contains('.', StringComparison.Ordinal);
+            && paragraph.EndsWith(":", StringComparison.Ordinal)
+            && !paragraph.Contains(".", StringComparison.Ordinal);
     }
 
     private static string NormalizeHeading(string heading)

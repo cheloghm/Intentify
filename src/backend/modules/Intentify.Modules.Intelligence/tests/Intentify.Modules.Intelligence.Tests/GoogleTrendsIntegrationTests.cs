@@ -77,7 +77,7 @@ public sealed class GoogleTrendsIntegrationTests : IAsyncLifetime
     private async Task<string> RegisterUserAsync()
     {
         var email = $"trends-disabled-{Guid.NewGuid():N}@intentify.local";
-        var response = await _client!.PostAsJsonAsync("/auth/register", new RegisterRequest("Trends Tester", email, "password-123"));
+        var response = await _client!.PostAsJsonAsync("/auth/register", new RegisterRequest("Trends Tester", email, "password-123", "Default Org"));
         var payload = await response.Content.ReadFromJsonAsync<LoginResponse>();
         return payload!.AccessToken;
     }

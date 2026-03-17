@@ -1,3 +1,4 @@
+using Intentify.Modules.Sites.Application;
 using Intentify.Modules.Knowledge.Domain;
 using Intentify.Shared.Validation;
 using Microsoft.Extensions.Logging;
@@ -14,12 +15,14 @@ public sealed class IndexKnowledgeSourceHandler
     private readonly IOpenSearchOptions? _openSearchOptions;
     private readonly IOpenSearchKnowledgeClient? _openSearchClient;
     private readonly ILogger<IndexKnowledgeSourceHandler> _logger;
+    private readonly ISiteRepository _siteRepository;
 
     public IndexKnowledgeSourceHandler(
         IKnowledgeSourceRepository sourceRepository,
         IKnowledgeChunkRepository chunkRepository,
         IKnowledgeTextExtractor extractor,
         IKnowledgeChunker chunker,
+        ISiteRepository siteRepository,
         IOpenSearchOptions? openSearchOptions = null,
         IOpenSearchKnowledgeClient? openSearchClient = null,
         ILogger<IndexKnowledgeSourceHandler>? logger = null)
@@ -31,6 +34,7 @@ public sealed class IndexKnowledgeSourceHandler
         _openSearchOptions = openSearchOptions;
         _openSearchClient = openSearchClient;
         _logger = logger ?? NullLogger<IndexKnowledgeSourceHandler>.Instance;
+        _siteRepository = siteRepository;
     }
 
     public async Task<OperationResult<IndexKnowledgeSourceResult>> HandleAsync(IndexKnowledgeSourceCommand command, CancellationToken cancellationToken = default)
@@ -44,6 +48,12 @@ public sealed class IndexKnowledgeSourceHandler
         if (source.Status == IndexStatus.Processing)
         {
             return OperationResult<IndexKnowledgeSourceResult>.Success(new IndexKnowledgeSourceResult(IndexStatus.Processing.ToString(), 0, null));
+        }
+
+        var site = await _siteRepository.GetByTenantAndIdAsync(command.TenantId, source.SiteId, cancellationToken);
+        if (site is null)
+        {
+            return OperationResult<IndexKnowledgeSourceResult>.NotFound();
         }
 
         await _sourceRepository.UpdateStatusAsync(command.TenantId, source.Id, IndexStatus.Processing, null, null, cancellationToken);

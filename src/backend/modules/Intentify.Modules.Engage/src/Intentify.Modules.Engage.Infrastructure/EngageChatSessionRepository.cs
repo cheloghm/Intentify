@@ -22,6 +22,12 @@ public sealed class EngageChatSessionRepository : IEngageChatSessionRepository
         return await _sessions.Find(item => item.Id == sessionId).FirstOrDefaultAsync(cancellationToken);
     }
 
+    public async Task<EngageChatSession?> GetByIdAsync(Guid tenantId, Guid siteId, Guid sessionId, CancellationToken cancellationToken = default)
+    {
+        await _ensureIndexes;
+        return await _sessions.Find(item => item.Id == sessionId && item.TenantId == tenantId && item.SiteId == siteId).FirstOrDefaultAsync(cancellationToken);
+    }
+
     public async Task InsertAsync(EngageChatSession session, CancellationToken cancellationToken = default)
     {
         await _ensureIndexes;

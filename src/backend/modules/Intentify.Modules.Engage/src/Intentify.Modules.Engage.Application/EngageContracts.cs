@@ -26,10 +26,12 @@ public sealed record ConversationSummaryResult(Guid SessionId, DateTime CreatedA
 
 public sealed record GetConversationMessagesQuery(Guid TenantId, Guid SiteId, Guid SessionId);
 
+public sealed record GetWidgetConversationMessagesQuery(string WidgetKey, Guid SessionId);
+
 public sealed record ConversationMessageResult(Guid MessageId, string Role, string Content, DateTime CreatedAtUtc, decimal? Confidence, IReadOnlyCollection<EngageCitationResult> Citations);
 
 public sealed record GetEngageBotQuery(Guid TenantId, Guid SiteId);
 
-public sealed record EngageBotResult(Guid BotId, string Name, string? PrimaryColor = null, bool? LauncherVisible = null);
+public sealed record EngageBotResult(Guid BotId, string Name, string? PrimaryColor = null, bool? LauncherVisible = null, string? Tone = null, string? Verbosity = null, string? FallbackStyle = null);
 
-public sealed record UpdateEngageBotCommand(Guid TenantId, Guid SiteId, string Name, string? PrimaryColor = null, bool? LauncherVisible = null);
+public sealed record UpdateEngageBotCommand(Guid TenantId, Guid SiteId, string Name, string? PrimaryColor = null, bool? LauncherVisible = null, string? Tone = null, string? Verbosity = null, string? FallbackStyle = null);
