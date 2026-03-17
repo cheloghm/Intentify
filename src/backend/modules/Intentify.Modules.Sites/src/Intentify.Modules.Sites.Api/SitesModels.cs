@@ -1,11 +1,12 @@
 namespace Intentify.Modules.Sites.Api;
 
-public sealed record CreateSiteRequest(string Domain, string? Description = null, string? Category = null, IReadOnlyCollection<string>? Tags = null);
+public sealed record CreateSiteRequest(string Domain, string? Description = null, string? Category = null, IReadOnlyCollection<string>? Tags = null, string? Name = null);
 
-public sealed record UpdateSiteProfileRequest(string? Description, string? Category, IReadOnlyCollection<string>? Tags);
+public sealed record UpdateSiteProfileRequest(string? Name, string? Domain, string? Description, string? Category, IReadOnlyCollection<string>? Tags);
 
 public sealed record CreateSiteResponse(
     string SiteId,
+    string Name,
     string Domain,
     string? Description,
     string? Category,
@@ -16,6 +17,7 @@ public sealed record CreateSiteResponse(
 
 public sealed record SiteSummaryResponse(
     string SiteId,
+    string Name,
     string Domain,
     string? Description,
     string? Category,

@@ -538,16 +538,17 @@ internal sealed class FakeMessageHandler : HttpMessageHandler
     {
         public Task<Site?> GetByTenantAndDomainAsync(Guid tenantId, string domain, CancellationToken cancellationToken = default) => Task.FromResult<Site?>(null);
         public Task<Site?> GetByTenantAndIdAsync(Guid tenantId, Guid siteId, CancellationToken cancellationToken = default)
-            => Task.FromResult<Site?>(new Site { TenantId = tenantId, Id = siteId, Domain = "example.com", SiteKey = "site-key", WidgetKey = "widget-key" });
+            => Task.FromResult<Site?>(new Site { TenantId = tenantId, Id = siteId, Name = "Example", Domain = "example.com", SiteKey = "site-key", WidgetKey = "widget-key" });
         public Task<Site?> GetByWidgetKeyAsync(string widgetKey, CancellationToken cancellationToken = default) => Task.FromResult<Site?>(null);
         public Task<Site?> GetBySiteKeyAsync(string siteKey, CancellationToken cancellationToken = default) => Task.FromResult<Site?>(null);
         public Task<IReadOnlyCollection<Site>> ListByTenantAsync(Guid tenantId, CancellationToken cancellationToken = default) => Task.FromResult((IReadOnlyCollection<Site>)Array.Empty<Site>());
         public Task<bool> TenantHasSiteAsync(Guid tenantId, CancellationToken cancellationToken = default) => Task.FromResult(false);
         public Task InsertAsync(Site site, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task<Site?> UpdateProfileAsync(Guid tenantId, Guid siteId, string? description, string? category, IReadOnlyCollection<string> tags, CancellationToken cancellationToken = default) => Task.FromResult<Site?>(null);
+        public Task<Site?> UpdateProfileAsync(Guid tenantId, Guid siteId, string? name, string domain, string? description, string? category, IReadOnlyCollection<string> tags, CancellationToken cancellationToken = default) => Task.FromResult<Site?>(null);
         public Task<Site?> UpdateAllowedOriginsAsync(Guid tenantId, Guid siteId, IReadOnlyCollection<string> allowedOrigins, CancellationToken cancellationToken = default) => Task.FromResult<Site?>(null);
         public Task<Site?> RotateKeysAsync(Guid tenantId, Guid siteId, string siteKey, string widgetKey, CancellationToken cancellationToken = default) => Task.FromResult<Site?>(null);
         public Task<Site?> UpdateFirstEventReceivedAsync(Guid siteId, DateTime timestampUtc, CancellationToken cancellationToken = default) => Task.FromResult<Site?>(null);
+        public Task<bool> DeleteAsync(Guid tenantId, Guid siteId, CancellationToken cancellationToken = default) => Task.FromResult(false);
     }
 
 }

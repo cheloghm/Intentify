@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Intentify.AppHost;
 using Intentify.Modules.Auth.Api;
+using Intentify.Modules.Knowledge.Api;
 using Intentify.Modules.Sites.Api;
 using Intentify.Shared.Testing;
 using Microsoft.AspNetCore.Builder;
@@ -57,15 +58,17 @@ public sealed class SitesIntegrationTests : IAsyncLifetime
     {
         var accessToken = await RegisterUserAsync();
         var domain = $"site-{Guid.NewGuid():N}.intentify.local";
+        var name = "Main Site";
 
         var createResponse = await SendAuthorizedAsync(HttpMethod.Post, "/sites", accessToken,
-            JsonContent.Create(new CreateSiteRequest(domain)));
+            JsonContent.Create(new CreateSiteRequest(domain, Name: name)));
 
         Assert.Equal(HttpStatusCode.OK, createResponse.StatusCode);
 
         var createPayload = await createResponse.Content.ReadFromJsonAsync<CreateSiteResponse>();
         Assert.NotNull(createPayload);
         Assert.False(string.IsNullOrWhiteSpace(createPayload!.SiteId));
+        Assert.Equal(name, createPayload.Name);
         Assert.Equal(domain, createPayload.Domain);
         Assert.False(string.IsNullOrWhiteSpace(createPayload.SiteKey));
         Assert.False(string.IsNullOrWhiteSpace(createPayload.WidgetKey));
@@ -86,6 +89,7 @@ public sealed class SitesIntegrationTests : IAsyncLifetime
             if (element.TryGetProperty("siteId", out var siteId) && siteId.GetString() == createPayload.SiteId)
             {
                 found = true;
+                Assert.Equal(name, element.GetProperty("name").GetString());
                 Assert.Equal(domain, element.GetProperty("domain").GetString());
                 Assert.False(element.TryGetProperty("siteKey", out _));
                 Assert.False(element.TryGetProperty("widgetKey", out _));
@@ -186,6 +190,83 @@ public sealed class SitesIntegrationTests : IAsyncLifetime
         Assert.Equal("First", sites[0].Description);
         Assert.Equal("Retail", sites[0].Category);
         Assert.Contains("brand", sites[0].Tags);
+    }
+
+    [Fact]
+    public async Task UpdateSiteProfile_UpdatesNameDomainAndMetadata()
+    {
+        var accessToken = await RegisterUserAsync();
+        var createResponse = await SendAuthorizedAsync(HttpMethod.Post, "/sites", accessToken,
+            JsonContent.Create(new CreateSiteRequest($"update-{Guid.NewGuid():N}.intentify.local", Name: "Original")));
+        var created = await createResponse.Content.ReadFromJsonAsync<CreateSiteResponse>();
+
+        var updateResponse = await SendAuthorizedAsync(HttpMethod.Put, $"/sites/{created!.SiteId}/profile", accessToken,
+            JsonContent.Create(new UpdateSiteProfileRequest("Updated Name", "LOCALHOST", "New description", "SaaS", new[] { " growth ", "Growth" })));
+
+        Assert.Equal(HttpStatusCode.OK, updateResponse.StatusCode);
+
+        var updated = await updateResponse.Content.ReadFromJsonAsync<SiteSummaryResponse>();
+        Assert.NotNull(updated);
+        Assert.Equal("Updated Name", updated!.Name);
+        Assert.Equal("localhost", updated.Domain);
+        Assert.Equal("New description", updated.Description);
+        Assert.Equal("SaaS", updated.Category);
+        Assert.Single(updated.Tags);
+        Assert.Equal("growth", updated.Tags[0], ignoreCase: true);
+    }
+
+    [Fact]
+    public async Task UpdateSiteProfile_InvalidDomain_ReturnsBadRequest()
+    {
+        var accessToken = await RegisterUserAsync();
+        var createResponse = await SendAuthorizedAsync(HttpMethod.Post, "/sites", accessToken,
+            JsonContent.Create(new CreateSiteRequest($"invalid-domain-{Guid.NewGuid():N}.intentify.local", Name: "Site")));
+        var created = await createResponse.Content.ReadFromJsonAsync<CreateSiteResponse>();
+
+        var updateResponse = await SendAuthorizedAsync(HttpMethod.Put, $"/sites/{created!.SiteId}/profile", accessToken,
+            JsonContent.Create(new UpdateSiteProfileRequest("Site", "not a valid host", null, null, null)));
+
+        Assert.Equal(HttpStatusCode.BadRequest, updateResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task DeleteSite_RemovesSite_AndCascadesKnowledgeSources()
+    {
+        var accessToken = await RegisterUserAsync();
+        var createResponse = await SendAuthorizedAsync(HttpMethod.Post, "/sites", accessToken,
+            JsonContent.Create(new CreateSiteRequest($"delete-{Guid.NewGuid():N}.intentify.local", Name: "Delete Me")));
+        var created = await createResponse.Content.ReadFromJsonAsync<CreateSiteResponse>();
+
+        var sourceResponse = await SendAuthorizedAsync(HttpMethod.Post, "/knowledge/sources", accessToken,
+            JsonContent.Create(new CreateKnowledgeSourceRequest(created!.SiteId, "text", "Doc", null, "hello")));
+        Assert.Equal(HttpStatusCode.OK, sourceResponse.StatusCode);
+
+        var deleteResponse = await SendAuthorizedAsync(HttpMethod.Delete, $"/sites/{created.SiteId}", accessToken);
+        Assert.Equal(HttpStatusCode.NoContent, deleteResponse.StatusCode);
+
+        var sitesResponse = await SendAuthorizedAsync(HttpMethod.Get, "/sites", accessToken);
+        var sites = await sitesResponse.Content.ReadFromJsonAsync<SiteSummaryResponse[]>();
+        Assert.NotNull(sites);
+        Assert.Empty(sites!);
+
+        var listSourcesResponse = await SendAuthorizedAsync(HttpMethod.Get, $"/knowledge/sources?siteId={created.SiteId}", accessToken);
+        var sources = await listSourcesResponse.Content.ReadFromJsonAsync<KnowledgeSourceSummaryResponse[]>();
+        Assert.NotNull(sources);
+        Assert.Empty(sources!);
+    }
+
+    [Fact]
+    public async Task DeleteSite_TenantOwnership_IsEnforced()
+    {
+        var ownerToken = await RegisterUserAsync();
+        var otherToken = await RegisterUserAsync();
+
+        var createResponse = await SendAuthorizedAsync(HttpMethod.Post, "/sites", ownerToken,
+            JsonContent.Create(new CreateSiteRequest($"ownership-{Guid.NewGuid():N}.intentify.local", Name: "Owned")));
+        var created = await createResponse.Content.ReadFromJsonAsync<CreateSiteResponse>();
+
+        var deleteResponse = await SendAuthorizedAsync(HttpMethod.Delete, $"/sites/{created!.SiteId}", otherToken);
+        Assert.Equal(HttpStatusCode.NotFound, deleteResponse.StatusCode);
     }
 
     private async Task<string> RegisterUserAsync()

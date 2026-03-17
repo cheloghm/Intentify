@@ -152,6 +152,9 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
     errorBySiteId: {},
     originEditingIndexBySiteId: {},
     originEditingValueBySiteId: {},
+    profileDraftBySiteId: {},
+    profileSavingBySiteId: {},
+    profileErrorBySiteId: {},
   };
 
   const page = document.createElement('div');
@@ -259,6 +262,10 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
   };
 
   const createSiteFormCard = () => {
+    const nameField = createField({
+      label: 'Name',
+      placeholder: 'My Site',
+    });
     const domainField = createField({
       label: 'Domain',
       placeholder: 'example.com',
@@ -273,12 +280,18 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
     form.style.display = 'flex';
     form.style.flexDirection = 'column';
     form.style.gap = '12px';
-    form.append(domainField.wrapper, descriptionField.wrapper, categoryField.wrapper, tagsField.wrapper, submitButton);
+    form.append(nameField.wrapper, domainField.wrapper, descriptionField.wrapper, categoryField.wrapper, tagsField.wrapper, submitButton);
 
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
+      nameField.error.textContent = '';
       domainField.error.textContent = '';
+      const name = nameField.input.value.trim();
       const domain = domainField.input.value.trim();
+      if (!name) {
+        nameField.error.textContent = 'Name is required.';
+        return;
+      }
       if (!domain) {
         domainField.error.textContent = 'Domain is required.';
         return;
@@ -289,6 +302,7 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
 
       try {
         const response = await client.sites.create({
+          name,
           domain,
           description: descriptionField.input.value.trim(),
           category: categoryField.input.value.trim(),
@@ -313,6 +327,7 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
 
         notifier.show({ message: 'Site created.', variant: 'success' });
         domainField.input.value = '';
+        nameField.input.value = '';
         descriptionField.input.value = '';
         categoryField.input.value = '';
         tagsField.input.value = '';
@@ -403,15 +418,19 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
       summaryRow.style.gap = '12px';
 
       const summaryLeft = document.createElement('div');
+      const nameLabel = document.createElement('div');
+      nameLabel.textContent = site.name || 'Unnamed site';
+      nameLabel.style.fontWeight = '600';
+      nameLabel.style.fontSize = '15px';
       const domainLabel = document.createElement('div');
       domainLabel.textContent = site.domain || 'Unknown domain';
-      domainLabel.style.fontWeight = '600';
-      domainLabel.style.fontSize = '15px';
+      domainLabel.style.fontSize = '13px';
+      domainLabel.style.color = '#64748b';
       const originsCount = document.createElement('div');
       originsCount.textContent = `Allowed origins: ${(site.allowedOrigins || []).length}`;
       originsCount.style.fontSize = '13px';
       originsCount.style.color = '#64748b';
-      summaryLeft.append(domainLabel, originsCount);
+      summaryLeft.append(nameLabel, domainLabel, originsCount);
 
       const status = site.installationStatus;
       const isConfigured = status?.isConfigured ?? ((site.allowedOrigins || []).length > 0);
@@ -467,6 +486,21 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
         }
         if (typeof state.errorBySiteId[siteId] === 'undefined') {
           state.errorBySiteId[siteId] = null;
+        }
+        if (!state.profileDraftBySiteId[siteId]) {
+          state.profileDraftBySiteId[siteId] = {
+            name: site.name || '',
+            domain: site.domain || '',
+            description: site.description || '',
+            category: site.category || '',
+            tags: (site.tags || []).join(','),
+          };
+        }
+        if (typeof state.profileSavingBySiteId[siteId] !== 'boolean') {
+          state.profileSavingBySiteId[siteId] = false;
+        }
+        if (typeof state.profileErrorBySiteId[siteId] === 'undefined') {
+          state.profileErrorBySiteId[siteId] = '';
         }
         renderSites();
       });
@@ -737,11 +771,160 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
         }
       });
 
+      const profileEditor = document.createElement('div');
+      profileEditor.style.display = 'flex';
+      profileEditor.style.flexDirection = 'column';
+      profileEditor.style.gap = '10px';
+
+      const profileHeader = document.createElement('div');
+      profileHeader.textContent = 'Site profile';
+      profileHeader.style.fontWeight = '600';
+      profileHeader.style.fontSize = '13px';
+      profileHeader.style.color = '#475569';
+
+      const profileDraft = state.profileDraftBySiteId[siteId] || {
+        name: site.name || '',
+        domain: site.domain || '',
+        description: site.description || '',
+        category: site.category || '',
+        tags: (site.tags || []).join(','),
+      };
+      state.profileDraftBySiteId[siteId] = profileDraft;
+
+      const nameField = createField({ label: 'Name', placeholder: 'My Site' });
+      nameField.input.value = profileDraft.name;
+      nameField.input.addEventListener('input', () => {
+        profileDraft.name = nameField.input.value;
+      });
+
+      const domainField = createField({ label: 'Domain', placeholder: 'example.com' });
+      domainField.input.value = profileDraft.domain;
+      domainField.input.addEventListener('input', () => {
+        profileDraft.domain = domainField.input.value;
+      });
+
+      const descriptionField = createField({ label: 'Description', placeholder: 'What this site is about' });
+      descriptionField.input.value = profileDraft.description;
+      descriptionField.input.addEventListener('input', () => {
+        profileDraft.description = descriptionField.input.value;
+      });
+
+      const categoryField = createField({ label: 'Category', placeholder: 'e.g. Ecommerce' });
+      categoryField.input.value = profileDraft.category;
+      categoryField.input.addEventListener('input', () => {
+        profileDraft.category = categoryField.input.value;
+      });
+
+      const tagsField = createField({ label: 'Tags', placeholder: 'comma,separated,tags' });
+      tagsField.input.value = profileDraft.tags;
+      tagsField.input.addEventListener('input', () => {
+        profileDraft.tags = tagsField.input.value;
+      });
+
+      const profileActions = document.createElement('div');
+      profileActions.style.display = 'flex';
+      profileActions.style.gap = '8px';
+      profileActions.style.flexWrap = 'wrap';
+
+      const profileSaveButton = createButton({ label: 'Save profile', variant: 'primary' });
+      profileSaveButton.disabled = Boolean(state.profileSavingBySiteId[siteId]);
+      if (state.profileSavingBySiteId[siteId]) {
+        profileSaveButton.textContent = 'Saving...';
+      }
+
+      const profileError = document.createElement('div');
+      profileError.style.fontSize = '13px';
+      profileError.style.color = '#dc2626';
+      profileError.textContent = state.profileErrorBySiteId[siteId] || '';
+
+      profileSaveButton.addEventListener('click', async () => {
+        state.profileSavingBySiteId[siteId] = true;
+        state.profileErrorBySiteId[siteId] = '';
+        renderSites();
+
+        try {
+          const response = await client.sites.updateProfile(siteId, {
+            name: profileDraft.name,
+            domain: profileDraft.domain,
+            description: profileDraft.description,
+            category: profileDraft.category,
+            tags: profileDraft.tags.split(',').map((tag) => tag.trim()).filter(Boolean),
+          });
+
+          const updatedSite = {
+            ...site,
+            ...response,
+            installationStatus: response.installationStatus || site.installationStatus,
+          };
+
+          state.sites = state.sites.map((item) =>
+            getSiteId(item) === siteId ? updatedSite : item
+          );
+          state.profileDraftBySiteId[siteId] = {
+            name: updatedSite.name || '',
+            domain: updatedSite.domain || '',
+            description: updatedSite.description || '',
+            category: updatedSite.category || '',
+            tags: (updatedSite.tags || []).join(','),
+          };
+          notifier.show({ message: 'Site profile updated.', variant: 'success' });
+          renderSites();
+        } catch (error) {
+          const uiError = mapApiError(error);
+          state.profileErrorBySiteId[siteId] = uiError.message;
+          notifier.show({ message: uiError.message, variant: 'danger' });
+        } finally {
+          state.profileSavingBySiteId[siteId] = false;
+          renderSites();
+        }
+      });
+
+      const deleteButton = createButton({ label: 'Delete site' });
+      deleteButton.style.border = '1px solid #dc2626';
+      deleteButton.style.color = '#dc2626';
+      deleteButton.addEventListener('click', async () => {
+        const shouldDelete = window.confirm('Deleting this site will also permanently delete all knowledge sources and their indexed/searchable content. This action cannot be undone.');
+        if (!shouldDelete) {
+          return;
+        }
+
+        deleteButton.disabled = true;
+        deleteButton.textContent = 'Deleting...';
+
+        try {
+          await client.sites.delete(siteId);
+          state.sites = state.sites.filter((item) => getSiteId(item) !== siteId);
+          state.expandedSiteId = null;
+          if (!state.sites.length) {
+            page.querySelector('[data-role="site-create-card"]')?.remove();
+            page.insertBefore(createSiteFormCard(), keysSection);
+          }
+          notifier.show({ message: 'Site deleted.', variant: 'success' });
+          renderSites();
+        } catch (error) {
+          const uiError = mapApiError(error);
+          notifier.show({ message: uiError.message, variant: 'danger' });
+          deleteButton.disabled = false;
+          deleteButton.textContent = 'Delete site';
+        }
+      });
+
+      profileActions.append(profileSaveButton, deleteButton);
+      profileEditor.append(
+        profileHeader,
+        nameField.wrapper,
+        domainField.wrapper,
+        descriptionField.wrapper,
+        categoryField.wrapper,
+        tagsField.wrapper,
+        profileActions,
+        profileError);
+
       originsEditor.append(originsHeader, originListContainer, addRow, saveButton, saveError);
 
       siteCardBody.append(summaryRow);
       if (state.expandedSiteId === siteId) {
-        siteCardBody.append(originsEditor);
+        siteCardBody.append(profileEditor, originsEditor);
       }
 
       const card = createCard({

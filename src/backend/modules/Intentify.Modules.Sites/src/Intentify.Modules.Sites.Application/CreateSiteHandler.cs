@@ -48,6 +48,7 @@ public sealed class CreateSiteHandler
         var site = new Site
         {
             TenantId = command.TenantId,
+            Name = NormalizeText(command.Name) ?? normalizedDomain,
             Domain = normalizedDomain,
             Description = NormalizeText(command.Description),
             Category = NormalizeText(command.Category),

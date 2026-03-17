@@ -186,6 +186,11 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
       body: JSON.stringify(payload),
     });
 
+  const deleteSite = async (siteId) =>
+    request(`/sites/${siteId}`, {
+      method: 'DELETE',
+    });
+
   const createKnowledgeSource = async (payload) =>
     request('/knowledge/sources', {
       method: 'POST',
@@ -467,6 +472,7 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
       list: listSites,
       create: createSite,
       updateProfile: updateSiteProfile,
+      delete: deleteSite,
     },
     visitors: {
       list: listVisitors,
