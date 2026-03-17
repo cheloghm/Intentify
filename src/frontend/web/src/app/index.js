@@ -288,6 +288,8 @@ const createProfileModal = ({
   profile,
   canManageTeam,
   isAdministrator,
+  inviteRoles,
+  onInvite,
   onManageTeam,
   onClose,
   onSave,
@@ -363,7 +365,117 @@ const createProfileModal = ({
   }
 
   let manageTeamButton;
+  let inviteSection;
   if (canManageTeam) {
+    const availableInviteRoles = Array.isArray(inviteRoles) ? inviteRoles : [];
+    const defaultInviteRole = availableInviteRoles[0] || 'user';
+
+    inviteSection = document.createElement('div');
+    inviteSection.style.display = 'flex';
+    inviteSection.style.flexDirection = 'column';
+    inviteSection.style.gap = '10px';
+    inviteSection.style.border = '1px solid #e2e8f0';
+    inviteSection.style.borderRadius = '10px';
+    inviteSection.style.padding = '12px';
+
+    const inviteTitle = document.createElement('div');
+    inviteTitle.textContent = 'Invite team member';
+    inviteTitle.style.fontSize = '14px';
+    inviteTitle.style.fontWeight = '600';
+    inviteTitle.style.color = '#0f172a';
+
+    const inviteEmailField = createField({
+      label: 'Invite email',
+      type: 'email',
+      placeholder: 'you@example.com',
+    });
+
+    const inviteRoleField = document.createElement('label');
+    inviteRoleField.className = 'ui-input';
+
+    const inviteRoleLabel = document.createElement('span');
+    inviteRoleLabel.textContent = 'Role';
+
+    const inviteRoleSelect = document.createElement('select');
+    inviteRoleSelect.className = 'ui-input__field';
+    availableInviteRoles.forEach((role) => {
+      const option = document.createElement('option');
+      option.value = role;
+      option.textContent = role === 'admin'
+        ? 'Admin'
+        : role === 'manager'
+          ? 'Manager'
+          : 'User';
+      inviteRoleSelect.appendChild(option);
+    });
+    inviteRoleSelect.value = defaultInviteRole;
+
+    const inviteRoleError = document.createElement('div');
+    inviteRoleError.className = 'ui-field-error';
+    inviteRoleField.append(inviteRoleLabel, inviteRoleSelect, inviteRoleError);
+
+    const inviteButton = document.createElement('button');
+    inviteButton.type = 'button';
+    inviteButton.textContent = 'Send invite';
+    inviteButton.style.alignSelf = 'flex-start';
+    inviteButton.style.padding = '8px 12px';
+    inviteButton.style.border = '0';
+    inviteButton.style.borderRadius = '8px';
+    inviteButton.style.background = '#2563eb';
+    inviteButton.style.color = '#ffffff';
+    inviteButton.style.cursor = 'pointer';
+
+    if (!availableInviteRoles.length) {
+      inviteRoleSelect.disabled = true;
+      inviteButton.disabled = true;
+      inviteButton.style.opacity = '0.6';
+      inviteButton.style.cursor = 'not-allowed';
+    }
+
+    inviteButton.addEventListener('click', async () => {
+      inviteEmailField.error.textContent = '';
+      inviteRoleError.textContent = '';
+
+      const email = inviteEmailField.input.value.trim();
+      const role = inviteRoleSelect.value;
+
+      const emailError = validateEmail(email);
+      if (emailError) {
+        inviteEmailField.error.textContent = emailError;
+        return;
+      }
+
+      if (!availableInviteRoles.includes(role)) {
+        inviteRoleError.textContent = 'You cannot invite this role.';
+        return;
+      }
+
+      inviteButton.disabled = true;
+      inviteButton.textContent = 'Sending...';
+
+      try {
+        await onInvite({ email, role });
+        inviteEmailField.input.value = '';
+        inviteRoleSelect.value = defaultInviteRole;
+        toast.show({ message: 'Invitation sent.', variant: 'success' });
+      } catch (error) {
+        const uiError = mapApiError(error);
+        const applied = applyFieldErrors(uiError.details?.errors, {
+          email: inviteEmailField,
+          role: { error: inviteRoleError },
+        });
+        toast.show({
+          message: applied ? 'Please review the highlighted errors.' : uiError.message,
+          variant: 'danger',
+        });
+      } finally {
+        inviteButton.disabled = false;
+        inviteButton.textContent = 'Send invite';
+      }
+    });
+
+    inviteSection.append(inviteTitle, inviteEmailField.wrapper, inviteRoleField, inviteButton);
+
     manageTeamButton = document.createElement('button');
     manageTeamButton.type = 'button';
     manageTeamButton.textContent = 'Manage team';
@@ -441,6 +553,9 @@ const createProfileModal = ({
 
   buttons.append(cancel, save);
   card.append(titleRow, displayNameField.wrapper, emailField.wrapper, organizationField.wrapper);
+  if (inviteSection) {
+    card.append(inviteSection);
+  }
   if (manageTeamButton) {
     card.append(manageTeamButton);
   }
@@ -1421,6 +1536,7 @@ const renderApp = () => {
     const primaryRole = getPrimaryRole(authState.roles);
     const canManageTeam = canManageUsers(primaryRole);
     const isAdministrator = isAdministratorRole(primaryRole);
+    const inviteRoles = ['admin', 'manager', 'user'].filter((role) => canInviteRole(primaryRole, role));
     let modal;
     const closeModal = () => {
       if (modal) {
@@ -1434,6 +1550,10 @@ const renderApp = () => {
       profile: authState.profile,
       canManageTeam,
       isAdministrator,
+      inviteRoles,
+      onInvite: async ({ email, role }) => {
+        await apiClient.auth.createInvite({ email, role });
+      },
       onManageTeam: () => {
         authState.profileModalOpen = false;
         window.location.hash = '#/team';

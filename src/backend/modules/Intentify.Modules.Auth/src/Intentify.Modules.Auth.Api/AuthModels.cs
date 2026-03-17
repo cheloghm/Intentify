@@ -33,3 +33,13 @@ public sealed record TenantUserResponse(
     DateTime UpdatedAt);
 
 public sealed record ChangeTenantUserRoleRequest(string Role);
+
+public sealed record TenantInviteResponse(
+    string InviteId,
+    string Email,
+    string Role,
+    DateTime ExpiresAtUtc,
+    DateTime? AcceptedAtUtc,
+    DateTime? RevokedAtUtc,
+    DateTime CreatedAtUtc,
+    DateTime UpdatedAtUtc);

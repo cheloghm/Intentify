@@ -29,3 +29,14 @@ public sealed record RemoveTenantUserCommand(
     Guid CurrentUserId,
     IReadOnlyCollection<string> CurrentUserRoles,
     Guid TargetUserId);
+
+public sealed record ListTenantInvitesQuery(
+    Guid TenantId,
+    Guid CurrentUserId,
+    IReadOnlyCollection<string> CurrentUserRoles);
+
+public sealed record RevokeTenantInviteCommand(
+    Guid TenantId,
+    Guid CurrentUserId,
+    IReadOnlyCollection<string> CurrentUserRoles,
+    Guid InviteId);
