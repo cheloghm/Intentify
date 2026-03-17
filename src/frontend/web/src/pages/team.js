@@ -1,4 +1,4 @@
-import { createCard, createInput } from '../shared/ui/index.js';
+import { createButton, createCard, createInput } from '../shared/ui/index.js';
 import { mapApiError } from '../shared/apiClient.js';
 
 const ROLE_LABELS = {
@@ -28,9 +28,13 @@ const getInviteStatus = (invite) => {
 const createSelectField = ({ label, options }) => {
   const wrapper = document.createElement('label');
   wrapper.className = 'ui-field';
+  wrapper.style.display = 'flex';
+  wrapper.style.flexDirection = 'column';
+  wrapper.style.gap = '6px';
 
   const title = document.createElement('span');
   title.className = 'ui-label';
+  title.style.fontSize = '14px';
   title.textContent = label;
 
   const select = document.createElement('select');
@@ -80,7 +84,7 @@ export const renderTeamView = async (container, { apiClient, toast, currentUser,
   const body = document.createElement('div');
   body.style.display = 'flex';
   body.style.flexDirection = 'column';
-  body.style.gap = '16px';
+  body.style.gap = '20px';
 
   const card = createCard({
     title: 'Team Management',
@@ -91,11 +95,28 @@ export const renderTeamView = async (container, { apiClient, toast, currentUser,
   card.style.width = '100%';
   container.appendChild(card);
 
+  const pageIntro = document.createElement('p');
+  pageIntro.textContent = 'Invite teammates and manage access in one place.';
+  pageIntro.style.margin = '0';
+  pageIntro.style.color = '#64748b';
+
   const inviteSection = document.createElement('div');
   inviteSection.style.display = 'flex';
-  inviteSection.style.gap = '8px';
-  inviteSection.style.alignItems = 'end';
-  inviteSection.style.flexWrap = 'wrap';
+  inviteSection.style.flexDirection = 'column';
+  inviteSection.style.gap = '12px';
+
+  const inviteSectionTitle = document.createElement('h4');
+  inviteSectionTitle.textContent = 'Invite a team member';
+  inviteSectionTitle.style.margin = '0';
+  inviteSectionTitle.style.fontSize = '14px';
+  inviteSectionTitle.style.fontWeight = '600';
+  inviteSectionTitle.style.color = '#1e293b';
+
+  const inviteRow = document.createElement('div');
+  inviteRow.style.display = 'grid';
+  inviteRow.style.gap = '12px';
+  inviteRow.style.alignItems = 'end';
+  inviteRow.style.gridTemplateColumns = 'repeat(auto-fit, minmax(180px, 1fr))';
 
   const { wrapper: emailWrapper, input: emailInput } = createInput({
     label: 'Invite email',
@@ -114,27 +135,50 @@ export const renderTeamView = async (container, { apiClient, toast, currentUser,
       { value: 'user', label: 'User' },
     ],
   });
+  roleField.select.className = 'ui-input__field';
 
-  const inviteButton = document.createElement('button');
-  inviteButton.type = 'button';
-  inviteButton.textContent = 'Send invite';
-  inviteButton.className = 'ui-button ui-button-primary';
+  const inviteButton = createButton({ label: 'Send invite', variant: 'primary' });
+  inviteButton.style.height = '36px';
+  inviteButton.style.whiteSpace = 'nowrap';
+  inviteButton.style.minWidth = '120px';
+  inviteButton.style.justifySelf = 'start';
 
-  inviteSection.append(emailWrapper, roleField.wrapper, inviteButton);
+  inviteRow.append(emailWrapper, roleField.wrapper, inviteButton);
+  inviteSection.append(inviteSectionTitle, inviteRow);
+
+  const inviteCard = createCard({ body: inviteSection });
 
   const usersSection = document.createElement('div');
+  usersSection.style.overflowX = 'auto';
   const usersLoading = document.createElement('div');
   usersLoading.textContent = 'Loading team...';
   usersLoading.style.color = '#475569';
   usersSection.appendChild(usersLoading);
 
   const invitesSection = document.createElement('div');
+  invitesSection.style.overflowX = 'auto';
   const invitesLoading = document.createElement('div');
   invitesLoading.textContent = 'Loading invites...';
   invitesLoading.style.color = '#475569';
   invitesSection.appendChild(invitesLoading);
 
-  body.append(inviteSection, usersSection, invitesSection);
+  const membersSection = document.createElement('div');
+  membersSection.style.display = 'flex';
+  membersSection.style.flexDirection = 'column';
+  membersSection.style.gap = '16px';
+
+  const membersSectionTitle = document.createElement('h4');
+  membersSectionTitle.textContent = 'Members & invites';
+  membersSectionTitle.style.margin = '0';
+  membersSectionTitle.style.fontSize = '14px';
+  membersSectionTitle.style.fontWeight = '600';
+  membersSectionTitle.style.color = '#1e293b';
+
+  membersSection.append(membersSectionTitle, usersSection, invitesSection);
+
+  const membersCard = createCard({ body: membersSection });
+
+  body.append(pageIntro, inviteCard, membersCard);
 
   const reload = async () => {
     usersLoading.textContent = 'Loading team...';
@@ -169,14 +213,16 @@ export const renderTeamView = async (container, { apiClient, toast, currentUser,
         actions.style.display = 'flex';
         actions.style.gap = '8px';
         actions.style.flexWrap = 'wrap';
+        actions.style.alignItems = 'center';
 
         const targetRole = normalizeRole(user.roles);
         const isSelf = (user.userId || '').toLowerCase() === (currentUser?.userId || '').toLowerCase();
 
         if (capabilities.canChangeRole(actorRole, targetRole) && !isSelf && user.isActive) {
           const selector = document.createElement('select');
-          selector.className = 'ui-input';
+          selector.className = 'ui-input__field';
           selector.style.maxWidth = '140px';
+          selector.style.minWidth = '120px';
 
           ['admin', 'manager', 'user'].forEach((role) => {
             if (!capabilities.canInviteRole(actorRole, role)) {
@@ -208,10 +254,8 @@ export const renderTeamView = async (container, { apiClient, toast, currentUser,
         }
 
         if (capabilities.canRemoveRole(actorRole, targetRole) && !isSelf && user.isActive) {
-          const removeButton = document.createElement('button');
-          removeButton.type = 'button';
-          removeButton.textContent = 'Remove';
-          removeButton.className = 'ui-button';
+          const removeButton = createButton({ label: 'Remove' });
+          removeButton.style.height = '36px';
           removeButton.addEventListener('click', async () => {
             const confirmed = window.confirm(`Remove ${user.email}?`);
             if (!confirmed) {
@@ -282,10 +326,8 @@ export const renderTeamView = async (container, { apiClient, toast, currentUser,
 
           const actionsCell = document.createElement('td');
           if (status === 'Pending' && capabilities.canInviteRole(actorRoleForInvites, role)) {
-            const revokeButton = document.createElement('button');
-            revokeButton.type = 'button';
-            revokeButton.textContent = 'Revoke';
-            revokeButton.className = 'ui-button';
+            const revokeButton = createButton({ label: 'Revoke' });
+            revokeButton.style.height = '36px';
             revokeButton.addEventListener('click', async () => {
               try {
                 await apiClient.auth.revokeInvite(invite.inviteId);
