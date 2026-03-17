@@ -42,6 +42,11 @@ public sealed class AcceptInviteHandler
             return OperationResult<AuthTokenResult>.Unauthorized();
         }
 
+        if (!AuthRoleHierarchy.IsSupportedInviteRole(invite.Role))
+        {
+            return OperationResult<AuthTokenResult>.Unauthorized();
+        }
+
         var trimmedEmail = command.Email.Trim();
         if (!string.Equals(trimmedEmail, invite.Email, StringComparison.OrdinalIgnoreCase))
         {

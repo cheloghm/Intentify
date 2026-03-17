@@ -142,6 +142,112 @@ internal static class AuthEndpoints
         };
     }
 
+    public static async Task<IResult> ListTenantUsersAsync(
+        HttpContext context,
+        ListTenantUsersHandler handler)
+    {
+        var userId = TryGetUserId(context.User);
+        var tenantId = TryGetTenantId(context.User);
+        if (userId is null || tenantId is null)
+        {
+            return Results.Unauthorized();
+        }
+
+        var roles = context.User.FindAll(ClaimTypes.Role).Select(role => role.Value).ToArray();
+        var result = await handler.HandleAsync(new ListTenantUsersQuery(tenantId.Value, userId.Value, roles));
+
+        return result.Status switch
+        {
+            Intentify.Shared.Validation.OperationStatus.Unauthorized => Results.Unauthorized(),
+            Intentify.Shared.Validation.OperationStatus.Forbidden => Results.StatusCode(StatusCodes.Status403Forbidden),
+            Intentify.Shared.Validation.OperationStatus.Error => Results.Problem(statusCode: StatusCodes.Status500InternalServerError),
+            _ => Results.Ok(result.Value!.Select(user => new TenantUserResponse(
+                user.UserId.ToString("N"),
+                user.Email,
+                user.DisplayName,
+                user.Roles,
+                user.IsActive,
+                user.CreatedAt,
+                user.UpdatedAt)))
+        };
+    }
+
+    public static async Task<IResult> ChangeTenantUserRoleAsync(
+        string userId,
+        ChangeTenantUserRoleRequest request,
+        HttpContext context,
+        ChangeTenantUserRoleHandler handler)
+    {
+        if (!Guid.TryParse(userId, out var targetUserId))
+        {
+            return Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(new Dictionary<string, string[]>
+            {
+                ["userId"] = ["User id is invalid."]
+            }));
+        }
+
+        var actorUserId = TryGetUserId(context.User);
+        var tenantId = TryGetTenantId(context.User);
+        if (actorUserId is null || tenantId is null)
+        {
+            return Results.Unauthorized();
+        }
+
+        var roles = context.User.FindAll(ClaimTypes.Role).Select(role => role.Value).ToArray();
+        var result = await handler.HandleAsync(new ChangeTenantUserRoleCommand(
+            tenantId.Value,
+            actorUserId.Value,
+            roles,
+            targetUserId,
+            request.Role));
+
+        return result.Status switch
+        {
+            Intentify.Shared.Validation.OperationStatus.ValidationFailed => Results.BadRequest(
+                ProblemDetailsHelpers.CreateValidationProblemDetails(result.Errors!.Errors)),
+            Intentify.Shared.Validation.OperationStatus.Unauthorized => Results.Unauthorized(),
+            Intentify.Shared.Validation.OperationStatus.Forbidden => Results.StatusCode(StatusCodes.Status403Forbidden),
+            Intentify.Shared.Validation.OperationStatus.Error => Results.Problem(statusCode: StatusCodes.Status500InternalServerError),
+            _ => Results.NoContent()
+        };
+    }
+
+    public static async Task<IResult> RemoveTenantUserAsync(
+        string userId,
+        HttpContext context,
+        RemoveTenantUserHandler handler)
+    {
+        if (!Guid.TryParse(userId, out var targetUserId))
+        {
+            return Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(new Dictionary<string, string[]>
+            {
+                ["userId"] = ["User id is invalid."]
+            }));
+        }
+
+        var actorUserId = TryGetUserId(context.User);
+        var tenantId = TryGetTenantId(context.User);
+        if (actorUserId is null || tenantId is null)
+        {
+            return Results.Unauthorized();
+        }
+
+        var roles = context.User.FindAll(ClaimTypes.Role).Select(role => role.Value).ToArray();
+        var result = await handler.HandleAsync(new RemoveTenantUserCommand(
+            tenantId.Value,
+            actorUserId.Value,
+            roles,
+            targetUserId));
+
+        return result.Status switch
+        {
+            Intentify.Shared.Validation.OperationStatus.Unauthorized => Results.Unauthorized(),
+            Intentify.Shared.Validation.OperationStatus.Forbidden => Results.StatusCode(StatusCodes.Status403Forbidden),
+            Intentify.Shared.Validation.OperationStatus.Error => Results.Problem(statusCode: StatusCodes.Status500InternalServerError),
+            _ => Results.NoContent()
+        };
+    }
+
     private static Guid? TryGetUserId(ClaimsPrincipal user)
     {
         var userIdValue = user.FindFirstValue(ClaimTypes.NameIdentifier)
