@@ -100,6 +100,8 @@ public sealed class SiteRepository : ISiteRepository
     public async Task<Site?> UpdateProfileAsync(
         Guid tenantId,
         Guid siteId,
+        string? name,
+        string domain,
         string? description,
         string? category,
         IReadOnlyCollection<string> tags,
@@ -109,6 +111,8 @@ public sealed class SiteRepository : ISiteRepository
         var filter = Builders<Site>.Filter.Eq(site => site.Id, siteId) &
             Builders<Site>.Filter.Eq(site => site.TenantId, tenantId);
         var update = Builders<Site>.Update
+            .Set(site => site.Name, name)
+            .Set(site => site.Domain, domain)
             .Set(site => site.Description, description)
             .Set(site => site.Category, category)
             .Set(site => site.Tags, tags.ToList())
@@ -135,6 +139,16 @@ public sealed class SiteRepository : ISiteRepository
             update,
             new FindOneAndUpdateOptions<Site> { ReturnDocument = ReturnDocument.After },
             cancellationToken);
+    }
+
+    public async Task<bool> DeleteAsync(Guid tenantId, Guid siteId, CancellationToken cancellationToken = default)
+    {
+        await _ensureIndexes;
+        var result = await _sites.DeleteOneAsync(
+            site => site.TenantId == tenantId && site.Id == siteId,
+            cancellationToken);
+
+        return result.DeletedCount > 0;
     }
 
     private Task EnsureIndexesAsync()

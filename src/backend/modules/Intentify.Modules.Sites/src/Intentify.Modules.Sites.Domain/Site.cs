@@ -9,6 +9,8 @@ public sealed class Site
 
     public Guid TenantId { get; init; }
 
+    public string Name { get; init; } = string.Empty;
+
     public string Domain { get; init; } = string.Empty;
 
     public string? Description { get; set; }

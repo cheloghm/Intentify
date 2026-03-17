@@ -19,7 +19,7 @@ internal static class SitesEndpoints
         {
             return Results.Unauthorized();
         }
-        var result = await handler.HandleAsync(new CreateSiteCommand(tenantId.Value, request.Domain, request.Description, request.Category, request.Tags));
+        var result = await handler.HandleAsync(new CreateSiteCommand(tenantId.Value, request.Domain, request.Description, request.Category, request.Tags, request.Name));
 
         return result.Status switch
         {
@@ -28,6 +28,7 @@ internal static class SitesEndpoints
             OperationStatus.Conflict => Results.Conflict(),
             _ => Results.Ok(new CreateSiteResponse(
                 result.Value!.Id.ToString("N"),
+                result.Value.Name,
                 result.Value.Domain,
                 result.Value.Description,
                 result.Value.Category,
@@ -61,15 +62,43 @@ internal static class SitesEndpoints
         var result = await handler.HandleAsync(new UpdateSiteProfileCommand(
             tenantId.Value,
             siteGuid,
+            request.Name,
+            request.Domain,
             request.Description,
             request.Category,
             request.Tags));
 
         return result.Status switch
         {
+            OperationStatus.ValidationFailed => Results.BadRequest(
+                ProblemDetailsHelpers.CreateValidationProblemDetails(result.Errors!.Errors)),
+            OperationStatus.Conflict => Results.Conflict(),
             OperationStatus.NotFound => Results.NotFound(),
             _ => Results.Ok(ToSummaryResponse(result.Value!))
         };
+    }
+
+    public static async Task<IResult> DeleteSiteAsync(
+        string siteId,
+        HttpContext context,
+        DeleteSiteHandler handler)
+    {
+        if (!Guid.TryParse(siteId, out var siteGuid))
+        {
+            return Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(new Dictionary<string, string[]>
+            {
+                ["siteId"] = ["Site id is invalid."]
+            }));
+        }
+
+        var tenantId = TryGetTenantId(context.User);
+        if (tenantId is null)
+        {
+            return Results.Unauthorized();
+        }
+
+        var result = await handler.HandleAsync(new DeleteSiteCommand(tenantId.Value, siteGuid), context.RequestAborted);
+        return result.Status == OperationStatus.NotFound ? Results.NotFound() : Results.NoContent();
     }
 
     public static async Task<IResult> ListSitesAsync(HttpContext context, ListSitesHandler handler)
@@ -323,6 +352,7 @@ internal static class SitesEndpoints
     {
         return new SiteSummaryResponse(
             site.Id.ToString("N"),
+            site.Name,
             site.Domain,
             site.Description,
             site.Category,
