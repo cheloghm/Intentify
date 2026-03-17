@@ -141,6 +141,13 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
       method: 'DELETE',
     });
 
+  const listTenantInvites = async () => request('/auth/invites');
+
+  const revokeTenantInvite = async (inviteId) =>
+    request(`/auth/invites/${encodeURIComponent(inviteId)}`, {
+      method: 'DELETE',
+    });
+
   const listVisitors = async (siteId, page = 1, pageSize = 50) =>
     request(`/visitors${buildQueryString({ siteId, page, pageSize })}`);
 
@@ -509,6 +516,8 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
       listUsers: listTenantUsers,
       updateUserRole: updateTenantUserRole,
       removeUser: removeTenantUser,
+      listInvites: listTenantInvites,
+      revokeInvite: revokeTenantInvite,
     },
     platformAdmin: {
       getSummary: getPlatformSummary,

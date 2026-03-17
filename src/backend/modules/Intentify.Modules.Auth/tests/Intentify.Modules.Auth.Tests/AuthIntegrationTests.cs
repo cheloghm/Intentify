@@ -200,6 +200,58 @@ public sealed class AuthIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ListInvites_AdminAllowed_UserForbidden()
+    {
+        var adminToken = await LoginAndGetTokenAsync("admin@intentify.local", "password-123");
+        var userToken = await LoginAndGetTokenAsync("tester@intentify.local", "password-123");
+        var createResponse = await PostInviteAsync(adminToken, "pending@intentify.local", AuthRoles.User);
+        Assert.Equal(HttpStatusCode.OK, createResponse.StatusCode);
+
+        using var adminRequest = new HttpRequestMessage(HttpMethod.Get, "/auth/invites");
+        adminRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", adminToken);
+        var adminResponse = await _client!.SendAsync(adminRequest);
+        Assert.Equal(HttpStatusCode.OK, adminResponse.StatusCode);
+
+        var invites = await adminResponse.Content.ReadFromJsonAsync<TenantInviteResponse[]>();
+        Assert.NotNull(invites);
+        Assert.Contains(invites!, invite => invite.Email == "pending@intentify.local" && invite.RevokedAtUtc is null);
+
+        using var userRequest = new HttpRequestMessage(HttpMethod.Get, "/auth/invites");
+        userRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", userToken);
+        var userResponse = await _client.SendAsync(userRequest);
+        Assert.Equal(HttpStatusCode.Forbidden, userResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task RevokeInvite_RevokesPendingInvite()
+    {
+        var adminToken = await LoginAndGetTokenAsync("admin@intentify.local", "password-123");
+        var createResponse = await PostInviteAsync(adminToken, "revoke-me@intentify.local", AuthRoles.User);
+        Assert.Equal(HttpStatusCode.OK, createResponse.StatusCode);
+
+        var invite = await createResponse.Content.ReadFromJsonAsync<CreateInviteResponse>();
+        Assert.NotNull(invite);
+
+        var listed = await GetInvitesAsync(adminToken);
+        var targetInvite = listed.Single(item => item.Token == invite!.Token);
+
+        using var revokeRequest = new HttpRequestMessage(HttpMethod.Delete, $"/auth/invites/{targetInvite.Id:N}");
+        revokeRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", adminToken);
+        var revokeResponse = await _client!.SendAsync(revokeRequest);
+        Assert.Equal(HttpStatusCode.NoContent, revokeResponse.StatusCode);
+
+        using var listRequest = new HttpRequestMessage(HttpMethod.Get, "/auth/invites");
+        listRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", adminToken);
+        var listResponse = await _client.SendAsync(listRequest);
+        Assert.Equal(HttpStatusCode.OK, listResponse.StatusCode);
+
+        var invites = await listResponse.Content.ReadFromJsonAsync<TenantInviteResponse[]>();
+        Assert.NotNull(invites);
+        var revoked = invites!.Single(item => item.InviteId == targetInvite.Id.ToString("N"));
+        Assert.NotNull(revoked.RevokedAtUtc);
+    }
+
+    [Fact]
     public async Task InviteMatrix_EnforcesHierarchy()
     {
         var adminToken = await LoginAndGetTokenAsync("admin@intentify.local", "password-123");
@@ -448,6 +500,21 @@ public sealed class AuthIntegrationTests : IAsyncLifetime
 
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         return await _client!.SendAsync(request);
+    }
+
+    private async Task<IReadOnlyCollection<Invitation>> GetInvitesAsync(string token)
+    {
+        MongoConventions.Register();
+        var client = new MongoClient(_mongo.ConnectionString);
+        var database = client.GetDatabase(_mongo.DatabaseName);
+        var invitations = database.GetCollection<Invitation>(AuthMongoCollections.Invitations);
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/auth/invites");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        var response = await _client!.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        return await invitations.Find(_ => true).ToListAsync();
     }
 
     private static async Task AssertValidationErrorAsync(HttpResponseMessage response, string fieldName)

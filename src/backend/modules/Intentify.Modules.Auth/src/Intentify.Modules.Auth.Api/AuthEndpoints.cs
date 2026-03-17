@@ -248,6 +248,69 @@ internal static class AuthEndpoints
         };
     }
 
+    public static async Task<IResult> ListTenantInvitesAsync(
+        HttpContext context,
+        ListTenantInvitesHandler handler)
+    {
+        var userId = TryGetUserId(context.User);
+        var tenantId = TryGetTenantId(context.User);
+        if (userId is null || tenantId is null)
+        {
+            return Results.Unauthorized();
+        }
+
+        var roles = context.User.FindAll(ClaimTypes.Role).Select(role => role.Value).ToArray();
+        var result = await handler.HandleAsync(new ListTenantInvitesQuery(tenantId.Value, userId.Value, roles));
+
+        return result.Status switch
+        {
+            Intentify.Shared.Validation.OperationStatus.Unauthorized => Results.Unauthorized(),
+            Intentify.Shared.Validation.OperationStatus.Forbidden => Results.StatusCode(StatusCodes.Status403Forbidden),
+            Intentify.Shared.Validation.OperationStatus.Error => Results.Problem(statusCode: StatusCodes.Status500InternalServerError),
+            _ => Results.Ok(result.Value!.Select(invite => new TenantInviteResponse(
+                invite.InviteId.ToString("N"),
+                invite.Email,
+                invite.Role,
+                invite.ExpiresAtUtc,
+                invite.AcceptedAtUtc,
+                invite.RevokedAtUtc,
+                invite.CreatedAtUtc,
+                invite.UpdatedAtUtc)))
+        };
+    }
+
+    public static async Task<IResult> RevokeTenantInviteAsync(
+        string inviteId,
+        HttpContext context,
+        RevokeTenantInviteHandler handler)
+    {
+        if (!Guid.TryParse(inviteId, out var parsedInviteId))
+        {
+            return Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(new Dictionary<string, string[]>
+            {
+                ["inviteId"] = ["Invite id is invalid."]
+            }));
+        }
+
+        var userId = TryGetUserId(context.User);
+        var tenantId = TryGetTenantId(context.User);
+        if (userId is null || tenantId is null)
+        {
+            return Results.Unauthorized();
+        }
+
+        var roles = context.User.FindAll(ClaimTypes.Role).Select(role => role.Value).ToArray();
+        var result = await handler.HandleAsync(new RevokeTenantInviteCommand(tenantId.Value, userId.Value, roles, parsedInviteId));
+
+        return result.Status switch
+        {
+            Intentify.Shared.Validation.OperationStatus.Unauthorized => Results.Unauthorized(),
+            Intentify.Shared.Validation.OperationStatus.Forbidden => Results.StatusCode(StatusCodes.Status403Forbidden),
+            Intentify.Shared.Validation.OperationStatus.Error => Results.Problem(statusCode: StatusCodes.Status500InternalServerError),
+            _ => Results.NoContent()
+        };
+    }
+
     private static Guid? TryGetUserId(ClaimsPrincipal user)
     {
         var userIdValue = user.FindFirstValue(ClaimTypes.NameIdentifier)

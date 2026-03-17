@@ -47,6 +47,8 @@ public sealed class AuthModule : IAppModule
         services.AddSingleton<ListTenantUsersHandler>();
         services.AddSingleton<ChangeTenantUserRoleHandler>();
         services.AddSingleton<RemoveTenantUserHandler>();
+        services.AddSingleton<ListTenantInvitesHandler>();
+        services.AddSingleton<RevokeTenantInviteHandler>();
     }
 
     public void MapEndpoints(IEndpointRouteBuilder endpoints)
@@ -69,6 +71,10 @@ public sealed class AuthModule : IAppModule
         group.MapPut("/users/{userId}/role", AuthEndpoints.ChangeTenantUserRoleAsync)
             .AddEndpointFilter<RequireAuthFilter>();
         group.MapDelete("/users/{userId}", AuthEndpoints.RemoveTenantUserAsync)
+            .AddEndpointFilter<RequireAuthFilter>();
+        group.MapGet("/invites", AuthEndpoints.ListTenantInvitesAsync)
+            .AddEndpointFilter<RequireAuthFilter>();
+        group.MapDelete("/invites/{inviteId}", AuthEndpoints.RevokeTenantInviteAsync)
             .AddEndpointFilter<RequireAuthFilter>();
     }
 }

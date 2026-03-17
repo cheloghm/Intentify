@@ -8,6 +8,23 @@ const ROLE_LABELS = {
   super_admin: 'Super Admin',
 };
 
+const getInviteStatus = (invite) => {
+  if (invite.acceptedAtUtc) {
+    return 'Accepted';
+  }
+
+  if (invite.revokedAtUtc) {
+    return 'Revoked';
+  }
+
+  const expiresAt = Date.parse(invite.expiresAtUtc || '');
+  if (!Number.isNaN(expiresAt) && expiresAt <= Date.now()) {
+    return 'Expired';
+  }
+
+  return 'Pending';
+};
+
 const createSelectField = ({ label, options }) => {
   const wrapper = document.createElement('label');
   wrapper.className = 'ui-field';
@@ -111,11 +128,19 @@ export const renderTeamView = async (container, { apiClient, toast, currentUser,
   usersLoading.style.color = '#475569';
   usersSection.appendChild(usersLoading);
 
-  body.append(inviteSection, usersSection);
+  const invitesSection = document.createElement('div');
+  const invitesLoading = document.createElement('div');
+  invitesLoading.textContent = 'Loading invites...';
+  invitesLoading.style.color = '#475569';
+  invitesSection.appendChild(invitesLoading);
+
+  body.append(inviteSection, usersSection, invitesSection);
 
   const reload = async () => {
     usersLoading.textContent = 'Loading team...';
     usersSection.replaceChildren(usersLoading);
+    invitesLoading.textContent = 'Loading invites...';
+    invitesSection.replaceChildren(invitesLoading);
 
     try {
       const users = await apiClient.auth.listUsers();
@@ -225,6 +250,69 @@ export const renderTeamView = async (container, { apiClient, toast, currentUser,
       table.appendChild(bodyRows);
 
       usersSection.replaceChildren(table);
+
+      try {
+        const invites = await apiClient.auth.listInvites();
+        const invitesTable = document.createElement('table');
+        invitesTable.className = 'ui-table';
+
+        const invitesHead = document.createElement('thead');
+        const invitesHeadRow = document.createElement('tr');
+        ['Pending Invites', 'Role', 'Status', 'Actions'].forEach((label) => {
+          const cell = document.createElement('th');
+          cell.textContent = label;
+          invitesHeadRow.appendChild(cell);
+        });
+        invitesHead.appendChild(invitesHeadRow);
+        invitesTable.appendChild(invitesHead);
+
+        const invitesBody = document.createElement('tbody');
+        const actorRoleForInvites = normalizeRole(currentUser?.roles || []);
+        (Array.isArray(invites) ? invites : []).forEach((invite) => {
+          const row = document.createElement('tr');
+          const status = getInviteStatus(invite);
+          const role = (invite.role || 'user').toLowerCase();
+          const roleText = ROLE_LABELS[role] || role;
+
+          [invite.email || '', roleText, status].forEach((value) => {
+            const cell = document.createElement('td');
+            cell.textContent = value;
+            row.appendChild(cell);
+          });
+
+          const actionsCell = document.createElement('td');
+          if (status === 'Pending' && capabilities.canInviteRole(actorRoleForInvites, role)) {
+            const revokeButton = document.createElement('button');
+            revokeButton.type = 'button';
+            revokeButton.textContent = 'Revoke';
+            revokeButton.className = 'ui-button';
+            revokeButton.addEventListener('click', async () => {
+              try {
+                await apiClient.auth.revokeInvite(invite.inviteId);
+                toast.show({ message: 'Invitation revoked.', variant: 'success' });
+                await reload();
+              } catch (error) {
+                const uiError = mapApiError(error);
+                toast.show({ message: uiError.message, variant: 'danger' });
+              }
+            });
+            actionsCell.appendChild(revokeButton);
+          }
+
+          row.appendChild(actionsCell);
+          invitesBody.appendChild(row);
+        });
+
+        invitesTable.appendChild(invitesBody);
+        invitesSection.replaceChildren(invitesTable);
+      } catch (error) {
+        const uiError = mapApiError(error);
+        invitesSection.replaceChildren();
+        const message = document.createElement('div');
+        message.textContent = uiError.message;
+        message.style.color = '#b91c1c';
+        invitesSection.appendChild(message);
+      }
     } catch (error) {
       const uiError = mapApiError(error);
       usersSection.replaceChildren();
