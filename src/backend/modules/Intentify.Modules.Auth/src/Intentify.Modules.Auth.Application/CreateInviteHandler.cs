@@ -23,7 +23,8 @@ public sealed class CreateInviteHandler
             return OperationResult<InviteResult>.ValidationFailed(errors);
         }
 
-        if (!CanCreateInvite(command.InviterRoles))
+        var actorRole = AuthRoleHierarchy.ResolveActorRole(command.InviterRoles);
+        if (!CanCreateInvite(actorRole, command.Role))
         {
             return OperationResult<InviteResult>.Forbidden();
         }
@@ -58,24 +59,22 @@ public sealed class CreateInviteHandler
             errors.Add("email", "Email is invalid.");
         }
 
-        var normalizedRole = command.Role?.Trim().ToLowerInvariant();
+        var normalizedRole = AuthRoleHierarchy.NormalizeRole(command.Role);
         if (string.IsNullOrWhiteSpace(normalizedRole))
         {
             errors.Add("role", "Role is required.");
         }
-        else if (normalizedRole != AuthRoles.User && normalizedRole != AuthRoles.Admin)
+        else if (!AuthRoleHierarchy.IsSupportedInviteRole(normalizedRole))
         {
-            errors.Add("role", "Role must be 'user' or 'admin'.");
+            errors.Add("role", "Role must be 'user', 'manager', or 'admin'.");
         }
 
         return errors;
     }
 
-    private static bool CanCreateInvite(IReadOnlyCollection<string> roles)
+    private static bool CanCreateInvite(TenantActorRole actorRole, string role)
     {
-        return roles.Any(role =>
-            string.Equals(role, AuthRoles.Admin, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(role, AuthRoles.SuperAdmin, StringComparison.OrdinalIgnoreCase));
+        return AuthRoleHierarchy.CanInvite(actorRole, role);
     }
 
     private static bool IsValidEmail(string email)

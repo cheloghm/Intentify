@@ -23,6 +23,12 @@ public sealed class AuthIntegrationTests : IAsyncLifetime
     private readonly MongoContainerFixture _mongo = new();
     private WebApplication? _app;
     private HttpClient? _client;
+    private Guid _tenantId;
+    private Guid _adminUserId;
+    private Guid _managerUserId;
+    private Guid _regularUserId;
+    private Guid _otherTenantUserId;
+    private Guid _superAdminUserId;
 
     public async Task InitializeAsync()
     {
@@ -176,6 +182,155 @@ public sealed class AuthIntegrationTests : IAsyncLifetime
         Assert.Equal("Tester", payload!.DisplayName);
     }
 
+    [Fact]
+    public async Task ListUsers_AdminAllowed_UserForbidden()
+    {
+        var adminToken = await LoginAndGetTokenAsync("admin@intentify.local", "password-123");
+        var userToken = await LoginAndGetTokenAsync("tester@intentify.local", "password-123");
+
+        using var adminRequest = new HttpRequestMessage(HttpMethod.Get, "/auth/users");
+        adminRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", adminToken);
+        var adminResponse = await _client!.SendAsync(adminRequest);
+        Assert.Equal(HttpStatusCode.OK, adminResponse.StatusCode);
+
+        using var userRequest = new HttpRequestMessage(HttpMethod.Get, "/auth/users");
+        userRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", userToken);
+        var userResponse = await _client.SendAsync(userRequest);
+        Assert.Equal(HttpStatusCode.Forbidden, userResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task InviteMatrix_EnforcesHierarchy()
+    {
+        var adminToken = await LoginAndGetTokenAsync("admin@intentify.local", "password-123");
+        var managerToken = await LoginAndGetTokenAsync("manager@intentify.local", "password-123");
+
+        var adminInviteManager = await PostInviteAsync(adminToken, "new-manager@intentify.local", AuthRoles.Manager);
+        Assert.Equal(HttpStatusCode.OK, adminInviteManager.StatusCode);
+
+        var adminInviteAdmin = await PostInviteAsync(adminToken, "new-admin@intentify.local", AuthRoles.Admin);
+        Assert.Equal(HttpStatusCode.Forbidden, adminInviteAdmin.StatusCode);
+
+        var managerInviteUser = await PostInviteAsync(managerToken, "new-user@intentify.local", AuthRoles.User);
+        Assert.Equal(HttpStatusCode.OK, managerInviteUser.StatusCode);
+
+        var managerInviteManager = await PostInviteAsync(managerToken, "new-manager-2@intentify.local", AuthRoles.Manager);
+        Assert.Equal(HttpStatusCode.Forbidden, managerInviteManager.StatusCode);
+    }
+
+    [Fact]
+    public async Task ChangeRole_BlocksSelfAndLastAdmin()
+    {
+        var adminToken = await LoginAndGetTokenAsync("admin@intentify.local", "password-123");
+
+        using var selfRequest = new HttpRequestMessage(HttpMethod.Put, $"/auth/users/{_adminUserId}/role")
+        {
+            Content = JsonContent.Create(new ChangeTenantUserRoleRequest(AuthRoles.Manager))
+        };
+        selfRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", adminToken);
+        var selfResponse = await _client!.SendAsync(selfRequest);
+        Assert.Equal(HttpStatusCode.Forbidden, selfResponse.StatusCode);
+
+        using var demoteRequest = new HttpRequestMessage(HttpMethod.Put, $"/auth/users/{_managerUserId}/role")
+        {
+            Content = JsonContent.Create(new ChangeTenantUserRoleRequest(AuthRoles.User))
+        };
+        demoteRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", adminToken);
+        var demoteResponse = await _client.SendAsync(demoteRequest);
+        Assert.Equal(HttpStatusCode.NoContent, demoteResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task ChangeRole_EnforcesTenantIsolationAndHierarchy()
+    {
+        var managerToken = await LoginAndGetTokenAsync("manager@intentify.local", "password-123");
+
+        using var promoteRequest = new HttpRequestMessage(HttpMethod.Put, $"/auth/users/{_regularUserId}/role")
+        {
+            Content = JsonContent.Create(new ChangeTenantUserRoleRequest(AuthRoles.Manager))
+        };
+        promoteRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", managerToken);
+        var promoteResponse = await _client!.SendAsync(promoteRequest);
+        Assert.Equal(HttpStatusCode.Forbidden, promoteResponse.StatusCode);
+
+        using var otherTenantRequest = new HttpRequestMessage(HttpMethod.Put, $"/auth/users/{_otherTenantUserId}/role")
+        {
+            Content = JsonContent.Create(new ChangeTenantUserRoleRequest(AuthRoles.User))
+        };
+        otherTenantRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", managerToken);
+        var otherTenantResponse = await _client.SendAsync(otherTenantRequest);
+        Assert.Equal(HttpStatusCode.Unauthorized, otherTenantResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task RemoveUser_BlocksSelfAndLastAdmin_AndSupportsSoftDelete()
+    {
+        var adminToken = await LoginAndGetTokenAsync("admin@intentify.local", "password-123");
+        var managerToken = await LoginAndGetTokenAsync("manager@intentify.local", "password-123");
+
+        using var selfDeleteRequest = new HttpRequestMessage(HttpMethod.Delete, $"/auth/users/{_adminUserId}");
+        selfDeleteRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", adminToken);
+        var selfDeleteResponse = await _client!.SendAsync(selfDeleteRequest);
+        Assert.Equal(HttpStatusCode.Forbidden, selfDeleteResponse.StatusCode);
+
+        using var managerDeleteRequest = new HttpRequestMessage(HttpMethod.Delete, $"/auth/users/{_regularUserId}");
+        managerDeleteRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", managerToken);
+        var managerDeleteResponse = await _client.SendAsync(managerDeleteRequest);
+        Assert.Equal(HttpStatusCode.NoContent, managerDeleteResponse.StatusCode);
+
+        var removedUserLogin = await _client.PostAsJsonAsync("/auth/login", new LoginRequest("tester@intentify.local", "password-123"));
+        Assert.Equal(HttpStatusCode.Unauthorized, removedUserLogin.StatusCode);
+    }
+
+    [Fact]
+    public async Task LastAdmin_CannotBeDemotedOrRemoved()
+    {
+        var superAdminToken = await LoginAndGetTokenAsync("super@intentify.local", "password-123");
+
+        using var demoteRequest = new HttpRequestMessage(HttpMethod.Put, $"/auth/users/{_adminUserId}/role")
+        {
+            Content = JsonContent.Create(new ChangeTenantUserRoleRequest(AuthRoles.Manager))
+        };
+        demoteRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", superAdminToken);
+        var demoteResponse = await _client!.SendAsync(demoteRequest);
+        Assert.Equal(HttpStatusCode.Forbidden, demoteResponse.StatusCode);
+
+        using var removeRequest = new HttpRequestMessage(HttpMethod.Delete, $"/auth/users/{_adminUserId}");
+        removeRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", superAdminToken);
+        var removeResponse = await _client.SendAsync(removeRequest);
+        Assert.Equal(HttpStatusCode.Forbidden, removeResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task AcceptInvite_RejectsUnsupportedRole()
+    {
+        MongoConventions.Register();
+        var client = new MongoClient(_mongo.ConnectionString);
+        var database = client.GetDatabase(_mongo.DatabaseName);
+        var invitations = database.GetCollection<Invitation>(AuthMongoCollections.Invitations);
+
+        var token = Convert.ToHexString(Guid.NewGuid().ToByteArray());
+        await invitations.InsertOneAsync(new Invitation
+        {
+            TenantId = _tenantId,
+            CreatedByUserId = _adminUserId,
+            Email = "unsafe@intentify.local",
+            Role = AuthRoles.SuperAdmin,
+            Token = token,
+            ExpiresAtUtc = DateTime.UtcNow.AddDays(1),
+            CreatedAtUtc = DateTime.UtcNow,
+            UpdatedAtUtc = DateTime.UtcNow
+        });
+
+        var response = await _client!.PostAsJsonAsync("/auth/invites/accept", new AcceptInviteRequest(
+            token,
+            "Unsafe User",
+            "unsafe@intentify.local",
+            "password-123"));
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
     private async Task SeedUserAsync()
     {
         MongoConventions.Register();
@@ -187,6 +342,7 @@ public sealed class AuthIntegrationTests : IAsyncLifetime
         var users = database.GetCollection<User>(AuthMongoCollections.Users);
 
         var tenantId = Guid.NewGuid();
+        _tenantId = tenantId;
         var tenant = new Tenant
         {
             Id = tenantId,
@@ -208,8 +364,90 @@ public sealed class AuthIntegrationTests : IAsyncLifetime
             Roles = new[] { AuthRoles.User }
         };
 
+        _regularUserId = user.Id;
+
+        var adminUser = new User
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            Email = "admin@intentify.local",
+            PasswordHash = hasher.HashPassword("password-123"),
+            DisplayName = "Admin",
+            Roles = new[] { AuthRoles.Admin }
+        };
+        _adminUserId = adminUser.Id;
+
+        var managerUser = new User
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            Email = "manager@intentify.local",
+            PasswordHash = hasher.HashPassword("password-123"),
+            DisplayName = "Manager",
+            Roles = new[] { AuthRoles.Manager }
+        };
+        _managerUserId = managerUser.Id;
+
+        var superAdminUser = new User
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            Email = "super@intentify.local",
+            PasswordHash = hasher.HashPassword("password-123"),
+            DisplayName = "Super Admin",
+            Roles = new[] { AuthRoles.SuperAdmin }
+        };
+        _superAdminUserId = superAdminUser.Id;
+
+        var otherTenantId = Guid.NewGuid();
+        var otherTenant = new Tenant
+        {
+            Id = otherTenantId,
+            Name = "Other Tenant",
+            Domain = "other.local",
+            Plan = "dev",
+            Industry = "software",
+            Category = "test"
+        };
+
+        var otherTenantUser = new User
+        {
+            Id = Guid.NewGuid(),
+            TenantId = otherTenantId,
+            Email = "other-admin@intentify.local",
+            PasswordHash = hasher.HashPassword("password-123"),
+            DisplayName = "Other Admin",
+            Roles = new[] { AuthRoles.Admin }
+        };
+        _otherTenantUserId = otherTenantUser.Id;
+
         await tenants.InsertOneAsync(tenant);
+        await tenants.InsertOneAsync(otherTenant);
         await users.InsertOneAsync(user);
+        await users.InsertOneAsync(adminUser);
+        await users.InsertOneAsync(managerUser);
+        await users.InsertOneAsync(superAdminUser);
+        await users.InsertOneAsync(otherTenantUser);
+    }
+
+    private async Task<string> LoginAndGetTokenAsync(string email, string password)
+    {
+        var response = await _client!.PostAsJsonAsync("/auth/login", new LoginRequest(email, password));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var payload = await response.Content.ReadFromJsonAsync<LoginResponse>();
+        Assert.NotNull(payload);
+        return payload!.AccessToken;
+    }
+
+    private async Task<HttpResponseMessage> PostInviteAsync(string token, string email, string role)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/auth/invites")
+        {
+            Content = JsonContent.Create(new CreateInviteRequest(email, role))
+        };
+
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        return await _client!.SendAsync(request);
     }
 
     private static async Task AssertValidationErrorAsync(HttpResponseMessage response, string fieldName)
