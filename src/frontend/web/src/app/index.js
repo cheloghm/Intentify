@@ -286,6 +286,7 @@ const createUserMenuTrigger = ({ firstName, onProfile, onLogout }) => {
 
 const createProfileModal = ({
   profile,
+  currentRole,
   canManageTeam,
   isAdministrator,
   inviteRoles,
@@ -327,6 +328,26 @@ const createProfileModal = ({
   title.textContent = 'Profile';
   title.style.margin = '0 0 4px';
   title.style.color = '#0f172a';
+
+  const roleWrapper = document.createElement('div');
+  roleWrapper.style.display = 'flex';
+  roleWrapper.style.alignItems = 'center';
+  roleWrapper.style.gap = '8px';
+
+  const roleLabel = document.createElement('span');
+  roleLabel.textContent = 'Role';
+  roleLabel.style.fontSize = '13px';
+  roleLabel.style.color = '#475569';
+
+  const roleText = currentRole === 'super_admin'
+    ? 'Super Admin'
+    : currentRole === 'admin'
+      ? 'Admin'
+      : currentRole === 'manager'
+        ? 'Manager'
+        : 'User';
+  const roleBadge = createBadge({ text: roleText, variant: 'neutral' });
+  roleWrapper.append(roleLabel, roleBadge);
 
   const displayNameField = createField({
     label: 'Display name',
@@ -552,7 +573,7 @@ const createProfileModal = ({
   });
 
   buttons.append(cancel, save);
-  card.append(titleRow, displayNameField.wrapper, emailField.wrapper, organizationField.wrapper);
+  card.append(titleRow, displayNameField.wrapper, emailField.wrapper, roleWrapper, organizationField.wrapper);
   if (inviteSection) {
     card.append(inviteSection);
   }
@@ -1548,6 +1569,7 @@ const renderApp = () => {
 
     modal = createProfileModal({
       profile: authState.profile,
+      currentRole: primaryRole,
       canManageTeam,
       isAdministrator,
       inviteRoles,
