@@ -165,6 +165,29 @@ public sealed class SitesIntegrationTests : IAsyncLifetime
         Assert.Equal(createPayload.WidgetKey, keysPayload.WidgetKey);
     }
 
+    [Fact]
+    public async Task SecondSiteCreation_IsBlocked_ForSameTenant()
+    {
+        var accessToken = await RegisterUserAsync();
+
+        var firstResponse = await SendAuthorizedAsync(HttpMethod.Post, "/sites", accessToken,
+            JsonContent.Create(new CreateSiteRequest($"one-{Guid.NewGuid():N}.intentify.local", "First", "Retail", new[] { "brand" })));
+        Assert.Equal(HttpStatusCode.OK, firstResponse.StatusCode);
+
+        var secondResponse = await SendAuthorizedAsync(HttpMethod.Post, "/sites", accessToken,
+            JsonContent.Create(new CreateSiteRequest($"two-{Guid.NewGuid():N}.intentify.local")));
+
+        Assert.Equal(HttpStatusCode.BadRequest, secondResponse.StatusCode);
+
+        var listResponse = await SendAuthorizedAsync(HttpMethod.Get, "/sites", accessToken);
+        var sites = await listResponse.Content.ReadFromJsonAsync<SiteSummaryResponse[]>();
+        Assert.NotNull(sites);
+        Assert.Single(sites!);
+        Assert.Equal("First", sites[0].Description);
+        Assert.Equal("Retail", sites[0].Category);
+        Assert.Contains("brand", sites[0].Tags);
+    }
+
     private async Task<string> RegisterUserAsync()
     {
         var email = $"tester-{Guid.NewGuid():N}@intentify.local";

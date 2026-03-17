@@ -29,4 +29,6 @@ public sealed class KnowledgeSource
     public DateTime UpdatedAtUtc { get; set; }
 
     public DateTime? IndexedAtUtc { get; set; }
+
+    public int ChunkCount { get; set; }
 }

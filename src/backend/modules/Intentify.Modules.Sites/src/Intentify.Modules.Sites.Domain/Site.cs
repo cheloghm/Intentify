@@ -11,6 +11,12 @@ public sealed class Site
 
     public string Domain { get; init; } = string.Empty;
 
+    public string? Description { get; set; }
+
+    public string? Category { get; set; }
+
+    public List<string> Tags { get; set; } = [];
+
     public List<string> AllowedOrigins { get; init; } = [];
 
     // Keys are stored in plain text for MVP purposes; keep them high entropy and never log them.

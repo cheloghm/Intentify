@@ -263,6 +263,9 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
       label: 'Domain',
       placeholder: 'example.com',
     });
+    const descriptionField = createField({ label: 'Description', placeholder: 'What this site is about' });
+    const categoryField = createField({ label: 'Category', placeholder: 'e.g. Ecommerce' });
+    const tagsField = createField({ label: 'Tags', placeholder: 'comma,separated,tags' });
 
     const submitButton = createButton({ label: 'Create site', variant: 'primary', type: 'submit' });
 
@@ -270,7 +273,7 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
     form.style.display = 'flex';
     form.style.flexDirection = 'column';
     form.style.gap = '12px';
-    form.append(domainField.wrapper, submitButton);
+    form.append(domainField.wrapper, descriptionField.wrapper, categoryField.wrapper, tagsField.wrapper, submitButton);
 
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
@@ -285,12 +288,11 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
       submitButton.textContent = 'Creating...';
 
       try {
-        const response = await client.request('/sites', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ domain }),
+        const response = await client.sites.create({
+          domain,
+          description: descriptionField.input.value.trim(),
+          category: categoryField.input.value.trim(),
+          tags: tagsField.input.value.split(',').map((tag) => tag.trim()).filter(Boolean),
         });
 
         const siteId = response.siteId || response.id;
@@ -311,6 +313,9 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
 
         notifier.show({ message: 'Site created.', variant: 'success' });
         domainField.input.value = '';
+        descriptionField.input.value = '';
+        categoryField.input.value = '';
+        tagsField.input.value = '';
         renderKeys();
         renderSites();
       } catch (error) {
@@ -330,6 +335,12 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
       title: 'Create a new site',
       body: form,
     });
+    card.dataset.role = 'site-create-card';
+
+    if (state.sites.length > 0) {
+      submitButton.disabled = true;
+      submitButton.textContent = 'Site limit reached';
+    }
     return card;
   };
 
@@ -748,9 +759,13 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
     renderSites();
 
     try {
-      const sites = await client.request('/sites');
+      const sites = await client.sites.list();
       state.sites = Array.isArray(sites) ? sites : [];
       state.loading = false;
+      page.querySelector('[data-role="site-create-card"]')?.remove();
+      if (!state.sites.length) {
+        page.insertBefore(createSiteFormCard(), keysSection);
+      }
       renderSites();
 
       await Promise.all(
@@ -769,12 +784,13 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
       const uiError = mapApiError(error);
       state.loading = false;
       state.error = uiError.message;
+      page.querySelector('[data-role="site-create-card"]')?.remove();
+      page.insertBefore(createSiteFormCard(), keysSection);
       renderSites();
     }
   };
 
-  const formCard = createSiteFormCard();
-  page.append(header, formCard, keysSection, sitesSection);
+  page.append(header, keysSection, sitesSection);
   container.appendChild(page);
 
   loadSites();

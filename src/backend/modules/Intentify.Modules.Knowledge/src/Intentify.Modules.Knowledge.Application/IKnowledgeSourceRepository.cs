@@ -16,6 +16,7 @@ public interface IKnowledgeSourceRepository
         IndexStatus status,
         string? failureReason,
         DateTime? indexedAtUtc,
+        int? chunkCount,
         CancellationToken cancellationToken = default);
 
     Task ReplaceSourceContentAsync(
@@ -25,4 +26,6 @@ public interface IKnowledgeSourceRepository
         IndexStatus status,
         DateTime updatedAtUtc,
         CancellationToken cancellationToken = default);
+
+    Task<bool> DeleteSourceAsync(Guid tenantId, Guid sourceId, CancellationToken cancellationToken = default);
 }

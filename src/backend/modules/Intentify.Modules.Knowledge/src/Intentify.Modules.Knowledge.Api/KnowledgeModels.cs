@@ -14,6 +14,7 @@ public sealed record KnowledgeSourceSummaryResponse(
     string? Url,
     string Status,
     string? FailureReason,
+    int ChunkCount,
     DateTime CreatedAtUtc,
     DateTime UpdatedAtUtc,
     DateTime? IndexedAtUtc);

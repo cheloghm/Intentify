@@ -34,6 +34,12 @@ public sealed class KnowledgeChunkRepository : IKnowledgeChunkRepository
             .ToListAsync(cancellationToken);
     }
 
+    public async Task DeleteBySourceAsync(Guid tenantId, Guid sourceId, CancellationToken cancellationToken = default)
+    {
+        await _ensureIndexes;
+        await _chunks.DeleteManyAsync(item => item.TenantId == tenantId && item.SourceId == sourceId, cancellationToken);
+    }
+
     private Task EnsureIndexesAsync()
     {
         var indexes = new[]

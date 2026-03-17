@@ -18,6 +18,7 @@ public sealed class CreateSiteHandler
     public async Task<OperationResult<Site>> HandleAsync(CreateSiteCommand command, CancellationToken cancellationToken = default)
     {
         var errors = new ValidationErrors();
+        var tags = NormalizeTags(command.Tags);
 
         if (string.IsNullOrWhiteSpace(command.Domain))
         {
@@ -37,11 +38,20 @@ public sealed class CreateSiteHandler
             return OperationResult<Site>.Conflict();
         }
 
+        if (await _sites.TenantHasSiteAsync(command.TenantId, cancellationToken))
+        {
+            errors.Add("site", "Tenant already has a site.");
+            return OperationResult<Site>.ValidationFailed(errors);
+        }
+
         var now = DateTime.UtcNow;
         var site = new Site
         {
             TenantId = command.TenantId,
             Domain = normalizedDomain,
+            Description = NormalizeText(command.Description),
+            Category = NormalizeText(command.Category),
+            Tags = tags,
             AllowedOrigins = [],
             SiteKey = _keyGenerator.GenerateKey(KeyPurpose.SiteKey),
             WidgetKey = _keyGenerator.GenerateKey(KeyPurpose.WidgetKey),
@@ -52,5 +62,20 @@ public sealed class CreateSiteHandler
         await _sites.InsertAsync(site, cancellationToken);
 
         return OperationResult<Site>.Success(site);
+    }
+
+    private static string? NormalizeText(string? value)
+    {
+        var normalized = value?.Trim();
+        return string.IsNullOrWhiteSpace(normalized) ? null : normalized;
+    }
+
+    private static List<string> NormalizeTags(IReadOnlyCollection<string>? tags)
+    {
+        return (tags ?? Array.Empty<string>())
+            .Select(tag => tag.Trim())
+            .Where(tag => !string.IsNullOrWhiteSpace(tag))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 }

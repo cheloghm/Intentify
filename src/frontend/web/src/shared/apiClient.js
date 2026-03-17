@@ -168,6 +168,24 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
 
   const listSites = async () => request('/sites');
 
+  const createSite = async (payload) =>
+    request('/sites', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+  const updateSiteProfile = async (siteId, payload) =>
+    request(`/sites/${siteId}/profile`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
   const createKnowledgeSource = async (payload) =>
     request('/knowledge/sources', {
       method: 'POST',
@@ -193,6 +211,11 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
 
   const listKnowledgeSources = async (siteId) =>
     request(`/knowledge/sources${buildQueryString({ siteId })}`);
+
+  const deleteKnowledgeSource = async (sourceId) =>
+    request(`/knowledge/sources/${sourceId}`, {
+      method: 'DELETE',
+    });
 
   const retrieveKnowledgeChunks = async ({ siteId, query, top = 5 }) =>
     request(`/knowledge/retrieve${buildQueryString({ siteId, query, top })}`);
@@ -442,6 +465,8 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
       regenerateKeys: regenerateSiteKeys,
       getKeys: getSiteKeys,
       list: listSites,
+      create: createSite,
+      updateProfile: updateSiteProfile,
     },
     visitors: {
       list: listVisitors,
@@ -456,6 +481,7 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
       uploadPdf: uploadKnowledgePdf,
       indexSource: indexKnowledgeSource,
       listSources: listKnowledgeSources,
+      deleteSource: deleteKnowledgeSource,
       retrieve: retrieveKnowledgeChunks,
     },
 

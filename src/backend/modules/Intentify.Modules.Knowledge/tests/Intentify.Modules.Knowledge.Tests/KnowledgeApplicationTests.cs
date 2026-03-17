@@ -260,8 +260,9 @@ internal sealed class CountingSourceRepository : IKnowledgeSourceRepository
         return Task.FromResult<IReadOnlyCollection<KnowledgeSource>>([]);
     }
 
-    public Task UpdateStatusAsync(Guid tenantId, Guid sourceId, IndexStatus status, string? failureReason, DateTime? indexedAtUtc, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public Task UpdateStatusAsync(Guid tenantId, Guid sourceId, IndexStatus status, string? failureReason, DateTime? indexedAtUtc, int? chunkCount, CancellationToken cancellationToken = default) => Task.CompletedTask;
     public Task ReplaceSourceContentAsync(Guid tenantId, Guid sourceId, byte[] pdfBytes, IndexStatus status, DateTime updatedAtUtc, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public Task<bool> DeleteSourceAsync(Guid tenantId, Guid sourceId, CancellationToken cancellationToken = default) => Task.FromResult(false);
 }
 
 internal sealed class CountingChunkRepository : IKnowledgeChunkRepository
@@ -275,6 +276,8 @@ internal sealed class CountingChunkRepository : IKnowledgeChunkRepository
         ListBySiteCallCount++;
         return Task.FromResult<IReadOnlyCollection<KnowledgeChunk>>([]);
     }
+
+    public Task DeleteBySourceAsync(Guid tenantId, Guid sourceId, CancellationToken cancellationToken = default) => Task.CompletedTask;
 }
 
 internal sealed class RecordingOpenSearchKnowledgeClient : IOpenSearchKnowledgeClient
@@ -298,6 +301,9 @@ internal sealed class RecordingOpenSearchKnowledgeClient : IOpenSearchKnowledgeC
         LastSearch = new SearchCall(tenantId, siteId, botId, query, topK);
         return Task.FromResult(_results);
     }
+
+    public Task DeleteBySourceAsync(Guid tenantId, Guid siteId, Guid sourceId, Guid? botId, CancellationToken cancellationToken = default)
+        => Task.CompletedTask;
 
     internal sealed record SearchCall(Guid TenantId, Guid SiteId, Guid? BotId, string Query, int TopK);
 }
@@ -402,7 +408,7 @@ public sealed class IndexingStatusTransitionTests
         public Task<KnowledgeSource?> GetSourceByIdAsync(Guid tenantId, Guid sourceId, CancellationToken cancellationToken = default) => Task.FromResult<KnowledgeSource?>(Stored);
         public Task<IReadOnlyCollection<KnowledgeSource>> ListSourcesAsync(Guid tenantId, Guid siteId, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyCollection<KnowledgeSource>>([Stored]);
 
-        public Task UpdateStatusAsync(Guid tenantId, Guid sourceId, IndexStatus status, string? failureReason, DateTime? indexedAtUtc, CancellationToken cancellationToken = default)
+        public Task UpdateStatusAsync(Guid tenantId, Guid sourceId, IndexStatus status, string? failureReason, DateTime? indexedAtUtc, int? chunkCount, CancellationToken cancellationToken = default)
         {
             UpdateStatusCalls++;
             Stored.Status = status;
@@ -413,6 +419,9 @@ public sealed class IndexingStatusTransitionTests
 
         public Task ReplaceSourceContentAsync(Guid tenantId, Guid sourceId, byte[] pdfBytes, IndexStatus status, DateTime updatedAtUtc, CancellationToken cancellationToken = default)
             => Task.CompletedTask;
+
+        public Task<bool> DeleteSourceAsync(Guid tenantId, Guid sourceId, CancellationToken cancellationToken = default)
+            => Task.FromResult(true);
     }
 
     private sealed class InMemoryChunkRepository : IKnowledgeChunkRepository
@@ -428,6 +437,8 @@ public sealed class IndexingStatusTransitionTests
 
         public Task<IReadOnlyCollection<KnowledgeChunk>> ListBySiteAsync(Guid tenantId, Guid siteId, CancellationToken cancellationToken = default)
             => Task.FromResult<IReadOnlyCollection<KnowledgeChunk>>(Stored);
+
+        public Task DeleteBySourceAsync(Guid tenantId, Guid sourceId, CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 }
 
@@ -473,8 +484,9 @@ internal sealed class RecordingSourceRepository : IKnowledgeSourceRepository
 
     public Task<KnowledgeSource?> GetSourceByIdAsync(Guid tenantId, Guid sourceId, CancellationToken cancellationToken = default) => Task.FromResult<KnowledgeSource?>(null);
     public Task<IReadOnlyCollection<KnowledgeSource>> ListSourcesAsync(Guid tenantId, Guid siteId, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyCollection<KnowledgeSource>>([]);
-    public Task UpdateStatusAsync(Guid tenantId, Guid sourceId, IndexStatus status, string? failureReason, DateTime? indexedAtUtc, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public Task UpdateStatusAsync(Guid tenantId, Guid sourceId, IndexStatus status, string? failureReason, DateTime? indexedAtUtc, int? chunkCount, CancellationToken cancellationToken = default) => Task.CompletedTask;
     public Task ReplaceSourceContentAsync(Guid tenantId, Guid sourceId, byte[] pdfBytes, IndexStatus status, DateTime updatedAtUtc, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public Task<bool> DeleteSourceAsync(Guid tenantId, Guid sourceId, CancellationToken cancellationToken = default) => Task.FromResult(false);
 }
 
 internal sealed class RetrievalSourceRepository : IKnowledgeSourceRepository
@@ -489,8 +501,9 @@ internal sealed class RetrievalSourceRepository : IKnowledgeSourceRepository
     public Task InsertSourceAsync(KnowledgeSource source, CancellationToken cancellationToken = default) => Task.CompletedTask;
     public Task<KnowledgeSource?> GetSourceByIdAsync(Guid tenantId, Guid sourceId, CancellationToken cancellationToken = default) => Task.FromResult(_sources.FirstOrDefault(item => item.Id == sourceId));
     public Task<IReadOnlyCollection<KnowledgeSource>> ListSourcesAsync(Guid tenantId, Guid siteId, CancellationToken cancellationToken = default) => Task.FromResult(_sources);
-    public Task UpdateStatusAsync(Guid tenantId, Guid sourceId, IndexStatus status, string? failureReason, DateTime? indexedAtUtc, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public Task UpdateStatusAsync(Guid tenantId, Guid sourceId, IndexStatus status, string? failureReason, DateTime? indexedAtUtc, int? chunkCount, CancellationToken cancellationToken = default) => Task.CompletedTask;
     public Task ReplaceSourceContentAsync(Guid tenantId, Guid sourceId, byte[] pdfBytes, IndexStatus status, DateTime updatedAtUtc, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public Task<bool> DeleteSourceAsync(Guid tenantId, Guid sourceId, CancellationToken cancellationToken = default) => Task.FromResult(false);
 }
 
 internal sealed class RetrievalChunkRepository : IKnowledgeChunkRepository
@@ -504,6 +517,7 @@ internal sealed class RetrievalChunkRepository : IKnowledgeChunkRepository
 
     public Task UpsertChunksAsync(Guid tenantId, Guid sourceId, IReadOnlyCollection<KnowledgeChunk> chunks, CancellationToken cancellationToken = default) => Task.CompletedTask;
     public Task<IReadOnlyCollection<KnowledgeChunk>> ListBySiteAsync(Guid tenantId, Guid siteId, CancellationToken cancellationToken = default) => Task.FromResult(_chunks);
+    public Task DeleteBySourceAsync(Guid tenantId, Guid sourceId, CancellationToken cancellationToken = default) => Task.CompletedTask;
 }
 
 internal sealed class FakeMessageHandler : HttpMessageHandler
@@ -528,7 +542,9 @@ internal sealed class FakeMessageHandler : HttpMessageHandler
         public Task<Site?> GetByWidgetKeyAsync(string widgetKey, CancellationToken cancellationToken = default) => Task.FromResult<Site?>(null);
         public Task<Site?> GetBySiteKeyAsync(string siteKey, CancellationToken cancellationToken = default) => Task.FromResult<Site?>(null);
         public Task<IReadOnlyCollection<Site>> ListByTenantAsync(Guid tenantId, CancellationToken cancellationToken = default) => Task.FromResult((IReadOnlyCollection<Site>)Array.Empty<Site>());
+        public Task<bool> TenantHasSiteAsync(Guid tenantId, CancellationToken cancellationToken = default) => Task.FromResult(false);
         public Task InsertAsync(Site site, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task<Site?> UpdateProfileAsync(Guid tenantId, Guid siteId, string? description, string? category, IReadOnlyCollection<string> tags, CancellationToken cancellationToken = default) => Task.FromResult<Site?>(null);
         public Task<Site?> UpdateAllowedOriginsAsync(Guid tenantId, Guid siteId, IReadOnlyCollection<string> allowedOrigins, CancellationToken cancellationToken = default) => Task.FromResult<Site?>(null);
         public Task<Site?> RotateKeysAsync(Guid tenantId, Guid siteId, string siteKey, string widgetKey, CancellationToken cancellationToken = default) => Task.FromResult<Site?>(null);
         public Task<Site?> UpdateFirstEventReceivedAsync(Guid siteId, DateTime timestampUtc, CancellationToken cancellationToken = default) => Task.FromResult<Site?>(null);

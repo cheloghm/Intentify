@@ -19,7 +19,7 @@ internal static class SitesEndpoints
         {
             return Results.Unauthorized();
         }
-        var result = await handler.HandleAsync(new CreateSiteCommand(tenantId.Value, request.Domain));
+        var result = await handler.HandleAsync(new CreateSiteCommand(tenantId.Value, request.Domain, request.Description, request.Category, request.Tags));
 
         return result.Status switch
         {
@@ -29,9 +29,46 @@ internal static class SitesEndpoints
             _ => Results.Ok(new CreateSiteResponse(
                 result.Value!.Id.ToString("N"),
                 result.Value.Domain,
+                result.Value.Description,
+                result.Value.Category,
+                result.Value.Tags,
                 result.Value.AllowedOrigins,
                 result.Value.SiteKey,
                 result.Value.WidgetKey))
+        };
+    }
+
+    public static async Task<IResult> UpdateSiteProfileAsync(
+        string siteId,
+        UpdateSiteProfileRequest request,
+        HttpContext context,
+        UpdateSiteProfileHandler handler)
+    {
+        if (!Guid.TryParse(siteId, out var siteGuid))
+        {
+            return Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(new Dictionary<string, string[]>
+            {
+                ["siteId"] = ["Site id is invalid."]
+            }));
+        }
+
+        var tenantId = TryGetTenantId(context.User);
+        if (tenantId is null)
+        {
+            return Results.Unauthorized();
+        }
+
+        var result = await handler.HandleAsync(new UpdateSiteProfileCommand(
+            tenantId.Value,
+            siteGuid,
+            request.Description,
+            request.Category,
+            request.Tags));
+
+        return result.Status switch
+        {
+            OperationStatus.NotFound => Results.NotFound(),
+            _ => Results.Ok(ToSummaryResponse(result.Value!))
         };
     }
 
@@ -287,6 +324,9 @@ internal static class SitesEndpoints
         return new SiteSummaryResponse(
             site.Id.ToString("N"),
             site.Domain,
+            site.Description,
+            site.Category,
+            site.Tags,
             site.AllowedOrigins,
             site.CreatedAtUtc,
             site.UpdatedAtUtc,

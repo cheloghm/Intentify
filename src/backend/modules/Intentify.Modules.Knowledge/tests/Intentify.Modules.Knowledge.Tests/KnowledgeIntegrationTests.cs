@@ -85,6 +85,38 @@ public sealed class KnowledgeIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Source_ReindexAndDelete_UpdatesLifecycleAndRetrieval()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var createResponse = await SendAuthorizedAsync(HttpMethod.Post, "/knowledge/sources", token, JsonContent.Create(new
+        {
+            siteId = site.SiteId,
+            type = "Text",
+            name = "lifecycle",
+            text = "alpha only"
+        }));
+        using var createdJson = JsonDocument.Parse(await createResponse.Content.ReadAsStringAsync());
+        var sourceId = createdJson.RootElement.GetProperty("sourceId").GetString();
+
+        var indexResponse = await SendAuthorizedAsync(HttpMethod.Post, $"/knowledge/sources/{sourceId}/index", token);
+        Assert.Equal(HttpStatusCode.OK, indexResponse.StatusCode);
+
+        var listResponse = await SendAuthorizedAsync(HttpMethod.Get, $"/knowledge/sources?siteId={site.SiteId}", token);
+        using var listJson = JsonDocument.Parse(await listResponse.Content.ReadAsStringAsync());
+        Assert.True(listJson.RootElement[0].TryGetProperty("chunkCount", out var chunkCount));
+        Assert.True(chunkCount.GetInt32() > 0);
+
+        var deleteResponse = await SendAuthorizedAsync(HttpMethod.Delete, $"/knowledge/sources/{sourceId}", token);
+        Assert.Equal(HttpStatusCode.NoContent, deleteResponse.StatusCode);
+
+        var retrieveResponse = await SendAuthorizedAsync(HttpMethod.Get, $"/knowledge/retrieve?siteId={site.SiteId}&query=alpha&top=5", token);
+        using var retrieveJson = JsonDocument.Parse(await retrieveResponse.Content.ReadAsStringAsync());
+        Assert.Equal(0, retrieveJson.RootElement.GetArrayLength());
+    }
+
+    [Fact]
     public async Task Retrieve_UsesOpenSearch_WhenEnabled()
     {
         await using var openSearchServer = await FakeOpenSearchServer.StartAsync();
