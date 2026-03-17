@@ -1,4 +1,4 @@
-import { createCard, createInput, createTable, createToastManager } from '../shared/ui/index.js';
+import { createBadge, createCard, createInput, createTable, createToastManager } from '../shared/ui/index.js';
 import { createApiClient, mapApiError } from '../shared/apiClient.js';
 import { clearToken, getToken, setToken } from '../shared/auth.js';
 import { renderSitesView } from '../pages/sites.js';
@@ -307,6 +307,11 @@ const createProfileModal = ({ profile, onClose, onSave }) => {
   card.style.flexDirection = 'column';
   card.style.gap = '12px';
 
+  const titleRow = document.createElement('div');
+  titleRow.style.display = 'flex';
+  titleRow.style.alignItems = 'center';
+  titleRow.style.justifyContent = 'space-between';
+
   const title = document.createElement('h3');
   title.textContent = 'Profile';
   title.style.margin = '0 0 4px';
@@ -340,10 +345,121 @@ const createProfileModal = ({ profile, onClose, onSave }) => {
   const isAdmin = Boolean(profile?.isAdmin)
     || roles.includes('admin')
     || roles.includes('super_admin');
+
+  if (isAdmin) {
+    titleRow.appendChild(createBadge({ text: 'Administrator', variant: 'info' }));
+  }
+
+  titleRow.prepend(title);
+
   if (!isAdmin) {
     organizationField.input.disabled = true;
     organizationField.input.style.background = '#f8fafc';
     organizationField.input.style.cursor = 'not-allowed';
+  }
+
+  let inviteSection = null;
+  let inviteEmailField = null;
+  let inviteSubmitButton = null;
+  let inviteCancelButton = null;
+  let inviteActionButton = null;
+
+  if (isAdmin) {
+    inviteSection = document.createElement('div');
+    inviteSection.style.display = 'none';
+    inviteSection.style.padding = '10px';
+    inviteSection.style.border = '1px solid #e2e8f0';
+    inviteSection.style.borderRadius = '10px';
+    inviteSection.style.background = '#f8fafc';
+
+    inviteEmailField = createField({
+      label: 'Invite email',
+      type: 'email',
+      placeholder: 'you@example.com',
+    });
+
+    const inviteButtons = document.createElement('div');
+    inviteButtons.style.display = 'flex';
+    inviteButtons.style.justifyContent = 'flex-end';
+    inviteButtons.style.gap = '8px';
+
+    inviteCancelButton = document.createElement('button');
+    inviteCancelButton.type = 'button';
+    inviteCancelButton.textContent = 'Cancel';
+    inviteCancelButton.style.padding = '8px 12px';
+    inviteCancelButton.style.border = '1px solid #cbd5e1';
+    inviteCancelButton.style.borderRadius = '8px';
+    inviteCancelButton.style.background = '#ffffff';
+    inviteCancelButton.style.cursor = 'pointer';
+
+    inviteSubmitButton = document.createElement('button');
+    inviteSubmitButton.type = 'button';
+    inviteSubmitButton.textContent = 'Send invite';
+    inviteSubmitButton.style.padding = '8px 12px';
+    inviteSubmitButton.style.border = '0';
+    inviteSubmitButton.style.borderRadius = '8px';
+    inviteSubmitButton.style.background = '#2563eb';
+    inviteSubmitButton.style.color = '#ffffff';
+    inviteSubmitButton.style.cursor = 'pointer';
+
+    const hideInviteSection = () => {
+      inviteSection.style.display = 'none';
+      inviteEmailField.error.textContent = '';
+      inviteEmailField.input.value = '';
+    };
+
+    inviteCancelButton.addEventListener('click', hideInviteSection);
+
+    inviteSubmitButton.addEventListener('click', async () => {
+      inviteEmailField.error.textContent = '';
+      const email = inviteEmailField.input.value.trim();
+      const emailError = validateEmail(email);
+      if (emailError) {
+        inviteEmailField.error.textContent = emailError;
+        toast.show({ message: 'Please fix the highlighted fields.', variant: 'warning' });
+        return;
+      }
+
+      inviteSubmitButton.disabled = true;
+      inviteSubmitButton.textContent = 'Sending...';
+      inviteCancelButton.disabled = true;
+
+      try {
+        await apiClient.auth.createInvite({ email });
+        inviteEmailField.input.value = '';
+        inviteEmailField.error.textContent = '';
+        toast.show({ message: 'Invitation sent.', variant: 'success' });
+      } catch (error) {
+        const uiError = mapApiError(error);
+        const applied = applyFieldErrors(uiError.details?.errors, {
+          email: inviteEmailField,
+        });
+        toast.show({
+          message: applied ? 'Please review the highlighted errors.' : uiError.message,
+          variant: 'danger',
+        });
+      } finally {
+        inviteSubmitButton.disabled = false;
+        inviteSubmitButton.textContent = 'Send invite';
+        inviteCancelButton.disabled = false;
+      }
+    });
+
+    inviteButtons.append(inviteCancelButton, inviteSubmitButton);
+    inviteSection.append(inviteEmailField.wrapper, inviteButtons);
+
+    inviteActionButton = document.createElement('button');
+    inviteActionButton.type = 'button';
+    inviteActionButton.textContent = 'Invite User';
+    inviteActionButton.style.padding = '8px 12px';
+    inviteActionButton.style.border = '1px solid #cbd5e1';
+    inviteActionButton.style.borderRadius = '8px';
+    inviteActionButton.style.background = '#ffffff';
+    inviteActionButton.style.cursor = 'pointer';
+    inviteActionButton.addEventListener('click', () => {
+      inviteSection.style.display = 'block';
+      inviteEmailField.input.focus();
+    });
   }
 
   const buttons = document.createElement('div');
@@ -409,8 +525,15 @@ const createProfileModal = ({ profile, onClose, onSave }) => {
     }
   });
 
+  if (inviteActionButton) {
+    buttons.append(inviteActionButton);
+  }
   buttons.append(cancel, save);
-  card.append(title, displayNameField.wrapper, emailField.wrapper, organizationField.wrapper, buttons);
+  card.append(titleRow, displayNameField.wrapper, emailField.wrapper, organizationField.wrapper);
+  if (inviteSection) {
+    card.append(inviteSection);
+  }
+  card.append(buttons);
 
   overlay.addEventListener('click', (event) => {
     if (event.target === overlay) {
