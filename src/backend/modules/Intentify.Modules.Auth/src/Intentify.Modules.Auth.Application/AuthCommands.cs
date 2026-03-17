@@ -14,3 +14,18 @@ public sealed record UpdateCurrentUserProfileCommand(
     IReadOnlyCollection<string> Roles,
     string DisplayName,
     string? OrganizationName);
+
+public sealed record ListTenantUsersQuery(Guid TenantId, Guid CurrentUserId, IReadOnlyCollection<string> CurrentUserRoles);
+
+public sealed record ChangeTenantUserRoleCommand(
+    Guid TenantId,
+    Guid CurrentUserId,
+    IReadOnlyCollection<string> CurrentUserRoles,
+    Guid TargetUserId,
+    string Role);
+
+public sealed record RemoveTenantUserCommand(
+    Guid TenantId,
+    Guid CurrentUserId,
+    IReadOnlyCollection<string> CurrentUserRoles,
+    Guid TargetUserId);

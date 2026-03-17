@@ -12,6 +12,7 @@ import { renderLeadsView } from '../pages/leads.js';
 import { renderTicketsView } from '../pages/tickets.js';
 import { renderIntelligenceView } from '../pages/intelligence.js';
 import { renderAdsView } from '../pages/ads.js';
+import { renderTeamView } from '../pages/team.js';
 import { renderPlatformAdminTenantDetailView, renderPlatformAdminView } from '../pages/platformAdmin.js';
 
 const app = document.getElementById('app');
@@ -75,6 +76,7 @@ const normalizeFieldKey = (key) => key.toLowerCase().replace(/\s+/g, '');
 const AUTH_NAV_ITEMS = [
   { label: 'Sites', href: '#/sites' },
   { label: 'Dashboard', href: '#/dashboard' },
+  { label: 'Team', href: '#/team' },
   { label: 'Visitors', href: '#/visitors' },
   { label: 'Knowledge', href: '#/knowledge' },
   { label: 'Engage', href: '#/engage' },
@@ -124,7 +126,7 @@ const createNavLink = ({ label, href }) => {
   return link;
 };
 
-const createNavbar = ({ isAuthenticated, canAccessPlatformAdmin }) => {
+const createNavbar = ({ isAuthenticated, canAccessPlatformAdmin, canAccessTeam }) => {
   const nav = document.createElement('nav');
   nav.style.display = 'flex';
   nav.style.alignItems = 'center';
@@ -150,7 +152,7 @@ const createNavbar = ({ isAuthenticated, canAccessPlatformAdmin }) => {
     links.appendChild(createNavLink({ label: 'Login', href: '#/login' }));
     links.appendChild(createNavLink({ label: 'Register', href: '#/register' }));
   } else {
-    AUTH_NAV_ITEMS.forEach((item) => {
+    AUTH_NAV_ITEMS.filter((item) => item.href !== '#/team' || canAccessTeam).forEach((item) => {
       links.appendChild(createNavLink(item));
     });
     if (canAccessPlatformAdmin) {
@@ -358,110 +360,6 @@ const createProfileModal = ({ profile, onClose, onSave }) => {
     organizationField.input.style.cursor = 'not-allowed';
   }
 
-  let inviteSection = null;
-  let inviteEmailField = null;
-  let inviteSubmitButton = null;
-  let inviteCancelButton = null;
-  let inviteActionButton = null;
-
-  if (isAdmin) {
-    inviteSection = document.createElement('div');
-    inviteSection.style.display = 'none';
-    inviteSection.style.padding = '10px';
-    inviteSection.style.border = '1px solid #e2e8f0';
-    inviteSection.style.borderRadius = '10px';
-    inviteSection.style.background = '#f8fafc';
-
-    inviteEmailField = createField({
-      label: 'Invite email',
-      type: 'email',
-      placeholder: 'you@example.com',
-    });
-
-    const inviteButtons = document.createElement('div');
-    inviteButtons.style.display = 'flex';
-    inviteButtons.style.justifyContent = 'flex-end';
-    inviteButtons.style.gap = '8px';
-
-    inviteCancelButton = document.createElement('button');
-    inviteCancelButton.type = 'button';
-    inviteCancelButton.textContent = 'Cancel';
-    inviteCancelButton.style.padding = '8px 12px';
-    inviteCancelButton.style.border = '1px solid #cbd5e1';
-    inviteCancelButton.style.borderRadius = '8px';
-    inviteCancelButton.style.background = '#ffffff';
-    inviteCancelButton.style.cursor = 'pointer';
-
-    inviteSubmitButton = document.createElement('button');
-    inviteSubmitButton.type = 'button';
-    inviteSubmitButton.textContent = 'Send invite';
-    inviteSubmitButton.style.padding = '8px 12px';
-    inviteSubmitButton.style.border = '0';
-    inviteSubmitButton.style.borderRadius = '8px';
-    inviteSubmitButton.style.background = '#2563eb';
-    inviteSubmitButton.style.color = '#ffffff';
-    inviteSubmitButton.style.cursor = 'pointer';
-
-    const hideInviteSection = () => {
-      inviteSection.style.display = 'none';
-      inviteEmailField.error.textContent = '';
-      inviteEmailField.input.value = '';
-    };
-
-    inviteCancelButton.addEventListener('click', hideInviteSection);
-
-    inviteSubmitButton.addEventListener('click', async () => {
-      inviteEmailField.error.textContent = '';
-      const email = inviteEmailField.input.value.trim();
-      const emailError = validateEmail(email);
-      if (emailError) {
-        inviteEmailField.error.textContent = emailError;
-        toast.show({ message: 'Please fix the highlighted fields.', variant: 'warning' });
-        return;
-      }
-
-      inviteSubmitButton.disabled = true;
-      inviteSubmitButton.textContent = 'Sending...';
-      inviteCancelButton.disabled = true;
-
-      try {
-        await apiClient.auth.createInvite({ email });
-        inviteEmailField.input.value = '';
-        inviteEmailField.error.textContent = '';
-        toast.show({ message: 'Invitation sent.', variant: 'success' });
-      } catch (error) {
-        const uiError = mapApiError(error);
-        const applied = applyFieldErrors(uiError.details?.errors, {
-          email: inviteEmailField,
-        });
-        toast.show({
-          message: applied ? 'Please review the highlighted errors.' : uiError.message,
-          variant: 'danger',
-        });
-      } finally {
-        inviteSubmitButton.disabled = false;
-        inviteSubmitButton.textContent = 'Send invite';
-        inviteCancelButton.disabled = false;
-      }
-    });
-
-    inviteButtons.append(inviteCancelButton, inviteSubmitButton);
-    inviteSection.append(inviteEmailField.wrapper, inviteButtons);
-
-    inviteActionButton = document.createElement('button');
-    inviteActionButton.type = 'button';
-    inviteActionButton.textContent = 'Invite User';
-    inviteActionButton.style.padding = '8px 12px';
-    inviteActionButton.style.border = '1px solid #cbd5e1';
-    inviteActionButton.style.borderRadius = '8px';
-    inviteActionButton.style.background = '#ffffff';
-    inviteActionButton.style.cursor = 'pointer';
-    inviteActionButton.addEventListener('click', () => {
-      inviteSection.style.display = 'block';
-      inviteEmailField.input.focus();
-    });
-  }
-
   const buttons = document.createElement('div');
   buttons.style.display = 'flex';
   buttons.style.justifyContent = 'flex-end';
@@ -525,14 +423,8 @@ const createProfileModal = ({ profile, onClose, onSave }) => {
     }
   });
 
-  if (inviteActionButton) {
-    buttons.append(inviteActionButton);
-  }
   buttons.append(cancel, save);
   card.append(titleRow, displayNameField.wrapper, emailField.wrapper, organizationField.wrapper);
-  if (inviteSection) {
-    card.append(inviteSection);
-  }
   card.append(buttons);
 
   overlay.addEventListener('click', (event) => {
@@ -562,7 +454,7 @@ const createProfileModal = ({ profile, onClose, onSave }) => {
   };
 };
 
-const createAuthenticatedShell = ({ route, canAccessPlatformAdmin, onLogout, onOpenProfile, firstName }) => {
+const createAuthenticatedShell = ({ route, canAccessPlatformAdmin, canAccessTeam, onLogout, onOpenProfile, firstName }) => {
   const shell = document.createElement('div');
   shell.style.display = 'flex';
   shell.style.minHeight = '100vh';
@@ -590,7 +482,7 @@ const createAuthenticatedShell = ({ route, canAccessPlatformAdmin, onLogout, onO
   nav.style.flexDirection = 'column';
   nav.style.gap = '4px';
 
-  AUTH_NAV_ITEMS.forEach((item) => {
+  AUTH_NAV_ITEMS.filter((item) => item.href !== '#/team' || canAccessTeam).forEach((item) => {
     nav.appendChild(createSidebarNavLink({ ...item, active: route === item.href.replace('#', '') }));
   });
 
@@ -1221,6 +1113,7 @@ const routes = {
   '/register': renderRegisterView,
   '/accept-invite': renderAcceptInviteView,
   '/dashboard': renderDashboardView,
+  '/team': renderTeamView,
   '/sites': renderSitesView,
   '/install': renderInstallView,
   '/visitors': renderVisitorsView,
@@ -1278,6 +1171,66 @@ const authState = {
   profileModalOpen: false,
 };
 
+const getPrimaryRole = (roles) => {
+  if (!Array.isArray(roles)) {
+    return 'user';
+  }
+
+  if (roles.includes('super_admin')) {
+    return 'super_admin';
+  }
+
+  if (roles.includes('admin')) {
+    return 'admin';
+  }
+
+  if (roles.includes('manager')) {
+    return 'manager';
+  }
+
+  return 'user';
+};
+
+const canManageUsers = (role) => role === 'super_admin' || role === 'admin' || role === 'manager';
+
+const canInviteRole = (actorRole, targetRole) => {
+  if (actorRole === 'super_admin') {
+    return targetRole === 'admin' || targetRole === 'manager' || targetRole === 'user';
+  }
+
+  if (actorRole === 'admin') {
+    return targetRole === 'manager' || targetRole === 'user';
+  }
+
+  if (actorRole === 'manager') {
+    return targetRole === 'user';
+  }
+
+  return false;
+};
+
+const canChangeRole = (actorRole, targetRole) => {
+  if (targetRole === 'super_admin') {
+    return false;
+  }
+
+  if (actorRole === 'super_admin') {
+    return targetRole === 'admin' || targetRole === 'manager' || targetRole === 'user';
+  }
+
+  if (actorRole === 'admin') {
+    return targetRole === 'manager' || targetRole === 'user';
+  }
+
+  if (actorRole === 'manager') {
+    return targetRole === 'user';
+  }
+
+  return false;
+};
+
+const canRemoveRole = (actorRole, targetRole) => canChangeRole(actorRole, targetRole);
+
 const hasPlatformAccess = () =>
   Array.isArray(authState.roles)
   && (authState.roles.includes('super_admin') || authState.roles.includes('platform_admin'));
@@ -1314,6 +1267,7 @@ const renderApp = () => {
 
   const protectedRoutes = [
     '/dashboard',
+    '/team',
     '/sites',
     '/install',
     '/visitors',
@@ -1351,11 +1305,13 @@ const renderApp = () => {
   }
 
   const isPlatformRoute = route === '/platform-admin' || route === '/platform-admin/tenant/:tenantId';
+  const isTeamRoute = route === '/team';
   if (isAuthenticated && isPlatformRoute && !authState.loaded) {
     app.innerHTML = '';
     const authenticatedShell = createAuthenticatedShell({
       route,
       canAccessPlatformAdmin: false,
+      canAccessTeam: false,
       firstName: getFirstName(authState.profile?.displayName),
       onOpenProfile: () => {
         authState.profileModalOpen = true;
@@ -1380,6 +1336,11 @@ const renderApp = () => {
     return;
   }
 
+  if (isAuthenticated && isTeamRoute && authState.loaded && !canManageUsers(getPrimaryRole(authState.roles))) {
+    window.location.hash = '#/dashboard';
+    return;
+  }
+
   const view = routes[route] || routes['/'];
   app.innerHTML = '';
   let main;
@@ -1388,6 +1349,7 @@ const renderApp = () => {
     const authenticatedShell = createAuthenticatedShell({
       route,
       canAccessPlatformAdmin: hasPlatformAccess(),
+      canAccessTeam: canManageUsers(getPrimaryRole(authState.roles)),
       firstName: getFirstName(authState.profile?.displayName),
       onOpenProfile: () => {
         authState.profileModalOpen = true;
@@ -1401,7 +1363,7 @@ const renderApp = () => {
     main = authenticatedShell.main;
     app.append(authenticatedShell.shell, authenticatedShell.overlay);
   } else {
-    const navbar = createNavbar({ isAuthenticated, canAccessPlatformAdmin: false });
+    const navbar = createNavbar({ isAuthenticated, canAccessPlatformAdmin: false, canAccessTeam: false });
     main = createMain();
     app.append(navbar, main);
   }
@@ -1416,7 +1378,19 @@ const renderApp = () => {
     return;
   }
 
-  view(main, { apiClient, toast, query, params });
+  view(main, {
+    apiClient,
+    toast,
+    query,
+    params,
+    currentUser: authState.profile,
+    capabilities: {
+      canManageUsers,
+      canInviteRole,
+      canChangeRole,
+      canRemoveRole,
+    },
+  });
 
   if (isAuthenticated && authState.profileModalOpen && authState.profile) {
     let modal;
