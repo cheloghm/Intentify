@@ -284,7 +284,14 @@ const createUserMenuTrigger = ({ firstName, onProfile, onLogout }) => {
   return { container, close };
 };
 
-const createProfileModal = ({ profile, onClose, onSave }) => {
+const createProfileModal = ({
+  profile,
+  canManageTeam,
+  isAdministrator,
+  onManageTeam,
+  onClose,
+  onSave,
+}) => {
   const overlay = document.createElement('div');
   overlay.setAttribute('role', 'dialog');
   overlay.setAttribute('aria-modal', 'true');
@@ -343,21 +350,30 @@ const createProfileModal = ({ profile, onClose, onSave }) => {
   });
   organizationField.input.value = profile?.organizationName || '';
 
-  const roles = Array.isArray(profile?.roles) ? profile.roles : [];
-  const isAdmin = Boolean(profile?.isAdmin)
-    || roles.includes('admin')
-    || roles.includes('super_admin');
-
-  if (isAdmin) {
+  if (isAdministrator) {
     titleRow.appendChild(createBadge({ text: 'Administrator', variant: 'info' }));
   }
 
   titleRow.prepend(title);
 
-  if (!isAdmin) {
+  if (!isAdministrator) {
     organizationField.input.disabled = true;
     organizationField.input.style.background = '#f8fafc';
     organizationField.input.style.cursor = 'not-allowed';
+  }
+
+  let manageTeamButton;
+  if (canManageTeam) {
+    manageTeamButton = document.createElement('button');
+    manageTeamButton.type = 'button';
+    manageTeamButton.textContent = 'Manage team';
+    manageTeamButton.style.alignSelf = 'flex-start';
+    manageTeamButton.style.padding = '8px 12px';
+    manageTeamButton.style.border = '1px solid #cbd5e1';
+    manageTeamButton.style.borderRadius = '8px';
+    manageTeamButton.style.background = '#ffffff';
+    manageTeamButton.style.cursor = 'pointer';
+    manageTeamButton.addEventListener('click', onManageTeam);
   }
 
   const buttons = document.createElement('div');
@@ -404,7 +420,7 @@ const createProfileModal = ({ profile, onClose, onSave }) => {
     try {
       await onSave({
         displayName,
-        organizationName: isAdmin ? organizationName : undefined,
+        organizationName: isAdministrator ? organizationName : undefined,
       });
       onClose();
     } catch (error) {
@@ -425,6 +441,9 @@ const createProfileModal = ({ profile, onClose, onSave }) => {
 
   buttons.append(cancel, save);
   card.append(titleRow, displayNameField.wrapper, emailField.wrapper, organizationField.wrapper);
+  if (manageTeamButton) {
+    card.append(manageTeamButton);
+  }
   card.append(buttons);
 
   overlay.addEventListener('click', (event) => {
@@ -1180,6 +1199,10 @@ const getPrimaryRole = (roles) => {
     return 'super_admin';
   }
 
+  if (roles.includes('platform_admin')) {
+    return 'admin';
+  }
+
   if (roles.includes('admin')) {
     return 'admin';
   }
@@ -1192,6 +1215,8 @@ const getPrimaryRole = (roles) => {
 };
 
 const canManageUsers = (role) => role === 'super_admin' || role === 'admin' || role === 'manager';
+
+const isAdministratorRole = (role) => role === 'super_admin' || role === 'admin';
 
 const canInviteRole = (actorRole, targetRole) => {
   if (actorRole === 'super_admin') {
@@ -1393,6 +1418,9 @@ const renderApp = () => {
   });
 
   if (isAuthenticated && authState.profileModalOpen && authState.profile) {
+    const primaryRole = getPrimaryRole(authState.roles);
+    const canManageTeam = canManageUsers(primaryRole);
+    const isAdministrator = isAdministratorRole(primaryRole);
     let modal;
     const closeModal = () => {
       if (modal) {
@@ -1404,6 +1432,12 @@ const renderApp = () => {
 
     modal = createProfileModal({
       profile: authState.profile,
+      canManageTeam,
+      isAdministrator,
+      onManageTeam: () => {
+        authState.profileModalOpen = false;
+        window.location.hash = '#/team';
+      },
       onClose: closeModal,
       onSave: async ({ displayName, organizationName }) => {
         await apiClient.auth.updateProfile({ displayName, organizationName });
