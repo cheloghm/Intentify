@@ -23,7 +23,7 @@ public sealed class HttpChatCompletionClient(AiOptions options, HttpClient httpC
             {
                 Content = JsonContent.Create(new
                 {
-                    model = "gpt-4o-mini",
+                    model = options.ChatModel,
                     temperature = 0,
                     messages = new[]
                     {
