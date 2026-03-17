@@ -120,6 +120,26 @@ internal static class KnowledgeEndpoints
         return Results.Ok(sources.Select(ToResponse).ToArray());
     }
 
+    public static async Task<IResult> DeleteSourceAsync(string sourceId, HttpContext context, DeleteKnowledgeSourceHandler handler)
+    {
+        if (!Guid.TryParse(sourceId, out var parsedSourceId))
+        {
+            return Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(new Dictionary<string, string[]>
+            {
+                ["sourceId"] = ["Source id is invalid."]
+            }));
+        }
+
+        var tenantId = TryGetTenantId(context.User);
+        if (tenantId is null)
+        {
+            return Results.Unauthorized();
+        }
+
+        var result = await handler.HandleAsync(new DeleteKnowledgeSourceCommand(tenantId.Value, parsedSourceId), context.RequestAborted);
+        return result.Status == OperationStatus.NotFound ? Results.NotFound() : Results.NoContent();
+    }
+
     public static async Task<IResult> RetrieveAsync(string siteId, string query, int top, HttpContext context, RetrieveTopChunksHandler handler)
     {
         if (!Guid.TryParse(siteId, out var parsedSiteId))
@@ -164,6 +184,7 @@ internal static class KnowledgeEndpoints
             source.Url,
             source.Status.ToString(),
             source.FailureReason,
+            source.ChunkCount,
             source.CreatedAtUtc,
             source.UpdatedAtUtc,
             source.IndexedAtUtc);

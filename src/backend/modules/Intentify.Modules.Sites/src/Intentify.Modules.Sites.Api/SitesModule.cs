@@ -25,6 +25,7 @@ public sealed class SitesModule : IAppModule
         services.AddSingleton<CreateSiteHandler>();
         services.AddSingleton<ListSitesHandler>();
         services.AddSingleton<UpdateAllowedOriginsHandler>();
+        services.AddSingleton<UpdateSiteProfileHandler>();
         services.AddSingleton<RotateKeysHandler>();
         services.AddSingleton<GetSiteKeysHandler>();
         services.AddSingleton<GetInstallationStatusHandler>();
@@ -42,6 +43,7 @@ public sealed class SitesModule : IAppModule
 
         protectedGroup.MapPost(string.Empty, SitesEndpoints.CreateSiteAsync);
         protectedGroup.MapGet(string.Empty, SitesEndpoints.ListSitesAsync);
+        protectedGroup.MapPut("/{siteId}/profile", SitesEndpoints.UpdateSiteProfileAsync);
         protectedGroup.MapPut("/{siteId}/origins", SitesEndpoints.UpdateAllowedOriginsAsync);
         protectedGroup.MapPost("/{siteId}/keys/regenerate", SitesEndpoints.RegenerateKeysAsync);
         protectedGroup.MapGet("/{siteId}/keys", SitesEndpoints.GetSiteKeysAsync);

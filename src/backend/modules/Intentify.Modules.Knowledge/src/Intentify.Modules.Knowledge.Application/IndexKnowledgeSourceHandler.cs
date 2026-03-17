@@ -56,12 +56,12 @@ public sealed class IndexKnowledgeSourceHandler
             return OperationResult<IndexKnowledgeSourceResult>.NotFound();
         }
 
-        await _sourceRepository.UpdateStatusAsync(command.TenantId, source.Id, IndexStatus.Processing, null, null, cancellationToken);
+        await _sourceRepository.UpdateStatusAsync(command.TenantId, source.Id, IndexStatus.Processing, null, null, null, cancellationToken);
 
         var extracted = await _extractor.ExtractAsync(source, cancellationToken);
         if (!extracted.IsSuccess)
         {
-            await _sourceRepository.UpdateStatusAsync(command.TenantId, source.Id, IndexStatus.Failed, extracted.FailureReason, source.IndexedAtUtc, cancellationToken);
+            await _sourceRepository.UpdateStatusAsync(command.TenantId, source.Id, IndexStatus.Failed, extracted.FailureReason, source.IndexedAtUtc, 0, cancellationToken);
             return OperationResult<IndexKnowledgeSourceResult>.Success(new IndexKnowledgeSourceResult(IndexStatus.Failed.ToString(), 0, extracted.FailureReason));
         }
 
@@ -93,6 +93,7 @@ public sealed class IndexKnowledgeSourceHandler
                     .ToArray();
 
                 await _openSearchClient.EnsureIndexExistsAsync(cancellationToken);
+                await _openSearchClient.DeleteBySourceAsync(source.TenantId, source.SiteId, source.Id, source.BotId, cancellationToken);
                 await _openSearchClient.BulkUpsertChunksAsync(source.TenantId, source.SiteId, source.BotId, openSearchDocs, cancellationToken);
             }
             catch (Exception exception)
@@ -109,7 +110,7 @@ public sealed class IndexKnowledgeSourceHandler
         }
 
         var indexedAt = DateTime.UtcNow;
-        await _sourceRepository.UpdateStatusAsync(command.TenantId, source.Id, IndexStatus.Indexed, null, indexedAt, cancellationToken);
+        await _sourceRepository.UpdateStatusAsync(command.TenantId, source.Id, IndexStatus.Indexed, null, indexedAt, chunks.Length, cancellationToken);
 
         return OperationResult<IndexKnowledgeSourceResult>.Success(new IndexKnowledgeSourceResult(IndexStatus.Indexed.ToString(), chunks.Length, null));
     }
@@ -137,6 +138,13 @@ public interface IOpenSearchKnowledgeClient
         Guid? botId,
         string query,
         int topK,
+        CancellationToken cancellationToken = default);
+
+    Task DeleteBySourceAsync(
+        Guid tenantId,
+        Guid siteId,
+        Guid sourceId,
+        Guid? botId,
         CancellationToken cancellationToken = default);
 }
 

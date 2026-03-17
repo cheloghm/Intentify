@@ -53,6 +53,7 @@ internal sealed class OpenSearchRestClient : IOpenSearchKnowledgeClient
                     tenantId = new { type = "keyword" },
                     siteId = new { type = "keyword" },
                     botId = new { type = "keyword" },
+                    sourceId = new { type = "keyword" },
                     chunkId = new { type = "keyword" },
                     chunkIndex = new { type = "integer" },
                     content = new { type = "text" }
@@ -213,7 +214,11 @@ internal sealed class OpenSearchRestClient : IOpenSearchKnowledgeClient
                 ? parsedChunkId
                 : Guid.Empty;
 
-            if (chunkId == Guid.Empty)
+            var sourceId = source.TryGetProperty("sourceId", out var sourceIdElement) && Guid.TryParse(sourceIdElement.GetString(), out var parsedSourceId)
+                ? parsedSourceId
+                : Guid.Empty;
+
+            if (chunkId == Guid.Empty || sourceId == Guid.Empty)
             {
                 continue;
             }
@@ -226,7 +231,7 @@ internal sealed class OpenSearchRestClient : IOpenSearchKnowledgeClient
                 ? contentElement.GetString() ?? string.Empty
                 : string.Empty;
 
-            results.Add(new OpenSearchChunkDocument(chunkId, chunkIndex, content));
+            results.Add(new OpenSearchChunkDocument(sourceId, chunkId, chunkIndex, content));
         }
 
         _logger.LogInformation(
@@ -238,6 +243,48 @@ internal sealed class OpenSearchRestClient : IOpenSearchKnowledgeClient
             topK);
 
         return results;
+    }
+
+    public async Task DeleteBySourceAsync(Guid tenantId, Guid siteId, Guid sourceId, Guid? botId, CancellationToken cancellationToken = default)
+    {
+        if (!_options.Enabled)
+        {
+            return;
+        }
+
+        await EnsureIndexExistsAsync(cancellationToken);
+
+        var mustClauses = new List<object>
+        {
+            new { term = new Dictionary<string, string> { ["tenantId"] = tenantId.ToString("D") } },
+            new { term = new Dictionary<string, string> { ["siteId"] = siteId.ToString("D") } },
+            new { term = new Dictionary<string, string> { ["sourceId"] = sourceId.ToString("D") } }
+        };
+
+        if (botId.HasValue)
+        {
+            mustClauses.Add(new { term = new Dictionary<string, string> { ["botId"] = botId.Value.ToString("D") } });
+        }
+
+        var payload = new
+        {
+            query = new
+            {
+                @bool = new
+                {
+                    must = mustClauses
+                }
+            }
+        };
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/{_options.IndexName}/_delete_by_query")
+        {
+            Content = JsonContent.Create(payload, options: JsonOptions)
+        };
+        ApplyBasicAuthIfConfigured(request);
+
+        using var response = await _httpClient.SendAsync(request, cancellationToken);
+        response.EnsureSuccessStatusCode();
     }
 
     private string BuildBulkPayload(
@@ -264,6 +311,7 @@ internal sealed class OpenSearchRestClient : IOpenSearchKnowledgeClient
                 tenantId = tenantId.ToString("D"),
                 siteId = siteId.ToString("D"),
                 botId = botId?.ToString("D"),
+                sourceId = doc.SourceId.ToString("D"),
                 chunkId = doc.ChunkId.ToString("D"),
                 chunkIndex = doc.ChunkIndex,
                 content = doc.Content

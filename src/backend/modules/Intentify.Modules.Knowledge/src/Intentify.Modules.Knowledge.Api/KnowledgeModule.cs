@@ -45,6 +45,7 @@ public sealed class KnowledgeModule : IAppModule
         services.AddSingleton<CreateKnowledgeSourceHandler>();
         services.AddSingleton<UploadPdfHandler>();
         services.AddSingleton<IndexKnowledgeSourceHandler>();
+        services.AddSingleton<DeleteKnowledgeSourceHandler>();
         services.AddSingleton<RetrieveTopChunksHandler>();
     }
 
@@ -56,6 +57,7 @@ public sealed class KnowledgeModule : IAppModule
         group.MapPost("/sources", KnowledgeEndpoints.CreateSourceAsync);
         group.MapPost("/sources/{sourceId}/pdf", KnowledgeEndpoints.UploadPdfAsync);
         group.MapPost("/sources/{sourceId}/index", KnowledgeEndpoints.IndexSourceAsync);
+        group.MapDelete("/sources/{sourceId}", KnowledgeEndpoints.DeleteSourceAsync);
         group.MapGet("/sources", KnowledgeEndpoints.ListSourcesAsync);
         group.MapGet("/retrieve", KnowledgeEndpoints.RetrieveAsync);
     }

@@ -375,7 +375,7 @@ export const renderKnowledgeView = (container, { apiClient, toast } = {}) => {
     table.className = 'ui-table';
     const thead = document.createElement('thead');
     const headerRow = document.createElement('tr');
-    ['Name', 'Type', 'Status', 'Freshness', 'Last Indexed', 'Updated', ''].forEach((label) => {
+    ['Name', 'Type', 'Status', 'Error', 'Chunks', 'Freshness', 'Last Indexed', 'Updated', ''].forEach((label) => {
       const th = document.createElement('th');
       th.textContent = label;
       headerRow.appendChild(th);
@@ -394,6 +394,10 @@ export const renderKnowledgeView = (container, { apiClient, toast } = {}) => {
         createBadge({ text: source.status || 'Unknown', variant: getStatusVariant(source.status) })
       );
       const freshness = getFreshness(source);
+      const errorCell = document.createElement('td');
+      errorCell.textContent = source.failureReason || '—';
+      const chunkCountCell = document.createElement('td');
+      chunkCountCell.textContent = Number.isFinite(source.chunkCount) ? String(source.chunkCount) : '0';
       const freshnessCell = document.createElement('td');
       freshnessCell.appendChild(createBadge({ text: freshness.label, variant: freshness.variant }));
 
@@ -407,6 +411,8 @@ export const renderKnowledgeView = (container, { apiClient, toast } = {}) => {
         ? new Date(source.updatedAtUtc).toLocaleString()
         : '—';
       const actionCell = document.createElement('td');
+      actionCell.style.display = 'flex';
+      actionCell.style.gap = '8px';
       const indexButton = createButton({ label: 'Index' });
       indexButton.addEventListener('click', async () => {
         indexButton.disabled = true;
@@ -443,10 +449,23 @@ export const renderKnowledgeView = (container, { apiClient, toast } = {}) => {
         }
       });
       actionCell.appendChild(indexButton);
+      const deleteButton = createButton({ label: 'Delete' });
+      deleteButton.addEventListener('click', async () => {
+        deleteButton.disabled = true;
+        try {
+          await client.knowledge.deleteSource(source.sourceId);
+          notifier.show({ message: 'Source deleted.', variant: 'success' });
+          await loadSources();
+        } catch (error) {
+          notifier.show({ message: mapApiError(error).message, variant: 'danger' });
+          deleteButton.disabled = false;
+        }
+      });
+      actionCell.appendChild(deleteButton);
       if (source.failureReason) {
         statusCell.title = source.failureReason;
       }
-      tr.append(nameCell, typeCell, statusCell, freshnessCell, indexedCell, updatedCell, actionCell);
+      tr.append(nameCell, typeCell, statusCell, errorCell, chunkCountCell, freshnessCell, indexedCell, updatedCell, actionCell);
       tbody.appendChild(tr);
     });
 

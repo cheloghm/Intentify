@@ -52,6 +52,12 @@ public sealed class SiteRepository : ISiteRepository
         return results;
     }
 
+    public async Task<bool> TenantHasSiteAsync(Guid tenantId, CancellationToken cancellationToken = default)
+    {
+        await _ensureIndexes;
+        return await _sites.Find(site => site.TenantId == tenantId).AnyAsync(cancellationToken);
+    }
+
     public async Task InsertAsync(Site site, CancellationToken cancellationToken = default)
     {
         await _ensureIndexes;
@@ -82,6 +88,30 @@ public sealed class SiteRepository : ISiteRepository
         var update = Builders<Site>.Update
             .Set(site => site.SiteKey, siteKey)
             .Set(site => site.WidgetKey, widgetKey)
+            .Set(site => site.UpdatedAtUtc, DateTime.UtcNow);
+
+        return await _sites.FindOneAndUpdateAsync(
+            filter,
+            update,
+            new FindOneAndUpdateOptions<Site> { ReturnDocument = ReturnDocument.After },
+            cancellationToken);
+    }
+
+    public async Task<Site?> UpdateProfileAsync(
+        Guid tenantId,
+        Guid siteId,
+        string? description,
+        string? category,
+        IReadOnlyCollection<string> tags,
+        CancellationToken cancellationToken = default)
+    {
+        await _ensureIndexes;
+        var filter = Builders<Site>.Filter.Eq(site => site.Id, siteId) &
+            Builders<Site>.Filter.Eq(site => site.TenantId, tenantId);
+        var update = Builders<Site>.Update
+            .Set(site => site.Description, description)
+            .Set(site => site.Category, category)
+            .Set(site => site.Tags, tags.ToList())
             .Set(site => site.UpdatedAtUtc, DateTime.UtcNow);
 
         return await _sites.FindOneAndUpdateAsync(

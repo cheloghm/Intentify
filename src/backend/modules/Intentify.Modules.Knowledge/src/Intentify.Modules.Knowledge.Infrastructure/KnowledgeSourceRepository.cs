@@ -36,18 +36,23 @@ public sealed class KnowledgeSourceRepository : IKnowledgeSourceRepository
             .ToListAsync(cancellationToken);
     }
 
-    public async Task UpdateStatusAsync(Guid tenantId, Guid sourceId, IndexStatus status, string? failureReason, DateTime? indexedAtUtc, CancellationToken cancellationToken = default)
+    public async Task UpdateStatusAsync(Guid tenantId, Guid sourceId, IndexStatus status, string? failureReason, DateTime? indexedAtUtc, int? chunkCount, CancellationToken cancellationToken = default)
     {
         await _ensureIndexes;
-        var update = Builders<KnowledgeSource>.Update
+        var updateBuilder = Builders<KnowledgeSource>.Update
             .Set(item => item.Status, status)
             .Set(item => item.FailureReason, failureReason)
             .Set(item => item.IndexedAtUtc, indexedAtUtc)
             .Set(item => item.UpdatedAtUtc, DateTime.UtcNow);
 
+        if (chunkCount.HasValue)
+        {
+            updateBuilder = updateBuilder.Set(item => item.ChunkCount, chunkCount.Value);
+        }
+
         await _sources.UpdateOneAsync(
             item => item.TenantId == tenantId && item.Id == sourceId,
-            update,
+            updateBuilder,
             cancellationToken: cancellationToken);
     }
 
@@ -59,12 +64,20 @@ public sealed class KnowledgeSourceRepository : IKnowledgeSourceRepository
             .Set(item => item.Status, status)
             .Set(item => item.FailureReason, null)
             .Set(item => item.IndexedAtUtc, null)
+            .Set(item => item.ChunkCount, 0)
             .Set(item => item.UpdatedAtUtc, updatedAtUtc);
 
         await _sources.UpdateOneAsync(
             item => item.TenantId == tenantId && item.Id == sourceId,
             update,
             cancellationToken: cancellationToken);
+    }
+
+    public async Task<bool> DeleteSourceAsync(Guid tenantId, Guid sourceId, CancellationToken cancellationToken = default)
+    {
+        await _ensureIndexes;
+        var result = await _sources.DeleteOneAsync(item => item.TenantId == tenantId && item.Id == sourceId, cancellationToken);
+        return result.DeletedCount > 0;
     }
 
     private Task EnsureIndexesAsync()
