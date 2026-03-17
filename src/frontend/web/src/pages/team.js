@@ -42,6 +42,10 @@ const normalizeRole = (roles = []) => {
     return 'super_admin';
   }
 
+  if (roles.includes('platform_admin')) {
+    return 'admin';
+  }
+
   if (roles.includes('admin')) {
     return 'admin';
   }
