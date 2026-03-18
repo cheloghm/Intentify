@@ -81,6 +81,12 @@ public sealed class IndexKnowledgeSourceHandler
 
         if (_openSearchOptions?.Enabled == true && _openSearchClient is not null)
         {
+            _logger.LogInformation(
+                "OpenSearch indexing path is enabled and wired for tenant {TenantId}, site {SiteId}, source {SourceId}.",
+                source.TenantId,
+                source.SiteId,
+                source.Id);
+
             try
             {
                 var openSearchDocs = chunks
@@ -107,6 +113,14 @@ public sealed class IndexKnowledgeSourceHandler
                     exception.GetType().Name,
                     exception.Message);
             }
+        }
+        else if (_openSearchOptions?.Enabled == true && _openSearchClient is null)
+        {
+            _logger.LogWarning(
+                "OpenSearch indexing is enabled but OpenSearch client dependency is unavailable for tenant {TenantId}, site {SiteId}, source {SourceId}. Mongo chunk persistence will continue without OpenSearch sync.",
+                source.TenantId,
+                source.SiteId,
+                source.Id);
         }
 
         var indexedAt = DateTime.UtcNow;
