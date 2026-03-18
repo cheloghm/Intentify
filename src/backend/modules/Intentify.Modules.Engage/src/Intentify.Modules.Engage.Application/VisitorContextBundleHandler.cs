@@ -92,7 +92,12 @@ public sealed class VisitorContextBundleHandler
 
         var knowledgeTop = Clamp(query.KnowledgeTop, 1, MaxKnowledgeTop);
         var retrievedChunks = await _retrieveTopChunksHandler.HandleAsync(
-            new RetrieveTopChunksQuery(query.TenantId, query.SiteId, query.KnowledgeQuery.Trim(), knowledgeTop),
+            new RetrieveTopChunksQuery(
+                query.TenantId,
+                query.SiteId,
+                query.KnowledgeQuery.Trim(),
+                knowledgeTop,
+                engageSession?.BotId),
             cancellationToken);
 
         var knowledgeSnapshot = new KnowledgeRetrievalSnapshot(

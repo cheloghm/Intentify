@@ -78,9 +78,16 @@ public sealed class IndexKnowledgeSourceHandler
             .ToArray();
 
         await _chunkRepository.UpsertChunksAsync(command.TenantId, source.Id, chunks, cancellationToken);
+        string? openSearchSyncFailureReason = null;
 
         if (_openSearchOptions?.Enabled == true && _openSearchClient is not null)
         {
+            _logger.LogInformation(
+                "OpenSearch indexing path is enabled and wired for tenant {TenantId}, site {SiteId}, source {SourceId}.",
+                source.TenantId,
+                source.SiteId,
+                source.Id);
+
             try
             {
                 var openSearchDocs = chunks
@@ -98,6 +105,7 @@ public sealed class IndexKnowledgeSourceHandler
             }
             catch (Exception exception)
             {
+                openSearchSyncFailureReason = "OpenSearchSyncFailed";
                 _logger.LogWarning(
                     exception,
                     "OpenSearch indexing failed for tenant {TenantId}, site {SiteId}, source {SourceId}. {ExceptionType}: {ExceptionMessage}",
@@ -108,9 +116,18 @@ public sealed class IndexKnowledgeSourceHandler
                     exception.Message);
             }
         }
+        else if (_openSearchOptions?.Enabled == true && _openSearchClient is null)
+        {
+            openSearchSyncFailureReason = "OpenSearchClientUnavailable";
+            _logger.LogWarning(
+                "OpenSearch indexing is enabled but OpenSearch client dependency is unavailable for tenant {TenantId}, site {SiteId}, source {SourceId}. Mongo chunk persistence will continue without OpenSearch sync.",
+                source.TenantId,
+                source.SiteId,
+                source.Id);
+        }
 
         var indexedAt = DateTime.UtcNow;
-        await _sourceRepository.UpdateStatusAsync(command.TenantId, source.Id, IndexStatus.Indexed, null, indexedAt, chunks.Length, cancellationToken);
+        await _sourceRepository.UpdateStatusAsync(command.TenantId, source.Id, IndexStatus.Indexed, openSearchSyncFailureReason, indexedAt, chunks.Length, cancellationToken);
 
         return OperationResult<IndexKnowledgeSourceResult>.Success(new IndexKnowledgeSourceResult(IndexStatus.Indexed.ToString(), chunks.Length, null));
     }

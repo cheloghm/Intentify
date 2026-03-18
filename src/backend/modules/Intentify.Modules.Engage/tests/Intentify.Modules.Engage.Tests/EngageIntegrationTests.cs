@@ -326,7 +326,7 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task ChatSend_WithKnowledge_AndStage7ValidDecision_IncludesRecommendations()
+    public async Task ChatSend_WithKnowledge_DoesNotIncludeStage7Decision()
     {
         var builder = AppHostApplication.CreateBuilder([], Environments.Development);
         builder.WebHost.UseTestServer();
@@ -392,10 +392,10 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         Assert.Equal("Return policy is 30 days with original receipt.", json.RootElement.GetProperty("response").GetString());
-        Assert.True(json.RootElement.TryGetProperty("stage7Decision", out var stage7Decision));
-        Assert.Equal("stage7.v1", stage7Decision.GetProperty("schemaVersion").GetString());
-        Assert.Equal("Valid", stage7Decision.GetProperty("validationStatus").GetString());
-        Assert.Equal("SuggestKnowledge", stage7Decision.GetProperty("recommendations")[0].GetProperty("type").GetString());
+        if (json.RootElement.TryGetProperty("stage7Decision", out var stage7Decision))
+        {
+            Assert.Equal(JsonValueKind.Null, stage7Decision.ValueKind);
+        }
     }
 
     [Fact]

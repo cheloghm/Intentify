@@ -308,6 +308,21 @@ internal sealed class RecordingOpenSearchKnowledgeClient : IOpenSearchKnowledgeC
     internal sealed record SearchCall(Guid TenantId, Guid SiteId, Guid? BotId, string Query, int TopK);
 }
 
+internal sealed class ThrowingOpenSearchKnowledgeClient : IOpenSearchKnowledgeClient
+{
+    public Task EnsureIndexExistsAsync(CancellationToken cancellationToken = default)
+        => throw new InvalidOperationException("OpenSearch unavailable");
+
+    public Task BulkUpsertChunksAsync(Guid tenantId, Guid siteId, Guid? botId, IReadOnlyCollection<OpenSearchChunkDocument> chunkDocs, CancellationToken cancellationToken = default)
+        => throw new InvalidOperationException("OpenSearch unavailable");
+
+    public Task<IReadOnlyCollection<OpenSearchChunkDocument>> SearchTopChunksAsync(Guid tenantId, Guid siteId, Guid? botId, string query, int topK, CancellationToken cancellationToken = default)
+        => throw new InvalidOperationException("OpenSearch unavailable");
+
+    public Task DeleteBySourceAsync(Guid tenantId, Guid siteId, Guid sourceId, Guid? botId, CancellationToken cancellationToken = default)
+        => throw new InvalidOperationException("OpenSearch unavailable");
+}
+
 public sealed class IndexingStatusTransitionTests
 {
     [Fact]
@@ -390,6 +405,40 @@ public sealed class IndexingStatusTransitionTests
         Assert.True(result.IsSuccess);
         Assert.Equal(IndexStatus.Indexed, sourceRepo.Stored.Status);
         Assert.NotNull(sourceRepo.Stored.IndexedAtUtc);
+        Assert.Single(chunkRepo.Stored);
+    }
+
+    [Fact]
+    public async Task Indexing_WhenOpenSearchSyncFails_SurfacesFailureReasonWhileKeepingMongoIndexed()
+    {
+        var source = new KnowledgeSource
+        {
+            TenantId = Guid.NewGuid(),
+            SiteId = Guid.NewGuid(),
+            BotId = Guid.NewGuid(),
+            Type = "Text",
+            TextContent = "alpha beta",
+            Status = IndexStatus.Queued,
+            CreatedAtUtc = DateTime.UtcNow,
+            UpdatedAtUtc = DateTime.UtcNow
+        };
+
+        var sourceRepo = new InMemorySourceRepository(source);
+        var chunkRepo = new InMemoryChunkRepository();
+        var handler = new IndexKnowledgeSourceHandler(
+            sourceRepo,
+            chunkRepo,
+            new KnowledgeTextExtractor(new FakeFactory(_ => new HttpResponseMessage(HttpStatusCode.OK))),
+            new KnowledgeChunker(),
+            new StubSiteRepository(),
+            new EnabledOpenSearchOptions(),
+            new ThrowingOpenSearchKnowledgeClient());
+
+        var result = await handler.HandleAsync(new IndexKnowledgeSourceCommand(source.TenantId, source.Id));
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(IndexStatus.Indexed, sourceRepo.Stored.Status);
+        Assert.Equal("OpenSearchSyncFailed", sourceRepo.Stored.FailureReason);
         Assert.Single(chunkRepo.Stored);
     }
 

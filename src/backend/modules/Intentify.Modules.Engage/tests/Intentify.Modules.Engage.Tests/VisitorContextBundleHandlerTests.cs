@@ -132,12 +132,26 @@ public sealed class VisitorContextBundleHandlerTests
         Assert.Equal(OperationStatus.NotFound, result.Status);
     }
 
+    [Fact]
+    public async Task HandleAsync_UsesEngageSessionBotId_ForKnowledgeRetrievalScoping()
+    {
+        var fixture = new Fixture();
+        var query = fixture.CreateQuery(visitorId: fixture.Visitor.Id, engageSessionId: fixture.EngageSession.Id);
+
+        var result = await fixture.Handler.HandleAsync(query);
+
+        Assert.Equal(OperationStatus.Success, result.Status);
+        var value = Assert.IsType<VisitorContextBundle>(result.Value);
+        Assert.DoesNotContain(value.KnowledgeRetrievalSnapshot.TopChunks, item => item.SourceId == fixture.OtherBotSourceId);
+    }
+
     private sealed class Fixture
     {
         public Guid TenantId { get; } = Guid.NewGuid();
         public Guid SiteId { get; } = Guid.NewGuid();
         public Visitor Visitor { get; }
         public EngageChatSession EngageSession { get; }
+        public Guid OtherBotSourceId { get; }
         public VisitorContextBundleHandler Handler { get; }
 
         public Fixture(bool includeOptionalData = true)
@@ -190,12 +204,18 @@ public sealed class VisitorContextBundleHandlerTests
 
             var leadLinker = new FakeLeadVisitorLinker(Visitor.Id);
 
+            var fallbackSourceId = Guid.NewGuid();
+            var matchingBotSourceId = Guid.NewGuid();
+            OtherBotSourceId = Guid.NewGuid();
             var knowledgeSources = new FakeKnowledgeSourceRepository([
-                new KnowledgeSource { Id = Guid.NewGuid(), TenantId = TenantId, SiteId = SiteId, BotId = Guid.Empty, Type = "text", CreatedAtUtc = DateTime.UtcNow, UpdatedAtUtc = DateTime.UtcNow }
+                new KnowledgeSource { Id = fallbackSourceId, TenantId = TenantId, SiteId = SiteId, BotId = Guid.Empty, Type = "text", CreatedAtUtc = DateTime.UtcNow, UpdatedAtUtc = DateTime.UtcNow },
+                new KnowledgeSource { Id = matchingBotSourceId, TenantId = TenantId, SiteId = SiteId, BotId = EngageSession.BotId, Type = "text", CreatedAtUtc = DateTime.UtcNow, UpdatedAtUtc = DateTime.UtcNow },
+                new KnowledgeSource { Id = OtherBotSourceId, TenantId = TenantId, SiteId = SiteId, BotId = Guid.NewGuid(), Type = "text", CreatedAtUtc = DateTime.UtcNow, UpdatedAtUtc = DateTime.UtcNow }
             ]);
-            var sourceId = knowledgeSources.Items[0].Id;
             var knowledgeChunks = new FakeKnowledgeChunkRepository([
-                new KnowledgeChunk { Id = Guid.NewGuid(), TenantId = TenantId, SiteId = SiteId, SourceId = sourceId, ChunkIndex = 0, Content = new string('k', 400), CreatedAtUtc = DateTime.UtcNow }
+                new KnowledgeChunk { Id = Guid.NewGuid(), TenantId = TenantId, SiteId = SiteId, SourceId = fallbackSourceId, ChunkIndex = 0, Content = "return policy fallback content", CreatedAtUtc = DateTime.UtcNow },
+                new KnowledgeChunk { Id = Guid.NewGuid(), TenantId = TenantId, SiteId = SiteId, SourceId = matchingBotSourceId, ChunkIndex = 1, Content = "return policy matching bot content", CreatedAtUtc = DateTime.UtcNow },
+                new KnowledgeChunk { Id = Guid.NewGuid(), TenantId = TenantId, SiteId = SiteId, SourceId = OtherBotSourceId, ChunkIndex = 2, Content = "return policy other bot content", CreatedAtUtc = DateTime.UtcNow }
             ]);
             var retrieveTopChunks = new RetrieveTopChunksHandler(knowledgeChunks, knowledgeSources, NullLogger<RetrieveTopChunksHandler>.Instance);
 
