@@ -38,6 +38,12 @@ public sealed partial class RetrieveTopChunksHandler
 
         if (_openSearchOptions?.Enabled == true && _openSearchClient is not null)
         {
+            _logger.LogInformation(
+                "OpenSearch retrieval path is enabled and wired for tenant {TenantId}, site {SiteId}, bot {BotId}.",
+                query.TenantId,
+                query.SiteId,
+                query.BotId);
+
             try
             {
                 var openSearchResults = await _openSearchClient.SearchTopChunksAsync(
@@ -80,6 +86,14 @@ public sealed partial class RetrieveTopChunksHandler
                     query.SiteId,
                     query.BotId);
             }
+        }
+        else if (_openSearchOptions?.Enabled == true && _openSearchClient is null)
+        {
+            _logger.LogWarning(
+                "OpenSearch retrieval is enabled but OpenSearch client dependency is unavailable for tenant {TenantId}, site {SiteId}, bot {BotId}. Falling back to Mongo retrieval.",
+                query.TenantId,
+                query.SiteId,
+                query.BotId);
         }
 
         var sources = await _sourceRepository.ListSourcesAsync(query.TenantId, query.SiteId, cancellationToken);
