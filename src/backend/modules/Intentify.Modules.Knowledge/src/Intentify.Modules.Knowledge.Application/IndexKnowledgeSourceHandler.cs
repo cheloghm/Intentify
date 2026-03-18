@@ -78,6 +78,7 @@ public sealed class IndexKnowledgeSourceHandler
             .ToArray();
 
         await _chunkRepository.UpsertChunksAsync(command.TenantId, source.Id, chunks, cancellationToken);
+        string? openSearchSyncFailureReason = null;
 
         if (_openSearchOptions?.Enabled == true && _openSearchClient is not null)
         {
@@ -104,6 +105,7 @@ public sealed class IndexKnowledgeSourceHandler
             }
             catch (Exception exception)
             {
+                openSearchSyncFailureReason = "OpenSearchSyncFailed";
                 _logger.LogWarning(
                     exception,
                     "OpenSearch indexing failed for tenant {TenantId}, site {SiteId}, source {SourceId}. {ExceptionType}: {ExceptionMessage}",
@@ -124,7 +126,7 @@ public sealed class IndexKnowledgeSourceHandler
         }
 
         var indexedAt = DateTime.UtcNow;
-        await _sourceRepository.UpdateStatusAsync(command.TenantId, source.Id, IndexStatus.Indexed, null, indexedAt, chunks.Length, cancellationToken);
+        await _sourceRepository.UpdateStatusAsync(command.TenantId, source.Id, IndexStatus.Indexed, openSearchSyncFailureReason, indexedAt, chunks.Length, cancellationToken);
 
         return OperationResult<IndexKnowledgeSourceResult>.Success(new IndexKnowledgeSourceResult(IndexStatus.Indexed.ToString(), chunks.Length, null));
     }

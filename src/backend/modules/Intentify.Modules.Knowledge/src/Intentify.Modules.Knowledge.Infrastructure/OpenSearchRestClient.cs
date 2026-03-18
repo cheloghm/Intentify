@@ -150,6 +150,7 @@ internal sealed class OpenSearchRestClient : IOpenSearchKnowledgeClient
                     should = new object[]
                     {
                         new { term = new Dictionary<string, string> { ["botId"] = botId.Value.ToString("D") } },
+                        new { term = new Dictionary<string, string> { ["botId"] = Guid.Empty.ToString("D") } },
                         new { @bool = new { must_not = new { exists = new { field = "botId" } } } }
                     },
                     minimum_should_match = 1
@@ -232,7 +233,12 @@ internal sealed class OpenSearchRestClient : IOpenSearchKnowledgeClient
                 ? contentElement.GetString() ?? string.Empty
                 : string.Empty;
 
-            results.Add(new OpenSearchChunkDocument(sourceId, chunkId, chunkIndex, content));
+            var resolvedBotId = source.TryGetProperty("botId", out var botIdElement)
+                && Guid.TryParse(botIdElement.GetString(), out var parsedBotId)
+                    ? parsedBotId
+                    : Guid.Empty;
+
+            results.Add(new OpenSearchChunkDocument(sourceId, chunkId, chunkIndex, content, resolvedBotId));
         }
 
         _logger.LogInformation(
