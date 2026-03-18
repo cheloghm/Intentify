@@ -118,7 +118,6 @@ public sealed class IndexKnowledgeSourceHandler
         }
         else if (_openSearchOptions?.Enabled == true && _openSearchClient is null)
         {
-            openSearchSyncFailureReason = "OpenSearchClientUnavailable";
             _logger.LogWarning(
                 "OpenSearch indexing is enabled but OpenSearch client dependency is unavailable for tenant {TenantId}, site {SiteId}, source {SourceId}. Mongo chunk persistence will continue without OpenSearch sync.",
                 source.TenantId,
