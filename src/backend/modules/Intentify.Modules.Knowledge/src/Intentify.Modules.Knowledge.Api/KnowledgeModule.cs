@@ -23,6 +23,8 @@ public sealed class KnowledgeModule : IAppModule
         var openSearchOptions = new OpenSearchOptions();
         configuration.GetSection(OpenSearchOptions.ConfigurationSection).Bind(openSearchOptions);
         services.AddSingleton(openSearchOptions);
+        services.AddSingleton<IOpenSearchOptions>(serviceProvider =>
+            serviceProvider.GetRequiredService<OpenSearchOptions>());
 
         services.AddHttpClient(OpenSearchServiceCollectionExtensions.ClientName, (serviceProvider, client) =>
         {
@@ -36,6 +38,8 @@ public sealed class KnowledgeModule : IAppModule
         });
 
         services.AddKnowledgeOpenSearchClient();
+        services.AddSingleton<Intentify.Modules.Knowledge.Application.IOpenSearchKnowledgeClient>(serviceProvider =>
+            serviceProvider.GetRequiredService<Intentify.Modules.Knowledge.Infrastructure.IOpenSearchKnowledgeClient>());
 
         services.AddSingleton<IKnowledgeSourceRepository, KnowledgeSourceRepository>();
         services.AddSingleton<IKnowledgeChunkRepository, KnowledgeChunkRepository>();

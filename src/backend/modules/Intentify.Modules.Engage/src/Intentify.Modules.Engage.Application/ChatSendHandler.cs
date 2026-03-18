@@ -74,8 +74,6 @@ public sealed class ChatSendHandler
     private readonly UpsertLeadFromPromoEntryHandler _upsertLeadFromPromoEntryHandler;
     private readonly RetrieveTopChunksHandler _retrieveTopChunksHandler;
     private readonly IChatCompletionClient _chatCompletionClient;
-    private readonly VisitorContextBundleHandler _stage7VisitorContextBundleHandler;
-    private readonly AiDecisionGenerationService _stage7AiDecisionGenerationService;
     private readonly TimeSpan _sessionTimeout;
     private readonly ILogger<ChatSendHandler> _logger;
 
@@ -90,8 +88,6 @@ public sealed class ChatSendHandler
         UpsertLeadFromPromoEntryHandler upsertLeadFromPromoEntryHandler,
         RetrieveTopChunksHandler retrieveTopChunksHandler,
         IChatCompletionClient chatCompletionClient,
-        VisitorContextBundleHandler stage7VisitorContextBundleHandler,
-        AiDecisionGenerationService stage7AiDecisionGenerationService,
         int sessionTimeoutMinutes,
         ILogger<ChatSendHandler> logger)
     {
@@ -105,8 +101,6 @@ public sealed class ChatSendHandler
         _upsertLeadFromPromoEntryHandler = upsertLeadFromPromoEntryHandler;
         _retrieveTopChunksHandler = retrieveTopChunksHandler;
         _chatCompletionClient = chatCompletionClient;
-        _stage7VisitorContextBundleHandler = stage7VisitorContextBundleHandler;
-        _stage7AiDecisionGenerationService = stage7AiDecisionGenerationService;
         _sessionTimeout = TimeSpan.FromMinutes(sessionTimeoutMinutes > 0 ? sessionTimeoutMinutes : 30);
         _logger = logger;
     }
@@ -280,57 +274,13 @@ public sealed class ChatSendHandler
 
         LogChatQualitySignal(session.Id, "Grounded", confidence, false, citations.Length, null, intent.ToString());
 
-        var stage7Decision = await TryGenerateStage7DecisionAsync(
-            site.TenantId,
-            site.Id,
-            session,
-            command.Message,
-            cancellationToken);
-
         return OperationResult<ChatSendResult>.Success(new ChatSendResult(
             session.Id,
             response,
             confidence,
             false,
             citations,
-            Stage7Decision: stage7Decision));
-    }
-
-
-    private async Task<AiDecisionContract?> TryGenerateStage7DecisionAsync(
-    Guid tenantId,
-    Guid siteId,
-    EngageChatSession session,
-    string message,
-    CancellationToken cancellationToken)
-    {
-        try
-        {
-            var visitorId = await ResolveVisitorIdAsync(tenantId, siteId, session.CollectorSessionId, cancellationToken);
-            var bundleResult = await _stage7VisitorContextBundleHandler.HandleAsync(
-                new BuildVisitorContextBundleQuery(
-                    tenantId,
-                    siteId,
-                    visitorId,
-                    session.Id,
-                    message),
-                cancellationToken);
-
-            if (!bundleResult.IsSuccess || bundleResult.Value is null)
-            {
-                return null;
-            }
-
-            var decision = await _stage7AiDecisionGenerationService.GenerateAsync(bundleResult.Value, cancellationToken);
-            return decision.ValidationStatus == AiDecisionValidationStatus.Valid
-                ? decision
-                : null;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Stage7 recommendation generation failed for session {SessionId}.", session.Id);
-            return null;
-        }
+            Stage7Decision: null));
     }
 
     private static decimal ComputeConfidence(bool hasChunks, int topScore)
