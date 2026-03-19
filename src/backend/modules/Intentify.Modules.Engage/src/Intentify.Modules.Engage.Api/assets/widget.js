@@ -27,6 +27,7 @@
   var isHydrating = false;
   var typingIndicatorRow = null;
   var contactDetailsPrompt = 'Sorry about that — I’ll get someone to help. What’s your name and best email?';
+  var collectorSessionWaitMs = 1200;
 
   function endpoint(path) { return baseUrl + path; }
 
@@ -144,7 +145,7 @@
     row.appendChild(bubble);
     messages.appendChild(row);
     messages.scrollTop = messages.scrollHeight;
-    return bubble;
+    return row;
   }
 
   function removeTypingIndicator() {
@@ -175,7 +176,7 @@
   }
 
   function addMessage(role, text) {
-    addBubble(role, function(bubble) {
+    return addBubble(role, function(bubble) {
       var content = document.createElement('div');
       content.textContent = text;
       bubble.appendChild(content);
@@ -446,6 +447,7 @@
       .then(function(response) {
         if (response.status === 404) {
           clearStoredSession();
+          messages.innerHTML = '';
           return null;
         }
 
@@ -525,17 +527,22 @@
   }
 
   function sendChatMessage(message) {
-    addMessage('user', message);
+    var optimisticUserRow = addMessage('user', message);
     setSendingState(true);
     showTypingIndicator();
-
-    return fetch(endpoint('/engage/chat/send?widgetKey=' + encodeURIComponent(widgetKey)), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ widgetKey: widgetKey, sessionId: sessionId, message: message, collectorSessionId: readCookie('intentify_sid') })
-    })
+    return waitForCollectorSessionId()
+      .then(function(collectorSessionId) {
+        return fetch(endpoint('/engage/chat/send?widgetKey=' + encodeURIComponent(widgetKey)), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ widgetKey: widgetKey, sessionId: sessionId, message: message, collectorSessionId: collectorSessionId })
+        });
+      })
       .then(function(response) {
         if (!response.ok) {
+          if (response.status === 404) {
+            clearStoredSession();
+          }
           throw new Error('Chat request failed with status ' + response.status);
         }
         return response.json();
@@ -557,10 +564,38 @@
       .catch(function(error) {
         console.warn('Intentify Engage widget send failed:', error);
         removeTypingIndicator();
+        if (optimisticUserRow && optimisticUserRow.parentNode) {
+          optimisticUserRow.parentNode.removeChild(optimisticUserRow);
+        }
+        if (!input.value) {
+          input.value = message;
+        }
         addMessage('bot', 'Sorry, something went wrong. Please try again.');
       })
       .finally(function() {
         setSendingState(false);
       });
+  }
+
+  function waitForCollectorSessionId() {
+    var existing = readCookie('intentify_sid');
+    if (existing) {
+      return Promise.resolve(existing);
+    }
+
+    return new Promise(function(resolve) {
+      var startedAt = Date.now();
+      function poll() {
+        var current = readCookie('intentify_sid');
+        if (current || Date.now() - startedAt >= collectorSessionWaitMs) {
+          resolve(current || null);
+          return;
+        }
+
+        setTimeout(poll, 100);
+      }
+
+      poll();
+    });
   }
 })();

@@ -924,12 +924,13 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.OK, detailsResponse.StatusCode);
         using var detailsJson = JsonDocument.Parse(await detailsResponse.Content.ReadAsStringAsync());
         Assert.Equal("Thanks — I’ve got your details. Our team will contact you shortly.", detailsJson.RootElement.GetProperty("response").GetString());
-        Assert.False(detailsJson.RootElement.GetProperty("ticketCreated").GetBoolean());
+        Assert.True(detailsJson.RootElement.GetProperty("ticketCreated").GetBoolean());
 
         var database = new MongoClient(_mongo.ConnectionString).GetDatabase(_mongo.DatabaseName);
         var tickets = database.GetCollection<BsonTicket>("tickets");
         var supportTicket = await tickets.Find(item => item.EngageSessionId == Guid.Parse(sessionId!)).FirstOrDefaultAsync();
-        Assert.Null(supportTicket);
+        Assert.NotNull(supportTicket);
+        Assert.Equal("Engage handoff: ContactDetails", supportTicket!.Subject);
 
         var leads = database.GetCollection<BsonLead>("leads");
         var createdLead = await leads.Find(item => item.SiteId == Guid.Parse(site.SiteId) && item.PrimaryEmail == "sam@example.com").FirstOrDefaultAsync();
@@ -1006,6 +1007,94 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
 
         Assert.True(match.Success);
         Assert.DoesNotContain(secondMessage, match.Groups["distilled"].Value, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ChatSend_SupportContactCapture_DoesNotRequireExactAssistantPrompt()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var helpResponse = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "the checkout form isn't working"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, helpResponse.StatusCode);
+        using var helpJson = JsonDocument.Parse(await helpResponse.Content.ReadAsStringAsync());
+        var sessionId = Guid.Parse(helpJson.RootElement.GetProperty("sessionId").GetString()!);
+
+        var database = new MongoClient(_mongo.ConnectionString).GetDatabase(_mongo.DatabaseName);
+        var messagesCollection = database.GetCollection<BsonDocument>("EngageChatMessages");
+        var assistantFilter = Builders<BsonDocument>.Filter.Eq("SessionId", sessionId) & Builders<BsonDocument>.Filter.Eq("Role", "assistant");
+        var latestAssistant = await messagesCollection.Find(assistantFilter).SortByDescending(item => item["CreatedAtUtc"]).FirstOrDefaultAsync();
+        Assert.NotNull(latestAssistant);
+
+        await messagesCollection.UpdateOneAsync(
+            Builders<BsonDocument>.Filter.Eq("_id", latestAssistant!["_id"]),
+            Builders<BsonDocument>.Update.Set("Content", "I can connect you with our team. Please share your full name and email so we can follow up."));
+
+        var detailsResponse = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            sessionId = sessionId.ToString("N"),
+            message = "Casey Example, casey@example.com, 415-333-9999"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, detailsResponse.StatusCode);
+        using var detailsJson = JsonDocument.Parse(await detailsResponse.Content.ReadAsStringAsync());
+        Assert.Equal("Thanks — I’ve got your details. Our team will contact you shortly.", detailsJson.RootElement.GetProperty("response").GetString());
+    }
+
+    [Fact]
+    public async Task ChatSend_LowConfidenceWithoutChunks_UsesDeterministicFallbackWithoutClarificationAiCall()
+    {
+        var clarificationPromptCount = 0;
+
+        var builder = AppHostApplication.CreateBuilder([], Environments.Development);
+        builder.WebHost.UseTestServer();
+        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Intentify:Jwt:Issuer"] = "intentify",
+            ["Intentify:Jwt:Audience"] = "intentify-users",
+            ["Intentify:Jwt:SigningKey"] = "test-signing-key-1234567890-EXTRA-KEY",
+            ["Intentify:Jwt:AccessTokenMinutes"] = "30",
+            ["Intentify:Mongo:ConnectionString"] = _mongo.ConnectionString,
+            ["Intentify:Mongo:DatabaseName"] = _mongo.DatabaseName
+        });
+
+        builder.WebHost.ConfigureTestServices(services =>
+        {
+            services.RemoveAll<IChatCompletionClient>();
+            services.AddSingleton<IChatCompletionClient>(new FakeChatCompletionClient(prompt =>
+            {
+                if (prompt.Contains("Write exactly one short reply for a low-support situation.", StringComparison.Ordinal))
+                {
+                    clarificationPromptCount++;
+                }
+
+                return Result<string>.Success("Unused response");
+            }));
+        });
+
+        await using var app = AppHostApplication.Build(builder);
+        await app.StartAsync();
+        using var client = app.GetTestClient();
+
+        var token = await RegisterUserAsync(client);
+        var site = await CreateSiteAsync(client, token);
+
+        var response = await client.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "what is your phone number?"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("I can help with contact details — are you looking for a phone number, email, or contact form?", json.RootElement.GetProperty("response").GetString());
+        Assert.Equal(0, clarificationPromptCount);
     }
 
     [Fact]

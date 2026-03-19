@@ -176,6 +176,7 @@ public sealed class ChatSendHandler
         await _sessionRepository.TouchAsync(session.Id, now, cancellationToken);
 
         var recentMessages = await _messageRepository.ListBySessionAsync(session.Id, cancellationToken);
+        var sessionHandoffs = await _ticketRepository.ListBySessionAsync(session.Id, cancellationToken);
 
         if (TryResolveManualPromo(command.Message, out var promoPublicKey))
         {
@@ -220,9 +221,19 @@ public sealed class ChatSendHandler
             return OperationResult<ChatSendResult>.Success(new ChatSendResult(session.Id, smalltalkResponse, 1m, false, []));
         }
 
-        if (await IsAwaitingContactDetailsAsync(session.Id, cancellationToken) && (ContainsEmail(command.Message) || ContainsPhone(command.Message)))
+        if (IsAwaitingContactDetails(sessionHandoffs, recentMessages) && (ContainsEmail(command.Message) || ContainsPhone(command.Message)))
         {
             return await CaptureContactDetailsAsync(site, session, command.Message, now, true, cancellationToken);
+        }
+
+        if (IsAwaitingCommercialContactDetails(sessionHandoffs) && (ContainsEmail(command.Message) || ContainsPhone(command.Message)))
+        {
+            return await CaptureContactDetailsAsync(site, session, command.Message, now, true, cancellationToken);
+        }
+
+        if (TryBuildCommercialIntentContactPrompt(command.Message, out var commercialPrompt))
+        {
+            return await CreateCommercialLeadCapturePromptAsync(site, session, command.Message, commercialPrompt, now, cancellationToken);
         }
 
         if (NeedsHumanHelp(command.Message))
@@ -527,7 +538,9 @@ Normalized user question (for typo recovery):
         if (!shouldEscalate)
         {
             var fallback = IsRealQuestion(userMessage) || (hasDirectQuestionContext && isContinuationReply)
-                ? await BuildBusinessAwareClarificationResponseAsync(bot, userMessage, normalizedUserMessage, intent, messages, retrievedChunks, cancellationToken)
+                ? reason == "LowConfidence" && retrievedChunks.Count == 0
+                    ? BuildDeterministicClarificationResponse(intent)
+                    : await BuildBusinessAwareClarificationResponseAsync(bot, userMessage, normalizedUserMessage, intent, messages, retrievedChunks, cancellationToken)
                 : BuildSoftFallbackResponse(bot);
             return await CreateAssistantResponseAsync(session.Id, now, fallback, 0.2m, false, "Fallback", reason, cancellationToken);
         }
@@ -779,27 +792,13 @@ Normalized user message:
 
     private static bool ContainsPhone(string message) => !string.IsNullOrWhiteSpace(TryExtractPhone(message));
 
-    private async Task<bool> IsAwaitingContactDetailsAsync(Guid sessionId, CancellationToken cancellationToken)
+    private static bool IsAwaitingContactDetails(IReadOnlyCollection<EngageHandoffTicket> handoffs, IReadOnlyCollection<EngageChatMessage> messages)
     {
-        var handoffs = await _ticketRepository.ListBySessionAsync(sessionId, cancellationToken);
-        if (handoffs.Count == 0)
+        if (!handoffs.Any(item => string.Equals(item.Reason, "NeedsHumanHelp", StringComparison.Ordinal)))
         {
             return false;
         }
 
-        var messages = await _messageRepository.ListBySessionAsync(sessionId, cancellationToken);
-        var lastAssistantMessage = messages
-            .Where(item => string.Equals(item.Role, "assistant", StringComparison.OrdinalIgnoreCase))
-            .OrderByDescending(item => item.CreatedAtUtc)
-            .Select(item => item.Content)
-            .FirstOrDefault();
-
-        return string.Equals(lastAssistantMessage, AskForContactDetailsResponse, StringComparison.Ordinal);
-    }
-
-    private async Task<bool> IsAwaitingCommercialContactDetailsAsync(Guid sessionId, CancellationToken cancellationToken)
-    {
-        var messages = await _messageRepository.ListBySessionAsync(sessionId, cancellationToken);
         var lastAssistantMessage = messages
             .Where(item => string.Equals(item.Role, "assistant", StringComparison.OrdinalIgnoreCase))
             .OrderByDescending(item => item.CreatedAtUtc)
@@ -807,7 +806,55 @@ Normalized user message:
             .FirstOrDefault();
 
         return !string.IsNullOrWhiteSpace(lastAssistantMessage)
-            && lastAssistantMessage.StartsWith(CommercialContactDetailsPrefix, StringComparison.Ordinal);
+            && lastAssistantMessage.Contains("name", StringComparison.OrdinalIgnoreCase)
+            && lastAssistantMessage.Contains("email", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsAwaitingCommercialContactDetails(IReadOnlyCollection<EngageHandoffTicket> handoffs)
+    {
+        return handoffs.Any(item => string.Equals(item.Reason, "CommercialLeadCapture", StringComparison.Ordinal));
+    }
+
+    private async Task<OperationResult<ChatSendResult>> CreateCommercialLeadCapturePromptAsync(
+        Site site,
+        EngageChatSession session,
+        string userMessage,
+        string prompt,
+        DateTime now,
+        CancellationToken cancellationToken)
+    {
+        var handoffs = await _ticketRepository.ListBySessionAsync(session.Id, cancellationToken);
+        if (!handoffs.Any(item => string.Equals(item.Reason, "CommercialLeadCapture", StringComparison.Ordinal)))
+        {
+            var handoffPackage = await BuildHandoffPackageAsync(session.Id, userMessage, cancellationToken);
+            await _ticketRepository.InsertAsync(new EngageHandoffTicket
+            {
+                TenantId = site.TenantId,
+                SiteId = site.Id,
+                SessionId = session.Id,
+                UserMessage = userMessage,
+                Reason = "CommercialLeadCapture",
+                LastAssistantMessage = handoffPackage.LastAssistantMessage,
+                TranscriptExcerpt = handoffPackage.TranscriptExcerpt,
+                CitationCount = handoffPackage.CitationCount,
+                CreatedAtUtc = now
+            }, cancellationToken);
+        }
+
+        return await CreateAssistantResponseAsync(session.Id, now, prompt, 0.8m, false, "CommercialLeadCapture", "CommercialIntent", cancellationToken);
+    }
+
+    private static string BuildDeterministicClarificationResponse(ChatIntent intent)
+    {
+        return intent switch
+        {
+            ChatIntent.Contact => "I can help with contact details — are you looking for a phone number, email, or contact form?",
+            ChatIntent.Location => "Happy to help with location — are you looking for our address or service area?",
+            ChatIntent.Hours => "I can help with hours — do you want weekday, weekend, or holiday times?",
+            ChatIntent.Services => "I can help with services — which specific service do you want details about?",
+            ChatIntent.Organization => "If you’re asking about our organization, I can help with the business name, contact details, hours, location, or services. Which one do you need?",
+            _ => NeutralClarificationResponse
+        };
     }
 
     private async Task<OperationResult<ChatSendResult>> CreateHumanHelpResponseAsync(
