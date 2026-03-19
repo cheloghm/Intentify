@@ -53,6 +53,23 @@ public sealed class ChatSendHandler
         "issue",
         "problem"
     ];
+    private static readonly string[] CommercialIntentTopicTerms =
+    [
+        "project",
+        "remodel",
+        "renovation",
+        "installation",
+        "service"
+    ];
+    private static readonly string[] CommercialIntentActionTerms =
+    [
+        "looking for",
+        "looking to",
+        "need",
+        "quote",
+        "estimate",
+        "pricing"
+    ];
 
     private const string AskForContactDetailsResponse = "Sorry about that — I’ll get someone to help. What’s your name and best email?";
     private const string ContactDetailsReceivedResponse = "Thanks — I’ve got your details. Our team will contact you shortly.";
