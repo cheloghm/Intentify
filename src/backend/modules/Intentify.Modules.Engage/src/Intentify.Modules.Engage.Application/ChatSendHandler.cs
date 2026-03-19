@@ -295,7 +295,7 @@ public sealed class ChatSendHandler
             confidence,
             false,
             citations,
-            Stage7Decision: null));
+            null));
     }
 
     private static decimal ComputeConfidence(bool hasChunks, int topScore)
