@@ -64,6 +64,16 @@ public sealed class ChatSendHandler
     private const string PromoCommandPrefix = "/promo";
     private const string PromoResponseText = "Please complete this short promo form.";
     private const string ContactDetailsNamePrefix = "my name is";
+    private static readonly string[] ContinuationPhrases =
+    [
+        "yes please",
+        "go ahead",
+        "that's fine",
+        "thats fine",
+        "that’s fine",
+        "sounds good",
+        "okay then"
+    ];
     private readonly ISiteRepository _siteRepository;
     private readonly IEngageChatSessionRepository _sessionRepository;
     private readonly IEngageBotRepository _botRepository;
@@ -202,6 +212,8 @@ public sealed class ChatSendHandler
             return await CreateHumanHelpResponseAsync(site, session, command.Message, now, cancellationToken);
         }
 
+        var hasDirectQuestionContext = TryGetLastAssistantDirectQuestion(recentMessages, out _);
+        var isContinuationReply = IsContinuationReply(command.Message);
         var normalizedMessage = NormalizeUserMessage(command.Message);
         var intent = DetectIntent(normalizedMessage);
         if (intent == ChatIntent.EscalationHelp)
@@ -222,6 +234,8 @@ public sealed class ChatSendHandler
                 [],
                 now,
                 "AmbiguousShortPrompt",
+                hasDirectQuestionContext,
+                isContinuationReply,
                 cancellationToken);
         }
 
@@ -238,7 +252,7 @@ public sealed class ChatSendHandler
         if (isLowConfidence)
         {
             _logger.LogInformation("Engage chat decision: layered fallback path for session {SessionId}.", session.Id);
-            return await CreateLayeredFallbackResponseAsync(site, bot, session, command.Message, normalizedMessage, intent, recentMessages, retrieved, now, "LowConfidence", cancellationToken);
+            return await CreateLayeredFallbackResponseAsync(site, bot, session, command.Message, normalizedMessage, intent, recentMessages, retrieved, now, "LowConfidence", hasDirectQuestionContext, isContinuationReply, cancellationToken);
         }
 
         var citations = retrieved
@@ -249,7 +263,7 @@ public sealed class ChatSendHandler
         if (!completion.IsSuccess || string.IsNullOrWhiteSpace(completion.Value))
         {
             _logger.LogWarning("Engage AI completion unavailable for session {SessionId}.", session.Id);
-            return await CreateLayeredFallbackResponseAsync(site, bot, session, command.Message, normalizedMessage, intent, recentMessages, retrieved, now, "AiUnavailable", cancellationToken);
+            return await CreateLayeredFallbackResponseAsync(site, bot, session, command.Message, normalizedMessage, intent, recentMessages, retrieved, now, "AiUnavailable", hasDirectQuestionContext, isContinuationReply, cancellationToken);
         }
 
         _logger.LogInformation("Engage chat decision: grounded answer path for session {SessionId}.", session.Id);
@@ -315,6 +329,7 @@ public sealed class ChatSendHandler
 
         return $"""
 You are an Engage support assistant.
+You are a site-aware business representative for this website.
 
 Use only the retrieved knowledge context to answer the user's question in plain English.
 - Keep a {tone} tone.
@@ -325,7 +340,8 @@ Use only the retrieved knowledge context to answer the user's question in plain 
 - Do not sound robotic.
 - Do not start with: Based on your knowledge base:
 - If details are incomplete, do not mention internal systems or missing sources.
-- Offer the safest helpful response you can and ask one brief, specific follow-up question.
+- If enough context is already present, provide a concise summary and a concrete next step instead of asking another follow-up question.
+- Ask one brief, specific follow-up question only when it is necessary to move forward safely.
 - Do not invent unsupported specifics.
 
 Retrieved knowledge context (deduped):
@@ -350,14 +366,11 @@ Normalized user question (for typo recovery):
         var normalized = message.Trim().ToLowerInvariant();
         var isGreeting = normalized is "hi" or "hello" or "hey";
         var isAcknowledgement = normalized is "yes" or "no" or "ok" or "okay" or "thanks" or "thank you" or "sure";
+        var isContinuation = IsContinuationReply(normalized);
         var isVeryShortNonQuestion = normalized.Length > 0 && normalized.Length <= 5 && !normalized.Contains('?');
-        var priorAssistantAskedQuestion = messages
-            .Reverse()
-            .Skip(1)
-            .FirstOrDefault(item => string.Equals(item.Role, "assistant", StringComparison.OrdinalIgnoreCase))
-            ?.Content.TrimEnd().EndsWith("?", StringComparison.Ordinal) == true;
+        var priorAssistantAskedQuestion = TryGetLastAssistantDirectQuestion(messages, out _);
 
-        if (priorAssistantAskedQuestion && isAcknowledgement)
+        if (priorAssistantAskedQuestion && (isAcknowledgement || isContinuation))
         {
             response = string.Empty;
             return false;
@@ -488,12 +501,14 @@ Normalized user question (for typo recovery):
         IReadOnlyCollection<RetrievedChunkResult> retrievedChunks,
         DateTime now,
         string reason,
+        bool hasDirectQuestionContext,
+        bool isContinuationReply,
         CancellationToken cancellationToken)
     {
         var shouldEscalate = ShouldEscalateFallback(bot, intent, normalizedUserMessage, reason);
         if (!shouldEscalate)
         {
-            var fallback = IsRealQuestion(userMessage)
+            var fallback = IsRealQuestion(userMessage) || (hasDirectQuestionContext && isContinuationReply)
                 ? await BuildBusinessAwareClarificationResponseAsync(bot, userMessage, normalizedUserMessage, intent, messages, retrievedChunks, cancellationToken)
                 : BuildSoftFallbackResponse(bot);
             return await CreateAssistantResponseAsync(session.Id, now, fallback, 0.2m, false, "Fallback", reason, cancellationToken);
@@ -664,13 +679,14 @@ Normalized user question (for typo recovery):
             .Select((item, index) => $"[{index + 1}] {item}"));
 
         return $"""
-You are a human-sounding assistant for a business website chat.
+You are a human-sounding site representative for a business website chat.
 
 Write exactly one short reply for a low-support situation.
 - Keep a {tone} tone.
 - Do not mention internal systems, confidence, reliability, or knowledge base details.
 - Do not invent unsupported specifics.
 - Use business cues only if supported by the conversation or context snippets.
+- If context is already sufficient, give a brief summary and a concrete next step instead of asking another question.
 - If context is weak or business type is unclear, ask one neutral clarification question.
 - Keep it concise and practical.
 
@@ -982,6 +998,35 @@ Normalized user message:
         return string.IsNullOrWhiteSpace(normalized)
             ? null
             : normalized.Length <= 200 ? normalized : normalized[..200];
+    }
+
+    private static bool IsContinuationReply(string message)
+    {
+        var normalized = message.Trim().ToLowerInvariant();
+        return ContinuationPhrases.Contains(normalized, StringComparer.Ordinal);
+    }
+
+    private static bool TryGetLastAssistantDirectQuestion(IReadOnlyCollection<EngageChatMessage> messages, out string question)
+    {
+        question = string.Empty;
+        var lastAssistant = messages
+            .Reverse()
+            .Skip(1)
+            .FirstOrDefault(item => string.Equals(item.Role, "assistant", StringComparison.OrdinalIgnoreCase));
+
+        if (lastAssistant is null)
+        {
+            return false;
+        }
+
+        var content = lastAssistant.Content.Trim();
+        if (!content.EndsWith("?", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        question = content;
+        return true;
     }
 
 

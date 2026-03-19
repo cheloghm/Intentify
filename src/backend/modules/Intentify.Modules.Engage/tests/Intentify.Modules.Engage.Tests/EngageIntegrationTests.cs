@@ -744,6 +744,42 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
         Assert.False(json.RootElement.GetProperty("ticketCreated").GetBoolean());
     }
 
+    [Theory]
+    [InlineData("yes please")]
+    [InlineData("go ahead")]
+    [InlineData("that’s fine")]
+    [InlineData("sounds good")]
+    [InlineData("okay then")]
+    public async Task ChatSend_ContinuationReplies_AfterAssistantQuestion_DoNotReturnGenericAck(string continuationReply)
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var first = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "what is your contact number"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+        using var firstJson = JsonDocument.Parse(await first.Content.ReadAsStringAsync());
+        var sessionId = firstJson.RootElement.GetProperty("sessionId").GetString();
+        Assert.False(string.IsNullOrWhiteSpace(sessionId));
+        Assert.EndsWith("?", firstJson.RootElement.GetProperty("response").GetString());
+
+        var second = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            sessionId,
+            message = continuationReply
+        });
+
+        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+        using var secondJson = JsonDocument.Parse(await second.Content.ReadAsStringAsync());
+        Assert.NotEqual("Got it — what would you like to know or do next?", secondJson.RootElement.GetProperty("response").GetString());
+        Assert.False(secondJson.RootElement.GetProperty("ticketCreated").GetBoolean());
+    }
+
     [Fact]
     public async Task ChatSend_TypoContactIntent_UsesBusinessAwareFallback()
     {
