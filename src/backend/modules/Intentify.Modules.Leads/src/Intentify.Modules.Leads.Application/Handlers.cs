@@ -19,6 +19,7 @@ public sealed class UpsertLeadFromPromoEntryHandler
         var normalizedEmail = Normalize(command.Email, 320);
         var normalizedFirstPartyId = Normalize(command.FirstPartyId, 200);
         var normalizedName = Normalize(command.Name, 200);
+        var normalizedPhone = Normalize(command.Phone, 64);
 
         Lead? lead = null;
         if (!string.IsNullOrWhiteSpace(normalizedEmail))
@@ -41,6 +42,7 @@ public sealed class UpsertLeadFromPromoEntryHandler
                 SiteId = command.SiteId,
                 PrimaryEmail = normalizedEmail,
                 DisplayName = normalizedName,
+                Phone = normalizedPhone,
                 LinkedVisitorId = linkedVisitorId,
                 FirstPartyId = normalizedFirstPartyId,
                 CreatedAtUtc = now,
@@ -59,6 +61,11 @@ public sealed class UpsertLeadFromPromoEntryHandler
             if (lead.DisplayName is null && normalizedName is not null)
             {
                 lead.DisplayName = normalizedName;
+            }
+
+            if (lead.Phone is null && normalizedPhone is not null)
+            {
+                lead.Phone = normalizedPhone;
             }
 
             if (lead.FirstPartyId is null && normalizedFirstPartyId is not null)
@@ -82,7 +89,7 @@ public sealed class UpsertLeadFromPromoEntryHandler
             command.ConsentGiven,
             normalizedEmail,
             normalizedName,
-            null,
+            normalizedPhone,
             cancellationToken);
 
         return OperationResult<Lead>.Success(lead);
