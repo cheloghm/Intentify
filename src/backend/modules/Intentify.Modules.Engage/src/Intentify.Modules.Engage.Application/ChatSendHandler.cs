@@ -65,30 +65,6 @@ public sealed class ChatSendHandler
     private const string PromoCommandPrefix = "/promo";
     private const string PromoResponseText = "Please complete this short promo form.";
     private const string ContactDetailsNamePrefix = "my name is";
-    private static readonly string[] CommercialIntentTopicTerms =
-    [
-        "quote",
-        "estimate",
-        "proposal",
-        "project",
-        "service",
-        "services",
-        "implementation",
-        "build"
-    ];
-    private static readonly string[] CommercialIntentActionTerms =
-    [
-        "need",
-        "want",
-        "looking",
-        "interested",
-        "plan",
-        "planning",
-        "starting",
-        "start",
-        "hiring",
-        "hire"
-    ];
     private static readonly string[] ContinuationPhrases =
     [
         "yes please",
@@ -235,16 +211,6 @@ public sealed class ChatSendHandler
         if (NeedsHumanHelp(command.Message))
         {
             return await CreateHumanHelpResponseAsync(site, session, command.Message, now, cancellationToken);
-        }
-
-        if (await IsAwaitingCommercialContactDetailsAsync(session.Id, cancellationToken) && (ContainsEmail(command.Message) || ContainsPhone(command.Message)))
-        {
-            return await CaptureContactDetailsAsync(site, session, command.Message, now, false, cancellationToken);
-        }
-
-        if (TryBuildCommercialIntentContactPrompt(command.Message, out var commercialPrompt))
-        {
-            return await CreateAssistantResponseAsync(session.Id, now, commercialPrompt, 0.35m, false, "CommercialIntent", "LeadCapture", cancellationToken);
         }
 
         var hasDirectQuestionContext = TryGetLastAssistantDirectQuestion(recentMessages, out _);
