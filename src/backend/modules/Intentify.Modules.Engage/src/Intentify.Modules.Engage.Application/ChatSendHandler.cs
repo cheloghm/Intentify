@@ -75,13 +75,39 @@ public sealed class ChatSendHandler
     private const string ContactDetailsReceivedResponse = "Thanks — I’ve got your details. Our team will contact you shortly.";
     private const string CommercialContactDetailsPrefix = "Thanks — it sounds like you’re looking for";
     private const string GreetingResponse = "Hi! How can I help you today?";
-    private const string AckResponse = "Got it — what would you like to know or do next?";
+    private const string AckResponse = "Got it.";
     private const string NeutralClarificationResponse = "Happy to help — could you share a bit more about what you need?";
     private const string SoftFallbackResponse = "I can help with that — what would you like to sort out first?";
     private const string EscalationFallbackResponse = "Thanks — I can connect you with our team. Please share your name and best email.";
     private const string PromoCommandPrefix = "/promo";
     private const string PromoResponseText = "Please complete this short promo form.";
     private const string ContactDetailsNamePrefix = "my name is";
+    private const string StateGreeting = "Greeting";
+    private const string StateInform = "Inform";
+    private const string StateDiscover = "Discover";
+    private const string StateCaptureLead = "CaptureLead";
+    private const string StateSupportTriage = "SupportTriage";
+    private const string StateConfirmHandoff = "ConfirmHandoff";
+    private const string StateClarify = "Clarify";
+    private const string StateCloseIdle = "CloseIdle";
+    private const string CaptureModeLead = "Lead";
+    private const string CaptureModeSupport = "Support";
+    private static readonly string[] VerboseRequestTerms =
+    [
+        "detail",
+        "detailed",
+        "step by step",
+        "list",
+        "all",
+        "everything"
+    ];
+    private static readonly string[] FillerPhrases =
+    [
+        "If you want, I can also",
+        "If you'd like",
+        "If you’d like",
+        "What would you like to do next?"
+    ];
     private static readonly string[] ContinuationPhrases =
     [
         "yes please",
@@ -177,6 +203,9 @@ public sealed class ChatSendHandler
 
         var recentMessages = await _messageRepository.ListBySessionAsync(session.Id, cancellationToken);
         var sessionHandoffs = await _ticketRepository.ListBySessionAsync(session.Id, cancellationToken);
+        var normalizedMessage = NormalizeUserMessage(command.Message);
+        var userAskedForDetail = UserRequestedDetail(command.Message);
+        MergeDiscoverySlots(session, command.Message);
 
         if (TryResolveManualPromo(command.Message, out var promoPublicKey))
         {
@@ -205,49 +234,38 @@ public sealed class ChatSendHandler
 
         if (TryBuildSmalltalkResponse(command.Message, recentMessages, out var smalltalkResponse))
         {
-            await _messageRepository.InsertAsync(new EngageChatMessage
+            session.ConversationState = smalltalkResponse == GreetingResponse ? StateGreeting : StateCloseIdle;
+            return await CreateAssistantResponseAsync(session, now, ShapeAssistantResponse(smalltalkResponse, userAskedForDetail), 1m, false, "Smalltalk", null, cancellationToken);
+        }
+
+        if (IsCaptureMode(session, CaptureModeSupport) || IsCaptureMode(session, CaptureModeLead))
+        {
+            var capture = await ContinueProgressiveCaptureAsync(site, session, command.Message, now, sessionHandoffs, cancellationToken);
+            if (capture is not null)
             {
-                SessionId = session.Id,
-                Role = "assistant",
-                Content = smalltalkResponse,
-                CreatedAtUtc = now,
-                Confidence = 1m
-            }, cancellationToken);
-
-            await _sessionRepository.TouchAsync(session.Id, now, cancellationToken);
-
-            LogChatQualitySignal(session.Id, "Smalltalk", 1m, false, 0, null, null);
-
-            return OperationResult<ChatSendResult>.Success(new ChatSendResult(session.Id, smalltalkResponse, 1m, false, []));
+                return capture;
+            }
         }
 
-        if (IsAwaitingContactDetails(sessionHandoffs, recentMessages) && (ContainsEmail(command.Message) || ContainsPhone(command.Message)))
+        var intent = DetectIntent(normalizedMessage);
+        if (TryBuildCommercialIntentContactPrompt(command.Message, out var commercialPrompt) || IsStrongCommercialIntent(command.Message))
         {
-            return await CaptureContactDetailsAsync(site, session, command.Message, now, true, cancellationToken);
-        }
-
-        if (IsAwaitingCommercialContactDetails(sessionHandoffs) && (ContainsEmail(command.Message) || ContainsPhone(command.Message)))
-        {
-            return await CaptureContactDetailsAsync(site, session, command.Message, now, true, cancellationToken);
-        }
-
-        if (TryBuildCommercialIntentContactPrompt(command.Message, out var commercialPrompt))
-        {
-            return await CreateCommercialLeadCapturePromptAsync(site, session, command.Message, commercialPrompt, now, cancellationToken);
+            var response = !string.IsNullOrWhiteSpace(commercialPrompt)
+                ? commercialPrompt
+                : BuildNextDiscoveryQuestion(session);
+            return await CreateCommercialLeadCapturePromptAsync(site, session, command.Message, response, now, sessionHandoffs, recentMessages, cancellationToken);
         }
 
         if (NeedsHumanHelp(command.Message))
         {
-            return await CreateHumanHelpResponseAsync(site, session, command.Message, now, cancellationToken);
+            return await CreateHumanHelpResponseAsync(site, session, command.Message, now, sessionHandoffs, recentMessages, cancellationToken);
         }
 
         var hasDirectQuestionContext = TryGetLastAssistantDirectQuestion(recentMessages, out _);
         var isContinuationReply = IsContinuationReply(command.Message);
-        var normalizedMessage = NormalizeUserMessage(command.Message);
-        var intent = DetectIntent(normalizedMessage);
         if (intent == ChatIntent.EscalationHelp)
         {
-            return await CreateHumanHelpResponseAsync(site, session, command.Message, now, cancellationToken);
+            return await CreateHumanHelpResponseAsync(site, session, command.Message, now, sessionHandoffs, recentMessages, cancellationToken);
         }
 
         if (intent == ChatIntent.AmbiguousShortPrompt)
@@ -261,6 +279,7 @@ public sealed class ChatSendHandler
                 intent,
                 recentMessages,
                 [],
+                sessionHandoffs,
                 now,
                 "AmbiguousShortPrompt",
                 hasDirectQuestionContext,
@@ -280,8 +299,13 @@ public sealed class ChatSendHandler
         var isLowConfidence = retrieved.Count == 0 || topScore < TopChunkScoreThreshold || confidence < LowConfidenceThreshold;
         if (isLowConfidence)
         {
+            if (IsStrongCommercialIntent(command.Message))
+            {
+                return await CreateCommercialLeadCapturePromptAsync(site, session, command.Message, BuildNextDiscoveryQuestion(session), now, sessionHandoffs, recentMessages, cancellationToken);
+            }
+
             _logger.LogInformation("Engage chat decision: layered fallback path for session {SessionId}.", session.Id);
-            return await CreateLayeredFallbackResponseAsync(site, bot, session, command.Message, normalizedMessage, intent, recentMessages, retrieved, now, "LowConfidence", hasDirectQuestionContext, isContinuationReply, cancellationToken);
+            return await CreateLayeredFallbackResponseAsync(site, bot, session, command.Message, normalizedMessage, intent, recentMessages, retrieved, sessionHandoffs, now, "LowConfidence", hasDirectQuestionContext, isContinuationReply, cancellationToken);
         }
 
         var citations = retrieved
@@ -292,12 +316,13 @@ public sealed class ChatSendHandler
         if (!completion.IsSuccess || string.IsNullOrWhiteSpace(completion.Value))
         {
             _logger.LogWarning("Engage AI completion unavailable for session {SessionId}.", session.Id);
-            return await CreateLayeredFallbackResponseAsync(site, bot, session, command.Message, normalizedMessage, intent, recentMessages, retrieved, now, "AiUnavailable", hasDirectQuestionContext, isContinuationReply, cancellationToken);
+            return await CreateLayeredFallbackResponseAsync(site, bot, session, command.Message, normalizedMessage, intent, recentMessages, retrieved, sessionHandoffs, now, "AiUnavailable", hasDirectQuestionContext, isContinuationReply, cancellationToken);
         }
 
         _logger.LogInformation("Engage chat decision: grounded answer path for session {SessionId}.", session.Id);
 
-        var response = NormalizeAiResponse(completion.Value);
+        var response = ShapeAssistantResponse(NormalizeAiResponse(completion.Value), userAskedForDetail);
+        session.ConversationState = StateInform;
         await _messageRepository.InsertAsync(new EngageChatMessage
         {
             SessionId = session.Id,
@@ -313,7 +338,8 @@ public sealed class ChatSendHandler
             }).ToArray()
         }, cancellationToken);
 
-        await _sessionRepository.TouchAsync(session.Id, now, cancellationToken);
+        session.UpdatedAtUtc = now;
+        await _sessionRepository.UpdateStateAsync(session, cancellationToken);
 
         LogChatQualitySignal(session.Id, "Grounded", confidence, false, citations.Length, null, intent.ToString());
 
@@ -458,21 +484,137 @@ Normalized user question (for typo recovery):
         return normalized;
     }
 
+    private static bool UserRequestedDetail(string message)
+    {
+        var normalized = message.Trim().ToLowerInvariant();
+        return VerboseRequestTerms.Any(term => normalized.Contains(term, StringComparison.Ordinal));
+    }
+
+    private static string ShapeAssistantResponse(string response, bool userAskedForDetail, bool allowMultipleQuestions = false)
+    {
+        var normalized = NormalizeAiResponse(response);
+        foreach (var filler in FillerPhrases)
+        {
+            normalized = normalized.Replace(filler, string.Empty, StringComparison.OrdinalIgnoreCase).Trim();
+        }
+
+        normalized = Regex.Replace(normalized, @"\s{2,}", " ").Trim();
+        if (!allowMultipleQuestions)
+        {
+            var firstQuestion = normalized.IndexOf('?', StringComparison.Ordinal);
+            if (firstQuestion >= 0)
+            {
+                var laterQuestion = normalized.IndexOf('?', firstQuestion + 1);
+                if (laterQuestion >= 0)
+                {
+                    normalized = normalized[..laterQuestion].TrimEnd();
+                }
+            }
+        }
+
+        if (userAskedForDetail)
+        {
+            return normalized;
+        }
+
+        var sentences = Regex.Split(normalized, @"(?<=[\.\?\!])\s+")
+            .Where(item => !string.IsNullOrWhiteSpace(item))
+            .Take(4)
+            .ToArray();
+        return sentences.Length == 0 ? normalized : string.Join(" ", sentences);
+    }
+
+    private static bool IsStrongCommercialIntent(string message)
+    {
+        var normalized = message.Trim().ToLowerInvariant();
+        var hasAction = CommercialIntentActionTerms.Any(term => normalized.Contains(term, StringComparison.Ordinal));
+        var hasTopic = CommercialIntentTopicTerms.Any(term => normalized.Contains(term, StringComparison.Ordinal))
+            || normalized.Contains("help with", StringComparison.Ordinal)
+            || normalized.Contains("for my", StringComparison.Ordinal)
+            || normalized.Contains("for our", StringComparison.Ordinal);
+        return hasAction && hasTopic;
+    }
+
+    private static void MergeDiscoverySlots(EngageChatSession session, string message)
+    {
+        var normalized = message.Trim();
+        if (string.IsNullOrWhiteSpace(session.CaptureGoal))
+        {
+            var goalMatch = Regex.Match(normalized, @"(?:need|want|looking for|looking to|trying to)\s+([^\.!\?,]+)", RegexOptions.IgnoreCase);
+            if (goalMatch.Success)
+            {
+                session.CaptureGoal = goalMatch.Groups[1].Value.Trim();
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(session.CaptureLocation))
+        {
+            var locationMatch = Regex.Match(normalized, @"\b(?:in|near|around|at)\s+([A-Za-z0-9\s\-]{2,40})", RegexOptions.IgnoreCase);
+            if (locationMatch.Success)
+            {
+                session.CaptureLocation = locationMatch.Groups[1].Value.Trim();
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(session.CaptureConstraints)
+            && Regex.IsMatch(normalized, @"\b(budget|timeline|deadline|urgent|asap|cost|price)\b", RegexOptions.IgnoreCase))
+        {
+            session.CaptureConstraints = normalized.Length <= 200 ? normalized : normalized[..200];
+        }
+
+        if (string.IsNullOrWhiteSpace(session.CaptureType))
+        {
+            var typeMatch = Regex.Match(normalized, @"\bfor\s+([^\.!\?,]+)", RegexOptions.IgnoreCase);
+            if (typeMatch.Success)
+            {
+                session.CaptureType = typeMatch.Groups[1].Value.Trim();
+            }
+        }
+
+        session.CaptureContext ??= normalized.Length <= 200 ? normalized : normalized[..200];
+    }
+
+    private static string BuildNextDiscoveryQuestion(EngageChatSession session)
+    {
+        if (string.IsNullOrWhiteSpace(session.CaptureGoal))
+        {
+            return "What outcome are you trying to achieve?";
+        }
+
+        if (string.IsNullOrWhiteSpace(session.CaptureType))
+        {
+            return "What type of work or use case is this for?";
+        }
+
+        if (string.IsNullOrWhiteSpace(session.CaptureLocation))
+        {
+            return "What location should we plan for?";
+        }
+
+        if (string.IsNullOrWhiteSpace(session.CaptureConstraints))
+        {
+            return "Any key constraints like budget or timeline?";
+        }
+
+        return "Please share your first name and best email so our team can follow up.";
+    }
+
     private async Task<OperationResult<ChatSendResult>> CreateFallbackResponseAsync(
         Site site,
         EngageChatSession session,
         string userMessage,
         DateTime now,
         string reason,
+        IReadOnlyCollection<EngageHandoffTicket> existingHandoffs,
+        IReadOnlyCollection<EngageChatMessage> existingMessages,
         CancellationToken cancellationToken,
         string? responseOverride = null)
     {
         const decimal fallbackConfidence = 0m;
         var fallbackResponse = responseOverride ?? "Thanks — we’ll get back to you shortly.";
 
-        var existingHandoffs = await _ticketRepository.ListBySessionAsync(session.Id, cancellationToken);
-        var createdTicket = existingHandoffs.Count == 0;
-        var handoffPackage = await BuildHandoffPackageAsync(session.Id, userMessage, cancellationToken);
+        var createdTicket = !existingHandoffs.Any(item => string.Equals(item.Reason, reason, StringComparison.Ordinal));
+        var handoffPackage = BuildHandoffPackage(existingMessages, userMessage);
 
         if (createdTicket)
         {
@@ -512,7 +654,10 @@ Normalized user question (for typo recovery):
             Confidence = fallbackConfidence
         }, cancellationToken);
 
-        await _sessionRepository.TouchAsync(session.Id, now, cancellationToken);
+        session.ConversationState = StateConfirmHandoff;
+        session.PendingCaptureMode = CaptureModeSupport;
+        session.UpdatedAtUtc = now;
+        await _sessionRepository.UpdateStateAsync(session, cancellationToken);
 
         LogChatQualitySignal(session.Id, "EscalationFallback", fallbackConfidence, createdTicket, handoffPackage.CitationCount, reason, null);
 
@@ -528,6 +673,7 @@ Normalized user question (for typo recovery):
         ChatIntent intent,
         IReadOnlyCollection<EngageChatMessage> messages,
         IReadOnlyCollection<RetrievedChunkResult> retrievedChunks,
+        IReadOnlyCollection<EngageHandoffTicket> handoffs,
         DateTime now,
         string reason,
         bool hasDirectQuestionContext,
@@ -542,10 +688,11 @@ Normalized user question (for typo recovery):
                     ? BuildDeterministicClarificationResponse(intent)
                     : await BuildBusinessAwareClarificationResponseAsync(bot, userMessage, normalizedUserMessage, intent, messages, retrievedChunks, cancellationToken)
                 : BuildSoftFallbackResponse(bot);
-            return await CreateAssistantResponseAsync(session.Id, now, fallback, 0.2m, false, "Fallback", reason, cancellationToken);
+            session.ConversationState = StateClarify;
+            return await CreateAssistantResponseAsync(session, now, ShapeAssistantResponse(fallback, UserRequestedDetail(userMessage)), 0.2m, false, "Fallback", reason, cancellationToken);
         }
 
-        return await CreateFallbackResponseAsync(site, session, userMessage, now, reason, cancellationToken, EscalationFallbackResponse);
+        return await CreateFallbackResponseAsync(site, session, userMessage, now, reason, handoffs, messages, cancellationToken, EscalationFallbackResponse);
     }
 
     private static bool NeedsHumanHelp(string message)
@@ -686,7 +833,7 @@ Normalized user question (for typo recovery):
             return NeutralClarificationResponse;
         }
 
-        return NormalizeAiResponse(completion.Value);
+        return ShapeAssistantResponse(completion.Value, false);
     }
 
     private static string BuildClarificationPrompt(
@@ -757,7 +904,7 @@ Normalized user message:
     }
 
     private async Task<OperationResult<ChatSendResult>> CreateAssistantResponseAsync(
-        Guid sessionId,
+        EngageChatSession session,
         DateTime now,
         string response,
         decimal confidence,
@@ -768,16 +915,17 @@ Normalized user message:
     {
         await _messageRepository.InsertAsync(new EngageChatMessage
         {
-            SessionId = sessionId,
+            SessionId = session.Id,
             Role = "assistant",
             Content = response,
             CreatedAtUtc = now,
             Confidence = confidence
         }, cancellationToken);
 
-        await _sessionRepository.TouchAsync(sessionId, now, cancellationToken);
-        LogChatQualitySignal(sessionId, qualityPath, confidence, ticketCreated, 0, qualityReason, null);
-        return OperationResult<ChatSendResult>.Success(new ChatSendResult(sessionId, response, confidence, ticketCreated, []));
+        session.UpdatedAtUtc = now;
+        await _sessionRepository.UpdateStateAsync(session, cancellationToken);
+        LogChatQualitySignal(session.Id, qualityPath, confidence, ticketCreated, 0, qualityReason, null);
+        return OperationResult<ChatSendResult>.Success(new ChatSendResult(session.Id, response, confidence, ticketCreated, []));
     }
 
     private static bool ContainsEmail(string message)
@@ -792,27 +940,50 @@ Normalized user message:
 
     private static bool ContainsPhone(string message) => !string.IsNullOrWhiteSpace(TryExtractPhone(message));
 
-    private static bool IsAwaitingContactDetails(IReadOnlyCollection<EngageHandoffTicket> handoffs, IReadOnlyCollection<EngageChatMessage> messages)
+    private static bool IsCaptureMode(EngageChatSession session, string mode)
     {
-        if (!handoffs.Any(item => string.Equals(item.Reason, "NeedsHumanHelp", StringComparison.Ordinal)))
-        {
-            return false;
-        }
-
-        var lastAssistantMessage = messages
-            .Where(item => string.Equals(item.Role, "assistant", StringComparison.OrdinalIgnoreCase))
-            .OrderByDescending(item => item.CreatedAtUtc)
-            .Select(item => item.Content)
-            .FirstOrDefault();
-
-        return !string.IsNullOrWhiteSpace(lastAssistantMessage)
-            && lastAssistantMessage.Contains("name", StringComparison.OrdinalIgnoreCase)
-            && lastAssistantMessage.Contains("email", StringComparison.OrdinalIgnoreCase);
+        return string.Equals(session.PendingCaptureMode, mode, StringComparison.Ordinal);
     }
 
-    private static bool IsAwaitingCommercialContactDetails(IReadOnlyCollection<EngageHandoffTicket> handoffs)
+    private async Task<OperationResult<ChatSendResult>?> ContinueProgressiveCaptureAsync(
+        Site site,
+        EngageChatSession session,
+        string userMessage,
+        DateTime now,
+        IReadOnlyCollection<EngageHandoffTicket> handoffs,
+        CancellationToken cancellationToken)
     {
-        return handoffs.Any(item => string.Equals(item.Reason, "CommercialLeadCapture", StringComparison.Ordinal));
+        var parsedEmail = TryExtractEmail(userMessage);
+        var parsedPhone = TryExtractPhone(userMessage);
+        var parsedName = TryExtractName(userMessage, parsedEmail, parsedPhone);
+
+        session.CapturedEmail ??= parsedEmail;
+        session.CapturedPhone ??= parsedPhone;
+        session.CapturedName ??= parsedName;
+
+        if (!string.IsNullOrWhiteSpace(parsedEmail) || !string.IsNullOrWhiteSpace(parsedPhone))
+        {
+            session.CapturedEmail = parsedEmail ?? session.CapturedEmail;
+            session.CapturedPhone = parsedPhone ?? session.CapturedPhone;
+        }
+
+        var hasFollowupMinimum = !string.IsNullOrWhiteSpace(session.CapturedEmail)
+            || (!string.IsNullOrWhiteSpace(session.CapturedPhone) && !string.IsNullOrWhiteSpace(session.CapturedName));
+
+        if (!hasFollowupMinimum)
+        {
+            var question = string.IsNullOrWhiteSpace(session.CapturedName)
+                ? "Please share your first name."
+                : string.IsNullOrWhiteSpace(session.CapturedEmail)
+                    ? "Please share your best email."
+                    : "Please share your best phone number.";
+            session.ConversationState = StateCaptureLead;
+            session.UpdatedAtUtc = now;
+            await _sessionRepository.UpdateStateAsync(session, cancellationToken);
+            return await CreateAssistantResponseAsync(session, now, question, 0.6m, false, "CaptureLead", "AwaitingContactFields", cancellationToken);
+        }
+
+        return await CaptureContactDetailsAsync(site, session, userMessage, now, false, handoffs, cancellationToken);
     }
 
     private async Task<OperationResult<ChatSendResult>> CreateCommercialLeadCapturePromptAsync(
@@ -821,12 +992,13 @@ Normalized user message:
         string userMessage,
         string prompt,
         DateTime now,
+        IReadOnlyCollection<EngageHandoffTicket> handoffs,
+        IReadOnlyCollection<EngageChatMessage> messages,
         CancellationToken cancellationToken)
     {
-        var handoffs = await _ticketRepository.ListBySessionAsync(session.Id, cancellationToken);
         if (!handoffs.Any(item => string.Equals(item.Reason, "CommercialLeadCapture", StringComparison.Ordinal)))
         {
-            var handoffPackage = await BuildHandoffPackageAsync(session.Id, userMessage, cancellationToken);
+            var handoffPackage = BuildHandoffPackage(messages, userMessage);
             await _ticketRepository.InsertAsync(new EngageHandoffTicket
             {
                 TenantId = site.TenantId,
@@ -841,7 +1013,9 @@ Normalized user message:
             }, cancellationToken);
         }
 
-        return await CreateAssistantResponseAsync(session.Id, now, prompt, 0.8m, false, "CommercialLeadCapture", "CommercialIntent", cancellationToken);
+        session.ConversationState = StateCaptureLead;
+        session.PendingCaptureMode = CaptureModeLead;
+        return await CreateAssistantResponseAsync(session, now, ShapeAssistantResponse(prompt, false, allowMultipleQuestions: true), 0.8m, false, "CommercialLeadCapture", "CommercialIntent", cancellationToken);
     }
 
     private static string BuildDeterministicClarificationResponse(ChatIntent intent)
@@ -862,35 +1036,30 @@ Normalized user message:
         EngageChatSession session,
         string userMessage,
         DateTime now,
+        IReadOnlyCollection<EngageHandoffTicket> handoffs,
+        IReadOnlyCollection<EngageChatMessage> messages,
         CancellationToken cancellationToken)
     {
-        var handoffPackage = await BuildHandoffPackageAsync(session.Id, userMessage, cancellationToken);
-
-        await _ticketRepository.InsertAsync(new EngageHandoffTicket
+        var handoffPackage = BuildHandoffPackage(messages, userMessage);
+        var needsHumanTicketExists = handoffs.Any(item => string.Equals(item.Reason, "NeedsHumanHelp", StringComparison.Ordinal));
+        if (!needsHumanTicketExists)
         {
-            TenantId = site.TenantId,
-            SiteId = site.Id,
-            SessionId = session.Id,
-            UserMessage = userMessage,
-            Reason = "NeedsHumanHelp",
-            LastAssistantMessage = handoffPackage.LastAssistantMessage,
-            TranscriptExcerpt = handoffPackage.TranscriptExcerpt,
-            CitationCount = handoffPackage.CitationCount,
-            CreatedAtUtc = now
-        }, cancellationToken);
+            await _ticketRepository.InsertAsync(new EngageHandoffTicket
+            {
+                TenantId = site.TenantId,
+                SiteId = site.Id,
+                SessionId = session.Id,
+                UserMessage = userMessage,
+                Reason = "NeedsHumanHelp",
+                LastAssistantMessage = handoffPackage.LastAssistantMessage,
+                TranscriptExcerpt = handoffPackage.TranscriptExcerpt,
+                CitationCount = handoffPackage.CitationCount,
+                CreatedAtUtc = now
+            }, cancellationToken);
 
-        var visitorId = await ResolveVisitorIdAsync(site.TenantId, site.Id, session.CollectorSessionId, cancellationToken);
-
-        await _createTicketHandler.HandleAsync(
-            new CreateTicketCommand(
-                site.TenantId,
-                site.Id,
-                visitorId,
-                session.Id,
-                "Engage handoff: NeedsHumanHelp",
-                handoffPackage.TicketDescription,
-                null),
-            cancellationToken);
+            var visitorId = await ResolveVisitorIdAsync(site.TenantId, site.Id, session.CollectorSessionId, cancellationToken);
+            await _createTicketHandler.HandleAsync(new CreateTicketCommand(site.TenantId, site.Id, visitorId, session.Id, "Engage handoff: NeedsHumanHelp", handoffPackage.TicketDescription, null), cancellationToken);
+        }
 
         await _messageRepository.InsertAsync(new EngageChatMessage
         {
@@ -901,9 +1070,12 @@ Normalized user message:
             Confidence = 0m
         }, cancellationToken);
 
-        await _sessionRepository.TouchAsync(session.Id, now, cancellationToken);
-        LogChatQualitySignal(session.Id, "HumanHelp", 0m, true, 0, "NeedsHumanHelp", null);
-        return OperationResult<ChatSendResult>.Success(new ChatSendResult(session.Id, AskForContactDetailsResponse, 0m, true, []));
+        session.ConversationState = StateSupportTriage;
+        session.PendingCaptureMode = CaptureModeSupport;
+        session.UpdatedAtUtc = now;
+        await _sessionRepository.UpdateStateAsync(session, cancellationToken);
+        LogChatQualitySignal(session.Id, "HumanHelp", 0m, !needsHumanTicketExists, 0, "NeedsHumanHelp", null);
+        return OperationResult<ChatSendResult>.Success(new ChatSendResult(session.Id, AskForContactDetailsResponse, 0m, !needsHumanTicketExists, []));
     }
 
     private async Task<OperationResult<ChatSendResult>> CaptureContactDetailsAsync(
@@ -912,14 +1084,18 @@ Normalized user message:
         string userMessage,
         DateTime now,
         bool createTicket,
+        IReadOnlyCollection<EngageHandoffTicket> handoffs,
         CancellationToken cancellationToken)
     {
         var visitorId = await ResolveVisitorIdAsync(site.TenantId, site.Id, session.CollectorSessionId, cancellationToken);
-        var parsedEmail = TryExtractEmail(userMessage);
-        var parsedPhone = TryExtractPhone(userMessage);
-        var parsedName = TryExtractName(userMessage, parsedEmail, parsedPhone);
+        var parsedEmail = TryExtractEmail(userMessage) ?? session.CapturedEmail;
+        var parsedPhone = TryExtractPhone(userMessage) ?? session.CapturedPhone;
+        var parsedName = TryExtractName(userMessage, parsedEmail, parsedPhone) ?? session.CapturedName;
+        session.CapturedEmail = parsedEmail;
+        session.CapturedPhone = parsedPhone;
+        session.CapturedName = parsedName;
 
-        if (createTicket)
+        if (createTicket && !handoffs.Any(item => string.Equals(item.Reason, "ContactDetails", StringComparison.Ordinal)))
         {
             await _createTicketHandler.HandleAsync(
                 new CreateTicketCommand(
@@ -959,7 +1135,10 @@ Normalized user message:
             Confidence = 0m
         }, cancellationToken);
 
-        await _sessionRepository.TouchAsync(session.Id, now, cancellationToken);
+        session.PendingCaptureMode = null;
+        session.ConversationState = StateConfirmHandoff;
+        session.UpdatedAtUtc = now;
+        await _sessionRepository.UpdateStateAsync(session, cancellationToken);
         LogChatQualitySignal(session.Id, "ContactCapture", 0m, createTicket, 0, "ContactDetails", null);
         return OperationResult<ChatSendResult>.Success(new ChatSendResult(session.Id, ContactDetailsReceivedResponse, 0m, createTicket, []));
     }
@@ -994,12 +1173,10 @@ Normalized user message:
         return string.Join("\n", distilled.Select((item, index) => $"- priorUser{index + 1}: {item}"));
     }
 
-    private async Task<(string TicketDescription, string? LastAssistantMessage, string TranscriptExcerpt, int CitationCount)> BuildHandoffPackageAsync(
-        Guid sessionId,
-        string userMessage,
-        CancellationToken cancellationToken)
+    private static (string TicketDescription, string? LastAssistantMessage, string TranscriptExcerpt, int CitationCount) BuildHandoffPackage(
+        IReadOnlyCollection<EngageChatMessage> messages,
+        string userMessage)
     {
-        var messages = await _messageRepository.ListBySessionAsync(sessionId, cancellationToken);
         var latestMessages = messages
             .OrderBy(item => item.CreatedAtUtc)
             .TakeLast(HandoffTranscriptLineLimit)

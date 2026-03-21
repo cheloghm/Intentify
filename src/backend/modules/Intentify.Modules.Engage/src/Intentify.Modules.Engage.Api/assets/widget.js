@@ -28,6 +28,9 @@
   var typingIndicatorRow = null;
   var contactDetailsPrompt = 'Sorry about that — I’ll get someone to help. What’s your name and best email?';
   var collectorSessionWaitMs = 1200;
+  var collectorSessionMaxWaitMs = 2200;
+  var hydrateRequestId = 0;
+  var sendNonce = 0;
 
   function endpoint(path) { return baseUrl + path; }
 
@@ -443,11 +446,14 @@
     input.disabled = true;
     sendButton.disabled = true;
 
+    var requestId = ++hydrateRequestId;
     return fetch(endpoint('/engage/widget/conversations/' + encodeURIComponent(sessionId) + '/messages?widgetKey=' + encodeURIComponent(widgetKey)))
       .then(function(response) {
         if (response.status === 404) {
           clearStoredSession();
-          messages.innerHTML = '';
+          if (!isSending && requestId === hydrateRequestId) {
+            messages.innerHTML = '';
+          }
           return null;
         }
 
@@ -458,6 +464,9 @@
         return response.json();
       })
       .then(function(history) {
+        if (requestId !== hydrateRequestId) {
+          return;
+        }
         if (!Array.isArray(history)) {
           return;
         }
@@ -527,6 +536,7 @@
   }
 
   function sendChatMessage(message) {
+    var requestNonce = ++sendNonce;
     var optimisticUserRow = addMessage('user', message);
     setSendingState(true);
     showTypingIndicator();
@@ -548,6 +558,9 @@
         return response.json();
       })
       .then(function(payload) {
+        if (requestNonce !== sendNonce) {
+          return;
+        }
         removeTypingIndicator();
         sessionId = payload.sessionId || sessionId;
         if (sessionId) {
@@ -588,7 +601,15 @@
       function poll() {
         var current = readCookie('intentify_sid');
         if (current || Date.now() - startedAt >= collectorSessionWaitMs) {
+          if (!current) {
+            current = ensureCollectorSessionId();
+          }
           resolve(current || null);
+          return;
+        }
+
+        if (Date.now() - startedAt >= collectorSessionMaxWaitMs) {
+          resolve(ensureCollectorSessionId());
           return;
         }
 
@@ -597,5 +618,35 @@
 
       poll();
     });
+  }
+
+  function ensureCollectorSessionId() {
+    var existing = readCookie('intentify_sid');
+    if (existing) {
+      return existing;
+    }
+
+    var generated = generateSessionId();
+    if (!generated) {
+      return null;
+    }
+
+    var secureFlag = window.location.protocol === 'https:' ? '; Secure' : '';
+    document.cookie = 'intentify_sid=' + encodeURIComponent(generated) + '; Max-Age=1800; Path=/; SameSite=Lax' + secureFlag;
+    return generated;
+  }
+
+  function generateSessionId() {
+    if (!window.crypto || !window.crypto.getRandomValues) {
+      return null;
+    }
+
+    var bytes = new Uint8Array(16);
+    window.crypto.getRandomValues(bytes);
+    var output = '';
+    for (var i = 0; i < bytes.length; i += 1) {
+      output += bytes[i].toString(16).padStart(2, '0');
+    }
+    return output;
   }
 })();

@@ -228,6 +228,97 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
         Assert.Contains("responseKind === 'promo'", script);
         Assert.Contains("/promos/public/", script);
         Assert.Contains("/entries", script);
+        Assert.Contains("ensureCollectorSessionId", script);
+        Assert.Contains("hydrateRequestId", script);
+    }
+
+    [Fact]
+    public async Task ChatSend_CommercialIntent_EntersDiscoveryCaptureFlow()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var response = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "We are looking to remodel our office"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var answer = json.RootElement.GetProperty("response").GetString();
+        Assert.NotNull(answer);
+        Assert.Contains("name", answer!, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("email", answer!, StringComparison.OrdinalIgnoreCase);
+        Assert.False(json.RootElement.GetProperty("ticketCreated").GetBoolean());
+    }
+
+    [Fact]
+    public async Task ChatSend_ProgressiveProfiling_EnrichesLeadAcrossTurns()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var first = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "I need a quote for our new location"
+        });
+
+        using var firstJson = JsonDocument.Parse(await first.Content.ReadAsStringAsync());
+        var sessionId = firstJson.RootElement.GetProperty("sessionId").GetString();
+
+        await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            sessionId,
+            message = "my name is Sam"
+        });
+
+        await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            sessionId,
+            message = "sam@example.com"
+        });
+
+        var database = new MongoClient(_mongo.ConnectionString).GetDatabase(_mongo.DatabaseName);
+        var leads = database.GetCollection<BsonLead>("leads");
+        var lead = await leads.Find(item => item.SiteId == Guid.Parse(site.SiteId) && item.PrimaryEmail == "sam@example.com").FirstOrDefaultAsync();
+        Assert.NotNull(lead);
+        Assert.Equal("Sam", lead!.DisplayName);
+    }
+
+    [Fact]
+    public async Task ChatSend_HumanHelpThenContact_DoesNotCreateDuplicateTickets()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var first = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "I need help, payment is broken and I need a human"
+        });
+
+        using var firstJson = JsonDocument.Parse(await first.Content.ReadAsStringAsync());
+        var sessionId = firstJson.RootElement.GetProperty("sessionId").GetString();
+
+        var second = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            sessionId,
+            message = "my name is Alex, alex@example.com"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+        using var secondJson = JsonDocument.Parse(await second.Content.ReadAsStringAsync());
+        Assert.False(secondJson.RootElement.GetProperty("ticketCreated").GetBoolean());
+
+        var database = new MongoClient(_mongo.ConnectionString).GetDatabase(_mongo.DatabaseName);
+        var tickets = database.GetCollection<BsonTicket>("tickets");
+        var count = await tickets.CountDocumentsAsync(item => item.EngageSessionId == Guid.Parse(sessionId!));
+        Assert.Equal(1, count);
     }
 
     [Fact]
