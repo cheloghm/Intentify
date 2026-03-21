@@ -1,3 +1,4 @@
+using System.Linq;
 using Intentify.Modules.Leads.Domain;
 using Intentify.Shared.Validation;
 
@@ -58,12 +59,12 @@ public sealed class UpsertLeadFromPromoEntryHandler
                 lead.PrimaryEmail = normalizedEmail;
             }
 
-            if (lead.DisplayName is null && normalizedName is not null)
+            if (ShouldReplaceDisplayName(lead.DisplayName, normalizedName))
             {
                 lead.DisplayName = normalizedName;
             }
 
-            if (lead.Phone is null && normalizedPhone is not null)
+            if (ShouldReplacePhone(lead.Phone, normalizedPhone))
             {
                 lead.Phone = normalizedPhone;
             }
@@ -100,6 +101,40 @@ public sealed class UpsertLeadFromPromoEntryHandler
         if (string.IsNullOrWhiteSpace(value)) return null;
         var trimmed = value.Trim();
         return trimmed.Length <= maxLength ? trimmed : trimmed[..maxLength];
+    }
+
+    private static bool ShouldReplaceDisplayName(string? current, string? incoming)
+    {
+        if (incoming is null)
+        {
+            return false;
+        }
+
+        if (current is null)
+        {
+            return true;
+        }
+
+        var currentParts = current.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
+        var incomingParts = incoming.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
+        return incomingParts > currentParts || incoming.Length > current.Length + 2;
+    }
+
+    private static bool ShouldReplacePhone(string? current, string? incoming)
+    {
+        if (incoming is null)
+        {
+            return false;
+        }
+
+        if (current is null)
+        {
+            return true;
+        }
+
+        var currentDigits = new string(current.Where(char.IsDigit).ToArray());
+        var incomingDigits = new string(incoming.Where(char.IsDigit).ToArray());
+        return incomingDigits.Length > currentDigits.Length;
     }
 }
 

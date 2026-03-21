@@ -41,6 +41,24 @@ public sealed class EngageChatSessionRepository : IEngageChatSessionRepository
         await _sessions.UpdateOneAsync(item => item.Id == sessionId, update, cancellationToken: cancellationToken);
     }
 
+    public async Task UpdateStateAsync(EngageChatSession session, CancellationToken cancellationToken = default)
+    {
+        await _ensureIndexes;
+        var update = Builders<EngageChatSession>.Update
+            .Set(item => item.ConversationState, session.ConversationState)
+            .Set(item => item.PendingCaptureMode, session.PendingCaptureMode)
+            .Set(item => item.CaptureGoal, session.CaptureGoal)
+            .Set(item => item.CaptureContext, session.CaptureContext)
+            .Set(item => item.CaptureType, session.CaptureType)
+            .Set(item => item.CaptureLocation, session.CaptureLocation)
+            .Set(item => item.CaptureConstraints, session.CaptureConstraints)
+            .Set(item => item.CapturedName, session.CapturedName)
+            .Set(item => item.CapturedEmail, session.CapturedEmail)
+            .Set(item => item.CapturedPhone, session.CapturedPhone)
+            .Set(item => item.UpdatedAtUtc, session.UpdatedAtUtc);
+        await _sessions.UpdateOneAsync(item => item.Id == session.Id, update, cancellationToken: cancellationToken);
+    }
+
     public async Task SetCollectorSessionIdIfEmptyAsync(Guid sessionId, string collectorSessionId, CancellationToken cancellationToken = default)
     {
         await _ensureIndexes;
