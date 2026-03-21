@@ -248,8 +248,27 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         var answer = json.RootElement.GetProperty("response").GetString();
         Assert.NotNull(answer);
-        Assert.Contains("name", answer!, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("email", answer!, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("What type of work or use case is this for?", answer);
+        Assert.False(json.RootElement.GetProperty("ticketCreated").GetBoolean());
+    }
+
+    [Fact]
+    public async Task ChatSend_ThinKnowledgeCommercialIntent_PrefersClarifyingDiscovery_OverContactCapture()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var response = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "we're exploring renovation options for our office"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var answer = json.RootElement.GetProperty("response").GetString();
+        Assert.Equal("What type of work or use case is this for?", answer);
+        Assert.DoesNotContain("name and best email", answer!, StringComparison.OrdinalIgnoreCase);
         Assert.False(json.RootElement.GetProperty("ticketCreated").GetBoolean());
     }
 
@@ -958,7 +977,20 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.OK, helpResponse.StatusCode);
         using var helpJson = JsonDocument.Parse(await helpResponse.Content.ReadAsStringAsync());
         var sessionId = helpJson.RootElement.GetProperty("sessionId").GetString();
-        Assert.Equal("Sorry about that — I’ll get someone to help. What’s your name and best email?", helpJson.RootElement.GetProperty("response").GetString());
+        Assert.Equal("Sorry you’re running into that — what happens when you try it (any error text or the exact step where it fails)?", helpJson.RootElement.GetProperty("response").GetString());
+        Assert.False(helpJson.RootElement.GetProperty("ticketCreated").GetBoolean());
+
+        var escalateResponse = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            sessionId,
+            message = "I need to talk to a human support agent"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, escalateResponse.StatusCode);
+        using var escalateJson = JsonDocument.Parse(await escalateResponse.Content.ReadAsStringAsync());
+        Assert.Equal("Sorry about that — I’ll get someone to help. What’s your name and best email?", escalateJson.RootElement.GetProperty("response").GetString());
+        Assert.True(escalateJson.RootElement.GetProperty("ticketCreated").GetBoolean());
 
         var detailsResponse = await _client!.PostAsJsonAsync("/engage/chat/send", new
         {
