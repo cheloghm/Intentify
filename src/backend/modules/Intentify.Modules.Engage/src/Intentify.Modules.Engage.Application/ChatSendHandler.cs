@@ -118,6 +118,18 @@ public sealed class ChatSendHandler
         "sounds good",
         "okay then"
     ];
+    private static readonly string[] ExplicitEscalationTerms =
+    [
+        "talk to a human",
+        "speak to a human",
+        "human support",
+        "contact support",
+        "call me",
+        "call back",
+        "callback",
+        "reach out"
+    ];
+    private const string SupportTroubleshootPrompt = "Sorry you’re running into that — what happens when you try it (any error text or the exact step where it fails)?";
     private readonly ISiteRepository _siteRepository;
     private readonly IEngageChatSessionRepository _sessionRepository;
     private readonly IEngageBotRepository _botRepository;
@@ -248,7 +260,9 @@ public sealed class ChatSendHandler
         }
 
         var intent = DetectIntent(normalizedMessage);
-        if (TryBuildCommercialIntentContactPrompt(command.Message, out var commercialPrompt) || IsStrongCommercialIntent(command.Message))
+        var hasCommercialIntent = TryBuildCommercialIntentContactPrompt(command.Message, out var commercialPrompt) || IsStrongCommercialIntent(command.Message);
+        var explicitCommercialContactRequest = IsExplicitCommercialContactRequest(command.Message);
+        if (hasCommercialIntent && (explicitCommercialContactRequest || HasSufficientDiscoveryContext(session)))
         {
             var response = !string.IsNullOrWhiteSpace(commercialPrompt)
                 ? commercialPrompt
@@ -258,6 +272,12 @@ public sealed class ChatSendHandler
 
         if (NeedsHumanHelp(command.Message))
         {
+            if (ShouldAttemptSupportTroubleshoot(session, command.Message))
+            {
+                session.ConversationState = StateSupportTriage;
+                return await CreateAssistantResponseAsync(session, now, SupportTroubleshootPrompt, 0.3m, false, "SupportTriage", "TroubleshootFirst", cancellationToken);
+            }
+
             return await CreateHumanHelpResponseAsync(site, session, command.Message, now, sessionHandoffs, recentMessages, cancellationToken);
         }
 
@@ -299,9 +319,18 @@ public sealed class ChatSendHandler
         var isLowConfidence = retrieved.Count == 0 || topScore < TopChunkScoreThreshold || confidence < LowConfidenceThreshold;
         if (isLowConfidence)
         {
-            if (IsStrongCommercialIntent(command.Message))
+            if (hasCommercialIntent && !explicitCommercialContactRequest)
             {
-                return await CreateCommercialLeadCapturePromptAsync(site, session, command.Message, BuildNextDiscoveryQuestion(session), now, sessionHandoffs, recentMessages, cancellationToken);
+                session.ConversationState = StateDiscover;
+                return await CreateAssistantResponseAsync(
+                    session,
+                    now,
+                    ShapeAssistantResponse(BuildNextDiscoveryQuestion(session), false, allowMultipleQuestions: true),
+                    0.4m,
+                    false,
+                    "Discover",
+                    "CommercialExploreFirst",
+                    cancellationToken);
             }
 
             _logger.LogInformation("Engage chat decision: layered fallback path for session {SessionId}.", session.Id);
@@ -535,6 +564,50 @@ Normalized user question (for typo recovery):
         return hasAction && hasTopic;
     }
 
+    private static bool IsExplicitCommercialContactRequest(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return false;
+        }
+
+        var normalized = message.Trim().ToLowerInvariant();
+        var asksForContact = normalized.Contains("contact", StringComparison.Ordinal)
+            || normalized.Contains("call", StringComparison.Ordinal)
+            || normalized.Contains("callback", StringComparison.Ordinal)
+            || normalized.Contains("call back", StringComparison.Ordinal)
+            || normalized.Contains("reach out", StringComparison.Ordinal);
+        var asksForQuote = normalized.Contains("quote", StringComparison.Ordinal)
+            || normalized.Contains("estimate", StringComparison.Ordinal);
+        return asksForContact || asksForQuote;
+    }
+
+    private static bool HasSufficientDiscoveryContext(EngageChatSession session)
+    {
+        var scopedFields = 0;
+        if (!string.IsNullOrWhiteSpace(session.CaptureGoal))
+        {
+            scopedFields++;
+        }
+
+        if (!string.IsNullOrWhiteSpace(session.CaptureType))
+        {
+            scopedFields++;
+        }
+
+        if (!string.IsNullOrWhiteSpace(session.CaptureLocation))
+        {
+            scopedFields++;
+        }
+
+        if (!string.IsNullOrWhiteSpace(session.CaptureConstraints))
+        {
+            scopedFields++;
+        }
+
+        return scopedFields >= 2;
+    }
+
     private static void MergeDiscoverySlots(EngageChatSession session, string message)
     {
         var normalized = message.Trim();
@@ -715,6 +788,44 @@ Normalized user question (for typo recovery):
         }
 
         return HumanHelpProblemTerms.Any(term => normalized.Contains(term, StringComparison.Ordinal));
+    }
+
+    private static bool IsExplicitEscalationRequest(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return false;
+        }
+
+        var normalized = message.Trim().ToLowerInvariant();
+        if (ExplicitEscalationTerms.Any(term => normalized.Contains(term, StringComparison.Ordinal)))
+        {
+            return true;
+        }
+
+        var containsHumanTarget = normalized.Contains("human", StringComparison.Ordinal)
+            || normalized.Contains("agent", StringComparison.Ordinal)
+            || normalized.Contains("representative", StringComparison.Ordinal)
+            || normalized.Contains("support", StringComparison.Ordinal);
+
+        var containsEscalationVerb = normalized.Contains("talk", StringComparison.Ordinal)
+            || normalized.Contains("speak", StringComparison.Ordinal)
+            || normalized.Contains("contact", StringComparison.Ordinal)
+            || normalized.Contains("connect", StringComparison.Ordinal)
+            || normalized.Contains("call", StringComparison.Ordinal);
+
+        return containsHumanTarget && containsEscalationVerb;
+    }
+
+    private static bool ShouldAttemptSupportTroubleshoot(EngageChatSession session, string message)
+    {
+        if (IsExplicitEscalationRequest(message))
+        {
+            return false;
+        }
+
+        return !string.Equals(session.ConversationState, StateSupportTriage, StringComparison.Ordinal)
+            && !IsCaptureMode(session, CaptureModeSupport);
     }
 
     private static ChatIntent DetectIntent(string message)
