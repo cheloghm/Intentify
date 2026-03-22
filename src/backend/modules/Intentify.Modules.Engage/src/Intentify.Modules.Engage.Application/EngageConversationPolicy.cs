@@ -309,7 +309,7 @@ public sealed class EngageConversationPolicy
             && !isSupportCaptureMode;
     }
 
-    public ChatIntent DetectIntent(string message)
+    internal ChatIntent DetectIntent(string message)
     {
         var normalized = message.Trim().ToLowerInvariant();
 
@@ -379,7 +379,7 @@ public sealed class EngageConversationPolicy
         return ChatIntent.General;
     }
 
-    public bool ShouldEscalateFallback(EngageBot bot, ChatIntent intent, string userMessage, string reason, bool isRealQuestion)
+    internal bool ShouldEscalateFallback(EngageBot bot, ChatIntent intent, string userMessage, string reason, bool isRealQuestion)
     {
         var isActionableHelpIntent = intent == ChatIntent.EscalationHelp || NeedsHumanHelp(userMessage);
 

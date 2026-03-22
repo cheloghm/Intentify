@@ -180,7 +180,6 @@ public sealed class EngageInputInterpreter
         }
 
         return SupportSurfaceTerms.Any(term => normalizedMessage.Contains(term, StringComparison.Ordinal));
-        return SupportProblemPhrases.Any(phrase => normalizedMessage.Contains(phrase, StringComparison.Ordinal));
     }
 
     public string? TryExtractEmail(string message)
@@ -220,25 +219,32 @@ public sealed class EngageInputInterpreter
             ? withoutEmail.Replace(phone, string.Empty, StringComparison.OrdinalIgnoreCase)
             : withoutEmail;
 
-        var trimmed = withoutContact.Trim();
-        if (string.IsNullOrWhiteSpace(trimmed))
+        var candidate = withoutContact.Trim(' ', ',', '.', ';', ':', '-', '_');
+        if (string.IsNullOrWhiteSpace(candidate))
         {
             return null;
         }
 
-        var explicitPrefix = ExplicitNamePrefixes
-            .FirstOrDefault(prefix => trimmed.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
-        if (!string.IsNullOrWhiteSpace(explicitPrefix))
+        // Explicit self-identification first
+        var explicitName = TryExtractExplicitName(candidate);
+        if (!string.IsNullOrWhiteSpace(explicitName))
         {
-            var explicitName = trimmed[explicitPrefix.Length..].Trim();
-        if (trimmed.StartsWith(ContactDetailsNamePrefix, StringComparison.OrdinalIgnoreCase))
-        {
-            var explicitName = trimmed[ContactDetailsNamePrefix.Length..].Trim();
-            return CleanNameCandidate(explicitName, allowContextTail: true);
+            return explicitName;
         }
 
-        return CleanNameCandidate(trimmed, allowContextTail: false);
+        // Reject obvious location/context replies
+        if (LooksLikeLocationOrContext(candidate))
+        {
+            return null;
         }
+
+        // Conservative fallback: only short, person-like values
+        if (IsShortPersonLikeName(candidate))
+        {
+            return candidate.Length <= 200 ? candidate : candidate[..200];
+        }
+
+        return null;
     }
 
     public bool IsLocationLikeText(string text)
@@ -308,6 +314,58 @@ public sealed class EngageInputInterpreter
         }
 
         return candidate.Length <= 200 ? candidate : candidate[..200];
+    }
+
+    private string? TryExtractExplicitName(string candidate)
+    {
+        if (string.IsNullOrWhiteSpace(candidate))
+        {
+            return null;
+        }
+
+        var normalized = candidate.Trim();
+
+        foreach (var prefix in ExplicitNamePrefixes)
+        {
+            if (normalized.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                var remainder = normalized[prefix.Length..].Trim(' ', ',', '.', ';', ':', '-', '_');
+                return CleanNameCandidate(remainder, allowContextTail: true);
+            }
+        }
+
+        return null;
+    }
+
+    private bool LooksLikeLocationOrContext(string candidate)
+    {
+        if (string.IsNullOrWhiteSpace(candidate))
+        {
+            return true;
+        }
+
+        if (IsLocationLikeText(candidate))
+        {
+            return true;
+        }
+
+        if (candidate.Contains(',', StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        var lowered = $" {candidate.Trim().ToLowerInvariant()} ";
+        if (NonNameContextTerms.Any(term => lowered.Contains($" {term} ", StringComparison.Ordinal)))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    private bool IsShortPersonLikeName(string candidate)
+    {
+        return !string.IsNullOrWhiteSpace(CleanNameCandidate(candidate, allowContextTail: false));
     }
 
     private static int IndexOfAny(string input, IReadOnlyCollection<string> markers)
