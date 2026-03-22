@@ -1145,16 +1145,16 @@ Normalized user message:
             session.CapturedPhone = parsedPhone ?? session.CapturedPhone;
         }
 
-        var hasFollowupMinimum = !string.IsNullOrWhiteSpace(session.CapturedEmail)
-            || (!string.IsNullOrWhiteSpace(session.CapturedPhone) && !string.IsNullOrWhiteSpace(session.CapturedName));
+        var hasFollowupMinimum = !string.IsNullOrWhiteSpace(session.CapturedName)
+            && (!string.IsNullOrWhiteSpace(session.CapturedEmail) || !string.IsNullOrWhiteSpace(session.CapturedPhone));
 
         if (!hasFollowupMinimum)
         {
             var question = string.IsNullOrWhiteSpace(session.CapturedName)
                 ? "Please share your first name."
-                : string.IsNullOrWhiteSpace(session.CapturedEmail)
-                    ? "Please share your best email."
-                    : "Please share your best phone number.";
+                : string.IsNullOrWhiteSpace(session.CapturedEmail) && string.IsNullOrWhiteSpace(session.CapturedPhone)
+                    ? "What’s the best way to reach you — email or phone?"
+                    : "Please share the best contact detail so our team can follow up.";
             session.ConversationState = StateCaptureLead;
             session.UpdatedAtUtc = now;
             await _sessionRepository.UpdateStateAsync(session, cancellationToken);
@@ -1439,7 +1439,7 @@ Normalized user message:
             condensedNeed = condensedNeed[..96].TrimEnd();
         }
 
-        prompt = $"{CommercialContactDetailsPrefix} \"{condensedNeed}\". Share your name, best email, and phone, and our team will follow up with next steps.";
+        prompt = $"{CommercialContactDetailsPrefix} \"{condensedNeed}\". I can get this moving — what’s your first name?";
         return true;
     }
 
