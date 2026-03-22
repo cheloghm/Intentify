@@ -1208,34 +1208,6 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task ChatSend_LeadCapture_IAmName_IsCaptured()
-    {
-        var token = await RegisterUserAsync();
-        var site = await CreateSiteAsync(token);
-
-        var first = await _client!.PostAsJsonAsync("/engage/chat/send", new
-        {
-            widgetKey = site.WidgetKey,
-            message = "We are looking to remodel our office and need a quote. Please contact me."
-        });
-
-        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
-        using var firstJson = JsonDocument.Parse(await first.Content.ReadAsStringAsync());
-        var sessionId = firstJson.RootElement.GetProperty("sessionId").GetString();
-
-        var second = await _client!.PostAsJsonAsync("/engage/chat/send", new
-        {
-            widgetKey = site.WidgetKey,
-            sessionId,
-            message = "I am Sam"
-        });
-
-        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
-        using var secondJson = JsonDocument.Parse(await second.Content.ReadAsStringAsync());
-        Assert.Equal("What’s the best way to reach you — email or phone?", secondJson.RootElement.GetProperty("response").GetString());
-    }
-
-    [Fact]
     public async Task ChatSend_LeadCapture_EmailFirst_StillRequestsName()
     {
         var token = await RegisterUserAsync();

@@ -1,10 +1,11 @@
+using System.Text.RegularExpressions;
 using Intentify.Modules.Engage.Domain;
 
 namespace Intentify.Modules.Engage.Application;
 
 public sealed class EngageConversationPolicy
 {
-    private static readonly EngageInputInterpreter InputInterpreter = new();
+    private const string ContactDetailsNamePrefix = "my name is";
     private static readonly string[] HumanHelpPhrases =
     [
         "contact form",
@@ -25,6 +26,20 @@ public sealed class EngageConversationPolicy
         "agent",
         "representative",
         "support"
+    ];
+    private static readonly string[] HumanHelpProblemTerms =
+    [
+        "broken",
+        "error",
+        "failed",
+        "not working",
+        "doesn't work",
+        "checkout",
+        "payment",
+        "refund",
+        "complaint",
+        "issue",
+        "problem"
     ];
     private static readonly string[] CommercialIntentTopicTerms =
     [
@@ -53,6 +68,15 @@ public sealed class EngageConversationPolicy
         "sounds good",
         "okay then"
     ];
+    private static readonly string[] GreetingTypos =
+    [
+        "hllo",
+        "helo",
+        "hy",
+        "helllo",
+        "helloo",
+        "heloo"
+    ];
     private static readonly string[] RecommendationPhrases =
     [
         "which one is better",
@@ -79,7 +103,7 @@ public sealed class EngageConversationPolicy
     public bool TryBuildSmalltalkResponse(string message, bool priorAssistantAskedQuestion, string greetingResponse, string ackResponse, out string response)
     {
         var normalized = message.Trim().ToLowerInvariant();
-        var isGreeting = normalized is "hi" or "hello" or "hey" || InputInterpreter.IsLikelyGreetingTypo(normalized);
+        var isGreeting = normalized is "hi" or "hello" or "hey" || IsLikelyGreetingTypo(normalized);
         var isAcknowledgement = normalized is "yes" or "no" or "ok" or "okay" or "thanks" or "thank you" or "sure";
         var isContinuation = IsContinuationReply(normalized);
         var isVeryShortNonQuestion = normalized.Length > 0 && normalized.Length <= 5 && !normalized.Contains('?');
@@ -227,10 +251,7 @@ public sealed class EngageConversationPolicy
             return false;
         }
 
-        return InputInterpreter.ContainsSupportProblemSignal(normalized)
-            || normalized.Contains("refund", StringComparison.Ordinal)
-            || normalized.Contains("issue", StringComparison.Ordinal)
-            || normalized.Contains("problem", StringComparison.Ordinal);
+        return HumanHelpProblemTerms.Any(term => normalized.Contains(term, StringComparison.Ordinal));
     }
 
     public bool ShouldAttemptSupportTroubleshoot(EngageChatSession session, string message, bool isSupportCaptureMode)
@@ -378,16 +399,63 @@ public sealed class EngageConversationPolicy
         return true;
     }
 
-    public string NormalizeUserMessage(string message) => InputInterpreter.NormalizeUserMessage(message);
-
     public string? TryExtractEmail(string message)
-        => InputInterpreter.TryExtractEmail(message);
+    {
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return null;
+        }
+
+        var match = Regex.Match(message, @"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", RegexOptions.IgnoreCase);
+        return match.Success ? match.Value.Trim() : null;
+    }
 
     public string? TryExtractPhone(string message)
-        => InputInterpreter.TryExtractPhone(message);
+    {
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return null;
+        }
+
+        var match = Regex.Match(message, @"(?:\+?\d[\d\-\.\(\)\s]{6,}\d)");
+        return match.Success ? match.Value.Trim() : null;
+    }
 
     public string? TryExtractName(string message, string? email, string? phone)
-        => InputInterpreter.TryExtractName(message, email, phone);
+    {
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return null;
+        }
+
+        var withoutEmail = !string.IsNullOrWhiteSpace(email)
+            ? message.Replace(email, string.Empty, StringComparison.OrdinalIgnoreCase)
+            : message;
+
+        var withoutContact = !string.IsNullOrWhiteSpace(phone)
+            ? withoutEmail.Replace(phone, string.Empty, StringComparison.OrdinalIgnoreCase)
+            : withoutEmail;
+
+        var normalized = withoutContact.Trim(' ', ',', '.', ';', ':', '-', '_');
+        if (normalized.StartsWith(ContactDetailsNamePrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            normalized = normalized[ContactDetailsNamePrefix.Length..].Trim(' ', ',', '.', ';', ':', '-', '_');
+        }
+
+        return string.IsNullOrWhiteSpace(normalized)
+            ? null
+            : normalized.Length <= 200 ? normalized : normalized[..200];
+    }
+
+    private static bool IsLikelyGreetingTypo(string normalizedMessage)
+    {
+        if (string.IsNullOrWhiteSpace(normalizedMessage))
+        {
+            return false;
+        }
+
+        return GreetingTypos.Contains(normalizedMessage, StringComparer.Ordinal);
+    }
 
     private bool IsExplicitEscalationRequest(string message)
     {

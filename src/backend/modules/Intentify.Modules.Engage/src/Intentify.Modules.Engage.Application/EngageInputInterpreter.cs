@@ -4,13 +4,7 @@ namespace Intentify.Modules.Engage.Application;
 
 public sealed class EngageInputInterpreter
 {
-    private static readonly string[] ExplicitNamePrefixes =
-    [
-        "my name is",
-        "i am",
-        "i'm",
-        "im"
-    ];
+    private const string ContactDetailsNamePrefix = "my name is";
     private static readonly string[] GreetingTypos =
     [
         "hllo",
@@ -47,24 +41,6 @@ public sealed class EngageInputInterpreter
         " from ",
         " near ",
         " around "
-    ];
-    private static readonly string[] NonNameContextTerms =
-    [
-        "office",
-        "store",
-        "business",
-        "location",
-        "address",
-        "city",
-        "country",
-        "state",
-        "zip",
-        "postal",
-        "website",
-        "service",
-        "project",
-        "timeline",
-        "budget"
     ];
 
     public string NormalizeUserMessage(string message)
@@ -156,11 +132,9 @@ public sealed class EngageInputInterpreter
             return null;
         }
 
-        var explicitPrefix = ExplicitNamePrefixes
-            .FirstOrDefault(prefix => trimmed.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
-        if (!string.IsNullOrWhiteSpace(explicitPrefix))
+        if (trimmed.StartsWith(ContactDetailsNamePrefix, StringComparison.OrdinalIgnoreCase))
         {
-            var explicitName = trimmed[explicitPrefix.Length..].Trim();
+            var explicitName = trimmed[ContactDetailsNamePrefix.Length..].Trim();
             return CleanNameCandidate(explicitName, allowContextTail: true);
         }
 
@@ -212,12 +186,6 @@ public sealed class EngageInputInterpreter
         }
 
         if (candidate.Contains(',', StringComparison.Ordinal) || IsLocationLikeText(candidate))
-        {
-            return null;
-        }
-
-        var lowered = $" {candidate.ToLowerInvariant()} ";
-        if (NonNameContextTerms.Any(term => lowered.Contains($" {term} ", StringComparison.Ordinal)))
         {
             return null;
         }
