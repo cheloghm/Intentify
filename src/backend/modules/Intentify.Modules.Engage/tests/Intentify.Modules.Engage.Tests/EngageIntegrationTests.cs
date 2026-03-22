@@ -273,6 +273,231 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ChatSend_GreetingTypo_ReturnsGreetingStyleResponse()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var response = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "hllo"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("Hi! How can I help you today?", json.RootElement.GetProperty("response").GetString());
+        Assert.False(json.RootElement.GetProperty("ticketCreated").GetBoolean());
+    }
+
+    [Fact]
+    public async Task ChatSend_EarlyCommercialWebsiteIntent_DoesNotJumpToContactCapture()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var response = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "I need a website for my business"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var answer = json.RootElement.GetProperty("response").GetString();
+        Assert.NotNull(answer);
+        Assert.DoesNotContain("name and best email", answer!, StringComparison.OrdinalIgnoreCase);
+        Assert.False(json.RootElement.GetProperty("ticketCreated").GetBoolean());
+    }
+
+    [Fact]
+    public async Task ChatSend_RecommendationPrompt_AsksTargetedQuestion_WhenContextIsThin()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var response = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "what do you recommend"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("Happy to help — what matters most for this choice: budget, speed, performance, or simplicity?", json.RootElement.GetProperty("response").GetString());
+        Assert.False(json.RootElement.GetProperty("ticketCreated").GetBoolean());
+    }
+
+    [Fact]
+    public async Task ChatSend_RecommendationPrompt_ReturnsDirectRecommendation_WhenContextIsSufficient()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var first = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "I need installation service for our office in Austin"
+        });
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+
+        using var firstJson = JsonDocument.Parse(await first.Content.ReadAsStringAsync());
+        var sessionId = firstJson.RootElement.GetProperty("sessionId").GetString();
+        Assert.False(string.IsNullOrWhiteSpace(sessionId));
+
+        var second = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            sessionId,
+            message = "we have a tight budget and urgent deadline"
+        });
+        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+
+        var recommendation = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            sessionId,
+            message = "what do you recommend"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, recommendation.StatusCode);
+        using var recommendationJson = JsonDocument.Parse(await recommendation.Content.ReadAsStringAsync());
+        Assert.Equal("Based on what you’ve shared, I recommend the option that best aligns with your goal and constraints.", recommendationJson.RootElement.GetProperty("response").GetString());
+        Assert.False(recommendationJson.RootElement.GetProperty("ticketCreated").GetBoolean());
+    }
+
+    [Fact]
+    public async Task ChatSend_CommercialCapture_EmailFirst_RequestsMissingName_ThenCompletes()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var first = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "We need installation service for our office and need a quote"
+        });
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+
+        using var firstJson = JsonDocument.Parse(await first.Content.ReadAsStringAsync());
+        var sessionId = firstJson.RootElement.GetProperty("sessionId").GetString();
+        Assert.False(string.IsNullOrWhiteSpace(sessionId));
+
+        var emailOnly = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            sessionId,
+            message = "sam@example.com"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, emailOnly.StatusCode);
+        using var emailOnlyJson = JsonDocument.Parse(await emailOnly.Content.ReadAsStringAsync());
+        Assert.Equal("Please share your first name.", emailOnlyJson.RootElement.GetProperty("response").GetString());
+
+        var nameOnly = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            sessionId,
+            message = "Sam"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, nameOnly.StatusCode);
+        using var nameOnlyJson = JsonDocument.Parse(await nameOnly.Content.ReadAsStringAsync());
+        Assert.Equal("Thanks — I’ve got your details. Our team will contact you shortly.", nameOnlyJson.RootElement.GetProperty("response").GetString());
+    }
+
+    [Fact]
+    public async Task ChatSend_CommercialCapture_PhoneFirst_DoesNotForceEmail()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var first = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "We need installation service for our office and need a quote"
+        });
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+
+        using var firstJson = JsonDocument.Parse(await first.Content.ReadAsStringAsync());
+        var sessionId = firstJson.RootElement.GetProperty("sessionId").GetString();
+        Assert.False(string.IsNullOrWhiteSpace(sessionId));
+
+        var phoneOnly = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            sessionId,
+            message = "415-222-3344"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, phoneOnly.StatusCode);
+        using var phoneOnlyJson = JsonDocument.Parse(await phoneOnly.Content.ReadAsStringAsync());
+        Assert.Equal("Please share your first name.", phoneOnlyJson.RootElement.GetProperty("response").GetString());
+
+        var nameOnly = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            sessionId,
+            message = "Sam"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, nameOnly.StatusCode);
+        using var nameOnlyJson = JsonDocument.Parse(await nameOnly.Content.ReadAsStringAsync());
+        Assert.Equal("Thanks — I’ve got your details. Our team will contact you shortly.", nameOnlyJson.RootElement.GetProperty("response").GetString());
+    }
+
+    [Fact]
+    public async Task ChatSend_CommercialCapture_AllDetailsInOneTurn_CompletesWithoutExtraPrompt()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var first = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "We need installation service for our office and need a quote"
+        });
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+
+        using var firstJson = JsonDocument.Parse(await first.Content.ReadAsStringAsync());
+        var sessionId = firstJson.RootElement.GetProperty("sessionId").GetString();
+        Assert.False(string.IsNullOrWhiteSpace(sessionId));
+
+        var details = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            sessionId,
+            message = "Sam Example, sam@example.com, +1 (415) 555-0101"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, details.StatusCode);
+        using var detailsJson = JsonDocument.Parse(await details.Content.ReadAsStringAsync());
+        Assert.Equal("Thanks — I’ve got your details. Our team will contact you shortly.", detailsJson.RootElement.GetProperty("response").GetString());
+        Assert.NotEqual("Please share your first name.", detailsJson.RootElement.GetProperty("response").GetString());
+        Assert.NotEqual("What’s the best way to reach you — email or phone?", detailsJson.RootElement.GetProperty("response").GetString());
+    }
+
+    [Fact]
+    public async Task ChatSend_CommercialCapturePrompt_IsLessAbruptThanLegacyPrompt()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var response = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "We are looking to start a kitchen remodel project and need a quote."
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var answer = json.RootElement.GetProperty("response").GetString();
+        Assert.NotNull(answer);
+        Assert.DoesNotContain("Share your name, best email, and phone", answer!, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("first name", answer!, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task ChatSend_ProgressiveProfiling_EnrichesLeadAcrossTurns()
     {
         var token = await RegisterUserAsync();

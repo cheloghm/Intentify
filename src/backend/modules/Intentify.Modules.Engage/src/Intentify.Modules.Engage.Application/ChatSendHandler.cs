@@ -118,6 +118,26 @@ public sealed class ChatSendHandler
         "sounds good",
         "okay then"
     ];
+    private static readonly string[] GreetingTypos =
+    [
+        "hllo",
+        "helo",
+        "hy",
+        "helllo",
+        "helloo",
+        "heloo"
+    ];
+    private static readonly string[] RecommendationPhrases =
+    [
+        "which one is better",
+        "which one should i pick",
+        "what do you recommend",
+        "which should i choose",
+        "which color should i pick",
+        "which spec is best",
+        "what should i choose",
+        "recommend"
+    ];
     private static readonly string[] ExplicitEscalationTerms =
     [
         "talk to a human",
@@ -262,9 +282,17 @@ public sealed class ChatSendHandler
         var intent = DetectIntent(normalizedMessage);
         var hasCommercialIntent = TryBuildCommercialIntentContactPrompt(command.Message, out var commercialPrompt) || IsStrongCommercialIntent(command.Message);
         var explicitCommercialContactRequest = IsExplicitCommercialContactRequest(command.Message);
+        var isRecommendationIntent = IsRecommendationIntent(normalizedMessage);
+        if (isRecommendationIntent && !hasCommercialIntent)
+        {
+            var recommendationResponse = BuildRecommendationResponse(session, command.Message);
+            session.ConversationState = StateDiscover;
+            return await CreateAssistantResponseAsync(session, now, recommendationResponse, 0.45m, false, "Recommendation", HasSufficientDiscoveryContext(session) ? "Direct" : "Clarify", cancellationToken);
+        }
+
         if (hasCommercialIntent && (explicitCommercialContactRequest || HasSufficientDiscoveryContext(session)))
         {
-            var response = !string.IsNullOrWhiteSpace(commercialPrompt)
+            var response = explicitCommercialContactRequest && !string.IsNullOrWhiteSpace(commercialPrompt)
                 ? commercialPrompt
                 : BuildNextDiscoveryQuestion(session);
             return await CreateCommercialLeadCapturePromptAsync(site, session, command.Message, response, now, sessionHandoffs, recentMessages, cancellationToken);
@@ -321,11 +349,28 @@ public sealed class ChatSendHandler
         {
             if (hasCommercialIntent && !explicitCommercialContactRequest)
             {
+                var nextDiscoveryQuestion = BuildNextDiscoveryQuestion(session);
+                var priorDiscoveryQuestions = CountDiscoveryQuestionsAsked(recentMessages);
+                if (priorDiscoveryQuestions >= 2 || TryGetLastAssistantDirectQuestion(recentMessages, out var lastQuestion) && string.Equals(lastQuestion, nextDiscoveryQuestion, StringComparison.Ordinal))
+                {
+                    var steadyCommercialResponse = "Thanks — that helps. Based on what you’ve shared, I can tailor a recommendation with one more detail: what matters most right now, timeline, budget, or scope?";
+                    session.ConversationState = StateDiscover;
+                    return await CreateAssistantResponseAsync(
+                        session,
+                        now,
+                        ShapeAssistantResponse(steadyCommercialResponse, false),
+                        0.4m,
+                        false,
+                        "Discover",
+                        "CommercialPacing",
+                        cancellationToken);
+                }
+
                 session.ConversationState = StateDiscover;
                 return await CreateAssistantResponseAsync(
                     session,
                     now,
-                    ShapeAssistantResponse(BuildNextDiscoveryQuestion(session), false, allowMultipleQuestions: true),
+                    ShapeAssistantResponse(nextDiscoveryQuestion, false, allowMultipleQuestions: true),
                     0.4m,
                     false,
                     "Discover",
@@ -448,7 +493,7 @@ Normalized user question (for typo recovery):
     private static bool TryBuildSmalltalkResponse(string message, IReadOnlyCollection<EngageChatMessage> messages, out string response)
     {
         var normalized = message.Trim().ToLowerInvariant();
-        var isGreeting = normalized is "hi" or "hello" or "hey";
+        var isGreeting = normalized is "hi" or "hello" or "hey" || IsLikelyGreetingTypo(normalized);
         var isAcknowledgement = normalized is "yes" or "no" or "ok" or "okay" or "thanks" or "thank you" or "sure";
         var isContinuation = IsContinuationReply(normalized);
         var isVeryShortNonQuestion = normalized.Length > 0 && normalized.Length <= 5 && !normalized.Contains('?');
@@ -580,6 +625,28 @@ Normalized user question (for typo recovery):
         var asksForQuote = normalized.Contains("quote", StringComparison.Ordinal)
             || normalized.Contains("estimate", StringComparison.Ordinal);
         return asksForContact || asksForQuote;
+    }
+
+    private static bool IsRecommendationIntent(string normalizedMessage)
+    {
+        if (string.IsNullOrWhiteSpace(normalizedMessage))
+        {
+            return false;
+        }
+
+        return RecommendationPhrases.Any(phrase => normalizedMessage.Contains(phrase, StringComparison.Ordinal));
+    }
+
+    private static string BuildRecommendationResponse(EngageChatSession session, string message)
+    {
+        if (HasSufficientDiscoveryContext(session))
+        {
+            return "Based on what you’ve shared, I recommend the option that best aligns with your goal and constraints.";
+        }
+
+        return message.Contains("color", StringComparison.OrdinalIgnoreCase)
+            ? "Happy to help — where will this color be used, and do you want a safer neutral look or a bolder standout look?"
+            : "Happy to help — what matters most for this choice: budget, speed, performance, or simplicity?";
     }
 
     private static bool HasSufficientDiscoveryContext(EngageChatSession session)
@@ -1078,16 +1145,16 @@ Normalized user message:
             session.CapturedPhone = parsedPhone ?? session.CapturedPhone;
         }
 
-        var hasFollowupMinimum = !string.IsNullOrWhiteSpace(session.CapturedEmail)
-            || (!string.IsNullOrWhiteSpace(session.CapturedPhone) && !string.IsNullOrWhiteSpace(session.CapturedName));
+        var hasFollowupMinimum = !string.IsNullOrWhiteSpace(session.CapturedName)
+            && (!string.IsNullOrWhiteSpace(session.CapturedEmail) || !string.IsNullOrWhiteSpace(session.CapturedPhone));
 
         if (!hasFollowupMinimum)
         {
             var question = string.IsNullOrWhiteSpace(session.CapturedName)
                 ? "Please share your first name."
-                : string.IsNullOrWhiteSpace(session.CapturedEmail)
-                    ? "Please share your best email."
-                    : "Please share your best phone number.";
+                : string.IsNullOrWhiteSpace(session.CapturedEmail) && string.IsNullOrWhiteSpace(session.CapturedPhone)
+                    ? "What’s the best way to reach you — email or phone?"
+                    : "Please share the best contact detail so our team can follow up.";
             session.ConversationState = StateCaptureLead;
             session.UpdatedAtUtc = now;
             await _sessionRepository.UpdateStateAsync(session, cancellationToken);
@@ -1372,7 +1439,7 @@ Normalized user message:
             condensedNeed = condensedNeed[..96].TrimEnd();
         }
 
-        prompt = $"{CommercialContactDetailsPrefix} \"{condensedNeed}\". Share your name, best email, and phone, and our team will follow up with next steps.";
+        prompt = $"{CommercialContactDetailsPrefix} \"{condensedNeed}\". I can get this moving — what’s your first name?";
         return true;
     }
 
@@ -1451,6 +1518,34 @@ Normalized user message:
 
         question = content;
         return true;
+    }
+
+    private static int CountDiscoveryQuestionsAsked(IReadOnlyCollection<EngageChatMessage> messages)
+    {
+        return messages.Count(item =>
+            string.Equals(item.Role, "assistant", StringComparison.OrdinalIgnoreCase)
+            && (
+                string.Equals(item.Content.Trim(), "What outcome are you trying to achieve?", StringComparison.Ordinal)
+                || string.Equals(item.Content.Trim(), "What type of work or use case is this for?", StringComparison.Ordinal)
+                || string.Equals(item.Content.Trim(), "What location should we plan for?", StringComparison.Ordinal)
+                || string.Equals(item.Content.Trim(), "Any key constraints like budget or timeline?", StringComparison.Ordinal)));
+    }
+
+    private static bool IsLikelyGreetingTypo(string normalized)
+    {
+        if (GreetingTypos.Contains(normalized, StringComparer.Ordinal))
+        {
+            return true;
+        }
+
+        if (normalized.Length is < 2 or > 8)
+        {
+            return false;
+        }
+
+        return normalized.StartsWith("he", StringComparison.Ordinal)
+            && normalized.EndsWith("o", StringComparison.Ordinal)
+            && normalized.Count(character => character == 'l') >= 1;
     }
 
 
@@ -1568,6 +1663,10 @@ Normalized user message:
             .Replace("cntact", "contact", StringComparison.Ordinal)
             .Replace("dtails", "details", StringComparison.Ordinal)
             .Replace("detals", "details", StringComparison.Ordinal)
+            .Replace("servces", "services", StringComparison.Ordinal)
+            .Replace("webstie", "website", StringComparison.Ordinal)
+            .Replace("websiet", "website", StringComparison.Ordinal)
+            .Replace("recomend", "recommend", StringComparison.Ordinal)
             .Replace("orgnization", "organization", StringComparison.Ordinal)
             .Replace("organisation", "organization", StringComparison.Ordinal)
             .Replace("adress", "address", StringComparison.Ordinal)
