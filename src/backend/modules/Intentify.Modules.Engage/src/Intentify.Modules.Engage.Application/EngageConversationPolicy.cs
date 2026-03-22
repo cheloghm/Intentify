@@ -279,6 +279,12 @@ public sealed class EngageConversationPolicy
             return false;
         }
 
+        var normalized = message.Trim().ToLowerInvariant();
+        if (InputInterpreter.ContainsSupportProblemSignal(normalized))
+        {
+            return true;
+        }
+
         if (HumanHelpPhrases.Any(phrase => message.Contains(phrase, StringComparison.OrdinalIgnoreCase)))
         {
             return true;

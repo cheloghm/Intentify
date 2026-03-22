@@ -27,6 +27,23 @@ public sealed class EngageInputInterpreter
         "isn't working",
         "is not working",
         "doesn't work",
+        "doesnt work",
+        "broken",
+        "failed",
+        "image not showing",
+        "page not loading",
+        "page is blank",
+        "blank page",
+        "link broken",
+        "button not working",
+        "contact page isn't working",
+        "contact page is not working",
+        "contact form not working",
+        "form not submitting",
+        "cannot submit",
+        "directions not clear",
+        "information not clear",
+        "prices not clear",
         "broken",
         "error",
         "failed",
@@ -39,6 +56,46 @@ public sealed class EngageInputInterpreter
         "unclear",
         "checkout not working",
         "payment failed",
+        "refund issue",
+        "map not showing",
+        "cannot log in",
+        "can't log in",
+        "cant log in",
+        "can't upload",
+        "cant upload",
+        "code not received"
+    ];
+    private static readonly string[] SupportProblemTerms =
+    [
+        "error",
+        "issue",
+        "problem",
+        "failed",
+        "broken",
+        "confusing",
+        "unclear",
+        "blank"
+    ];
+    private static readonly string[] SupportSurfaceTerms =
+    [
+        "site",
+        "website",
+        "page",
+        "link",
+        "button",
+        "contact",
+        "form",
+        "checkout",
+        "payment",
+        "refund",
+        "image",
+        "map",
+        "directions",
+        "information",
+        "prices",
+        "login",
+        "log in",
+        "upload"
         "map not showing"
     ];
     private static readonly string[] LocationMarkers =
@@ -111,6 +168,18 @@ public sealed class EngageInputInterpreter
             return false;
         }
 
+        if (SupportProblemPhrases.Any(phrase => normalizedMessage.Contains(phrase, StringComparison.Ordinal)))
+        {
+            return true;
+        }
+
+        var hasProblemTerm = SupportProblemTerms.Any(term => normalizedMessage.Contains(term, StringComparison.Ordinal));
+        if (!hasProblemTerm)
+        {
+            return false;
+        }
+
+        return SupportSurfaceTerms.Any(term => normalizedMessage.Contains(term, StringComparison.Ordinal));
         return SupportProblemPhrases.Any(phrase => normalizedMessage.Contains(phrase, StringComparison.Ordinal));
     }
 

@@ -1118,6 +1118,24 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ChatSend_NonSupportInformationalQuery_DoesNotGetSupportEscalationPrompt()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var response = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "what are your prices?"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.False(json.RootElement.GetProperty("ticketCreated").GetBoolean());
+        Assert.NotEqual("Sorry about that — I’ll get someone to help. What’s your name and best email?", json.RootElement.GetProperty("response").GetString());
+    }
+
+    [Fact]
     public async Task ChatSend_ExplicitHumanHelpRequest_StillEscalates()
     {
         var token = await RegisterUserAsync();
@@ -1190,6 +1208,61 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
         Assert.NotNull(createdLead);
         Assert.Equal("Pat Example", createdLead!.DisplayName);
         Assert.Equal("+1 (415) 555-0101", createdLead.Phone);
+    }
+
+    [Fact]
+    public async Task ChatSend_ContactPageNotWorking_TriageThenEscalates_CreatesTicket()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var first = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "contact page isn't working"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+        using var firstJson = JsonDocument.Parse(await first.Content.ReadAsStringAsync());
+        var sessionId = firstJson.RootElement.GetProperty("sessionId").GetString();
+        Assert.Equal("Sorry you’re running into that — what happens when you try it (any error text or the exact step where it fails)?", firstJson.RootElement.GetProperty("response").GetString());
+        Assert.False(firstJson.RootElement.GetProperty("ticketCreated").GetBoolean());
+
+        var second = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            sessionId,
+            message = "still not working, cannot submit"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+        using var secondJson = JsonDocument.Parse(await second.Content.ReadAsStringAsync());
+        Assert.True(secondJson.RootElement.GetProperty("ticketCreated").GetBoolean());
+        Assert.Equal("Sorry about that — I’ll get someone to help. What’s your name and best email?", secondJson.RootElement.GetProperty("response").GetString());
+
+        var database = new MongoClient(_mongo.ConnectionString).GetDatabase(_mongo.DatabaseName);
+        var tickets = database.GetCollection<BsonTicket>("tickets");
+        var ticket = await tickets.Find(item => item.EngageSessionId == Guid.Parse(sessionId!)).FirstOrDefaultAsync();
+        Assert.NotNull(ticket);
+        Assert.Equal("Engage handoff: NeedsHumanHelp", ticket!.Subject);
+    }
+
+    [Fact]
+    public async Task ChatSend_CheckoutNotWorking_UsesSupportTriage()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var response = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "checkout not working"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("Sorry you’re running into that — what happens when you try it (any error text or the exact step where it fails)?", json.RootElement.GetProperty("response").GetString());
+        Assert.False(json.RootElement.GetProperty("ticketCreated").GetBoolean());
     }
 
     [Fact]
