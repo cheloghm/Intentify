@@ -121,6 +121,45 @@
     panel.style.display = isPanelOpen ? 'block' : 'none';
   }
 
+  function canSafelyFocusInput() {
+    if (!launcherVisible || !isPanelOpen || panel.style.display === 'none' || isSending || isHydrating) {
+      return false;
+    }
+
+    var active = document.activeElement;
+    if (!active || active === document.body) {
+      return true;
+    }
+
+    if (active === input || active === toggleButton) {
+      return true;
+    }
+
+    if (panel.contains(active)) {
+      return false;
+    }
+
+    return false;
+  }
+
+  function restoreInputFocus() {
+    if (!canSafelyFocusInput()) {
+      return;
+    }
+
+    setTimeout(function() {
+      if (!canSafelyFocusInput()) {
+        return;
+      }
+
+      try {
+        input.focus({ preventScroll: true });
+      } catch (error) {
+        input.focus();
+      }
+    }, 0);
+  }
+
   function addBubble(role, bodyBuilder) {
     var row = document.createElement('div');
     row.style.display = 'flex';
@@ -484,12 +523,17 @@
         isHydrating = false;
         input.disabled = false;
         sendButton.disabled = false;
+        restoreInputFocus();
       });
   }
 
   toggleButton.addEventListener('click', function() {
-    persistPanelState(!isPanelOpen);
+    var willOpen = !isPanelOpen;
+    persistPanelState(willOpen);
     renderPanelState();
+    if (willOpen) {
+      restoreInputFocus();
+    }
   });
 
   sendButton.addEventListener('click', sendMessage);
@@ -519,6 +563,7 @@
   applyTheme();
   renderPanelState();
   hydrateConversation();
+  restoreInputFocus();
 
   function sendMessage() {
     if (isSending || isHydrating) {
@@ -538,6 +583,7 @@
   function sendChatMessage(message) {
     var requestNonce = ++sendNonce;
     var optimisticUserRow = addMessage('user', message);
+    var shouldRestoreFocusAfterSend = true;
     setSendingState(true);
     showTypingIndicator();
     return waitForCollectorSessionId()
@@ -569,9 +615,11 @@
         addMessage('bot', payload.response || '');
         if (payload && payload.response === contactDetailsPrompt) {
           addContactDetailsForm();
+          shouldRestoreFocusAfterSend = false;
         }
         if (payload && payload.responseKind === 'promo' && payload.promoPublicKey) {
           addPromoForm(payload);
+          shouldRestoreFocusAfterSend = false;
         }
       })
       .catch(function(error) {
@@ -587,6 +635,9 @@
       })
       .finally(function() {
         setSendingState(false);
+        if (shouldRestoreFocusAfterSend) {
+          restoreInputFocus();
+        }
       });
   }
 

@@ -13,63 +13,12 @@ namespace Intentify.Modules.Engage.Application;
 
 public sealed class ChatSendHandler
 {
+    private static readonly EngageConversationPolicy ConversationPolicy = new();
     public const decimal LowConfidenceThreshold = 0.50m;
     public const int TopChunkScoreThreshold = 2;
     private const int PromptReplayMessageLimit = 12;
     private const int PromptDistilledUserTurnsLimit = 3;
     private const int HandoffTranscriptLineLimit = 8;
-    private static readonly string[] HumanHelpPhrases =
-    [
-        "contact form",
-        "form isn't working",
-        "form is not working",
-        "can't submit",
-        "cannot submit",
-        "doesn't submit"
-    ];
-    private static readonly string[] HumanHelpRequestPhrases =
-    [
-        "help me",
-        "need help",
-        "someone help",
-        "talk to",
-        "speak to",
-        "human",
-        "agent",
-        "representative",
-        "support"
-    ];
-    private static readonly string[] HumanHelpProblemTerms =
-    [
-        "broken",
-        "error",
-        "failed",
-        "not working",
-        "doesn't work",
-        "checkout",
-        "payment",
-        "refund",
-        "complaint",
-        "issue",
-        "problem"
-    ];
-    private static readonly string[] CommercialIntentTopicTerms =
-    [
-        "project",
-        "remodel",
-        "renovation",
-        "installation",
-        "service"
-    ];
-    private static readonly string[] CommercialIntentActionTerms =
-    [
-        "looking for",
-        "looking to",
-        "need",
-        "quote",
-        "estimate",
-        "pricing"
-    ];
 
     private const string AskForContactDetailsResponse = "Sorry about that — I’ll get someone to help. What’s your name and best email?";
     private const string ContactDetailsReceivedResponse = "Thanks — I’ve got your details. Our team will contact you shortly.";
@@ -81,7 +30,6 @@ public sealed class ChatSendHandler
     private const string EscalationFallbackResponse = "Thanks — I can connect you with our team. Please share your name and best email.";
     private const string PromoCommandPrefix = "/promo";
     private const string PromoResponseText = "Please complete this short promo form.";
-    private const string ContactDetailsNamePrefix = "my name is";
     private const string StateGreeting = "Greeting";
     private const string StateInform = "Inform";
     private const string StateDiscover = "Discover";
@@ -107,47 +55,6 @@ public sealed class ChatSendHandler
         "If you'd like",
         "If you’d like",
         "What would you like to do next?"
-    ];
-    private static readonly string[] ContinuationPhrases =
-    [
-        "yes please",
-        "go ahead",
-        "that's fine",
-        "thats fine",
-        "that’s fine",
-        "sounds good",
-        "okay then"
-    ];
-    private static readonly string[] GreetingTypos =
-    [
-        "hllo",
-        "helo",
-        "hy",
-        "helllo",
-        "helloo",
-        "heloo"
-    ];
-    private static readonly string[] RecommendationPhrases =
-    [
-        "which one is better",
-        "which one should i pick",
-        "what do you recommend",
-        "which should i choose",
-        "which color should i pick",
-        "which spec is best",
-        "what should i choose",
-        "recommend"
-    ];
-    private static readonly string[] ExplicitEscalationTerms =
-    [
-        "talk to a human",
-        "speak to a human",
-        "human support",
-        "contact support",
-        "call me",
-        "call back",
-        "callback",
-        "reach out"
     ];
     private const string SupportTroubleshootPrompt = "Sorry you’re running into that — what happens when you try it (any error text or the exact step where it fails)?";
     private readonly ISiteRepository _siteRepository;
@@ -235,7 +142,7 @@ public sealed class ChatSendHandler
 
         var recentMessages = await _messageRepository.ListBySessionAsync(session.Id, cancellationToken);
         var sessionHandoffs = await _ticketRepository.ListBySessionAsync(session.Id, cancellationToken);
-        var normalizedMessage = NormalizeUserMessage(command.Message);
+        var normalizedMessage = ConversationPolicy.NormalizeUserMessage(command.Message);
         var userAskedForDetail = UserRequestedDetail(command.Message);
         MergeDiscoverySlots(session, command.Message);
 
@@ -264,7 +171,8 @@ public sealed class ChatSendHandler
                 promoPublicKey));
         }
 
-        if (TryBuildSmalltalkResponse(command.Message, recentMessages, out var smalltalkResponse))
+        var priorAssistantAskedQuestion = TryGetLastAssistantDirectQuestion(recentMessages, out _);
+        if (ConversationPolicy.TryBuildSmalltalkResponse(command.Message, priorAssistantAskedQuestion, GreetingResponse, AckResponse, out var smalltalkResponse))
         {
             session.ConversationState = smalltalkResponse == GreetingResponse ? StateGreeting : StateCloseIdle;
             return await CreateAssistantResponseAsync(session, now, ShapeAssistantResponse(smalltalkResponse, userAskedForDetail), 1m, false, "Smalltalk", null, cancellationToken);
@@ -279,28 +187,30 @@ public sealed class ChatSendHandler
             }
         }
 
-        var intent = DetectIntent(normalizedMessage);
-        var hasCommercialIntent = TryBuildCommercialIntentContactPrompt(command.Message, out var commercialPrompt) || IsStrongCommercialIntent(command.Message);
-        var explicitCommercialContactRequest = IsExplicitCommercialContactRequest(command.Message);
-        var isRecommendationIntent = IsRecommendationIntent(normalizedMessage);
+        var intent = ConversationPolicy.DetectIntent(normalizedMessage);
+        var hasCommercialIntent = ConversationPolicy.TryBuildCommercialIntentContactPrompt(command.Message, CommercialContactDetailsPrefix, out var commercialPrompt)
+            || ConversationPolicy.IsStrongCommercialIntent(command.Message);
+        var explicitCommercialContactRequest = ConversationPolicy.IsExplicitCommercialContactRequest(command.Message);
+        var isRecommendationIntent = ConversationPolicy.IsRecommendationIntent(normalizedMessage);
         if (isRecommendationIntent && !hasCommercialIntent)
         {
-            var recommendationResponse = BuildRecommendationResponse(session, command.Message);
+            var recommendationResponse = ConversationPolicy.BuildRecommendationResponse(session, command.Message);
             session.ConversationState = StateDiscover;
-            return await CreateAssistantResponseAsync(session, now, recommendationResponse, 0.45m, false, "Recommendation", HasSufficientDiscoveryContext(session) ? "Direct" : "Clarify", cancellationToken);
+            return await CreateAssistantResponseAsync(session, now, recommendationResponse, 0.45m, false, "Recommendation", ConversationPolicy.HasSufficientDiscoveryContext(session) ? "Direct" : "Clarify", cancellationToken);
         }
 
-        if (hasCommercialIntent && (explicitCommercialContactRequest || HasSufficientDiscoveryContext(session)))
+        if (hasCommercialIntent && ConversationPolicy.IsCommercialCaptureReady(session, explicitCommercialContactRequest))
+        if (hasCommercialIntent && (explicitCommercialContactRequest || ConversationPolicy.HasSufficientDiscoveryContext(session)))
         {
             var commercialResponse = explicitCommercialContactRequest && !string.IsNullOrWhiteSpace(commercialPrompt)
                 ? commercialPrompt
-                : BuildNextDiscoveryQuestion(session);
-            return await CreateCommercialLeadCapturePromptAsync(site, session, command.Message, commercialResponse, now, sessionHandoffs, recentMessages, cancellationToken);
+                : ConversationPolicy.BuildNextDiscoveryQuestion(session);
+            return await CreateCommercialLeadCapturePromptAsync(site, session, command.Message, response, now, sessionHandoffs, recentMessages, cancellationToken);
         }
 
-        if (NeedsHumanHelp(command.Message))
+        if (ConversationPolicy.NeedsHumanHelp(command.Message))
         {
-            if (ShouldAttemptSupportTroubleshoot(session, command.Message))
+            if (ConversationPolicy.ShouldAttemptSupportTroubleshoot(session, command.Message, IsCaptureMode(session, CaptureModeSupport)))
             {
                 session.ConversationState = StateSupportTriage;
                 return await CreateAssistantResponseAsync(session, now, SupportTroubleshootPrompt, 0.3m, false, "SupportTriage", "TroubleshootFirst", cancellationToken);
@@ -309,8 +219,8 @@ public sealed class ChatSendHandler
             return await CreateHumanHelpResponseAsync(site, session, command.Message, now, sessionHandoffs, recentMessages, cancellationToken);
         }
 
-        var hasDirectQuestionContext = TryGetLastAssistantDirectQuestion(recentMessages, out _);
-        var isContinuationReply = IsContinuationReply(command.Message);
+        var hasDirectQuestionContext = priorAssistantAskedQuestion;
+        var isContinuationReply = ConversationPolicy.IsContinuationReply(command.Message);
         if (intent == ChatIntent.EscalationHelp)
         {
             return await CreateHumanHelpResponseAsync(site, session, command.Message, now, sessionHandoffs, recentMessages, cancellationToken);
@@ -349,7 +259,7 @@ public sealed class ChatSendHandler
         {
             if (hasCommercialIntent && !explicitCommercialContactRequest)
             {
-                var nextDiscoveryQuestion = BuildNextDiscoveryQuestion(session);
+                var nextDiscoveryQuestion = ConversationPolicy.BuildNextDiscoveryQuestion(session);
                 var priorDiscoveryQuestions = CountDiscoveryQuestionsAsked(recentMessages);
                 if (priorDiscoveryQuestions >= 2 || TryGetLastAssistantDirectQuestion(recentMessages, out var lastQuestion) && string.Equals(lastQuestion, nextDiscoveryQuestion, StringComparison.Ordinal))
                 {
@@ -490,31 +400,6 @@ Normalized user question (for typo recovery):
 """;
     }
 
-    private static bool TryBuildSmalltalkResponse(string message, IReadOnlyCollection<EngageChatMessage> messages, out string response)
-    {
-        var normalized = message.Trim().ToLowerInvariant();
-        var isGreeting = normalized is "hi" or "hello" or "hey" || IsLikelyGreetingTypo(normalized);
-        var isAcknowledgement = normalized is "yes" or "no" or "ok" or "okay" or "thanks" or "thank you" or "sure";
-        var isContinuation = IsContinuationReply(normalized);
-        var isVeryShortNonQuestion = normalized.Length > 0 && normalized.Length <= 5 && !normalized.Contains('?');
-        var priorAssistantAskedQuestion = TryGetLastAssistantDirectQuestion(messages, out _);
-
-        if (priorAssistantAskedQuestion && (isAcknowledgement || isContinuation))
-        {
-            response = string.Empty;
-            return false;
-        }
-
-        if (!isGreeting && !isAcknowledgement && !isVeryShortNonQuestion)
-        {
-            response = string.Empty;
-            return false;
-        }
-
-        response = isGreeting ? GreetingResponse : AckResponse;
-        return true;
-    }
-
     private static bool IsRealQuestion(string message)
     {
         if (string.IsNullOrWhiteSpace(message))
@@ -598,83 +483,6 @@ Normalized user question (for typo recovery):
         return sentences.Length == 0 ? normalized : string.Join(" ", sentences);
     }
 
-    private static bool IsStrongCommercialIntent(string message)
-    {
-        var normalized = message.Trim().ToLowerInvariant();
-        var hasAction = CommercialIntentActionTerms.Any(term => normalized.Contains(term, StringComparison.Ordinal));
-        var hasTopic = CommercialIntentTopicTerms.Any(term => normalized.Contains(term, StringComparison.Ordinal))
-            || normalized.Contains("help with", StringComparison.Ordinal)
-            || normalized.Contains("for my", StringComparison.Ordinal)
-            || normalized.Contains("for our", StringComparison.Ordinal);
-        return hasAction && hasTopic;
-    }
-
-    private static bool IsExplicitCommercialContactRequest(string message)
-    {
-        if (string.IsNullOrWhiteSpace(message))
-        {
-            return false;
-        }
-
-        var normalized = message.Trim().ToLowerInvariant();
-        var asksForContact = normalized.Contains("contact", StringComparison.Ordinal)
-            || normalized.Contains("call", StringComparison.Ordinal)
-            || normalized.Contains("callback", StringComparison.Ordinal)
-            || normalized.Contains("call back", StringComparison.Ordinal)
-            || normalized.Contains("reach out", StringComparison.Ordinal);
-        var asksForQuote = normalized.Contains("quote", StringComparison.Ordinal)
-            || normalized.Contains("estimate", StringComparison.Ordinal);
-        return asksForContact || asksForQuote;
-    }
-
-    private static bool IsRecommendationIntent(string normalizedMessage)
-    {
-        if (string.IsNullOrWhiteSpace(normalizedMessage))
-        {
-            return false;
-        }
-
-        return RecommendationPhrases.Any(phrase => normalizedMessage.Contains(phrase, StringComparison.Ordinal));
-    }
-
-    private static string BuildRecommendationResponse(EngageChatSession session, string message)
-    {
-        if (HasSufficientDiscoveryContext(session))
-        {
-            return "Based on what you’ve shared, I recommend the option that best aligns with your goal and constraints.";
-        }
-
-        return message.Contains("color", StringComparison.OrdinalIgnoreCase)
-            ? "Happy to help — where will this color be used, and do you want a safer neutral look or a bolder standout look?"
-            : "Happy to help — what matters most for this choice: budget, speed, performance, or simplicity?";
-    }
-
-    private static bool HasSufficientDiscoveryContext(EngageChatSession session)
-    {
-        var scopedFields = 0;
-        if (!string.IsNullOrWhiteSpace(session.CaptureGoal))
-        {
-            scopedFields++;
-        }
-
-        if (!string.IsNullOrWhiteSpace(session.CaptureType))
-        {
-            scopedFields++;
-        }
-
-        if (!string.IsNullOrWhiteSpace(session.CaptureLocation))
-        {
-            scopedFields++;
-        }
-
-        if (!string.IsNullOrWhiteSpace(session.CaptureConstraints))
-        {
-            scopedFields++;
-        }
-
-        return scopedFields >= 2;
-    }
-
     private static void MergeDiscoverySlots(EngageChatSession session, string message)
     {
         var normalized = message.Trim();
@@ -712,31 +520,6 @@ Normalized user question (for typo recovery):
         }
 
         session.CaptureContext ??= normalized.Length <= 200 ? normalized : normalized[..200];
-    }
-
-    private static string BuildNextDiscoveryQuestion(EngageChatSession session)
-    {
-        if (string.IsNullOrWhiteSpace(session.CaptureGoal))
-        {
-            return "What outcome are you trying to achieve?";
-        }
-
-        if (string.IsNullOrWhiteSpace(session.CaptureType))
-        {
-            return "What type of work or use case is this for?";
-        }
-
-        if (string.IsNullOrWhiteSpace(session.CaptureLocation))
-        {
-            return "What location should we plan for?";
-        }
-
-        if (string.IsNullOrWhiteSpace(session.CaptureConstraints))
-        {
-            return "Any key constraints like budget or timeline?";
-        }
-
-        return "Please share your first name and best email so our team can follow up.";
     }
 
     private async Task<OperationResult<ChatSendResult>> CreateFallbackResponseAsync(
@@ -820,14 +603,14 @@ Normalized user question (for typo recovery):
         bool isContinuationReply,
         CancellationToken cancellationToken)
     {
-        var shouldEscalate = ShouldEscalateFallback(bot, intent, normalizedUserMessage, reason);
+        var shouldEscalate = ConversationPolicy.ShouldEscalateFallback(bot, intent, normalizedUserMessage, reason, IsRealQuestion(userMessage));
         if (!shouldEscalate)
         {
             var fallback = IsRealQuestion(userMessage) || (hasDirectQuestionContext && isContinuationReply)
                 ? reason == "LowConfidence" && retrievedChunks.Count == 0
                     ? BuildDeterministicClarificationResponse(intent)
                     : await BuildBusinessAwareClarificationResponseAsync(bot, userMessage, normalizedUserMessage, intent, messages, retrievedChunks, cancellationToken)
-                : BuildSoftFallbackResponse(bot);
+                : ConversationPolicy.BuildSoftFallbackResponse(bot, SoftFallbackResponse);
             session.ConversationState = StateClarify;
             return await CreateAssistantResponseAsync(session, now, ShapeAssistantResponse(fallback, UserRequestedDetail(userMessage)), 0.2m, false, "Fallback", reason, cancellationToken);
         }
@@ -835,165 +618,6 @@ Normalized user question (for typo recovery):
         return await CreateFallbackResponseAsync(site, session, userMessage, now, reason, handoffs, messages, cancellationToken, EscalationFallbackResponse);
     }
 
-    private static bool NeedsHumanHelp(string message)
-    {
-        if (string.IsNullOrWhiteSpace(message))
-        {
-            return false;
-        }
-
-        if (HumanHelpPhrases.Any(phrase => message.Contains(phrase, StringComparison.OrdinalIgnoreCase)))
-        {
-            return true;
-        }
-
-        var normalized = message.Trim().ToLowerInvariant();
-        var requestedHumanHelp = HumanHelpRequestPhrases.Any(phrase => normalized.Contains(phrase, StringComparison.Ordinal));
-        if (!requestedHumanHelp)
-        {
-            return false;
-        }
-
-        return HumanHelpProblemTerms.Any(term => normalized.Contains(term, StringComparison.Ordinal));
-    }
-
-    private static bool IsExplicitEscalationRequest(string message)
-    {
-        if (string.IsNullOrWhiteSpace(message))
-        {
-            return false;
-        }
-
-        var normalized = message.Trim().ToLowerInvariant();
-        if (ExplicitEscalationTerms.Any(term => normalized.Contains(term, StringComparison.Ordinal)))
-        {
-            return true;
-        }
-
-        var containsHumanTarget = normalized.Contains("human", StringComparison.Ordinal)
-            || normalized.Contains("agent", StringComparison.Ordinal)
-            || normalized.Contains("representative", StringComparison.Ordinal)
-            || normalized.Contains("support", StringComparison.Ordinal);
-
-        var containsEscalationVerb = normalized.Contains("talk", StringComparison.Ordinal)
-            || normalized.Contains("speak", StringComparison.Ordinal)
-            || normalized.Contains("contact", StringComparison.Ordinal)
-            || normalized.Contains("connect", StringComparison.Ordinal)
-            || normalized.Contains("call", StringComparison.Ordinal);
-
-        return containsHumanTarget && containsEscalationVerb;
-    }
-
-    private static bool ShouldAttemptSupportTroubleshoot(EngageChatSession session, string message)
-    {
-        if (IsExplicitEscalationRequest(message))
-        {
-            return false;
-        }
-
-        return !string.Equals(session.ConversationState, StateSupportTriage, StringComparison.Ordinal)
-            && !IsCaptureMode(session, CaptureModeSupport);
-    }
-
-    private static ChatIntent DetectIntent(string message)
-    {
-        var normalized = message.Trim().ToLowerInvariant();
-
-        if (normalized.Length <= 3 || normalized is "help" or "info" or "details" or "price")
-        {
-            return ChatIntent.AmbiguousShortPrompt;
-        }
-
-        var containsHumanTarget = normalized.Contains("human", StringComparison.Ordinal)
-            || normalized.Contains("agent", StringComparison.Ordinal)
-            || normalized.Contains("representative", StringComparison.Ordinal)
-            || normalized.Contains("person", StringComparison.Ordinal);
-        var containsHandoffVerb = normalized.Contains("need", StringComparison.Ordinal)
-            || normalized.Contains("want", StringComparison.Ordinal)
-            || normalized.Contains("speak", StringComparison.Ordinal)
-            || normalized.Contains("talk", StringComparison.Ordinal)
-            || normalized.Contains("connect", StringComparison.Ordinal)
-            || normalized.Contains("help", StringComparison.Ordinal);
-
-        if (containsHumanTarget && containsHandoffVerb)
-        {
-            return ChatIntent.EscalationHelp;
-        }
-
-        if (normalized.Contains("contact", StringComparison.Ordinal)
-            || normalized.Contains("phone", StringComparison.Ordinal)
-            || normalized.Contains("email", StringComparison.Ordinal)
-            || normalized.Contains("call", StringComparison.Ordinal))
-        {
-            return ChatIntent.Contact;
-        }
-
-        if (normalized.Contains("location", StringComparison.Ordinal)
-            || normalized.Contains("address", StringComparison.Ordinal)
-            || normalized.Contains("where", StringComparison.Ordinal)
-            || normalized.Contains("located", StringComparison.Ordinal))
-        {
-            return ChatIntent.Location;
-        }
-
-        if (normalized.Contains("hours", StringComparison.Ordinal)
-            || normalized.Contains("open", StringComparison.Ordinal)
-            || normalized.Contains("close", StringComparison.Ordinal)
-            || normalized.Contains("time", StringComparison.Ordinal))
-        {
-            return ChatIntent.Hours;
-        }
-
-        if (normalized.Contains("service", StringComparison.Ordinal)
-            || normalized.Contains("menu", StringComparison.Ordinal)
-            || normalized.Contains("offer", StringComparison.Ordinal)
-            || normalized.Contains("pricing", StringComparison.Ordinal)
-            || normalized.Contains("order", StringComparison.Ordinal))
-        {
-            return ChatIntent.Services;
-        }
-
-        if (normalized.Contains("org", StringComparison.Ordinal)
-            || normalized.Contains("organization", StringComparison.Ordinal)
-            || normalized.Contains("business name", StringComparison.Ordinal)
-            || normalized.Contains("company name", StringComparison.Ordinal)
-            || normalized.Contains("name of", StringComparison.Ordinal))
-        {
-            return ChatIntent.Organization;
-        }
-
-        return ChatIntent.General;
-    }
-
-    private static bool ShouldEscalateFallback(EngageBot bot, ChatIntent intent, string userMessage, string reason)
-    {
-        var isActionableHelpIntent = intent == ChatIntent.EscalationHelp || NeedsHumanHelp(userMessage);
-        var isRealQuestion = IsRealQuestion(userMessage);
-
-        if (string.Equals(NormalizeOptional(bot.FallbackStyle), "handoff", StringComparison.OrdinalIgnoreCase)
-            && (isActionableHelpIntent || isRealQuestion))
-        {
-            return true;
-        }
-
-        if (reason == "AiUnavailable" && isRealQuestion)
-        {
-            return true;
-        }
-
-        return isActionableHelpIntent;
-    }
-
-    private static string BuildSoftFallbackResponse(EngageBot bot)
-    {
-        var tone = NormalizeOptional(bot.Tone)?.ToLowerInvariant();
-        return tone switch
-        {
-            "professional" => "I can help with that — which part should we focus on first?",
-            "casual" => "Sure — what are you trying to do right now?",
-            _ => SoftFallbackResponse
-        };
-    }
 
     private async Task<string> BuildBusinessAwareClarificationResponseAsync(
         EngageBot bot,
@@ -1116,7 +740,7 @@ Normalized user message:
         return Regex.IsMatch(message, @"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", RegexOptions.IgnoreCase);
     }
 
-    private static bool ContainsPhone(string message) => !string.IsNullOrWhiteSpace(TryExtractPhone(message));
+    private static bool ContainsPhone(string message) => !string.IsNullOrWhiteSpace(ConversationPolicy.TryExtractPhone(message));
 
     private static bool IsCaptureMode(EngageChatSession session, string mode)
     {
@@ -1131,9 +755,9 @@ Normalized user message:
         IReadOnlyCollection<EngageHandoffTicket> handoffs,
         CancellationToken cancellationToken)
     {
-        var parsedEmail = TryExtractEmail(userMessage);
-        var parsedPhone = TryExtractPhone(userMessage);
-        var parsedName = TryExtractName(userMessage, parsedEmail, parsedPhone);
+        var parsedEmail = ConversationPolicy.TryExtractEmail(userMessage);
+        var parsedPhone = ConversationPolicy.TryExtractPhone(userMessage);
+        var parsedName = ConversationPolicy.TryExtractName(userMessage, parsedEmail, parsedPhone);
 
         session.CapturedEmail ??= parsedEmail;
         session.CapturedPhone ??= parsedPhone;
@@ -1145,16 +769,16 @@ Normalized user message:
             session.CapturedPhone = parsedPhone ?? session.CapturedPhone;
         }
 
-        var hasFollowupMinimum = !string.IsNullOrWhiteSpace(session.CapturedEmail)
-            || (!string.IsNullOrWhiteSpace(session.CapturedPhone) && !string.IsNullOrWhiteSpace(session.CapturedName));
+        var hasFollowupMinimum = !string.IsNullOrWhiteSpace(session.CapturedName)
+            && (!string.IsNullOrWhiteSpace(session.CapturedEmail) || !string.IsNullOrWhiteSpace(session.CapturedPhone));
 
         if (!hasFollowupMinimum)
         {
             var question = string.IsNullOrWhiteSpace(session.CapturedName)
                 ? "Please share your first name."
-                : string.IsNullOrWhiteSpace(session.CapturedEmail)
-                    ? "Please share your best email."
-                    : "Please share your best phone number.";
+                : string.IsNullOrWhiteSpace(session.CapturedEmail) && string.IsNullOrWhiteSpace(session.CapturedPhone)
+                    ? "What’s the best way to reach you — email or phone?"
+                    : "Please share the best contact detail so our team can follow up.";
             session.ConversationState = StateCaptureLead;
             session.UpdatedAtUtc = now;
             await _sessionRepository.UpdateStateAsync(session, cancellationToken);
@@ -1266,9 +890,9 @@ Normalized user message:
         CancellationToken cancellationToken)
     {
         var visitorId = await ResolveVisitorIdAsync(site.TenantId, site.Id, session.CollectorSessionId, cancellationToken);
-        var parsedEmail = TryExtractEmail(userMessage) ?? session.CapturedEmail;
-        var parsedPhone = TryExtractPhone(userMessage) ?? session.CapturedPhone;
-        var parsedName = TryExtractName(userMessage, parsedEmail, parsedPhone) ?? session.CapturedName;
+        var parsedEmail = ConversationPolicy.TryExtractEmail(userMessage) ?? session.CapturedEmail;
+        var parsedPhone = ConversationPolicy.TryExtractPhone(userMessage) ?? session.CapturedPhone;
+        var parsedName = ConversationPolicy.TryExtractName(userMessage, parsedEmail, parsedPhone) ?? session.CapturedName;
         session.CapturedEmail = parsedEmail;
         session.CapturedPhone = parsedPhone;
         session.CapturedName = parsedName;
@@ -1408,94 +1032,7 @@ Normalized user message:
             intent ?? string.Empty);
     }
 
-    private static bool TryBuildCommercialIntentContactPrompt(string message, out string prompt)
-    {
-        var normalized = message.Trim().ToLowerInvariant();
-        if (string.IsNullOrWhiteSpace(normalized))
-        {
-            prompt = string.Empty;
-            return false;
-        }
-
-        var hasTopic = CommercialIntentTopicTerms.Any(term => normalized.Contains(term, StringComparison.Ordinal));
-        var hasAction = CommercialIntentActionTerms.Any(term => normalized.Contains(term, StringComparison.Ordinal));
-        var hasFirstPartySignal = normalized.StartsWith("i ", StringComparison.Ordinal)
-            || normalized.Contains(" i ", StringComparison.Ordinal)
-            || normalized.StartsWith("we ", StringComparison.Ordinal)
-            || normalized.Contains(" we ", StringComparison.Ordinal)
-            || normalized.Contains(" my ", StringComparison.Ordinal)
-            || normalized.Contains(" our ", StringComparison.Ordinal)
-            || normalized.Contains("looking to", StringComparison.Ordinal);
-
-        if (!(hasTopic && hasAction && hasFirstPartySignal))
-        {
-            prompt = string.Empty;
-            return false;
-        }
-
-        var condensedNeed = message.Trim().TrimEnd('.', '!', '?');
-        if (condensedNeed.Length > 96)
-        {
-            condensedNeed = condensedNeed[..96].TrimEnd();
-        }
-
-        prompt = $"{CommercialContactDetailsPrefix} \"{condensedNeed}\". Share your name, best email, and phone, and our team will follow up with next steps.";
-        return true;
-    }
-
-    private static string? TryExtractEmail(string message)
-    {
-        if (string.IsNullOrWhiteSpace(message))
-        {
-            return null;
-        }
-
-        var match = Regex.Match(message, @"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", RegexOptions.IgnoreCase);
-        return match.Success ? match.Value.Trim() : null;
-    }
-
-    private static string? TryExtractPhone(string message)
-    {
-        if (string.IsNullOrWhiteSpace(message))
-        {
-            return null;
-        }
-
-        var match = Regex.Match(message, @"(?:\+?\d[\d\-\.\(\)\s]{6,}\d)");
-        return match.Success ? match.Value.Trim() : null;
-    }
-
-    private static string? TryExtractName(string message, string? email, string? phone)
-    {
-        if (string.IsNullOrWhiteSpace(message))
-        {
-            return null;
-        }
-
-        var withoutEmail = !string.IsNullOrWhiteSpace(email)
-            ? message.Replace(email, string.Empty, StringComparison.OrdinalIgnoreCase)
-            : message;
-
-        var withoutContact = !string.IsNullOrWhiteSpace(phone)
-            ? withoutEmail.Replace(phone, string.Empty, StringComparison.OrdinalIgnoreCase)
-            : withoutEmail;
-
-        var normalized = withoutContact.Trim(' ', ',', '.', ';', ':', '-', '_');
-        if (normalized.StartsWith(ContactDetailsNamePrefix, StringComparison.OrdinalIgnoreCase))
-        {
-            normalized = normalized[ContactDetailsNamePrefix.Length..].Trim(' ', ',', '.', ';', ':', '-', '_');
-        }
-
-        return string.IsNullOrWhiteSpace(normalized)
-            ? null
-            : normalized.Length <= 200 ? normalized : normalized[..200];
-    }
-
-    private static bool IsContinuationReply(string message)
-    {
-        var normalized = message.Trim().ToLowerInvariant();
-        return ContinuationPhrases.Contains(normalized, StringComparer.Ordinal);
-    }
+    private static bool IsContinuationReply(string message) => ConversationPolicy.IsContinuationReply(message);
 
     private static bool TryGetLastAssistantDirectQuestion(IReadOnlyCollection<EngageChatMessage> messages, out string question)
     {
@@ -1530,24 +1067,6 @@ Normalized user message:
                 || string.Equals(item.Content.Trim(), "What location should we plan for?", StringComparison.Ordinal)
                 || string.Equals(item.Content.Trim(), "Any key constraints like budget or timeline?", StringComparison.Ordinal)));
     }
-
-    private static bool IsLikelyGreetingTypo(string normalized)
-    {
-        if (GreetingTypos.Contains(normalized, StringComparer.Ordinal))
-        {
-            return true;
-        }
-
-        if (normalized.Length is < 2 or > 8)
-        {
-            return false;
-        }
-
-        return normalized.StartsWith("he", StringComparison.Ordinal)
-            && normalized.EndsWith("o", StringComparison.Ordinal)
-            && normalized.Count(character => character == 'l') >= 1;
-    }
-
 
     private async Task<Guid?> ResolveVisitorIdAsync(Guid tenantId, Guid siteId, string? collectorSessionId, CancellationToken cancellationToken)
     {
@@ -1647,33 +1166,6 @@ Normalized user message:
         return !string.IsNullOrWhiteSpace(promoPublicKey);
     }
 
-
-    private static string NormalizeUserMessage(string message)
-    {
-        if (string.IsNullOrWhiteSpace(message))
-        {
-            return string.Empty;
-        }
-
-        var collapsed = Regex.Replace(message.Trim().ToLowerInvariant(), "[^a-z0-9 ]", " ");
-        var normalized = Regex.Replace(collapsed, "\\s+", " ").Trim();
-
-        var repaired = normalized
-            .Replace("contct", "contact", StringComparison.Ordinal)
-            .Replace("cntact", "contact", StringComparison.Ordinal)
-            .Replace("dtails", "details", StringComparison.Ordinal)
-            .Replace("detals", "details", StringComparison.Ordinal)
-            .Replace("servces", "services", StringComparison.Ordinal)
-            .Replace("webstie", "website", StringComparison.Ordinal)
-            .Replace("websiet", "website", StringComparison.Ordinal)
-            .Replace("recomend", "recommend", StringComparison.Ordinal)
-            .Replace("orgnization", "organization", StringComparison.Ordinal)
-            .Replace("organisation", "organization", StringComparison.Ordinal)
-            .Replace("adress", "address", StringComparison.Ordinal)
-            .Replace("locaton", "location", StringComparison.Ordinal);
-
-        return repaired;
-    }
 
     private static string? NormalizeOptional(string? value)
     {
