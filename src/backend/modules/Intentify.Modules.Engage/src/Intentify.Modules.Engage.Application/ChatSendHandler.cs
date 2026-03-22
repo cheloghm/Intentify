@@ -200,6 +200,7 @@ public sealed class ChatSendHandler
         }
 
         if (hasCommercialIntent && ConversationPolicy.IsCommercialCaptureReady(session, explicitCommercialContactRequest))
+        if (hasCommercialIntent && (explicitCommercialContactRequest || ConversationPolicy.HasSufficientDiscoveryContext(session)))
         {
             var response = explicitCommercialContactRequest && !string.IsNullOrWhiteSpace(commercialPrompt)
                 ? commercialPrompt
