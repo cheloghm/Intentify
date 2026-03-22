@@ -248,7 +248,7 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         var answer = json.RootElement.GetProperty("response").GetString();
         Assert.NotNull(answer);
-        Assert.Equal("What type of work or use case is this for?", answer);
+        Assert.Equal("What kind of business or use case is this for?", answer);
         Assert.False(json.RootElement.GetProperty("ticketCreated").GetBoolean());
     }
 
@@ -267,7 +267,7 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         var answer = json.RootElement.GetProperty("response").GetString();
-        Assert.Equal("What type of work or use case is this for?", answer);
+        Assert.Equal("What kind of business or use case is this for?", answer);
         Assert.DoesNotContain("name and best email", answer!, StringComparison.OrdinalIgnoreCase);
         Assert.False(json.RootElement.GetProperty("ticketCreated").GetBoolean());
     }
@@ -306,7 +306,28 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         var answer = json.RootElement.GetProperty("response").GetString();
         Assert.NotNull(answer);
+        Assert.Equal("Is this a brand new site or a redesign, and what should it help customers do first?", answer);
         Assert.DoesNotContain("name and best email", answer!, StringComparison.OrdinalIgnoreCase);
+        Assert.False(json.RootElement.GetProperty("ticketCreated").GetBoolean());
+    }
+
+    [Fact]
+    public async Task ChatSend_ExplicitCommercialContactRequest_UsesCommercialCapturePrompt()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var response = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "We are looking to remodel our office and need a quote. Please contact me."
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var answer = json.RootElement.GetProperty("response").GetString();
+        Assert.NotNull(answer);
+        Assert.StartsWith("Thanks — it sounds like you’re looking for", answer, StringComparison.Ordinal);
         Assert.False(json.RootElement.GetProperty("ticketCreated").GetBoolean());
     }
 
@@ -364,6 +385,46 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
         using var recommendationJson = JsonDocument.Parse(await recommendation.Content.ReadAsStringAsync());
         Assert.Equal("Based on what you’ve shared, I recommend the option that best aligns with your goal and constraints.", recommendationJson.RootElement.GetProperty("response").GetString());
         Assert.False(recommendationJson.RootElement.GetProperty("ticketCreated").GetBoolean());
+    }
+
+    [Fact]
+    public async Task ChatSend_CommercialFlow_DoesNotOverQuestion_BeforeCaptureBridge()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var first = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "We are looking to remodel our office"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+        using var firstJson = JsonDocument.Parse(await first.Content.ReadAsStringAsync());
+        var sessionId = firstJson.RootElement.GetProperty("sessionId").GetString();
+        Assert.Equal("What kind of business or use case is this for?", firstJson.RootElement.GetProperty("response").GetString());
+
+        var second = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            sessionId,
+            message = "We need renovation service for our office in Austin"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+        using var secondJson = JsonDocument.Parse(await second.Content.ReadAsStringAsync());
+        Assert.Equal("Any key constraints like budget or timeline?", secondJson.RootElement.GetProperty("response").GetString());
+
+        var third = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            sessionId,
+            message = "We need renovation service and our budget is 20k"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, third.StatusCode);
+        using var thirdJson = JsonDocument.Parse(await third.Content.ReadAsStringAsync());
+        Assert.Equal("Thanks — that gives me enough context. If you want tailored options and next steps, share your first name and best email.", thirdJson.RootElement.GetProperty("response").GetString());
     }
 
     [Fact]
@@ -1003,6 +1064,24 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ChatSend_TypoServiceIntent_UsesServicesClarification()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var response = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "what servces do yur webstie offer?"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("I can help with services — which specific service do you want details about?", json.RootElement.GetProperty("response").GetString());
+        Assert.False(json.RootElement.GetProperty("ticketCreated").GetBoolean());
+    }
+
+    [Fact]
     public async Task ChatSend_OrganizationNameQuestion_ReturnsHelpfulClarification()
     {
         var token = await RegisterUserAsync();
@@ -1111,6 +1190,164 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
         Assert.NotNull(createdLead);
         Assert.Equal("Pat Example", createdLead!.DisplayName);
         Assert.Equal("+1 (415) 555-0101", createdLead.Phone);
+    }
+
+    [Fact]
+    public async Task ChatSend_LeadCapture_LocationLikeReply_DoesNotBecomeName()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var first = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "We are looking to remodel our office and need a quote. Please contact me."
+        });
+
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+        using var firstJson = JsonDocument.Parse(await first.Content.ReadAsStringAsync());
+        var sessionId = firstJson.RootElement.GetProperty("sessionId").GetString();
+
+        var second = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            sessionId,
+            message = "Lincoln, in England"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+        using var secondJson = JsonDocument.Parse(await second.Content.ReadAsStringAsync());
+        Assert.Equal("Please share your first name.", secondJson.RootElement.GetProperty("response").GetString());
+    }
+
+    [Fact]
+    public async Task ChatSend_LeadCapture_ExplicitNameIsCaptured()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var first = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "We are looking to remodel our office and need a quote. Please contact me."
+        });
+
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+        using var firstJson = JsonDocument.Parse(await first.Content.ReadAsStringAsync());
+        var sessionId = firstJson.RootElement.GetProperty("sessionId").GetString();
+
+        var second = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            sessionId,
+            message = "my name is Sam"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+        using var secondJson = JsonDocument.Parse(await second.Content.ReadAsStringAsync());
+        Assert.Equal("What’s the best way to reach you — email or phone?", secondJson.RootElement.GetProperty("response").GetString());
+    }
+
+    [Fact]
+    public async Task ChatSend_LeadCapture_IAmName_IsCaptured()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var first = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "We are looking to remodel our office and need a quote. Please contact me."
+        });
+
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+        using var firstJson = JsonDocument.Parse(await first.Content.ReadAsStringAsync());
+        var sessionId = firstJson.RootElement.GetProperty("sessionId").GetString();
+
+        var second = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            sessionId,
+            message = "I am Sam"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+        using var secondJson = JsonDocument.Parse(await second.Content.ReadAsStringAsync());
+        Assert.Equal("What’s the best way to reach you — email or phone?", secondJson.RootElement.GetProperty("response").GetString());
+    }
+
+    [Fact]
+    public async Task ChatSend_LeadCapture_EmailFirst_StillRequestsName()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var first = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "We are looking to remodel our office and need a quote. Please contact me."
+        });
+
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+        using var firstJson = JsonDocument.Parse(await first.Content.ReadAsStringAsync());
+        var sessionId = firstJson.RootElement.GetProperty("sessionId").GetString();
+
+        var second = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            sessionId,
+            message = "sam@example.com"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+        using var secondJson = JsonDocument.Parse(await second.Content.ReadAsStringAsync());
+        Assert.Equal("Please share your first name.", secondJson.RootElement.GetProperty("response").GetString());
+    }
+
+    [Fact]
+    public async Task ChatSend_LeadCapture_PhoneFirst_StillRequestsName()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var first = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "We are looking to remodel our office and need a quote. Please contact me."
+        });
+
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+        using var firstJson = JsonDocument.Parse(await first.Content.ReadAsStringAsync());
+        var sessionId = firstJson.RootElement.GetProperty("sessionId").GetString();
+
+        var second = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            sessionId,
+            message = "+1 (415) 555-0101"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+        using var secondJson = JsonDocument.Parse(await second.Content.ReadAsStringAsync());
+        Assert.Equal("Please share your first name.", secondJson.RootElement.GetProperty("response").GetString());
+    }
+
+    [Fact]
+    public async Task ChatSend_BroadenedSupportPhrase_WithHelpRequest_TriggersSupportTriage()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var response = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "I need help, the map not showing on mobile"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("Sorry you’re running into that — what happens when you try it (any error text or the exact step where it fails)?", json.RootElement.GetProperty("response").GetString());
+        Assert.False(json.RootElement.GetProperty("ticketCreated").GetBoolean());
     }
 
     [Fact]
