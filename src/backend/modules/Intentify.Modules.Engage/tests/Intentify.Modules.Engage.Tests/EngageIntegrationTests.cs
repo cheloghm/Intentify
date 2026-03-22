@@ -311,6 +311,26 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ChatSend_ExplicitCommercialContactRequest_UsesCommercialCapturePrompt()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var response = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "We are looking to remodel our office and need a quote. Please contact me."
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var answer = json.RootElement.GetProperty("response").GetString();
+        Assert.NotNull(answer);
+        Assert.StartsWith("Thanks — it sounds like you’re looking for", answer, StringComparison.Ordinal);
+        Assert.False(json.RootElement.GetProperty("ticketCreated").GetBoolean());
+    }
+
+    [Fact]
     public async Task ChatSend_RecommendationPrompt_AsksTargetedQuestion_WhenContextIsThin()
     {
         var token = await RegisterUserAsync();
