@@ -199,6 +199,7 @@ public sealed class ChatSendHandler
             return await CreateAssistantResponseAsync(session, now, recommendationResponse, 0.45m, false, "Recommendation", ConversationPolicy.HasSufficientDiscoveryContext(session) ? "Direct" : "Clarify", cancellationToken);
         }
 
+        if (hasCommercialIntent && ConversationPolicy.IsCommercialCaptureReady(session, explicitCommercialContactRequest))
         if (hasCommercialIntent && (explicitCommercialContactRequest || ConversationPolicy.HasSufficientDiscoveryContext(session)))
         {
             var response = explicitCommercialContactRequest && !string.IsNullOrWhiteSpace(commercialPrompt)

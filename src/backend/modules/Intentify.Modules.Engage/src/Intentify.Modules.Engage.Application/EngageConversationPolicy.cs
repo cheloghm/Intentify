@@ -5,6 +5,7 @@ namespace Intentify.Modules.Engage.Application;
 
 public sealed class EngageConversationPolicy
 {
+    private static readonly EngageInputInterpreter InputInterpreter = new();
     private const string ContactDetailsNamePrefix = "my name is";
     private static readonly string[] HumanHelpPhrases =
     [
@@ -103,6 +104,7 @@ public sealed class EngageConversationPolicy
     public bool TryBuildSmalltalkResponse(string message, bool priorAssistantAskedQuestion, string greetingResponse, string ackResponse, out string response)
     {
         var normalized = message.Trim().ToLowerInvariant();
+        var isGreeting = normalized is "hi" or "hello" or "hey" || InputInterpreter.IsLikelyGreetingTypo(normalized);
         var isGreeting = normalized is "hi" or "hello" or "hey" || IsLikelyGreetingTypo(normalized);
         var isAcknowledgement = normalized is "yes" or "no" or "ok" or "okay" or "thanks" or "thank you" or "sure";
         var isContinuation = IsContinuationReply(normalized);
@@ -216,6 +218,12 @@ public sealed class EngageConversationPolicy
 
         if (string.IsNullOrWhiteSpace(session.CaptureType))
         {
+            return "What kind of business or use case is this for?";
+        }
+
+        if (IsDigitalProjectContext(session) && string.IsNullOrWhiteSpace(session.CaptureConstraints))
+        {
+            return "Is this a brand new site or a redesign, and what should it help customers do first?";
             return "What type of work or use case is this for?";
         }
 
@@ -229,6 +237,38 @@ public sealed class EngageConversationPolicy
             return "Any key constraints like budget or timeline?";
         }
 
+        return "Thanks — that gives me enough context. If you want tailored options and next steps, share your first name and best email.";
+    }
+
+    public bool IsCommercialCaptureReady(EngageChatSession session, bool explicitContactRequest)
+    {
+        if (explicitContactRequest)
+        {
+            return true;
+        }
+
+        var fields = 0;
+        if (!string.IsNullOrWhiteSpace(session.CaptureGoal))
+        {
+            fields++;
+        }
+
+        if (!string.IsNullOrWhiteSpace(session.CaptureType))
+        {
+            fields++;
+        }
+
+        if (!string.IsNullOrWhiteSpace(session.CaptureConstraints))
+        {
+            fields++;
+        }
+
+        if (!string.IsNullOrWhiteSpace(session.CaptureLocation))
+        {
+            fields++;
+        }
+
+        return fields >= 3;
         return "Please share your first name and best email so our team can follow up.";
     }
 
@@ -251,6 +291,10 @@ public sealed class EngageConversationPolicy
             return false;
         }
 
+        return InputInterpreter.ContainsSupportProblemSignal(normalized)
+            || normalized.Contains("refund", StringComparison.Ordinal)
+            || normalized.Contains("issue", StringComparison.Ordinal)
+            || normalized.Contains("problem", StringComparison.Ordinal);
         return HumanHelpProblemTerms.Any(term => normalized.Contains(term, StringComparison.Ordinal));
     }
 
@@ -399,6 +443,16 @@ public sealed class EngageConversationPolicy
         return true;
     }
 
+    public string NormalizeUserMessage(string message) => InputInterpreter.NormalizeUserMessage(message);
+
+    public string? TryExtractEmail(string message)
+        => InputInterpreter.TryExtractEmail(message);
+
+    public string? TryExtractPhone(string message)
+        => InputInterpreter.TryExtractPhone(message);
+
+    public string? TryExtractName(string message, string? email, string? phone)
+        => InputInterpreter.TryExtractName(message, email, phone);
     public string? TryExtractEmail(string message)
     {
         if (string.IsNullOrWhiteSpace(message))
@@ -486,4 +540,14 @@ public sealed class EngageConversationPolicy
 
     private static string? NormalizeOptional(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static bool IsDigitalProjectContext(EngageChatSession session)
+    {
+        var context = $"{session.CaptureGoal} {session.CaptureType} {session.CaptureContext}".ToLowerInvariant();
+        return context.Contains("website", StringComparison.Ordinal)
+            || context.Contains("site", StringComparison.Ordinal)
+            || context.Contains("online store", StringComparison.Ordinal)
+            || context.Contains("ecommerce", StringComparison.Ordinal)
+            || context.Contains("e-commerce", StringComparison.Ordinal);
+    }
 }
