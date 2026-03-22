@@ -11,6 +11,7 @@ public sealed class EngageInputInterpreter
         "i'm",
         "im"
     ];
+    private const string ContactDetailsNamePrefix = "my name is";
     private static readonly string[] GreetingTypos =
     [
         "hllo",
@@ -161,6 +162,9 @@ public sealed class EngageInputInterpreter
         if (!string.IsNullOrWhiteSpace(explicitPrefix))
         {
             var explicitName = trimmed[explicitPrefix.Length..].Trim();
+        if (trimmed.StartsWith(ContactDetailsNamePrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            var explicitName = trimmed[ContactDetailsNamePrefix.Length..].Trim();
             return CleanNameCandidate(explicitName, allowContextTail: true);
         }
 
