@@ -199,13 +199,12 @@ public sealed class ChatSendHandler
             return await CreateAssistantResponseAsync(session, now, recommendationResponse, 0.45m, false, "Recommendation", ConversationPolicy.HasSufficientDiscoveryContext(session) ? "Direct" : "Clarify", cancellationToken);
         }
 
-        if (hasCommercialIntent && ConversationPolicy.IsCommercialCaptureReady(session, explicitCommercialContactRequest))
         if (hasCommercialIntent && (explicitCommercialContactRequest || ConversationPolicy.HasSufficientDiscoveryContext(session)))
         {
             var commercialResponse = explicitCommercialContactRequest && !string.IsNullOrWhiteSpace(commercialPrompt)
                 ? commercialPrompt
                 : ConversationPolicy.BuildNextDiscoveryQuestion(session);
-            return await CreateCommercialLeadCapturePromptAsync(site, session, command.Message, response, now, sessionHandoffs, recentMessages, cancellationToken);
+            return await CreateCommercialLeadCapturePromptAsync(site, session, command.Message, commercialResponse, now, sessionHandoffs, recentMessages, cancellationToken);
         }
 
         if (ConversationPolicy.NeedsHumanHelp(command.Message))
@@ -1177,15 +1176,4 @@ Normalized user message:
         return value.Trim();
     }
 
-    private enum ChatIntent
-    {
-        General,
-        Contact,
-        Location,
-        Hours,
-        Services,
-        Organization,
-        EscalationHelp,
-        AmbiguousShortPrompt
-    }
 }
