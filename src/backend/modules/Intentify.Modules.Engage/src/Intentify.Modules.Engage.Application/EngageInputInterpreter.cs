@@ -95,7 +95,7 @@ public sealed class EngageInputInterpreter
         "prices",
         "login",
         "log in",
-        "upload"
+        "upload",
         "map not showing"
     ];
     private static readonly string[] LocationMarkers =
@@ -238,6 +238,7 @@ public sealed class EngageInputInterpreter
         }
 
         return CleanNameCandidate(trimmed, allowContextTail: false);
+        }
     }
 
     public bool IsLocationLikeText(string text)
