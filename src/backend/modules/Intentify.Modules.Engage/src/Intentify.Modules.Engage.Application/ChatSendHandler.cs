@@ -250,10 +250,10 @@ public sealed class ChatSendHandler
         var intent = DetectIntent(normalizedMessage);
         if (TryBuildCommercialIntentContactPrompt(command.Message, out var commercialPrompt) || IsStrongCommercialIntent(command.Message))
         {
-            var response = !string.IsNullOrWhiteSpace(commercialPrompt)
+            var commercialResponse = !string.IsNullOrWhiteSpace(commercialPrompt)
                 ? commercialPrompt
                 : BuildNextDiscoveryQuestion(session);
-            return await CreateCommercialLeadCapturePromptAsync(site, session, command.Message, response, now, sessionHandoffs, recentMessages, cancellationToken);
+            return await CreateCommercialLeadCapturePromptAsync(site, session, command.Message, commercialResponse, now, sessionHandoffs, recentMessages, cancellationToken);
         }
 
         if (NeedsHumanHelp(command.Message))
@@ -321,13 +321,13 @@ public sealed class ChatSendHandler
 
         _logger.LogInformation("Engage chat decision: grounded answer path for session {SessionId}.", session.Id);
 
-        var response = ShapeAssistantResponse(NormalizeAiResponse(completion.Value), userAskedForDetail);
+        var assistantResponse = ShapeAssistantResponse(NormalizeAiResponse(completion.Value), userAskedForDetail);
         session.ConversationState = StateInform;
         await _messageRepository.InsertAsync(new EngageChatMessage
         {
             SessionId = session.Id,
             Role = "assistant",
-            Content = response,
+            Content = assistantResponse,
             CreatedAtUtc = now,
             Confidence = confidence,
             Citations = citations.Select(item => new EngageCitation
@@ -345,7 +345,7 @@ public sealed class ChatSendHandler
 
         return OperationResult<ChatSendResult>.Success(new ChatSendResult(
             session.Id,
-            response,
+            assistantResponse,
             confidence,
             false,
             citations,
