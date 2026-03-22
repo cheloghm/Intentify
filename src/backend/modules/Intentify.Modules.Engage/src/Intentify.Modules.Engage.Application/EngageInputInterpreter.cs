@@ -11,6 +11,7 @@ public sealed class EngageInputInterpreter
         "i'm",
         "im"
     ];
+    private const string ContactDetailsNamePrefix = "my name is";
     private static readonly string[] GreetingTypos =
     [
         "hllo",
@@ -43,6 +44,14 @@ public sealed class EngageInputInterpreter
         "directions not clear",
         "information not clear",
         "prices not clear",
+        "broken",
+        "error",
+        "failed",
+        "image not showing",
+        "page not loading",
+        "link broken",
+        "directions not clear",
+        "information not clear",
         "confusing",
         "unclear",
         "checkout not working",
@@ -87,6 +96,7 @@ public sealed class EngageInputInterpreter
         "login",
         "log in",
         "upload"
+        "map not showing"
     ];
     private static readonly string[] LocationMarkers =
     [
@@ -170,6 +180,7 @@ public sealed class EngageInputInterpreter
         }
 
         return SupportSurfaceTerms.Any(term => normalizedMessage.Contains(term, StringComparison.Ordinal));
+        return SupportProblemPhrases.Any(phrase => normalizedMessage.Contains(phrase, StringComparison.Ordinal));
     }
 
     public string? TryExtractEmail(string message)
@@ -220,6 +231,9 @@ public sealed class EngageInputInterpreter
         if (!string.IsNullOrWhiteSpace(explicitPrefix))
         {
             var explicitName = trimmed[explicitPrefix.Length..].Trim();
+        if (trimmed.StartsWith(ContactDetailsNamePrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            var explicitName = trimmed[ContactDetailsNamePrefix.Length..].Trim();
             return CleanNameCandidate(explicitName, allowContextTail: true);
         }
 
