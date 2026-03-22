@@ -142,7 +142,7 @@ public sealed class ChatSendHandler
 
         var recentMessages = await _messageRepository.ListBySessionAsync(session.Id, cancellationToken);
         var sessionHandoffs = await _ticketRepository.ListBySessionAsync(session.Id, cancellationToken);
-        var normalizedMessage = NormalizeUserMessage(command.Message);
+        var normalizedMessage = ConversationPolicy.NormalizeUserMessage(command.Message);
         var userAskedForDetail = UserRequestedDetail(command.Message);
         MergeDiscoverySlots(session, command.Message);
 
@@ -1165,33 +1165,6 @@ Normalized user message:
         return !string.IsNullOrWhiteSpace(promoPublicKey);
     }
 
-
-    private static string NormalizeUserMessage(string message)
-    {
-        if (string.IsNullOrWhiteSpace(message))
-        {
-            return string.Empty;
-        }
-
-        var collapsed = Regex.Replace(message.Trim().ToLowerInvariant(), "[^a-z0-9 ]", " ");
-        var normalized = Regex.Replace(collapsed, "\\s+", " ").Trim();
-
-        var repaired = normalized
-            .Replace("contct", "contact", StringComparison.Ordinal)
-            .Replace("cntact", "contact", StringComparison.Ordinal)
-            .Replace("dtails", "details", StringComparison.Ordinal)
-            .Replace("detals", "details", StringComparison.Ordinal)
-            .Replace("servces", "services", StringComparison.Ordinal)
-            .Replace("webstie", "website", StringComparison.Ordinal)
-            .Replace("websiet", "website", StringComparison.Ordinal)
-            .Replace("recomend", "recommend", StringComparison.Ordinal)
-            .Replace("orgnization", "organization", StringComparison.Ordinal)
-            .Replace("organisation", "organization", StringComparison.Ordinal)
-            .Replace("adress", "address", StringComparison.Ordinal)
-            .Replace("locaton", "location", StringComparison.Ordinal);
-
-        return repaired;
-    }
 
     private static string? NormalizeOptional(string? value)
     {
