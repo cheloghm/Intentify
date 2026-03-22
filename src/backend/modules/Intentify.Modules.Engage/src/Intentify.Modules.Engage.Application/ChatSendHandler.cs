@@ -292,7 +292,7 @@ public sealed class ChatSendHandler
 
         if (hasCommercialIntent && (explicitCommercialContactRequest || HasSufficientDiscoveryContext(session)))
         {
-            var response = explicitCommercialContactRequest && !string.IsNullOrWhiteSpace(commercialPrompt)
+            var commercialResponse = explicitCommercialContactRequest && !string.IsNullOrWhiteSpace(commercialPrompt)
                 ? commercialPrompt
                 : BuildNextDiscoveryQuestion(session);
             return await CreateCommercialLeadCapturePromptAsync(site, session, command.Message, commercialResponse, now, sessionHandoffs, recentMessages, cancellationToken);
