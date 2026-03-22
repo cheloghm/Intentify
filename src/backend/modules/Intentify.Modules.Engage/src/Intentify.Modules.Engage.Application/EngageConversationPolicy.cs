@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using Intentify.Modules.Engage.Domain;
 
 namespace Intentify.Modules.Engage.Application;
@@ -105,7 +104,6 @@ public sealed class EngageConversationPolicy
     {
         var normalized = message.Trim().ToLowerInvariant();
         var isGreeting = normalized is "hi" or "hello" or "hey" || InputInterpreter.IsLikelyGreetingTypo(normalized);
-        var isGreeting = normalized is "hi" or "hello" or "hey" || IsLikelyGreetingTypo(normalized);
         var isAcknowledgement = normalized is "yes" or "no" or "ok" or "okay" or "thanks" or "thank you" or "sure";
         var isContinuation = IsContinuationReply(normalized);
         var isVeryShortNonQuestion = normalized.Length > 0 && normalized.Length <= 5 && !normalized.Contains('?');
@@ -224,7 +222,6 @@ public sealed class EngageConversationPolicy
         if (IsDigitalProjectContext(session) && string.IsNullOrWhiteSpace(session.CaptureConstraints))
         {
             return "Is this a brand new site or a redesign, and what should it help customers do first?";
-            return "What type of work or use case is this for?";
         }
 
         if (string.IsNullOrWhiteSpace(session.CaptureLocation))
@@ -269,7 +266,6 @@ public sealed class EngageConversationPolicy
         }
 
         return fields >= 3;
-        return "Please share your first name and best email so our team can follow up.";
     }
 
     public bool NeedsHumanHelp(string message)
@@ -290,7 +286,6 @@ public sealed class EngageConversationPolicy
             return true;
         }
 
-        var normalized = message.Trim().ToLowerInvariant();
         var requestedHumanHelp = HumanHelpRequestPhrases.Any(phrase => normalized.Contains(phrase, StringComparison.Ordinal));
         if (!requestedHumanHelp)
         {
@@ -301,7 +296,6 @@ public sealed class EngageConversationPolicy
             || normalized.Contains("refund", StringComparison.Ordinal)
             || normalized.Contains("issue", StringComparison.Ordinal)
             || normalized.Contains("problem", StringComparison.Ordinal);
-        return HumanHelpProblemTerms.Any(term => normalized.Contains(term, StringComparison.Ordinal));
     }
 
     public bool ShouldAttemptSupportTroubleshoot(EngageChatSession session, string message, bool isSupportCaptureMode)
@@ -459,63 +453,6 @@ public sealed class EngageConversationPolicy
 
     public string? TryExtractName(string message, string? email, string? phone)
         => InputInterpreter.TryExtractName(message, email, phone);
-    public string? TryExtractEmail(string message)
-    {
-        if (string.IsNullOrWhiteSpace(message))
-        {
-            return null;
-        }
-
-        var match = Regex.Match(message, @"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", RegexOptions.IgnoreCase);
-        return match.Success ? match.Value.Trim() : null;
-    }
-
-    public string? TryExtractPhone(string message)
-    {
-        if (string.IsNullOrWhiteSpace(message))
-        {
-            return null;
-        }
-
-        var match = Regex.Match(message, @"(?:\+?\d[\d\-\.\(\)\s]{6,}\d)");
-        return match.Success ? match.Value.Trim() : null;
-    }
-
-    public string? TryExtractName(string message, string? email, string? phone)
-    {
-        if (string.IsNullOrWhiteSpace(message))
-        {
-            return null;
-        }
-
-        var withoutEmail = !string.IsNullOrWhiteSpace(email)
-            ? message.Replace(email, string.Empty, StringComparison.OrdinalIgnoreCase)
-            : message;
-
-        var withoutContact = !string.IsNullOrWhiteSpace(phone)
-            ? withoutEmail.Replace(phone, string.Empty, StringComparison.OrdinalIgnoreCase)
-            : withoutEmail;
-
-        var normalized = withoutContact.Trim(' ', ',', '.', ';', ':', '-', '_');
-        if (normalized.StartsWith(ContactDetailsNamePrefix, StringComparison.OrdinalIgnoreCase))
-        {
-            normalized = normalized[ContactDetailsNamePrefix.Length..].Trim(' ', ',', '.', ';', ':', '-', '_');
-        }
-
-        return string.IsNullOrWhiteSpace(normalized)
-            ? null
-            : normalized.Length <= 200 ? normalized : normalized[..200];
-    }
-
-    private static bool IsLikelyGreetingTypo(string normalizedMessage)
-    {
-        if (string.IsNullOrWhiteSpace(normalizedMessage))
-        {
-            return false;
-        }
-
-        return GreetingTypos.Contains(normalizedMessage, StringComparer.Ordinal);
-    }
 
     private bool IsExplicitEscalationRequest(string message)
     {
