@@ -472,6 +472,7 @@ const label = document.createElement('div');
         const businessRows = [
           entry.opportunityLabel ? `Opportunity: ${entry.opportunityLabel}` : null,
           Number.isFinite(Number(entry.intentScore)) ? `Intent score: ${entry.intentScore}` : null,
+          entry.preferredContactMethod ? `Preferred contact method: ${entry.preferredContactMethod}` : null,
           entry.conversationSummary ? `Summary: ${entry.conversationSummary}` : null,
           entry.suggestedFollowUp ? `Suggested follow-up: ${entry.suggestedFollowUp}` : null,
         ].filter(Boolean);
@@ -1037,6 +1038,7 @@ const label = document.createElement('div');
         stage7Decision: response.stage7Decision || null,
         opportunityLabel: response.opportunityLabel || null,
         intentScore: response.intentScore,
+        preferredContactMethod: response.preferredContactMethod || null,
         conversationSummary: response.conversationSummary || null,
         suggestedFollowUp: response.suggestedFollowUp || null,
       });

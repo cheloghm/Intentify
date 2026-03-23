@@ -1099,7 +1099,8 @@ Normalized user message:
             OpportunityLabel: createTicket ? opportunityLabel : null,
             IntentScore: createTicket ? intentScore : null,
             ConversationSummary: createTicket ? conversationSummary : null,
-            SuggestedFollowUp: createTicket ? suggestedFollowUp : null));
+            SuggestedFollowUp: createTicket ? suggestedFollowUp : null,
+            PreferredContactMethod: createTicket ? session.CapturedPreferredContactMethod : null));
     }
 
     private async Task CreateCommercialOpportunityTicketAsync(

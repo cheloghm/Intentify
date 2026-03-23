@@ -146,7 +146,8 @@ internal static class EngageEndpoints
                 result.Value.OpportunityLabel,
                 result.Value.IntentScore,
                 result.Value.ConversationSummary,
-                result.Value.SuggestedFollowUp))
+                result.Value.SuggestedFollowUp,
+                result.Value.PreferredContactMethod))
         };
     }
 
