@@ -18,7 +18,6 @@ public sealed record UpsertLeadFromPromoEntryCommand(
     int? IntentScore = null,
     string? ConversationSummary = null,
     string? SuggestedFollowUp = null);
-    string? PreferredContactMethod = null);
 
 public sealed record ListLeadsQuery(Guid TenantId, Guid? SiteId, int Page, int PageSize);
 public sealed record GetLeadQuery(Guid TenantId, Guid LeadId);
