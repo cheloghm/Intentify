@@ -21,6 +21,7 @@ public sealed class UpsertLeadFromPromoEntryHandler
         var normalizedFirstPartyId = Normalize(command.FirstPartyId, 200);
         var normalizedName = Normalize(command.Name, 200);
         var normalizedPhone = Normalize(command.Phone, 64);
+        var normalizedPreferredContactMethod = Normalize(command.PreferredContactMethod, 16);
 
         Lead? lead = null;
         if (!string.IsNullOrWhiteSpace(normalizedEmail))
@@ -44,6 +45,7 @@ public sealed class UpsertLeadFromPromoEntryHandler
                 PrimaryEmail = normalizedEmail,
                 DisplayName = normalizedName,
                 Phone = normalizedPhone,
+                PreferredContactMethod = normalizedPreferredContactMethod,
                 LinkedVisitorId = linkedVisitorId,
                 FirstPartyId = normalizedFirstPartyId,
                 CreatedAtUtc = now,
@@ -67,6 +69,11 @@ public sealed class UpsertLeadFromPromoEntryHandler
             if (ShouldReplacePhone(lead.Phone, normalizedPhone))
             {
                 lead.Phone = normalizedPhone;
+            }
+
+            if (lead.PreferredContactMethod is null && normalizedPreferredContactMethod is not null)
+            {
+                lead.PreferredContactMethod = normalizedPreferredContactMethod;
             }
 
             if (lead.FirstPartyId is null && normalizedFirstPartyId is not null)
