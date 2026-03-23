@@ -1511,12 +1511,19 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
         using var detailsJson = JsonDocument.Parse(await detailsResponse.Content.ReadAsStringAsync());
         Assert.Equal("Thanks — I’ve got your details. Our team will contact you shortly.", detailsJson.RootElement.GetProperty("response").GetString());
         Assert.True(detailsJson.RootElement.GetProperty("ticketCreated").GetBoolean());
+        Assert.Equal("HighIntentCommercialOpportunity", detailsJson.RootElement.GetProperty("opportunityLabel").GetString());
+        Assert.True(detailsJson.RootElement.GetProperty("intentScore").GetInt32() >= 80);
+        Assert.False(string.IsNullOrWhiteSpace(detailsJson.RootElement.GetProperty("conversationSummary").GetString()));
+        Assert.False(string.IsNullOrWhiteSpace(detailsJson.RootElement.GetProperty("suggestedFollowUp").GetString()));
 
         var database = new MongoClient(_mongo.ConnectionString).GetDatabase(_mongo.DatabaseName);
         var tickets = database.GetCollection<BsonTicket>("tickets");
         var supportTicket = await tickets.Find(item => item.EngageSessionId == Guid.Parse(sessionId!)).FirstOrDefaultAsync();
         Assert.NotNull(supportTicket);
-        Assert.Equal("Engage handoff: ContactDetails", supportTicket!.Subject);
+        Assert.Equal("Engage commercial opportunity: HighIntentCommercialOpportunity", supportTicket!.Subject);
+        Assert.Contains("[Commercial opportunity package]", supportTicket.Description);
+        Assert.Contains("Preferred contact method: Email", supportTicket.Description);
+        Assert.Contains("Intent score:", supportTicket.Description);
 
         var leads = database.GetCollection<BsonLead>("leads");
         var createdLead = await leads.Find(item => item.SiteId == Guid.Parse(site.SiteId) && item.PrimaryEmail == "sam@example.com").FirstOrDefaultAsync();

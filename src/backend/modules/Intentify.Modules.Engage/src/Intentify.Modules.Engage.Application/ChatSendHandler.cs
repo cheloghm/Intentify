@@ -814,7 +814,8 @@ Normalized user message:
             return await CreateAssistantResponseAsync(session, now, question, 0.6m, false, "CaptureLead", "AwaitingContactFields", cancellationToken);
         }
 
-        return await CaptureContactDetailsAsync(site, session, userMessage, now, false, handoffs, cancellationToken);
+        var shouldCreateCommercialTicket = IsCaptureMode(session, CaptureModeLead);
+        return await CaptureContactDetailsAsync(site, session, userMessage, now, shouldCreateCommercialTicket, handoffs, cancellationToken);
     }
 
     private async Task<OperationResult<ChatSendResult>> CreateCommercialLeadCapturePromptAsync(
@@ -928,17 +929,24 @@ Normalized user message:
         session.CapturedPreferredContactMethod = parsedPreferredContactMethod;
         session.CapturedName = parsedName;
 
-        if (createTicket && !handoffs.Any(item => string.Equals(item.Reason, "ContactDetails", StringComparison.Ordinal)))
+        var intentScore = ConversationPolicy.ComputeCommercialIntentScore(session);
+        var opportunityLabel = ConversationPolicy.BuildCommercialOpportunityLabel(intentScore);
+        var conversationSummary = ConversationPolicy.BuildCommercialOpportunitySummary(session);
+        var suggestedFollowUp = ConversationPolicy.BuildSuggestedFollowUpMessage(session);
+
+        if (createTicket)
         {
-            await _createTicketHandler.HandleAsync(
-                new CreateTicketCommand(
-                    site.TenantId,
-                    site.Id,
-                    visitorId,
-                    session.Id,
-                    "Engage handoff: ContactDetails",
-                    $"Contact details provided by visitor: {userMessage}",
-                    null),
+            await CreateCommercialOpportunityTicketAsync(
+                site,
+                session,
+                userMessage,
+                now,
+                handoffs,
+                visitorId,
+                opportunityLabel,
+                intentScore,
+                conversationSummary,
+                suggestedFollowUp,
                 cancellationToken);
         }
 
@@ -974,7 +982,81 @@ Normalized user message:
         session.UpdatedAtUtc = now;
         await _sessionRepository.UpdateStateAsync(session, cancellationToken);
         LogChatQualitySignal(session.Id, "ContactCapture", 0m, createTicket, 0, "ContactDetails", null);
-        return OperationResult<ChatSendResult>.Success(new ChatSendResult(session.Id, ContactDetailsReceivedResponse, 0m, createTicket, []));
+        return OperationResult<ChatSendResult>.Success(new ChatSendResult(
+            session.Id,
+            ContactDetailsReceivedResponse,
+            0m,
+            createTicket,
+            [],
+            OpportunityLabel: createTicket ? opportunityLabel : null,
+            IntentScore: createTicket ? intentScore : null,
+            ConversationSummary: createTicket ? conversationSummary : null,
+            SuggestedFollowUp: createTicket ? suggestedFollowUp : null));
+    }
+
+    private async Task CreateCommercialOpportunityTicketAsync(
+        Site site,
+        EngageChatSession session,
+        string userMessage,
+        DateTime now,
+        IReadOnlyCollection<EngageHandoffTicket> handoffs,
+        Guid? visitorId,
+        string opportunityLabel,
+        int intentScore,
+        string conversationSummary,
+        string suggestedFollowUp,
+        CancellationToken cancellationToken)
+    {
+        if (handoffs.Any(item => string.Equals(item.Reason, CommercialOpportunityReason, StringComparison.Ordinal)))
+        {
+            return;
+        }
+
+        var messages = await _messageRepository.ListBySessionAsync(session.Id, cancellationToken);
+        var handoffPackage = BuildHandoffPackage(messages, userMessage);
+        var preferredContactMethod = session.CapturedPreferredContactMethod ?? "Unknown";
+        var preferredContactDetail = string.Equals(preferredContactMethod, PreferredContactMethodPhone, StringComparison.Ordinal)
+            ? session.CapturedPhone
+            : session.CapturedEmail;
+
+        await _ticketRepository.InsertAsync(new EngageHandoffTicket
+        {
+            TenantId = site.TenantId,
+            SiteId = site.Id,
+            SessionId = session.Id,
+            UserMessage = userMessage,
+            Reason = CommercialOpportunityReason,
+            LastAssistantMessage = handoffPackage.LastAssistantMessage,
+            TranscriptExcerpt = handoffPackage.TranscriptExcerpt,
+            CitationCount = handoffPackage.CitationCount,
+            CreatedAtUtc = now
+        }, cancellationToken);
+
+        var ticketDescription = $"""
+{conversationSummary}
+
+[Commercial opportunity package]
+Opportunity label: {opportunityLabel}
+Intent score: {intentScore}
+Contact name: {session.CapturedName ?? "Unknown"}
+Preferred contact method: {preferredContactMethod}
+Preferred contact detail: {preferredContactDetail ?? "Unknown"}
+Suggested follow-up: {suggestedFollowUp}
+Recent transcript:
+{handoffPackage.TranscriptExcerpt}
+Grounding citations observed in session: {handoffPackage.CitationCount}
+""";
+
+        await _createTicketHandler.HandleAsync(
+            new CreateTicketCommand(
+                site.TenantId,
+                site.Id,
+                visitorId,
+                session.Id,
+                $"Engage commercial opportunity: {opportunityLabel}",
+                ticketDescription,
+                null),
+            cancellationToken);
     }
 
     private static string BuildDistilledContext(IReadOnlyCollection<EngageChatMessage> messages, string currentUserMessage)
