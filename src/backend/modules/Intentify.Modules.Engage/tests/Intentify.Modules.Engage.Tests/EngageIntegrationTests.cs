@@ -1574,6 +1574,7 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
         Assert.True(detailsJson.RootElement.GetProperty("intentScore").GetInt32() >= 80);
         Assert.False(string.IsNullOrWhiteSpace(detailsJson.RootElement.GetProperty("conversationSummary").GetString()));
         Assert.False(string.IsNullOrWhiteSpace(detailsJson.RootElement.GetProperty("suggestedFollowUp").GetString()));
+        Assert.Equal("Email", detailsJson.RootElement.GetProperty("preferredContactMethod").GetString());
 
         var database = new MongoClient(_mongo.ConnectionString).GetDatabase(_mongo.DatabaseName);
         var tickets = database.GetCollection<BsonTicket>("tickets");
