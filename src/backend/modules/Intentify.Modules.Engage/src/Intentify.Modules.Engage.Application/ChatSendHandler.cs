@@ -24,7 +24,7 @@ public sealed class ChatSendHandler
     private const string ContactDetailsReceivedResponse = "Thanks — I’ve got your details. Our team will contact you shortly.";
     private const string CommercialContactDetailsPrefix = "Thanks — it sounds like you’re looking for";
     private const string GreetingResponse = "Hi! How can I help you today?";
-    private const string AckResponse = "Got it.";
+    private const string AckResponse = "Thanks for confirming — what would you like help with next?";
     private const string NeutralClarificationResponse = "Happy to help — could you share a bit more about what you need?";
     private const string SoftFallbackResponse = "I can help with that — what would you like to sort out first?";
     private const string EscalationFallbackResponse = "Thanks — I can connect you with our team. Please share your name and best email.";
@@ -483,6 +483,8 @@ Normalized user question (for typo recovery):
             }
         }
 
+        normalized = SoftenStandaloneAcknowledgement(normalized);
+
         if (userAskedForDetail)
         {
             return normalized;
@@ -493,6 +495,17 @@ Normalized user question (for typo recovery):
             .Take(4)
             .ToArray();
         return sentences.Length == 0 ? normalized : string.Join(" ", sentences);
+    }
+
+    private static string SoftenStandaloneAcknowledgement(string response)
+    {
+        var normalized = response.Trim();
+        return normalized.ToLowerInvariant() switch
+        {
+            "got it." or "got it" or "ok." or "ok" or "okay." or "okay" or "sure." or "sure"
+                => AckResponse,
+            _ => response
+        };
     }
 
     private static void MergeDiscoverySlots(EngageChatSession session, string message)
