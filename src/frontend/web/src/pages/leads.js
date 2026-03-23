@@ -74,6 +74,7 @@ export const renderLeadsView = (container, { apiClient, toast } = {}) => {
       <div><strong>Email:</strong> ${lead.primaryEmail || ''}</div>
       <div><strong>Name:</strong> ${lead.displayName || ''}</div>
       <div><strong>Phone:</strong> ${lead.phone || ''}</div>
+      <div><strong>Preferred contact method:</strong> ${lead.preferredContactMethod || ''}</div>
       <div><strong>FirstPartyId:</strong> ${lead.firstPartyId || ''}</div>
       <div><strong>Linked Visitor:</strong> ${lead.linkedVisitorId || ''}</div>
     `;

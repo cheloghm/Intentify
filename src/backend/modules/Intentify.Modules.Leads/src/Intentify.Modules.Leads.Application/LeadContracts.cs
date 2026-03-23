@@ -12,7 +12,8 @@ public sealed record UpsertLeadFromPromoEntryCommand(
     string? Email,
     string? Name,
     bool ConsentGiven,
-    string? Phone = null);
+    string? Phone = null,
+    string? PreferredContactMethod = null);
 
 public sealed record ListLeadsQuery(Guid TenantId, Guid? SiteId, int Page, int PageSize);
 public sealed record GetLeadQuery(Guid TenantId, Guid LeadId);

@@ -454,6 +454,9 @@ public sealed class EngageConversationPolicy
     public string? TryExtractName(string message, string? email, string? phone)
         => InputInterpreter.TryExtractName(message, email, phone);
 
+    public string? TryExtractPreferredContactMethod(string message, string? email, string? phone)
+        => InputInterpreter.TryExtractPreferredContactMethod(message, email, phone);
+
     private bool IsExplicitEscalationRequest(string message)
     {
         if (string.IsNullOrWhiteSpace(message))

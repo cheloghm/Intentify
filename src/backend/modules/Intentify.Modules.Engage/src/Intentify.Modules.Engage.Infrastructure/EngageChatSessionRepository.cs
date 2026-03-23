@@ -55,6 +55,7 @@ public sealed class EngageChatSessionRepository : IEngageChatSessionRepository
             .Set(item => item.CapturedName, session.CapturedName)
             .Set(item => item.CapturedEmail, session.CapturedEmail)
             .Set(item => item.CapturedPhone, session.CapturedPhone)
+            .Set(item => item.CapturedPreferredContactMethod, session.CapturedPreferredContactMethod)
             .Set(item => item.UpdatedAtUtc, session.UpdatedAtUtc);
         await _sessions.UpdateOneAsync(item => item.Id == session.Id, update, cancellationToken: cancellationToken);
     }
