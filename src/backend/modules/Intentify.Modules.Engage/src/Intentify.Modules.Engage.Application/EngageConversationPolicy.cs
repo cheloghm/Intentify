@@ -136,7 +136,7 @@ public sealed class EngageConversationPolicy
         var isContinuation = IsContinuationReply(normalized);
         var isVeryShortNonQuestion = normalized.Length > 0 && normalized.Length <= 5 && !normalized.Contains('?');
 
-        if (priorAssistantAskedQuestion && (isAcknowledgement || isContinuation))
+        if (priorAssistantAskedQuestion && (isAcknowledgement || isContinuation || isVeryShortNonQuestion))
         {
             response = string.Empty;
             return false;
