@@ -75,6 +75,7 @@ public sealed class EngageModule : IAppModule
                 serviceProvider.GetRequiredService<ILeadVisitorLinker>(),
                 serviceProvider.GetRequiredService<UpsertLeadFromPromoEntryHandler>(),
                 serviceProvider.GetRequiredService<RetrieveTopChunksHandler>(),
+                serviceProvider.GetRequiredService<VisitorContextBundleHandler>(),
                 serviceProvider.GetRequiredService<IChatCompletionClient>(),
                 sessionTimeoutMinutes,
                 serviceProvider.GetRequiredService<Microsoft.Extensions.Logging.ILogger<ChatSendHandler>>());

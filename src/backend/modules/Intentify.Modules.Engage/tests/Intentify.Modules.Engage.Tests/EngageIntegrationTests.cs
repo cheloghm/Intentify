@@ -1691,6 +1691,68 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ChatSend_LowConfidenceClarification_UsesBusinessContextBundleSignalsInPrompt()
+    {
+        var builder = AppHostApplication.CreateBuilder([], Environments.Development);
+        builder.WebHost.UseTestServer();
+        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Intentify:Jwt:Issuer"] = "intentify",
+            ["Intentify:Jwt:Audience"] = "intentify-users",
+            ["Intentify:Jwt:SigningKey"] = "test-signing-key-1234567890-EXTRA-KEY",
+            ["Intentify:Jwt:AccessTokenMinutes"] = "30",
+            ["Intentify:Mongo:ConnectionString"] = _mongo.ConnectionString,
+            ["Intentify:Mongo:DatabaseName"] = _mongo.DatabaseName
+        });
+
+        builder.WebHost.ConfigureTestServices(services =>
+        {
+            services.RemoveAll<IChatCompletionClient>();
+            services.AddSingleton<IChatCompletionClient>(new FakeChatCompletionClient(prompt =>
+            {
+                if (prompt.Contains("Write exactly one short reply for a low-support situation.", StringComparison.Ordinal))
+                {
+                    return prompt.Contains("- Capture goal: support for bakery in Austin", StringComparison.Ordinal)
+                        ? Result<string>.Success("Given your bakery goal in Austin, should we prioritize speed or cost first?")
+                        : Result<string>.Success("Happy to help — could you share a bit more about what you need?");
+                }
+
+                return Result<string>.Success("Unused grounded response");
+            }));
+        });
+
+        await using var app = AppHostApplication.Build(builder);
+        await app.StartAsync();
+        using var client = app.GetTestClient();
+
+        var token = await RegisterUserAsync(client);
+        var site = await CreateSiteAsync(client, token);
+        await AddKnowledgeAsync(client, token, site.SiteId, "Support plans are available.");
+
+        var first = await client.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "I need support for bakery in Austin"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+        using var firstJson = JsonDocument.Parse(await first.Content.ReadAsStringAsync());
+        var sessionId = firstJson.RootElement.GetProperty("sessionId").GetString();
+
+        var second = await client.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            sessionId,
+            message = "suppor?"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+        using var secondJson = JsonDocument.Parse(await second.Content.ReadAsStringAsync());
+        Assert.Equal("Given your bakery goal in Austin, should we prioritize speed or cost first?", secondJson.RootElement.GetProperty("response").GetString());
+        Assert.False(secondJson.RootElement.GetProperty("ticketCreated").GetBoolean());
+    }
+
+    [Fact]
     public async Task ChatSend_RejectsWidgetKeyMismatchBetweenQueryAndBody()
     {
         var token = await RegisterUserAsync();
