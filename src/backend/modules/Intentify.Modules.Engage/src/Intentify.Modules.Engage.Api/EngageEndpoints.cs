@@ -244,6 +244,44 @@ internal static class EngageEndpoints
         return Results.Ok(results.Select(item => new ConversationSummaryResponse(item.SessionId.ToString("N"), item.CreatedAtUtc, item.UpdatedAtUtc)).ToArray());
     }
 
+    public static async Task<IResult> GetOpportunityAnalyticsAsync(string? siteId, HttpContext context, GetOpportunityAnalyticsHandler handler)
+    {
+        if (string.IsNullOrWhiteSpace(siteId))
+        {
+            return Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(new Dictionary<string, string[]>
+            {
+                ["siteId"] = ["Site id is required."]
+            }));
+        }
+
+        if (!Guid.TryParse(siteId, out var parsedSiteId))
+        {
+            return Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(new Dictionary<string, string[]>
+            {
+                ["siteId"] = ["Site id is invalid."]
+            }));
+        }
+
+        var tenantId = TryGetTenantId(context.User);
+        if (tenantId is null)
+        {
+            return Results.Unauthorized();
+        }
+
+        var result = await handler.HandleAsync(tenantId.Value, parsedSiteId, context.RequestAborted);
+        return Results.Ok(new OpportunityAnalyticsResponse(
+            result.TotalCommercialOpportunities,
+            result.CommercialCount,
+            result.SupportCount,
+            result.GeneralCount,
+            result.HighIntentCount,
+            new OpportunityContactMethodBreakdownResponse(
+                result.PreferredContactMethodDistribution.Email,
+                result.PreferredContactMethodDistribution.Phone,
+                result.PreferredContactMethodDistribution.Unknown),
+            result.OpportunitiesOverTime.Select(item => new OpportunityDailyPointResponse(item.DateUtc, item.Count)).ToArray()));
+    }
+
 
     public static async Task<IResult> GetWidgetConversationMessagesAsync(string sessionId, string? widgetKey, HttpContext context, GetWidgetConversationMessagesHandler handler, ISiteRepository siteRepository, IHostEnvironment environment, IConfiguration configuration)
     {

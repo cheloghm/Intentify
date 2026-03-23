@@ -28,6 +28,19 @@ public sealed record ListConversationsQuery(Guid TenantId, Guid SiteId, string? 
 
 public sealed record ConversationSummaryResult(Guid SessionId, DateTime CreatedAtUtc, DateTime UpdatedAtUtc);
 
+public sealed record OpportunityContactMethodBreakdownResult(int Email, int Phone, int Unknown);
+
+public sealed record OpportunityDailyPointResult(DateTime DateUtc, int Count);
+
+public sealed record OpportunityAnalyticsResult(
+    int TotalCommercialOpportunities,
+    int CommercialCount,
+    int SupportCount,
+    int GeneralCount,
+    int HighIntentCount,
+    OpportunityContactMethodBreakdownResult PreferredContactMethodDistribution,
+    IReadOnlyCollection<OpportunityDailyPointResult> OpportunitiesOverTime);
+
 public sealed record GetConversationMessagesQuery(Guid TenantId, Guid SiteId, Guid SessionId);
 
 public sealed record GetWidgetConversationMessagesQuery(string WidgetKey, Guid SessionId);

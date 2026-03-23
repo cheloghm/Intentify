@@ -39,4 +39,12 @@ public sealed class EngageChatSession
     public string? CapturedPhone { get; set; }
 
     public string? CapturedPreferredContactMethod { get; set; }
+
+    public string? OpportunityLabel { get; set; }
+
+    public int? IntentScore { get; set; }
+
+    public string? ConversationSummary { get; set; }
+
+    public string? SuggestedFollowUp { get; set; }
 }

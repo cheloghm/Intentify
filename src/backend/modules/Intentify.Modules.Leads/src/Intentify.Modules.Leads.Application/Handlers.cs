@@ -22,6 +22,9 @@ public sealed class UpsertLeadFromPromoEntryHandler
         var normalizedName = Normalize(command.Name, 200);
         var normalizedPhone = Normalize(command.Phone, 64);
         var normalizedPreferredContactMethod = Normalize(command.PreferredContactMethod, 16);
+        var normalizedOpportunityLabel = Normalize(command.OpportunityLabel, 64);
+        var normalizedConversationSummary = Normalize(command.ConversationSummary, 1200);
+        var normalizedSuggestedFollowUp = Normalize(command.SuggestedFollowUp, 800);
 
         Lead? lead = null;
         if (!string.IsNullOrWhiteSpace(normalizedEmail))
@@ -46,6 +49,10 @@ public sealed class UpsertLeadFromPromoEntryHandler
                 DisplayName = normalizedName,
                 Phone = normalizedPhone,
                 PreferredContactMethod = normalizedPreferredContactMethod,
+                OpportunityLabel = normalizedOpportunityLabel,
+                IntentScore = command.IntentScore,
+                ConversationSummary = normalizedConversationSummary,
+                SuggestedFollowUp = normalizedSuggestedFollowUp,
                 LinkedVisitorId = linkedVisitorId,
                 FirstPartyId = normalizedFirstPartyId,
                 CreatedAtUtc = now,
@@ -74,6 +81,26 @@ public sealed class UpsertLeadFromPromoEntryHandler
             if (lead.PreferredContactMethod is null && normalizedPreferredContactMethod is not null)
             {
                 lead.PreferredContactMethod = normalizedPreferredContactMethod;
+            }
+
+            if (lead.OpportunityLabel is null && normalizedOpportunityLabel is not null)
+            {
+                lead.OpportunityLabel = normalizedOpportunityLabel;
+            }
+
+            if (lead.IntentScore is null && command.IntentScore is not null)
+            {
+                lead.IntentScore = command.IntentScore;
+            }
+
+            if (lead.ConversationSummary is null && normalizedConversationSummary is not null)
+            {
+                lead.ConversationSummary = normalizedConversationSummary;
+            }
+
+            if (lead.SuggestedFollowUp is null && normalizedSuggestedFollowUp is not null)
+            {
+                lead.SuggestedFollowUp = normalizedSuggestedFollowUp;
             }
 
             if (lead.FirstPartyId is null && normalizedFirstPartyId is not null)

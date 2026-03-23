@@ -2,7 +2,21 @@ using Intentify.Modules.Tickets.Domain;
 
 namespace Intentify.Modules.Tickets.Application;
 
-public sealed record CreateTicketCommand(Guid TenantId, Guid SiteId, Guid? VisitorId, Guid? EngageSessionId, string Subject, string Description, Guid? AssignedToUserId);
+public sealed record CreateTicketCommand(
+    Guid TenantId,
+    Guid SiteId,
+    Guid? VisitorId,
+    Guid? EngageSessionId,
+    string Subject,
+    string Description,
+    Guid? AssignedToUserId,
+    string? ContactName = null,
+    string? PreferredContactMethod = null,
+    string? PreferredContactDetail = null,
+    string? OpportunityLabel = null,
+    int? IntentScore = null,
+    string? ConversationSummary = null,
+    string? SuggestedFollowUp = null);
 public sealed record GetTicketQuery(Guid TenantId, Guid TicketId);
 public sealed record ListTicketsQuery(Guid TenantId, Guid? SiteId, Guid? VisitorId, Guid? EngageSessionId, int Page, int PageSize);
 public sealed record UpdateTicketCommand(Guid TenantId, Guid TicketId, string Subject, string Description);

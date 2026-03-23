@@ -83,6 +83,7 @@ public sealed class EngageModule : IAppModule
         services.AddSingleton<GetEngageBotHandler>();
         services.AddSingleton<UpdateEngageBotHandler>();
         services.AddSingleton<ListConversationsHandler>();
+        services.AddSingleton<GetOpportunityAnalyticsHandler>();
         services.AddSingleton<GetConversationMessagesHandler>();
         services.AddSingleton(serviceProvider =>
         {
@@ -116,6 +117,7 @@ public sealed class EngageModule : IAppModule
         adminGroup.MapGet("/bot", EngageEndpoints.GetBotAsync);
         adminGroup.MapPut("/bot", EngageEndpoints.UpdateBotAsync);
         adminGroup.MapGet("/conversations", EngageEndpoints.ListConversationsAsync);
+        adminGroup.MapGet("/opportunities/analytics", EngageEndpoints.GetOpportunityAnalyticsAsync);
         adminGroup.MapGet("/conversations/{sessionId}/messages", EngageEndpoints.GetConversationMessagesAsync);
     }
 }

@@ -56,6 +56,10 @@ public sealed class EngageChatSessionRepository : IEngageChatSessionRepository
             .Set(item => item.CapturedEmail, session.CapturedEmail)
             .Set(item => item.CapturedPhone, session.CapturedPhone)
             .Set(item => item.CapturedPreferredContactMethod, session.CapturedPreferredContactMethod)
+            .Set(item => item.OpportunityLabel, session.OpportunityLabel)
+            .Set(item => item.IntentScore, session.IntentScore)
+            .Set(item => item.ConversationSummary, session.ConversationSummary)
+            .Set(item => item.SuggestedFollowUp, session.SuggestedFollowUp)
             .Set(item => item.UpdatedAtUtc, session.UpdatedAtUtc);
         await _sessions.UpdateOneAsync(item => item.Id == session.Id, update, cancellationToken: cancellationToken);
     }

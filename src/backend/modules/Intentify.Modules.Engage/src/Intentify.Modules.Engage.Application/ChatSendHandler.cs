@@ -45,6 +45,7 @@ public sealed class ChatSendHandler
     private const string AskPreferredContactMethodResponse = "What’s the best way to reach you — email or phone?";
     private const string AskForEmailResponse = "Thanks — what’s your best email?";
     private const string AskForPhoneResponse = "Thanks — what’s your best phone number?";
+    private const string CommercialOpportunityReason = "CommercialOpportunity";
     private static readonly string[] VerboseRequestTerms =
     [
         "detail",
@@ -933,6 +934,10 @@ Normalized user message:
         var opportunityLabel = ConversationPolicy.BuildCommercialOpportunityLabel(intentScore);
         var conversationSummary = ConversationPolicy.BuildCommercialOpportunitySummary(session);
         var suggestedFollowUp = ConversationPolicy.BuildSuggestedFollowUpMessage(session);
+        session.OpportunityLabel = opportunityLabel;
+        session.IntentScore = intentScore;
+        session.ConversationSummary = conversationSummary;
+        session.SuggestedFollowUp = suggestedFollowUp;
 
         if (createTicket)
         {
@@ -964,6 +969,11 @@ Normalized user message:
                     parsedName,
                     true,
                     parsedPhone,
+                    session.CapturedPreferredContactMethod,
+                    session.OpportunityLabel,
+                    session.IntentScore,
+                    session.ConversationSummary,
+                    session.SuggestedFollowUp),
                     session.CapturedPreferredContactMethod),
                 cancellationToken);
         }
@@ -1055,6 +1065,14 @@ Grounding citations observed in session: {handoffPackage.CitationCount}
                 session.Id,
                 $"Engage commercial opportunity: {opportunityLabel}",
                 ticketDescription,
+                null,
+                session.CapturedName,
+                preferredContactMethod,
+                preferredContactDetail,
+                opportunityLabel,
+                intentScore,
+                conversationSummary,
+                suggestedFollowUp),
                 null),
             cancellationToken);
     }

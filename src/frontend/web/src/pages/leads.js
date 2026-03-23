@@ -75,6 +75,10 @@ export const renderLeadsView = (container, { apiClient, toast } = {}) => {
       <div><strong>Name:</strong> ${lead.displayName || ''}</div>
       <div><strong>Phone:</strong> ${lead.phone || ''}</div>
       <div><strong>Preferred contact method:</strong> ${lead.preferredContactMethod || ''}</div>
+      <div><strong>Opportunity label:</strong> ${lead.opportunityLabel || ''}</div>
+      <div><strong>Intent score:</strong> ${Number.isFinite(Number(lead.intentScore)) ? lead.intentScore : ''}</div>
+      <div><strong>Conversation summary:</strong> ${lead.conversationSummary || ''}</div>
+      <div><strong>Suggested follow-up:</strong> ${lead.suggestedFollowUp || ''}</div>
       <div><strong>FirstPartyId:</strong> ${lead.firstPartyId || ''}</div>
       <div><strong>Linked Visitor:</strong> ${lead.linkedVisitorId || ''}</div>
     `;

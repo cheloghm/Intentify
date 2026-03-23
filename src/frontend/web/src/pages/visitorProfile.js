@@ -747,7 +747,7 @@ export const renderVisitorProfileView = async (
     table.className = 'ui-table';
     const thead = document.createElement('thead');
     const row = document.createElement('tr');
-    ['Ticket', 'Status', 'Created'].forEach((label) => {
+    ['Ticket', 'Status', 'Created', 'Contact', 'Opportunity', 'Intent'].forEach((label) => {
       const th = document.createElement('th');
       th.textContent = label;
       row.appendChild(th);
@@ -758,7 +758,14 @@ export const renderVisitorProfileView = async (
     const tbody = document.createElement('tbody');
     state.tickets.forEach((ticket) => {
       const tr = document.createElement('tr');
-      [toShortId(ticket.id), ticket.status || '—', formatDate(ticket.createdAtUtc)].forEach((value) => {
+      [
+        toShortId(ticket.id),
+        ticket.status || '—',
+        formatDate(ticket.createdAtUtc),
+        ticket.preferredContactMethod || '—',
+        ticket.opportunityLabel || '—',
+        Number.isFinite(Number(ticket.intentScore)) ? String(ticket.intentScore) : '—'
+      ].forEach((value) => {
         const td = document.createElement('td');
         td.textContent = String(value);
         tr.appendChild(td);

@@ -13,6 +13,11 @@ public sealed record UpsertLeadFromPromoEntryCommand(
     string? Name,
     bool ConsentGiven,
     string? Phone = null,
+    string? PreferredContactMethod = null,
+    string? OpportunityLabel = null,
+    int? IntentScore = null,
+    string? ConversationSummary = null,
+    string? SuggestedFollowUp = null);
     string? PreferredContactMethod = null);
 
 public sealed record ListLeadsQuery(Guid TenantId, Guid? SiteId, int Page, int PageSize);

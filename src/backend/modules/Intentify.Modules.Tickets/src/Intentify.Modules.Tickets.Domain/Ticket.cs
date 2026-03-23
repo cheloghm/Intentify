@@ -9,6 +9,13 @@ public sealed class Ticket
     public Guid? EngageSessionId { get; set; }
     public string Subject { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
+    public string? ContactName { get; set; }
+    public string? PreferredContactMethod { get; set; }
+    public string? PreferredContactDetail { get; set; }
+    public string? OpportunityLabel { get; set; }
+    public int? IntentScore { get; set; }
+    public string? ConversationSummary { get; set; }
+    public string? SuggestedFollowUp { get; set; }
     public string Status { get; set; } = TicketStatuses.Open;
     public Guid? AssignedToUserId { get; set; }
     public DateTime CreatedAtUtc { get; init; }
