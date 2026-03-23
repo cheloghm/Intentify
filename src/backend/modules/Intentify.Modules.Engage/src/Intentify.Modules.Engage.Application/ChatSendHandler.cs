@@ -470,6 +470,11 @@ Normalized user question (for typo recovery):
         }
 
         normalized = Regex.Replace(normalized, @"\s{2,}", " ").Trim();
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            normalized = NeutralClarificationResponse;
+        }
+
         if (!allowMultipleQuestions)
         {
             var firstQuestion = normalized.IndexOf('?', StringComparison.Ordinal);
@@ -1289,13 +1294,17 @@ Grounding citations observed in session: {handoffPackage.CitationCount}
 
     private static int CountDiscoveryQuestionsAsked(IReadOnlyCollection<EngageChatMessage> messages)
     {
+        static bool IsDiscoveryQuestion(string content)
+        {
+            return string.Equals(content, "What outcome are you trying to achieve?", StringComparison.Ordinal)
+                || string.Equals(content, "What kind of business or use case is this for?", StringComparison.Ordinal)
+                || string.Equals(content, "What location should we plan for?", StringComparison.Ordinal)
+                || content.StartsWith("Any key constraints like budget, timeline", StringComparison.Ordinal);
+        }
+
         return messages.Count(item =>
             string.Equals(item.Role, "assistant", StringComparison.OrdinalIgnoreCase)
-            && (
-                string.Equals(item.Content.Trim(), "What outcome are you trying to achieve?", StringComparison.Ordinal)
-                || string.Equals(item.Content.Trim(), "What type of work or use case is this for?", StringComparison.Ordinal)
-                || string.Equals(item.Content.Trim(), "What location should we plan for?", StringComparison.Ordinal)
-                || string.Equals(item.Content.Trim(), "Any key constraints like budget or timeline?", StringComparison.Ordinal)));
+            && IsDiscoveryQuestion(item.Content.Trim()));
     }
 
     private async Task<Guid?> ResolveVisitorIdAsync(Guid tenantId, Guid siteId, string? collectorSessionId, CancellationToken cancellationToken)

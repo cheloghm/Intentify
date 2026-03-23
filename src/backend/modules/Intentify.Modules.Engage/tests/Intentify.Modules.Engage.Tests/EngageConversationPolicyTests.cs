@@ -67,6 +67,20 @@ public sealed class EngageConversationPolicyTests
     }
 
     [Fact]
+    public void TryBuildSmalltalkResponse_VeryShortReplyAfterAssistantQuestion_DoesNotSwallowCaptureAnswer()
+    {
+        var result = Policy.TryBuildSmalltalkResponse(
+            "sam",
+            priorAssistantAskedQuestion: true,
+            greetingResponse: "Hi! How can I help you today?",
+            ackResponse: "Thanks for confirming — what would you like help with next?",
+            out var response);
+
+        Assert.False(result);
+        Assert.Equal(string.Empty, response);
+    }
+
+    [Fact]
     public void BuildSoftFallbackResponse_ProfessionalTone_UsesSofterTransition()
     {
         var response = Policy.BuildSoftFallbackResponse(
