@@ -45,7 +45,6 @@ public sealed class ChatSendHandler
     private const string AskPreferredContactMethodResponse = "What’s the best way to reach you — email or phone?";
     private const string AskForEmailResponse = "Thanks — what’s your best email?";
     private const string AskForPhoneResponse = "Thanks — what’s your best phone number?";
-    private const string CommercialOpportunityReason = "CommercialOpportunity";
     private static readonly string[] VerboseRequestTerms =
     [
         "detail",
