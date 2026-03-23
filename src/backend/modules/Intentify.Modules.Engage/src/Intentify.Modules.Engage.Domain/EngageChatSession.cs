@@ -37,4 +37,6 @@ public sealed class EngageChatSession
     public string? CapturedEmail { get; set; }
 
     public string? CapturedPhone { get; set; }
+
+    public string? CapturedPreferredContactMethod { get; set; }
 }

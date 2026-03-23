@@ -247,6 +247,47 @@ public sealed class EngageInputInterpreter
         return null;
     }
 
+    public string? TryExtractPreferredContactMethod(string message, string? email, string? phone)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(email))
+        {
+            return "Email";
+        }
+
+        if (!string.IsNullOrWhiteSpace(phone))
+        {
+            return "Phone";
+        }
+
+        var normalized = $" {message.Trim().ToLowerInvariant()} ";
+
+        var emailSignal = normalized.Contains(" email ", StringComparison.Ordinal)
+            || normalized.Contains(" by email ", StringComparison.Ordinal)
+            || normalized.Contains(" via email ", StringComparison.Ordinal)
+            || normalized.Contains(" reach me by email ", StringComparison.Ordinal);
+
+        var phoneSignal = normalized.Contains(" phone ", StringComparison.Ordinal)
+            || normalized.Contains(" by phone ", StringComparison.Ordinal)
+            || normalized.Contains(" via phone ", StringComparison.Ordinal)
+            || normalized.Contains(" call me ", StringComparison.Ordinal)
+            || normalized.Contains(" text me ", StringComparison.Ordinal)
+            || normalized.Contains(" sms ", StringComparison.Ordinal)
+            || normalized.Contains(" call back ", StringComparison.Ordinal)
+            || normalized.Contains(" callback ", StringComparison.Ordinal);
+
+        if (emailSignal == phoneSignal)
+        {
+            return null;
+        }
+
+        return emailSignal ? "Email" : "Phone";
+    }
+
     public bool IsLocationLikeText(string text)
     {
         if (string.IsNullOrWhiteSpace(text))

@@ -1208,6 +1208,7 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
         Assert.NotNull(createdLead);
         Assert.Equal("Pat Example", createdLead!.DisplayName);
         Assert.Equal("+1 (415) 555-0101", createdLead.Phone);
+        Assert.Equal("Email", createdLead.PreferredContactMethod);
     }
 
     [Fact]
@@ -1350,6 +1351,64 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ChatSend_LeadCapture_PreferenceThenDetail_ProgressesDeterministically_AndPersistsPreference()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var first = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "We are looking to remodel our office and need a quote. Please contact me."
+        });
+
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+        using var firstJson = JsonDocument.Parse(await first.Content.ReadAsStringAsync());
+        var sessionId = firstJson.RootElement.GetProperty("sessionId").GetString();
+
+        var second = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            sessionId,
+            message = "my name is Sam"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+        using var secondJson = JsonDocument.Parse(await second.Content.ReadAsStringAsync());
+        Assert.Equal("What’s the best way to reach you — email or phone?", secondJson.RootElement.GetProperty("response").GetString());
+
+        var third = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            sessionId,
+            message = "call me"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, third.StatusCode);
+        using var thirdJson = JsonDocument.Parse(await third.Content.ReadAsStringAsync());
+        Assert.Equal("Thanks — what’s your best phone number?", thirdJson.RootElement.GetProperty("response").GetString());
+
+        var fourth = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            sessionId,
+            message = "+1 (415) 555-0101"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, fourth.StatusCode);
+        using var fourthJson = JsonDocument.Parse(await fourth.Content.ReadAsStringAsync());
+        Assert.Equal("Thanks — I’ve got your details. Our team will contact you shortly.", fourthJson.RootElement.GetProperty("response").GetString());
+
+        var database = new MongoClient(_mongo.ConnectionString).GetDatabase(_mongo.DatabaseName);
+        var leads = database.GetCollection<BsonLead>("leads");
+        var createdLead = await leads.Find(item => item.SiteId == Guid.Parse(site.SiteId) && item.DisplayName == "Sam").FirstOrDefaultAsync();
+
+        Assert.NotNull(createdLead);
+        Assert.Equal("+1 (415) 555-0101", createdLead!.Phone);
+        Assert.Equal("Phone", createdLead.PreferredContactMethod);
+    }
+
+    [Fact]
     public async Task ChatSend_LeadCapture_EmailFirst_StillRequestsName()
     {
         var token = await RegisterUserAsync();
@@ -1452,12 +1511,19 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
         using var detailsJson = JsonDocument.Parse(await detailsResponse.Content.ReadAsStringAsync());
         Assert.Equal("Thanks — I’ve got your details. Our team will contact you shortly.", detailsJson.RootElement.GetProperty("response").GetString());
         Assert.True(detailsJson.RootElement.GetProperty("ticketCreated").GetBoolean());
+        Assert.Equal("HighIntentCommercialOpportunity", detailsJson.RootElement.GetProperty("opportunityLabel").GetString());
+        Assert.True(detailsJson.RootElement.GetProperty("intentScore").GetInt32() >= 80);
+        Assert.False(string.IsNullOrWhiteSpace(detailsJson.RootElement.GetProperty("conversationSummary").GetString()));
+        Assert.False(string.IsNullOrWhiteSpace(detailsJson.RootElement.GetProperty("suggestedFollowUp").GetString()));
 
         var database = new MongoClient(_mongo.ConnectionString).GetDatabase(_mongo.DatabaseName);
         var tickets = database.GetCollection<BsonTicket>("tickets");
         var supportTicket = await tickets.Find(item => item.EngageSessionId == Guid.Parse(sessionId!)).FirstOrDefaultAsync();
         Assert.NotNull(supportTicket);
-        Assert.Equal("Engage handoff: ContactDetails", supportTicket!.Subject);
+        Assert.Equal("Engage commercial opportunity: HighIntentCommercialOpportunity", supportTicket!.Subject);
+        Assert.Contains("[Commercial opportunity package]", supportTicket.Description);
+        Assert.Contains("Preferred contact method: Email", supportTicket.Description);
+        Assert.Contains("Intent score:", supportTicket.Description);
 
         var leads = database.GetCollection<BsonLead>("leads");
         var createdLead = await leads.Find(item => item.SiteId == Guid.Parse(site.SiteId) && item.PrimaryEmail == "sam@example.com").FirstOrDefaultAsync();
@@ -2049,6 +2115,7 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
         public string? PrimaryEmail { get; init; }
         public string? DisplayName { get; init; }
         public string? Phone { get; init; }
+        public string? PreferredContactMethod { get; init; }
     }
 
     private sealed class FakeChatCompletionClient : IChatCompletionClient
