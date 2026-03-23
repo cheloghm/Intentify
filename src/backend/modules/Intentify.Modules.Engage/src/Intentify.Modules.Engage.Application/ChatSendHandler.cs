@@ -974,6 +974,7 @@ Normalized user message:
                     session.IntentScore,
                     session.ConversationSummary,
                     session.SuggestedFollowUp),
+                    session.CapturedPreferredContactMethod),
                 cancellationToken);
         }
 
@@ -1072,6 +1073,7 @@ Grounding citations observed in session: {handoffPackage.CitationCount}
                 intentScore,
                 conversationSummary,
                 suggestedFollowUp),
+                null),
             cancellationToken);
     }
 
