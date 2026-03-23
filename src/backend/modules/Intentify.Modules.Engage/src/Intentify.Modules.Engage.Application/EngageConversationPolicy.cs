@@ -533,8 +533,8 @@ public sealed class EngageConversationPolicy
         var tone = NormalizeOptional(bot.Tone)?.ToLowerInvariant();
         return tone switch
         {
-            "professional" => "I can help with that — which part should we focus on first?",
-            "casual" => "Sure — what are you trying to do right now?",
+            "professional" => "Happy to help — which part should we focus on first?",
+            "casual" => "Happy to help — what are you trying to do right now?",
             _ => defaultResponse
         };
     }

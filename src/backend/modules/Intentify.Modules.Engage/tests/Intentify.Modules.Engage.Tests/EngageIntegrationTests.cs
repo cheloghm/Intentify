@@ -428,6 +428,26 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ChatSend_CommercialIntent_StillTransitionsIntoDeterministicCapture()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var response = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "We need to improve online ordering for our restaurant."
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var reply = json.RootElement.GetProperty("response").GetString();
+        Assert.NotNull(reply);
+        Assert.Contains("what’s your first name?", reply, StringComparison.OrdinalIgnoreCase);
+        Assert.False(json.RootElement.GetProperty("ticketCreated").GetBoolean());
+    }
+
+    [Fact]
     public async Task ChatSend_ProgressiveProfiling_EnrichesLeadAcrossTurns()
     {
         var token = await RegisterUserAsync();
@@ -1043,6 +1063,45 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
         using var secondJson = JsonDocument.Parse(await second.Content.ReadAsStringAsync());
         Assert.NotEqual("Got it — what would you like to know or do next?", secondJson.RootElement.GetProperty("response").GetString());
         Assert.False(secondJson.RootElement.GetProperty("ticketCreated").GetBoolean());
+    }
+
+    [Fact]
+    public async Task ChatSend_ShortAcknowledgement_UsesNaturalContinuationPrompt()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var response = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "ok"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("Thanks for confirming — what would you like help with next?", json.RootElement.GetProperty("response").GetString());
+        Assert.False(json.RootElement.GetProperty("ticketCreated").GetBoolean());
+    }
+
+    [Fact]
+    public async Task ChatSend_SoftFallbackResponse_AvoidsAbruptEnding()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var response = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "random thing"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var reply = json.RootElement.GetProperty("response").GetString();
+        Assert.NotNull(reply);
+        Assert.DoesNotEndWith("Got it.", reply);
+        Assert.EndsWith("?", reply, StringComparison.Ordinal);
+        Assert.False(json.RootElement.GetProperty("ticketCreated").GetBoolean());
     }
 
     [Fact]
