@@ -18,11 +18,28 @@ public sealed record ChatSendResult(
     string? PromoPublicKey = null,
     string? PromoTitle = null,
     string? PromoDescription = null,
-    AiDecisionContract? Stage7Decision = null);
+    AiDecisionContract? Stage7Decision = null,
+    string? OpportunityLabel = null,
+    int? IntentScore = null,
+    string? ConversationSummary = null,
+    string? SuggestedFollowUp = null);
 
 public sealed record ListConversationsQuery(Guid TenantId, Guid SiteId, string? CollectorSessionId);
 
 public sealed record ConversationSummaryResult(Guid SessionId, DateTime CreatedAtUtc, DateTime UpdatedAtUtc);
+
+public sealed record OpportunityContactMethodBreakdownResult(int Email, int Phone, int Unknown);
+
+public sealed record OpportunityDailyPointResult(DateTime DateUtc, int Count);
+
+public sealed record OpportunityAnalyticsResult(
+    int TotalCommercialOpportunities,
+    int CommercialCount,
+    int SupportCount,
+    int GeneralCount,
+    int HighIntentCount,
+    OpportunityContactMethodBreakdownResult PreferredContactMethodDistribution,
+    IReadOnlyCollection<OpportunityDailyPointResult> OpportunitiesOverTime);
 
 public sealed record GetConversationMessagesQuery(Guid TenantId, Guid SiteId, Guid SessionId);
 

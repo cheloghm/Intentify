@@ -49,9 +49,26 @@ public sealed record EngageChatSendResponse(
     string? PromoPublicKey = null,
     string? PromoTitle = null,
     string? PromoDescription = null,
-    EngageAiDecisionResponse? Stage7Decision = null);
+    EngageAiDecisionResponse? Stage7Decision = null,
+    string? OpportunityLabel = null,
+    int? IntentScore = null,
+    string? ConversationSummary = null,
+    string? SuggestedFollowUp = null);
 
 public sealed record ConversationSummaryResponse(string SessionId, DateTime CreatedAtUtc, DateTime UpdatedAtUtc);
+
+public sealed record OpportunityContactMethodBreakdownResponse(int Email, int Phone, int Unknown);
+
+public sealed record OpportunityDailyPointResponse(DateTime DateUtc, int Count);
+
+public sealed record OpportunityAnalyticsResponse(
+    int TotalCommercialOpportunities,
+    int CommercialCount,
+    int SupportCount,
+    int GeneralCount,
+    int HighIntentCount,
+    OpportunityContactMethodBreakdownResponse PreferredContactMethodDistribution,
+    IReadOnlyCollection<OpportunityDailyPointResponse> OpportunitiesOverTime);
 
 public sealed record ConversationMessageResponse(
     string MessageId,

@@ -8,6 +8,11 @@ public sealed class Lead
     public string? PrimaryEmail { get; set; }
     public string? DisplayName { get; set; }
     public string? Phone { get; set; }
+    public string? PreferredContactMethod { get; set; }
+    public string? OpportunityLabel { get; set; }
+    public int? IntentScore { get; set; }
+    public string? ConversationSummary { get; set; }
+    public string? SuggestedFollowUp { get; set; }
     public Guid? LinkedVisitorId { get; set; }
     public string? FirstPartyId { get; set; }
     public DateTime CreatedAtUtc { get; init; }

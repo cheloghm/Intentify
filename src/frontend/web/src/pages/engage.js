@@ -132,6 +132,7 @@ export const renderEngageView = (container, { apiClient, toast } = {}) => {
     conversations: [],
     selectedSessionId: '',
     selectedMessages: [],
+    opportunityAnalytics: null,
     botName: 'Assistant',
     primaryColor: '#2563eb',
     launcherVisible: true,
@@ -358,6 +359,11 @@ export const renderEngageView = (container, { apiClient, toast } = {}) => {
 
   conversationsBody.appendChild(sessionsList);
 
+  const analyticsBody = document.createElement('div');
+  analyticsBody.style.display = 'flex';
+  analyticsBody.style.flexDirection = 'column';
+  analyticsBody.style.gap = '8px';
+
   const modalOverlay = document.createElement('div');
   modalOverlay.style.position = 'fixed';
   modalOverlay.style.inset = '0';
@@ -463,6 +469,25 @@ const label = document.createElement('div');
       bubble.append(label, content);
 
       if (entry.role === 'assistant') {
+        const businessRows = [
+          entry.opportunityLabel ? `Opportunity: ${entry.opportunityLabel}` : null,
+          Number.isFinite(Number(entry.intentScore)) ? `Intent score: ${entry.intentScore}` : null,
+          entry.conversationSummary ? `Summary: ${entry.conversationSummary}` : null,
+          entry.suggestedFollowUp ? `Suggested follow-up: ${entry.suggestedFollowUp}` : null,
+        ].filter(Boolean);
+
+        if (businessRows.length > 0) {
+          const businessMeta = document.createElement('div');
+          businessMeta.style.marginTop = '8px';
+          businessMeta.style.paddingTop = '8px';
+          businessMeta.style.borderTop = '1px solid #cbd5e1';
+          businessMeta.style.fontSize = '11px';
+          businessMeta.style.color = '#334155';
+          businessMeta.style.whiteSpace = 'pre-wrap';
+          businessMeta.textContent = businessRows.join('\n');
+          bubble.appendChild(businessMeta);
+        }
+
         const recommendations = getValidRecommendations(entry.stage7Decision);
         if (recommendations.length > 0) {
           const recommendationPanel = document.createElement('div');
@@ -546,6 +571,65 @@ const label = document.createElement('div');
       });
       sessionsList.appendChild(button);
     });
+  };
+
+  const renderOpportunityAnalytics = () => {
+    analyticsBody.innerHTML = '';
+
+    if (!state.siteId) {
+      const empty = document.createElement('div');
+      empty.textContent = 'Select a site to view opportunity analytics.';
+      empty.style.color = '#64748b';
+      analyticsBody.appendChild(empty);
+      return;
+    }
+
+    if (!state.opportunityAnalytics) {
+      const empty = document.createElement('div');
+      empty.textContent = 'No analytics available yet.';
+      empty.style.color = '#64748b';
+      analyticsBody.appendChild(empty);
+      return;
+    }
+
+    const analytics = state.opportunityAnalytics;
+    const summary = document.createElement('div');
+    summary.style.display = 'grid';
+    summary.style.gridTemplateColumns = 'repeat(auto-fit, minmax(180px, 1fr))';
+    summary.style.gap = '8px';
+
+    [
+      ['Total commercial opportunities', analytics.totalCommercialOpportunities ?? 0],
+      ['Commercial', analytics.commercialCount ?? 0],
+      ['Support', analytics.supportCount ?? 0],
+      ['General', analytics.generalCount ?? 0],
+      ['High intent', analytics.highIntentCount ?? 0],
+      ['Email preference', analytics.preferredContactMethodDistribution?.email ?? 0],
+      ['Phone preference', analytics.preferredContactMethodDistribution?.phone ?? 0],
+      ['Unknown preference', analytics.preferredContactMethodDistribution?.unknown ?? 0],
+    ].forEach(([label, value]) => {
+      const block = document.createElement('div');
+      block.style.padding = '8px';
+      block.style.border = '1px solid #e2e8f0';
+      block.style.borderRadius = '6px';
+      block.style.background = '#f8fafc';
+      block.innerHTML = `<div style="font-size:12px;color:#64748b;">${label}</div><div style="font-weight:600;color:#0f172a;">${value}</div>`;
+      summary.appendChild(block);
+    });
+
+    analyticsBody.appendChild(summary);
+
+    const overTime = Array.isArray(analytics.opportunitiesOverTime) ? analytics.opportunitiesOverTime : [];
+    if (overTime.length > 0) {
+      const trend = document.createElement('div');
+      trend.style.fontSize = '12px';
+      trend.style.color = '#334155';
+      trend.style.whiteSpace = 'pre-wrap';
+      trend.textContent = `Opportunities over time: ${overTime
+        .map((row) => `${new Date(row.dateUtc).toLocaleDateString()}: ${row.count}`)
+        .join(' | ')}`;
+      analyticsBody.appendChild(trend);
+    }
   };
 
   const renderConversationMessagesModal = () => {
@@ -684,6 +768,23 @@ const label = document.createElement('div');
     } catch (error) {
       notifier.show({ message: mapApiError(error).message, variant: 'danger' });
     }
+  };
+
+  const loadOpportunityAnalytics = async () => {
+    if (!state.siteId) {
+      state.opportunityAnalytics = null;
+      renderOpportunityAnalytics();
+      return;
+    }
+
+    try {
+      state.opportunityAnalytics = await client.engage.getOpportunityAnalytics(state.siteId);
+    } catch (error) {
+      state.opportunityAnalytics = null;
+      notifier.show({ message: mapApiError(error).message, variant: 'danger' });
+    }
+
+    renderOpportunityAnalytics();
   };
 
   const loadConversationMessages = async ({ openModal: shouldOpenModal = false } = {}) => {
@@ -902,6 +1003,7 @@ const label = document.createElement('div');
     renderTranscript();
     renderConversations();
     await loadConversations();
+    await loadOpportunityAnalytics();
   });
 
   chatForm.addEventListener('submit', async (event) => {
@@ -933,9 +1035,14 @@ const label = document.createElement('div');
         role: 'assistant',
         content: response.response || '',
         stage7Decision: response.stage7Decision || null,
+        opportunityLabel: response.opportunityLabel || null,
+        intentScore: response.intentScore,
+        conversationSummary: response.conversationSummary || null,
+        suggestedFollowUp: response.suggestedFollowUp || null,
       });
       renderTranscript();
       await loadConversations();
+      await loadOpportunityAnalytics();
     } catch (error) {
       notifier.show({ message: mapApiError(error).message, variant: 'danger' });
     } finally {
@@ -954,6 +1061,7 @@ const label = document.createElement('div');
       await loadSiteWidgetKey(state.siteId);
       await loadBotName(state.siteId);
       await loadConversations();
+      await loadOpportunityAnalytics();
     } catch (error) {
       notifier.show({ message: mapApiError(error).message, variant: 'danger' });
     }
@@ -964,13 +1072,15 @@ const label = document.createElement('div');
     createCard({ title: 'Bot Config', body: configBody }),
     createCard({ title: 'Install Engage', body: installBody }),
     createCard({ title: 'Test Chat', body: chatBody }),
-    createCard({ title: 'Conversations', body: conversationsBody })
+    createCard({ title: 'Conversations', body: conversationsBody }),
+    createCard({ title: 'Opportunity analytics', body: analyticsBody })
   );
 
   container.appendChild(page);
 
   renderTranscript();
   renderConversations();
+  renderOpportunityAnalytics();
   updateInstallCard();
   void loadSites();
 };

@@ -29,6 +29,13 @@ public sealed class EngageHandoffTicketRepository : IEngageHandoffTicketReposito
         return items;
     }
 
+    public async Task<IReadOnlyCollection<EngageHandoffTicket>> ListBySiteAsync(Guid tenantId, Guid siteId, CancellationToken cancellationToken = default)
+    {
+        await _ensureIndexes;
+        var items = await _tickets.Find(item => item.TenantId == tenantId && item.SiteId == siteId).ToListAsync(cancellationToken);
+        return items;
+    }
+
     private Task EnsureIndexesAsync()
     {
         var indexes = new[]

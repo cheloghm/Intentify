@@ -181,6 +181,105 @@ public sealed class EngageConversationPolicy
             : "Happy to help — what matters most for this choice: budget, speed, performance, or simplicity?";
     }
 
+    public int ComputeCommercialIntentScore(EngageChatSession session)
+    {
+        var score = 0;
+
+        if (!string.IsNullOrWhiteSpace(session.CaptureGoal))
+        {
+            score += 25;
+        }
+
+        if (!string.IsNullOrWhiteSpace(session.CaptureType))
+        {
+            score += 20;
+        }
+
+        if (!string.IsNullOrWhiteSpace(session.CaptureLocation))
+        {
+            score += 15;
+        }
+
+        if (!string.IsNullOrWhiteSpace(session.CaptureConstraints))
+        {
+            score += 15;
+        }
+
+        if (!string.IsNullOrWhiteSpace(session.CapturedName))
+        {
+            score += 10;
+        }
+
+        if (!string.IsNullOrWhiteSpace(session.CapturedPreferredContactMethod))
+        {
+            score += 5;
+        }
+
+        if (!string.IsNullOrWhiteSpace(session.CapturedEmail) || !string.IsNullOrWhiteSpace(session.CapturedPhone))
+        {
+            score += 10;
+        }
+
+        return Math.Clamp(score, 0, 100);
+    }
+
+    public string BuildCommercialOpportunityLabel(int intentScore)
+    {
+        return intentScore switch
+        {
+            >= 80 => "HighIntentCommercialOpportunity",
+            >= 60 => "QualifiedCommercialOpportunity",
+            _ => "CommercialOpportunity"
+        };
+    }
+
+    public string BuildCommercialOpportunitySummary(EngageChatSession session)
+    {
+        var parts = new List<string>();
+
+        if (!string.IsNullOrWhiteSpace(session.CaptureGoal))
+        {
+            parts.Add($"Goal: {session.CaptureGoal}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(session.CaptureType))
+        {
+            parts.Add($"Type: {session.CaptureType}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(session.CaptureLocation))
+        {
+            parts.Add($"Location: {session.CaptureLocation}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(session.CaptureConstraints))
+        {
+            parts.Add($"Constraints: {session.CaptureConstraints}");
+        }
+
+        if (parts.Count == 0 && !string.IsNullOrWhiteSpace(session.CaptureContext))
+        {
+            parts.Add($"Context: {session.CaptureContext}");
+        }
+
+        return parts.Count == 0
+            ? "Commercial inquiry captured from Engage conversation."
+            : string.Join("; ", parts);
+    }
+
+    public string BuildSuggestedFollowUpMessage(EngageChatSession session)
+    {
+        var namePrefix = string.IsNullOrWhiteSpace(session.CapturedName)
+            ? "Hi"
+            : $"Hi {session.CapturedName}";
+
+        var goalContext = string.IsNullOrWhiteSpace(session.CaptureGoal)
+            ? "your project"
+            : session.CaptureGoal;
+
+        return $"{namePrefix}, thanks for reaching out about {goalContext}. We reviewed your request and can share tailored next steps—what timing works best for a quick follow-up?";
+    }
+
     public bool HasSufficientDiscoveryContext(EngageChatSession session)
     {
         var scopedFields = 0;
@@ -453,6 +552,9 @@ public sealed class EngageConversationPolicy
 
     public string? TryExtractName(string message, string? email, string? phone)
         => InputInterpreter.TryExtractName(message, email, phone);
+
+    public string? TryExtractPreferredContactMethod(string message, string? email, string? phone)
+        => InputInterpreter.TryExtractPreferredContactMethod(message, email, phone);
 
     private bool IsExplicitEscalationRequest(string message)
     {

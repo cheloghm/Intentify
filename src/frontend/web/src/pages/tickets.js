@@ -385,6 +385,13 @@ export const renderTicketsView = async (container, { apiClient, toast, query } =
       ['Visitor ID', ticket.visitorId || '—'],
       ['Engage Session ID', ticket.engageSessionId || '—'],
       ['Assigned To User ID', ticket.assignedToUserId || '—'],
+      ['Contact Name', ticket.contactName || '—'],
+      ['Preferred Contact Method', ticket.preferredContactMethod || '—'],
+      ['Preferred Contact Detail', ticket.preferredContactDetail || '—'],
+      ['Opportunity Label', ticket.opportunityLabel || '—'],
+      ['Intent Score', Number.isFinite(Number(ticket.intentScore)) ? String(ticket.intentScore) : '—'],
+      ['Conversation Summary', ticket.conversationSummary || '—'],
+      ['Suggested Follow-up', ticket.suggestedFollowUp || '—'],
     ];
 
     fields.forEach(([label, value]) => {

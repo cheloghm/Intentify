@@ -351,6 +351,9 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
   const listEngageConversations = async (siteId, collectorSessionId) =>
     request(`/engage/conversations${buildQueryString({ siteId, collectorSessionId })}`);
 
+  const getEngageOpportunityAnalytics = async (siteId) =>
+    request(`/engage/opportunities/analytics${buildQueryString({ siteId })}`);
+
   const getEngageConversationMessages = async (sessionId, siteId) =>
     request(
       `/engage/conversations/${encodeURIComponent(sessionId)}/messages?siteId=${encodeURIComponent(siteId)}`
@@ -525,6 +528,7 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
       sendChat: sendEngageChat,
       getConversations: listEngageConversations,
       listConversations: listEngageConversations,
+      getOpportunityAnalytics: getEngageOpportunityAnalytics,
       getConversationMessages: getEngageConversationMessages,
       getBot: getEngageBot,
       updateBot: updateEngageBot,

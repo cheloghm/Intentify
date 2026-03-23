@@ -25,6 +25,13 @@ public sealed class CreateTicketHandler
             EngageSessionId = command.EngageSessionId,
             Subject = command.Subject.Trim(),
             Description = command.Description.Trim(),
+            ContactName = Normalize(command.ContactName, 200),
+            PreferredContactMethod = Normalize(command.PreferredContactMethod, 32),
+            PreferredContactDetail = Normalize(command.PreferredContactDetail, 320),
+            OpportunityLabel = Normalize(command.OpportunityLabel, 80),
+            IntentScore = command.IntentScore,
+            ConversationSummary = Normalize(command.ConversationSummary, 1200),
+            SuggestedFollowUp = Normalize(command.SuggestedFollowUp, 800),
             Status = TicketStatuses.Open,
             AssignedToUserId = command.AssignedToUserId,
             CreatedAtUtc = now,
@@ -33,6 +40,17 @@ public sealed class CreateTicketHandler
 
         await _repository.InsertAsync(ticket, cancellationToken);
         return OperationResult<Ticket>.Success(ticket);
+    }
+
+    private static string? Normalize(string? value, int maxLength)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var trimmed = value.Trim();
+        return trimmed.Length <= maxLength ? trimmed : trimmed[..maxLength];
     }
 }
 
