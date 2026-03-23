@@ -72,6 +72,7 @@ public sealed class ChatSendHandler
     private readonly ILeadVisitorLinker _leadVisitorLinker;
     private readonly UpsertLeadFromPromoEntryHandler _upsertLeadFromPromoEntryHandler;
     private readonly RetrieveTopChunksHandler _retrieveTopChunksHandler;
+    private readonly VisitorContextBundleHandler _visitorContextBundleHandler;
     private readonly IChatCompletionClient _chatCompletionClient;
     private readonly TimeSpan _sessionTimeout;
     private readonly ILogger<ChatSendHandler> _logger;
@@ -86,6 +87,7 @@ public sealed class ChatSendHandler
         ILeadVisitorLinker leadVisitorLinker,
         UpsertLeadFromPromoEntryHandler upsertLeadFromPromoEntryHandler,
         RetrieveTopChunksHandler retrieveTopChunksHandler,
+        VisitorContextBundleHandler visitorContextBundleHandler,
         IChatCompletionClient chatCompletionClient,
         int sessionTimeoutMinutes,
         ILogger<ChatSendHandler> logger)
@@ -99,6 +101,7 @@ public sealed class ChatSendHandler
         _leadVisitorLinker = leadVisitorLinker;
         _upsertLeadFromPromoEntryHandler = upsertLeadFromPromoEntryHandler;
         _retrieveTopChunksHandler = retrieveTopChunksHandler;
+        _visitorContextBundleHandler = visitorContextBundleHandler;
         _chatCompletionClient = chatCompletionClient;
         _sessionTimeout = TimeSpan.FromMinutes(sessionTimeoutMinutes > 0 ? sessionTimeoutMinutes : 30);
         _logger = logger;
@@ -256,6 +259,7 @@ public sealed class ChatSendHandler
 
         var topScore = retrieved.Count == 0 ? 0 : retrieved.Max(item => item.Score);
         var confidence = ComputeConfidence(retrieved.Count > 0, topScore);
+        var businessContext = await BuildRuntimeBusinessContextAsync(site, session, normalizedMessage, cancellationToken);
 
         _logger.LogInformation("Engage retrieval summary for session {SessionId}: hits={Hits}, topScore={TopScore}, confidence={Confidence}.", session.Id, retrieved.Count, topScore, confidence);
 
@@ -301,7 +305,7 @@ public sealed class ChatSendHandler
             .Select(item => new EngageCitationResult(item.SourceId, item.ChunkId, item.ChunkIndex))
             .ToArray();
 
-        var completion = await _chatCompletionClient.CompleteAsync(BuildPrompt(bot, command.Message, normalizedMessage, retrieved, recentMessages), cancellationToken);
+        var completion = await _chatCompletionClient.CompleteAsync(BuildPrompt(bot, command.Message, normalizedMessage, retrieved, recentMessages, businessContext), cancellationToken);
         if (!completion.IsSuccess || string.IsNullOrWhiteSpace(completion.Value))
         {
             _logger.LogWarning("Engage AI completion unavailable for session {SessionId}.", session.Id);
@@ -351,7 +355,7 @@ public sealed class ChatSendHandler
         return Math.Min(1m, topScore / 4m);
     }
 
-    private static string BuildPrompt(EngageBot bot, string message, string normalizedMessage, IReadOnlyCollection<RetrievedChunkResult> chunks, IReadOnlyCollection<EngageChatMessage> messages)
+    private static string BuildPrompt(EngageBot bot, string message, string normalizedMessage, IReadOnlyCollection<RetrievedChunkResult> chunks, IReadOnlyCollection<EngageChatMessage> messages, string businessContext)
     {
         var dedupedChunks = chunks
             .Select(item => item.Content.Trim())
@@ -396,6 +400,9 @@ Conversation transcript (oldest to newest):
 
 Distilled prior user context:
 {distilledContext}
+
+Business context bundle (optional):
+{(string.IsNullOrWhiteSpace(businessContext) ? "none" : businessContext)}
 
 User question:
 {message}
@@ -614,7 +621,7 @@ Normalized user question (for typo recovery):
             var fallback = IsRealQuestion(userMessage) || (hasDirectQuestionContext && isContinuationReply)
                 ? reason == "LowConfidence" && retrievedChunks.Count == 0
                     ? BuildDeterministicClarificationResponse(intent)
-                    : await BuildBusinessAwareClarificationResponseAsync(bot, userMessage, normalizedUserMessage, intent, messages, retrievedChunks, cancellationToken)
+                    : await BuildBusinessAwareClarificationResponseAsync(site, session, bot, userMessage, normalizedUserMessage, intent, messages, retrievedChunks, cancellationToken)
                 : ConversationPolicy.BuildSoftFallbackResponse(bot, SoftFallbackResponse);
             session.ConversationState = StateClarify;
             return await CreateAssistantResponseAsync(session, now, ShapeAssistantResponse(fallback, UserRequestedDetail(userMessage)), 0.2m, false, "Fallback", reason, cancellationToken);
@@ -623,8 +630,82 @@ Normalized user question (for typo recovery):
         return await CreateFallbackResponseAsync(site, session, userMessage, now, reason, handoffs, messages, cancellationToken, EscalationFallbackResponse);
     }
 
+    private async Task<string> BuildRuntimeBusinessContextAsync(
+        Site site,
+        EngageChatSession session,
+        string normalizedUserMessage,
+        CancellationToken cancellationToken)
+    {
+        var lines = new List<string>();
+        var captureSignals = new[]
+        {
+            session.CaptureGoal is { Length: > 0 } ? $"- Capture goal: {session.CaptureGoal}" : null,
+            session.CaptureType is { Length: > 0 } ? $"- Capture type: {session.CaptureType}" : null,
+            session.CaptureLocation is { Length: > 0 } ? $"- Capture location: {session.CaptureLocation}" : null,
+            session.CaptureConstraints is { Length: > 0 } ? $"- Capture constraints: {session.CaptureConstraints}" : null
+        }.Where(item => item is not null).Select(item => item!);
+
+        if (captureSignals.Any())
+        {
+            lines.Add("Current session capture signals:");
+            lines.AddRange(captureSignals);
+        }
+
+        var bundleResult = await _visitorContextBundleHandler.HandleAsync(
+            new BuildVisitorContextBundleQuery(
+                site.TenantId,
+                site.Id,
+                null,
+                session.Id,
+                normalizedUserMessage,
+                KnowledgeTop: 3,
+                TimelineLimit: 5,
+                EngageMessageLimit: 6,
+                TicketsLimit: 5,
+                PromoEntriesLimit: 3),
+            cancellationToken);
+
+        if (bundleResult.Status != OperationStatus.Success || bundleResult.Value is null)
+        {
+            return lines.Count == 0 ? "none" : string.Join("\n", lines);
+        }
+
+        var bundle = bundleResult.Value;
+        if (bundle.VisitorProfile is not null)
+        {
+            lines.Add("Visitor profile summary:");
+            lines.Add($"- Visits: {bundle.VisitorProfile.VisitCount}, pages viewed: {bundle.VisitorProfile.TotalPagesVisited}");
+            if (!string.IsNullOrWhiteSpace(bundle.VisitorProfile.DisplayName))
+            {
+                lines.Add($"- Name: {bundle.VisitorProfile.DisplayName}");
+            }
+        }
+
+        if (bundle.LinkedTicketsSummary is { Count: > 0 })
+        {
+            lines.Add("Linked ticket signals:");
+            foreach (var ticket in bundle.LinkedTicketsSummary.Take(2))
+            {
+                lines.Add($"- {ticket.Subject} ({ticket.Status})");
+            }
+        }
+
+        if (bundle.PromoInteractionSummary is { Count: > 0 })
+        {
+            lines.Add("Recent promo interactions:");
+            foreach (var promo in bundle.PromoInteractionSummary.Take(2))
+            {
+                lines.Add($"- Promo submitted at {promo.SubmittedAtUtc:O}");
+            }
+        }
+
+        return lines.Count == 0 ? "none" : string.Join("\n", lines);
+    }
+
 
     private async Task<string> BuildBusinessAwareClarificationResponseAsync(
+        Site site,
+        EngageChatSession session,
         EngageBot bot,
         string userMessage,
         string normalizedUserMessage,
@@ -633,7 +714,8 @@ Normalized user question (for typo recovery):
         IReadOnlyCollection<RetrievedChunkResult> retrievedChunks,
         CancellationToken cancellationToken)
     {
-        var prompt = BuildClarificationPrompt(bot, userMessage, normalizedUserMessage, intent, messages, retrievedChunks);
+        var businessContext = await BuildRuntimeBusinessContextAsync(site, session, normalizedUserMessage, cancellationToken);
+        var prompt = BuildClarificationPrompt(bot, userMessage, normalizedUserMessage, intent, messages, retrievedChunks, businessContext);
         var completion = await _chatCompletionClient.CompleteAsync(prompt, cancellationToken);
         if (!completion.IsSuccess || string.IsNullOrWhiteSpace(completion.Value))
         {
@@ -649,7 +731,8 @@ Normalized user question (for typo recovery):
         string normalizedUserMessage,
         ChatIntent intent,
         IReadOnlyCollection<EngageChatMessage> messages,
-        IReadOnlyCollection<RetrievedChunkResult> retrievedChunks)
+        IReadOnlyCollection<RetrievedChunkResult> retrievedChunks,
+        string businessContext)
     {
         var tone = ResolvePromptTone(bot.Tone);
         var recentTurns = string.Join("\n", messages
@@ -679,6 +762,9 @@ Detected intent: {intent}
 
 Retrieved business context snippets:
 {(string.IsNullOrWhiteSpace(chunkContext) ? "none" : chunkContext)}
+
+Business context bundle (optional):
+{(string.IsNullOrWhiteSpace(businessContext) ? "none" : businessContext)}
 
 Conversation transcript (oldest to newest):
 {(string.IsNullOrWhiteSpace(recentTurns) ? "none" : recentTurns)}
