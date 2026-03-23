@@ -47,7 +47,24 @@ public sealed class EngageConversationPolicy
         "remodel",
         "renovation",
         "installation",
-        "service"
+        "service",
+        "solution",
+        "software",
+        "app",
+        "platform",
+        "integration",
+        "website",
+        "store",
+        "shop",
+        "restaurant",
+        "menu",
+        "order",
+        "booking",
+        "appointment",
+        "campaign",
+        "consulting",
+        "package",
+        "plan"
     ];
     private static readonly string[] CommercialIntentActionTerms =
     [
@@ -56,7 +73,18 @@ public sealed class EngageConversationPolicy
         "need",
         "quote",
         "estimate",
-        "pricing"
+        "pricing",
+        "buy",
+        "purchase",
+        "book",
+        "schedule",
+        "hire",
+        "start",
+        "launch",
+        "upgrade",
+        "improve",
+        "set up",
+        "setup"
     ];
     private static readonly string[] ContinuationPhrases =
     [
@@ -137,7 +165,11 @@ public sealed class EngageConversationPolicy
         var hasTopic = CommercialIntentTopicTerms.Any(term => normalized.Contains(term, StringComparison.Ordinal))
             || normalized.Contains("help with", StringComparison.Ordinal)
             || normalized.Contains("for my", StringComparison.Ordinal)
-            || normalized.Contains("for our", StringComparison.Ordinal);
+            || normalized.Contains("for our", StringComparison.Ordinal)
+            || normalized.Contains("for my business", StringComparison.Ordinal)
+            || normalized.Contains("for our business", StringComparison.Ordinal)
+            || normalized.Contains("customers", StringComparison.Ordinal)
+            || normalized.Contains("clients", StringComparison.Ordinal);
         return hasAction && hasTopic;
     }
 
@@ -318,11 +350,6 @@ public sealed class EngageConversationPolicy
             return "What kind of business or use case is this for?";
         }
 
-        if (IsDigitalProjectContext(session) && string.IsNullOrWhiteSpace(session.CaptureConstraints))
-        {
-            return "Is this a brand new site or a redesign, and what should it help customers do first?";
-        }
-
         if (string.IsNullOrWhiteSpace(session.CaptureLocation))
         {
             return "What location should we plan for?";
@@ -330,6 +357,11 @@ public sealed class EngageConversationPolicy
 
         if (string.IsNullOrWhiteSpace(session.CaptureConstraints))
         {
+            if (TryBuildBusinessAwareConstraintQuestion(session, out var refinementQuestion))
+            {
+                return refinementQuestion;
+            }
+
             return "Any key constraints like budget or timeline?";
         }
 
@@ -586,13 +618,45 @@ public sealed class EngageConversationPolicy
     private static string? NormalizeOptional(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
-    private static bool IsDigitalProjectContext(EngageChatSession session)
+    private static bool TryBuildBusinessAwareConstraintQuestion(EngageChatSession session, out string question)
     {
         var context = $"{session.CaptureGoal} {session.CaptureType} {session.CaptureContext}".ToLowerInvariant();
-        return context.Contains("website", StringComparison.Ordinal)
+        var isDigitalContext = context.Contains("website", StringComparison.Ordinal)
             || context.Contains("site", StringComparison.Ordinal)
             || context.Contains("online store", StringComparison.Ordinal)
             || context.Contains("ecommerce", StringComparison.Ordinal)
             || context.Contains("e-commerce", StringComparison.Ordinal);
+
+        if (isDigitalContext)
+        {
+            question = "Any key constraints like budget, timeline, or systems this needs to work with?";
+            return true;
+        }
+
+        var isBookingContext = context.Contains("booking", StringComparison.Ordinal)
+            || context.Contains("appointment", StringComparison.Ordinal)
+            || context.Contains("reservation", StringComparison.Ordinal)
+            || context.Contains("schedule", StringComparison.Ordinal);
+        if (isBookingContext)
+        {
+            question = "Any key constraints like budget, timeline, or scheduling requirements?";
+            return true;
+        }
+
+        var isCommerceContext = context.Contains("retail", StringComparison.Ordinal)
+            || context.Contains("restaurant", StringComparison.Ordinal)
+            || context.Contains("food", StringComparison.Ordinal)
+            || context.Contains("drink", StringComparison.Ordinal)
+            || context.Contains("menu", StringComparison.Ordinal)
+            || context.Contains("inventory", StringComparison.Ordinal)
+            || context.Contains("order", StringComparison.Ordinal);
+        if (isCommerceContext)
+        {
+            question = "Any key constraints like budget, timeline, or fulfillment capacity?";
+            return true;
+        }
+
+        question = string.Empty;
+        return false;
     }
 }
