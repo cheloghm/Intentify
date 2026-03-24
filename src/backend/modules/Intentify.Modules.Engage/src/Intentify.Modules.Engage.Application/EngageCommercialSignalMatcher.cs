@@ -2,70 +2,11 @@ namespace Intentify.Modules.Engage.Application;
 
 public sealed class EngageCommercialSignalMatcher
 {
-    private static readonly string[] CommercialIntentTopicTerms =
-    [
-        "project",
-        "remodel",
-        "renovation",
-        "installation",
-        "service",
-        "solution",
-        "software",
-        "app",
-        "platform",
-        "integration",
-        "website",
-        "store",
-        "shop",
-        "restaurant",
-        "menu",
-        "order",
-        "booking",
-        "appointment",
-        "campaign",
-        "consulting",
-        "package",
-        "plan"
-    ];
-
-    private static readonly string[] CommercialIntentActionTerms =
-    [
-        "looking for",
-        "looking to",
-        "need",
-        "quote",
-        "estimate",
-        "pricing",
-        "buy",
-        "purchase",
-        "book",
-        "schedule",
-        "hire",
-        "start",
-        "launch",
-        "upgrade",
-        "improve",
-        "set up",
-        "setup"
-    ];
-
-    private static readonly string[] RecommendationPhrases =
-    [
-        "which one is better",
-        "which one should i pick",
-        "what do you recommend",
-        "which should i choose",
-        "which color should i pick",
-        "which spec is best",
-        "what should i choose",
-        "recommend"
-    ];
-
     public bool IsStrongCommercialIntent(string message)
     {
         var normalized = message.Trim().ToLowerInvariant();
-        var hasAction = CommercialIntentActionTerms.Any(term => normalized.Contains(term, StringComparison.Ordinal));
-        var hasTopic = CommercialIntentTopicTerms.Any(term => normalized.Contains(term, StringComparison.Ordinal))
+        var hasAction = EngageCommercialSignalBank.IntentActionTerms.Any(term => normalized.Contains(term, StringComparison.Ordinal));
+        var hasTopic = EngageCommercialSignalBank.IntentTopicTerms.Any(term => normalized.Contains(term, StringComparison.Ordinal))
             || normalized.Contains("help with", StringComparison.Ordinal)
             || normalized.Contains("for my", StringComparison.Ordinal)
             || normalized.Contains("for our", StringComparison.Ordinal)
@@ -84,13 +25,8 @@ public sealed class EngageCommercialSignalMatcher
         }
 
         var normalized = message.Trim().ToLowerInvariant();
-        var asksForContact = normalized.Contains("contact", StringComparison.Ordinal)
-            || normalized.Contains("call", StringComparison.Ordinal)
-            || normalized.Contains("callback", StringComparison.Ordinal)
-            || normalized.Contains("call back", StringComparison.Ordinal)
-            || normalized.Contains("reach out", StringComparison.Ordinal);
-        var asksForQuote = normalized.Contains("quote", StringComparison.Ordinal)
-            || normalized.Contains("estimate", StringComparison.Ordinal);
+        var asksForContact = EngageCommercialSignalBank.ExplicitContactTerms.Any(term => normalized.Contains(term, StringComparison.Ordinal));
+        var asksForQuote = EngageCommercialSignalBank.ExplicitQuoteTerms.Any(term => normalized.Contains(term, StringComparison.Ordinal));
         return asksForContact || asksForQuote;
     }
 
@@ -101,7 +37,7 @@ public sealed class EngageCommercialSignalMatcher
             return false;
         }
 
-        return RecommendationPhrases.Any(phrase => normalizedMessage.Contains(phrase, StringComparison.Ordinal));
+        return EngageCommercialSignalBank.RecommendationPhrases.Any(phrase => normalizedMessage.Contains(phrase, StringComparison.Ordinal));
     }
 
     public bool TryBuildCommercialIntentContactPrompt(string message, string prefix, out string prompt)
@@ -113,8 +49,8 @@ public sealed class EngageCommercialSignalMatcher
             return false;
         }
 
-        var hasTopic = CommercialIntentTopicTerms.Any(term => normalized.Contains(term, StringComparison.Ordinal));
-        var hasAction = CommercialIntentActionTerms.Any(term => normalized.Contains(term, StringComparison.Ordinal));
+        var hasTopic = EngageCommercialSignalBank.IntentTopicTerms.Any(term => normalized.Contains(term, StringComparison.Ordinal));
+        var hasAction = EngageCommercialSignalBank.IntentActionTerms.Any(term => normalized.Contains(term, StringComparison.Ordinal));
         var hasFirstPartySignal = normalized.StartsWith("i ", StringComparison.Ordinal)
             || normalized.Contains(" i ", StringComparison.Ordinal)
             || normalized.StartsWith("we ", StringComparison.Ordinal)
