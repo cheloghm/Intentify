@@ -5,201 +5,24 @@ namespace Intentify.Modules.Engage.Application;
 public sealed class EngageConversationPolicy
 {
     private static readonly EngageInputInterpreter InputInterpreter = new();
-    private const string ContactDetailsNamePrefix = "my name is";
-    private static readonly string[] HumanHelpPhrases =
-    [
-        "contact form",
-        "form isn't working",
-        "form is not working",
-        "can't submit",
-        "cannot submit",
-        "doesn't submit"
-    ];
-    private static readonly string[] HumanHelpRequestPhrases =
-    [
-        "help me",
-        "need help",
-        "someone help",
-        "talk to",
-        "speak to",
-        "human",
-        "agent",
-        "representative",
-        "support"
-    ];
-    private static readonly string[] HumanHelpProblemTerms =
-    [
-        "broken",
-        "error",
-        "failed",
-        "not working",
-        "doesn't work",
-        "checkout",
-        "payment",
-        "refund",
-        "complaint",
-        "issue",
-        "problem"
-    ];
-    private static readonly string[] CommercialIntentTopicTerms =
-    [
-        "project",
-        "remodel",
-        "renovation",
-        "installation",
-        "service",
-        "solution",
-        "software",
-        "app",
-        "platform",
-        "integration",
-        "website",
-        "store",
-        "shop",
-        "restaurant",
-        "menu",
-        "order",
-        "booking",
-        "appointment",
-        "campaign",
-        "consulting",
-        "package",
-        "plan"
-    ];
-    private static readonly string[] CommercialIntentActionTerms =
-    [
-        "looking for",
-        "looking to",
-        "need",
-        "quote",
-        "estimate",
-        "pricing",
-        "buy",
-        "purchase",
-        "book",
-        "schedule",
-        "hire",
-        "start",
-        "launch",
-        "upgrade",
-        "improve",
-        "set up",
-        "setup"
-    ];
-    private static readonly string[] ContinuationPhrases =
-    [
-        "yes please",
-        "go ahead",
-        "that's fine",
-        "thats fine",
-        "that’s fine",
-        "sounds good",
-        "okay then"
-    ];
-    private static readonly string[] GreetingTypos =
-    [
-        "hllo",
-        "helo",
-        "hy",
-        "helllo",
-        "helloo",
-        "heloo"
-    ];
-    private static readonly string[] RecommendationPhrases =
-    [
-        "which one is better",
-        "which one should i pick",
-        "what do you recommend",
-        "which should i choose",
-        "which color should i pick",
-        "which spec is best",
-        "what should i choose",
-        "recommend"
-    ];
-    private static readonly string[] ExplicitEscalationTerms =
-    [
-        "talk to a human",
-        "speak to a human",
-        "human support",
-        "contact support",
-        "call me",
-        "call back",
-        "callback",
-        "reach out"
-    ];
+    private static readonly EngageSmalltalkSignalMatcher SmalltalkSignals = new(InputInterpreter);
+    private static readonly EngageSupportSignalMatcher SupportSignals = new(InputInterpreter);
+    private static readonly EngageCommercialSignalMatcher CommercialSignals = new();
 
     public bool TryBuildSmalltalkResponse(string message, bool priorAssistantAskedQuestion, string greetingResponse, string ackResponse, out string response)
-    {
-        var normalized = message.Trim().ToLowerInvariant();
-        var isGreeting = normalized is "hi" or "hello" or "hey" || InputInterpreter.IsLikelyGreetingTypo(normalized);
-        var isAcknowledgement = normalized is "yes" or "no" or "ok" or "okay" or "thanks" or "thank you" or "sure";
-        var isContinuation = IsContinuationReply(normalized);
-        var isVeryShortNonQuestion = normalized.Length > 0 && normalized.Length <= 5 && !normalized.Contains('?');
-
-        if (priorAssistantAskedQuestion && (isAcknowledgement || isContinuation || isVeryShortNonQuestion))
-        {
-            response = string.Empty;
-            return false;
-        }
-
-        if (!isGreeting && !isAcknowledgement && !isVeryShortNonQuestion)
-        {
-            response = string.Empty;
-            return false;
-        }
-
-        response = isGreeting ? greetingResponse : ackResponse;
-        return true;
-    }
+        => SmalltalkSignals.TryBuildSmalltalkResponse(message, priorAssistantAskedQuestion, greetingResponse, ackResponse, out response);
 
     public bool IsContinuationReply(string message)
-    {
-        var normalized = message.Trim().ToLowerInvariant();
-        return ContinuationPhrases.Contains(normalized, StringComparer.Ordinal);
-    }
+        => SmalltalkSignals.IsContinuationReply(message);
 
     public bool IsStrongCommercialIntent(string message)
-    {
-        var normalized = message.Trim().ToLowerInvariant();
-        var hasAction = CommercialIntentActionTerms.Any(term => normalized.Contains(term, StringComparison.Ordinal));
-        var hasTopic = CommercialIntentTopicTerms.Any(term => normalized.Contains(term, StringComparison.Ordinal))
-            || normalized.Contains("help with", StringComparison.Ordinal)
-            || normalized.Contains("for my", StringComparison.Ordinal)
-            || normalized.Contains("for our", StringComparison.Ordinal)
-            || normalized.Contains("for my business", StringComparison.Ordinal)
-            || normalized.Contains("for our business", StringComparison.Ordinal)
-            || normalized.Contains("customers", StringComparison.Ordinal)
-            || normalized.Contains("clients", StringComparison.Ordinal);
-        return hasAction && hasTopic;
-    }
+        => CommercialSignals.IsStrongCommercialIntent(message);
 
     public bool IsExplicitCommercialContactRequest(string message)
-    {
-        if (string.IsNullOrWhiteSpace(message))
-        {
-            return false;
-        }
-
-        var normalized = message.Trim().ToLowerInvariant();
-        var asksForContact = normalized.Contains("contact", StringComparison.Ordinal)
-            || normalized.Contains("call", StringComparison.Ordinal)
-            || normalized.Contains("callback", StringComparison.Ordinal)
-            || normalized.Contains("call back", StringComparison.Ordinal)
-            || normalized.Contains("reach out", StringComparison.Ordinal);
-        var asksForQuote = normalized.Contains("quote", StringComparison.Ordinal)
-            || normalized.Contains("estimate", StringComparison.Ordinal);
-        return asksForContact || asksForQuote;
-    }
+        => CommercialSignals.IsExplicitCommercialContactRequest(message);
 
     public bool IsRecommendationIntent(string normalizedMessage)
-    {
-        if (string.IsNullOrWhiteSpace(normalizedMessage))
-        {
-            return false;
-        }
-
-        return RecommendationPhrases.Any(phrase => normalizedMessage.Contains(phrase, StringComparison.Ordinal));
-    }
+        => CommercialSignals.IsRecommendationIntent(normalizedMessage);
 
     public string BuildRecommendationResponse(EngageChatSession session, string message)
     {
@@ -400,38 +223,11 @@ public sealed class EngageConversationPolicy
     }
 
     public bool NeedsHumanHelp(string message)
-    {
-        if (string.IsNullOrWhiteSpace(message))
-        {
-            return false;
-        }
-
-        var normalized = message.Trim().ToLowerInvariant();
-        if (InputInterpreter.ContainsSupportProblemSignal(normalized))
-        {
-            return true;
-        }
-
-        if (HumanHelpPhrases.Any(phrase => message.Contains(phrase, StringComparison.OrdinalIgnoreCase)))
-        {
-            return true;
-        }
-
-        var requestedHumanHelp = HumanHelpRequestPhrases.Any(phrase => normalized.Contains(phrase, StringComparison.Ordinal));
-        if (!requestedHumanHelp)
-        {
-            return false;
-        }
-
-        return InputInterpreter.ContainsSupportProblemSignal(normalized)
-            || normalized.Contains("refund", StringComparison.Ordinal)
-            || normalized.Contains("issue", StringComparison.Ordinal)
-            || normalized.Contains("problem", StringComparison.Ordinal);
-    }
+        => SupportSignals.NeedsHumanHelp(message);
 
     public bool ShouldAttemptSupportTroubleshoot(EngageChatSession session, string message, bool isSupportCaptureMode)
     {
-        if (IsExplicitEscalationRequest(message))
+        if (SupportSignals.IsExplicitEscalationRequest(message))
         {
             return false;
         }
@@ -540,39 +336,7 @@ public sealed class EngageConversationPolicy
     }
 
     public bool TryBuildCommercialIntentContactPrompt(string message, string prefix, out string prompt)
-    {
-        var normalized = message.Trim().ToLowerInvariant();
-        if (string.IsNullOrWhiteSpace(normalized))
-        {
-            prompt = string.Empty;
-            return false;
-        }
-
-        var hasTopic = CommercialIntentTopicTerms.Any(term => normalized.Contains(term, StringComparison.Ordinal));
-        var hasAction = CommercialIntentActionTerms.Any(term => normalized.Contains(term, StringComparison.Ordinal));
-        var hasFirstPartySignal = normalized.StartsWith("i ", StringComparison.Ordinal)
-            || normalized.Contains(" i ", StringComparison.Ordinal)
-            || normalized.StartsWith("we ", StringComparison.Ordinal)
-            || normalized.Contains(" we ", StringComparison.Ordinal)
-            || normalized.Contains(" my ", StringComparison.Ordinal)
-            || normalized.Contains(" our ", StringComparison.Ordinal)
-            || normalized.Contains("looking to", StringComparison.Ordinal);
-
-        if (!(hasTopic && hasAction && hasFirstPartySignal))
-        {
-            prompt = string.Empty;
-            return false;
-        }
-
-        var condensedNeed = message.Trim().TrimEnd('.', '!', '?');
-        if (condensedNeed.Length > 96)
-        {
-            condensedNeed = condensedNeed[..96].TrimEnd();
-        }
-
-        prompt = $"{prefix} \"{condensedNeed}\". I can get this moving — what’s your first name?";
-        return true;
-    }
+        => CommercialSignals.TryBuildCommercialIntentContactPrompt(message, prefix, out prompt);
 
     public string NormalizeUserMessage(string message) => InputInterpreter.NormalizeUserMessage(message);
 
@@ -587,33 +351,6 @@ public sealed class EngageConversationPolicy
 
     public string? TryExtractPreferredContactMethod(string message, string? email, string? phone)
         => InputInterpreter.TryExtractPreferredContactMethod(message, email, phone);
-
-    private bool IsExplicitEscalationRequest(string message)
-    {
-        if (string.IsNullOrWhiteSpace(message))
-        {
-            return false;
-        }
-
-        var normalized = message.Trim().ToLowerInvariant();
-        if (ExplicitEscalationTerms.Any(term => normalized.Contains(term, StringComparison.Ordinal)))
-        {
-            return true;
-        }
-
-        var containsHumanTarget = normalized.Contains("human", StringComparison.Ordinal)
-            || normalized.Contains("agent", StringComparison.Ordinal)
-            || normalized.Contains("representative", StringComparison.Ordinal)
-            || normalized.Contains("support", StringComparison.Ordinal);
-
-        var containsEscalationVerb = normalized.Contains("talk", StringComparison.Ordinal)
-            || normalized.Contains("speak", StringComparison.Ordinal)
-            || normalized.Contains("contact", StringComparison.Ordinal)
-            || normalized.Contains("connect", StringComparison.Ordinal)
-            || normalized.Contains("call", StringComparison.Ordinal);
-
-        return containsHumanTarget && containsEscalationVerb;
-    }
 
     private static string? NormalizeOptional(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
