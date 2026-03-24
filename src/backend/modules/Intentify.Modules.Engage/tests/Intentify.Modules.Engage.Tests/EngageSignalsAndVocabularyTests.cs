@@ -9,11 +9,41 @@ namespace Intentify.Modules.Engage.Tests;
 public sealed class EngageSignalsAndVocabularyTests
 {
     [Fact]
+    public void InputInterpreter_GreetingTypo_IsDetected()
+    {
+        var interpreter = new EngageInputInterpreter();
+
+        var result = interpreter.IsLikelyGreetingTypo("helo");
+
+        Assert.True(result);
+    }
+
+    [Fact]
+    public void SmalltalkSignalMatcher_ContinuationPhrase_IsDetected()
+    {
+        var matcher = new EngageSmalltalkSignalMatcher(new EngageInputInterpreter());
+
+        var result = matcher.IsContinuationReply("sounds good");
+
+        Assert.True(result);
+    }
+
+    [Fact]
     public void SupportSignalMatcher_ExplicitSupportIssue_IsDetected()
     {
         var matcher = new EngageSupportSignalMatcher(new EngageInputInterpreter());
 
         var result = matcher.NeedsHumanHelp("I need support, payment failed and I need help.");
+
+        Assert.True(result);
+    }
+
+    [Fact]
+    public void SupportSignalMatcher_ExplicitEscalationRequest_IsDetected()
+    {
+        var matcher = new EngageSupportSignalMatcher(new EngageInputInterpreter());
+
+        var result = matcher.IsExplicitEscalationRequest("Please call back and connect me to human support.");
 
         Assert.True(result);
     }
