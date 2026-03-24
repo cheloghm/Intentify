@@ -147,7 +147,7 @@ public sealed class EngageAiIntentInterpreter
     }
 }
 
-internal sealed record AiIntentInterpretationResult
+public sealed record AiIntentInterpretationResult
 {
     internal AiIntentInterpretationResult(ChatIntent intent, decimal confidence, string rationale)
     {
