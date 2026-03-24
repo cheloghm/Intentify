@@ -73,6 +73,8 @@ public sealed class ChatSendHandler
     private readonly UpsertLeadFromPromoEntryHandler _upsertLeadFromPromoEntryHandler;
     private readonly RetrieveTopChunksHandler _retrieveTopChunksHandler;
     private readonly VisitorContextBundleHandler _visitorContextBundleHandler;
+    private readonly TenantVocabularyResolver _tenantVocabularyResolver;
+    private readonly EngageAiIntentInterpreter _aiIntentInterpreter;
     private readonly IChatCompletionClient _chatCompletionClient;
     private readonly TimeSpan _sessionTimeout;
     private readonly ILogger<ChatSendHandler> _logger;
@@ -88,6 +90,8 @@ public sealed class ChatSendHandler
         UpsertLeadFromPromoEntryHandler upsertLeadFromPromoEntryHandler,
         RetrieveTopChunksHandler retrieveTopChunksHandler,
         VisitorContextBundleHandler visitorContextBundleHandler,
+        TenantVocabularyResolver tenantVocabularyResolver,
+        EngageAiIntentInterpreter aiIntentInterpreter,
         IChatCompletionClient chatCompletionClient,
         int sessionTimeoutMinutes,
         ILogger<ChatSendHandler> logger)
@@ -102,6 +106,8 @@ public sealed class ChatSendHandler
         _upsertLeadFromPromoEntryHandler = upsertLeadFromPromoEntryHandler;
         _retrieveTopChunksHandler = retrieveTopChunksHandler;
         _visitorContextBundleHandler = visitorContextBundleHandler;
+        _tenantVocabularyResolver = tenantVocabularyResolver;
+        _aiIntentInterpreter = aiIntentInterpreter;
         _chatCompletionClient = chatCompletionClient;
         _sessionTimeout = TimeSpan.FromMinutes(sessionTimeoutMinutes > 0 ? sessionTimeoutMinutes : 30);
         _logger = logger;
@@ -225,6 +231,16 @@ public sealed class ChatSendHandler
             }
 
             return await CreateHumanHelpResponseAsync(site, session, command.Message, now, sessionHandoffs, recentMessages, cancellationToken);
+        }
+
+        if (!hasCommercialIntent && intent is ChatIntent.General or ChatIntent.AmbiguousShortPrompt)
+        {
+            var tenantVocabulary = await _tenantVocabularyResolver.ResolveAsync(site.TenantId, site.Id, session.BotId, cancellationToken);
+            var interpreted = await _aiIntentInterpreter.InterpretAsync(command.Message, normalizedMessage, session, tenantVocabulary, cancellationToken);
+            if (interpreted is not null && interpreted.Confidence >= 0.65m && interpreted.Intent is not ChatIntent.General)
+            {
+                intent = interpreted.Intent;
+            }
         }
 
         var hasDirectQuestionContext = priorAssistantAskedQuestion;
