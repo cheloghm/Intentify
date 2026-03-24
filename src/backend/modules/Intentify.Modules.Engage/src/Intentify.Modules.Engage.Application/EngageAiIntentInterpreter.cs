@@ -5,7 +5,7 @@ using Intentify.Shared.AI;
 
 namespace Intentify.Modules.Engage.Application;
 
-internal sealed class EngageAiIntentInterpreter
+public sealed class EngageAiIntentInterpreter
 {
     private readonly IChatCompletionClient _chatCompletionClient;
 
