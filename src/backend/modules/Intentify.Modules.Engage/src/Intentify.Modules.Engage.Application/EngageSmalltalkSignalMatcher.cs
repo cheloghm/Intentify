@@ -2,17 +2,6 @@ namespace Intentify.Modules.Engage.Application;
 
 public sealed class EngageSmalltalkSignalMatcher
 {
-    private static readonly string[] ContinuationPhrases =
-    [
-        "yes please",
-        "go ahead",
-        "that's fine",
-        "thats fine",
-        "that’s fine",
-        "sounds good",
-        "okay then"
-    ];
-
     private readonly EngageInputInterpreter _inputInterpreter;
 
     public EngageSmalltalkSignalMatcher(EngageInputInterpreter inputInterpreter)
@@ -47,6 +36,6 @@ public sealed class EngageSmalltalkSignalMatcher
     public bool IsContinuationReply(string message)
     {
         var normalized = message.Trim().ToLowerInvariant();
-        return ContinuationPhrases.Contains(normalized, StringComparer.Ordinal);
+        return EngageContinuationPhraseBank.ContinuationPhrases.Contains(normalized, StringComparer.Ordinal);
     }
 }
