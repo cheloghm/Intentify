@@ -4,127 +4,6 @@ namespace Intentify.Modules.Engage.Application;
 
 public sealed class EngageInputInterpreter
 {
-    private static readonly string[] ExplicitNamePrefixes =
-    [
-        "my name is",
-        "i am",
-        "i'm",
-        "im"
-    ];
-    private const string ContactDetailsNamePrefix = "my name is";
-    private static readonly string[] GreetingTypos =
-    [
-        "hllo",
-        "helo",
-        "hy",
-        "helllo",
-        "helloo",
-        "heloo"
-    ];
-    private static readonly string[] SupportProblemPhrases =
-    [
-        "not working",
-        "isn't working",
-        "is not working",
-        "doesn't work",
-        "doesnt work",
-        "broken",
-        "failed",
-        "image not showing",
-        "page not loading",
-        "page is blank",
-        "blank page",
-        "link broken",
-        "button not working",
-        "contact page isn't working",
-        "contact page is not working",
-        "contact form not working",
-        "form not submitting",
-        "cannot submit",
-        "directions not clear",
-        "information not clear",
-        "prices not clear",
-        "broken",
-        "error",
-        "failed",
-        "image not showing",
-        "page not loading",
-        "link broken",
-        "directions not clear",
-        "information not clear",
-        "confusing",
-        "unclear",
-        "checkout not working",
-        "payment failed",
-        "refund issue",
-        "map not showing",
-        "cannot log in",
-        "can't log in",
-        "cant log in",
-        "can't upload",
-        "cant upload",
-        "code not received"
-    ];
-    private static readonly string[] SupportProblemTerms =
-    [
-        "error",
-        "issue",
-        "problem",
-        "failed",
-        "broken",
-        "confusing",
-        "unclear",
-        "blank"
-    ];
-    private static readonly string[] SupportSurfaceTerms =
-    [
-        "site",
-        "website",
-        "page",
-        "link",
-        "button",
-        "contact",
-        "form",
-        "checkout",
-        "payment",
-        "refund",
-        "image",
-        "map",
-        "directions",
-        "information",
-        "prices",
-        "login",
-        "log in",
-        "upload",
-        "map not showing"
-    ];
-    private static readonly string[] LocationMarkers =
-    [
-        " in ",
-        " at ",
-        " from ",
-        " near ",
-        " around "
-    ];
-    private static readonly string[] NonNameContextTerms =
-    [
-        "office",
-        "store",
-        "business",
-        "location",
-        "address",
-        "city",
-        "country",
-        "state",
-        "zip",
-        "postal",
-        "website",
-        "service",
-        "project",
-        "timeline",
-        "budget"
-    ];
-
     public string NormalizeUserMessage(string message)
     {
         if (string.IsNullOrWhiteSpace(message))
@@ -158,7 +37,7 @@ public sealed class EngageInputInterpreter
             return false;
         }
 
-        return GreetingTypos.Contains(normalizedMessage, StringComparer.Ordinal);
+        return EngageGreetingPhraseBank.GreetingTypos.Contains(normalizedMessage, StringComparer.Ordinal);
     }
 
     public bool ContainsSupportProblemSignal(string normalizedMessage)
@@ -168,18 +47,18 @@ public sealed class EngageInputInterpreter
             return false;
         }
 
-        if (SupportProblemPhrases.Any(phrase => normalizedMessage.Contains(phrase, StringComparison.Ordinal)))
+        if (EngageSupportProblemSignalBank.ProblemPhrases.Any(phrase => normalizedMessage.Contains(phrase, StringComparison.Ordinal)))
         {
             return true;
         }
 
-        var hasProblemTerm = SupportProblemTerms.Any(term => normalizedMessage.Contains(term, StringComparison.Ordinal));
+        var hasProblemTerm = EngageSupportProblemSignalBank.ProblemTerms.Any(term => normalizedMessage.Contains(term, StringComparison.Ordinal));
         if (!hasProblemTerm)
         {
             return false;
         }
 
-        return SupportSurfaceTerms.Any(term => normalizedMessage.Contains(term, StringComparison.Ordinal));
+        return EngageSupportProblemSignalBank.SurfaceTerms.Any(term => normalizedMessage.Contains(term, StringComparison.Ordinal));
     }
 
     public string? TryExtractEmail(string message)
@@ -296,7 +175,7 @@ public sealed class EngageInputInterpreter
         }
 
         var normalized = $" {text.Trim().ToLowerInvariant()} ";
-        return LocationMarkers.Any(marker => normalized.Contains(marker, StringComparison.Ordinal))
+        return EngageInputExtractionSignalBank.LocationMarkers.Any(marker => normalized.Contains(marker, StringComparison.Ordinal))
             || normalized.Contains("city", StringComparison.Ordinal)
             || normalized.Contains("state", StringComparison.Ordinal)
             || normalized.Contains("country", StringComparison.Ordinal)
@@ -338,7 +217,7 @@ public sealed class EngageInputInterpreter
         }
 
         var lowered = $" {candidate.ToLowerInvariant()} ";
-        if (NonNameContextTerms.Any(term => lowered.Contains($" {term} ", StringComparison.Ordinal)))
+        if (EngageInputExtractionSignalBank.NonNameContextTerms.Any(term => lowered.Contains($" {term} ", StringComparison.Ordinal)))
         {
             return null;
         }
@@ -366,7 +245,7 @@ public sealed class EngageInputInterpreter
 
         var normalized = candidate.Trim();
 
-        foreach (var prefix in ExplicitNamePrefixes)
+        foreach (var prefix in EngageInputExtractionSignalBank.ExplicitNamePrefixes)
         {
             if (normalized.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
             {
@@ -396,7 +275,7 @@ public sealed class EngageInputInterpreter
         }
 
         var lowered = $" {candidate.Trim().ToLowerInvariant()} ";
-        if (NonNameContextTerms.Any(term => lowered.Contains($" {term} ", StringComparison.Ordinal)))
+        if (EngageInputExtractionSignalBank.NonNameContextTerms.Any(term => lowered.Contains($" {term} ", StringComparison.Ordinal)))
         {
             return true;
         }

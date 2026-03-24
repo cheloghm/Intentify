@@ -2,41 +2,6 @@ namespace Intentify.Modules.Engage.Application;
 
 public sealed class EngageSupportSignalMatcher
 {
-    private static readonly string[] HumanHelpPhrases =
-    [
-        "contact form",
-        "form isn't working",
-        "form is not working",
-        "can't submit",
-        "cannot submit",
-        "doesn't submit"
-    ];
-
-    private static readonly string[] HumanHelpRequestPhrases =
-    [
-        "help me",
-        "need help",
-        "someone help",
-        "talk to",
-        "speak to",
-        "human",
-        "agent",
-        "representative",
-        "support"
-    ];
-
-    private static readonly string[] ExplicitEscalationTerms =
-    [
-        "talk to a human",
-        "speak to a human",
-        "human support",
-        "contact support",
-        "call me",
-        "call back",
-        "callback",
-        "reach out"
-    ];
-
     private readonly EngageInputInterpreter _inputInterpreter;
 
     public EngageSupportSignalMatcher(EngageInputInterpreter inputInterpreter)
@@ -57,12 +22,12 @@ public sealed class EngageSupportSignalMatcher
             return true;
         }
 
-        if (HumanHelpPhrases.Any(phrase => message.Contains(phrase, StringComparison.OrdinalIgnoreCase)))
+        if (EngageSupportEscalationSignalBank.HumanHelpPhrases.Any(phrase => message.Contains(phrase, StringComparison.OrdinalIgnoreCase)))
         {
             return true;
         }
 
-        var requestedHumanHelp = HumanHelpRequestPhrases.Any(phrase => normalized.Contains(phrase, StringComparison.Ordinal));
+        var requestedHumanHelp = EngageSupportEscalationSignalBank.HumanHelpRequestPhrases.Any(phrase => normalized.Contains(phrase, StringComparison.Ordinal));
         if (!requestedHumanHelp)
         {
             return false;
@@ -82,7 +47,7 @@ public sealed class EngageSupportSignalMatcher
         }
 
         var normalized = message.Trim().ToLowerInvariant();
-        if (ExplicitEscalationTerms.Any(term => normalized.Contains(term, StringComparison.Ordinal)))
+        if (EngageSupportEscalationSignalBank.ExplicitEscalationTerms.Any(term => normalized.Contains(term, StringComparison.Ordinal)))
         {
             return true;
         }
