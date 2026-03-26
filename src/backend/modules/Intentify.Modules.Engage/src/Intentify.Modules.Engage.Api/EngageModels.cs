@@ -49,6 +49,7 @@ public sealed record EngageChatSendResponse(
     string? PromoPublicKey = null,
     string? PromoTitle = null,
     string? PromoDescription = null,
+    string? SecondaryResponse = null,
     EngageAiDecisionResponse? Stage7Decision = null,
     string? OpportunityLabel = null,
     int? IntentScore = null,

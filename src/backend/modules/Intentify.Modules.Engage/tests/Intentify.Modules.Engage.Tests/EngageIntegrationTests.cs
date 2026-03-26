@@ -230,6 +230,8 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
         Assert.Contains("/entries", script);
         Assert.Contains("ensureCollectorSessionId", script);
         Assert.Contains("hydrateRequestId", script);
+        Assert.Contains("secondaryResponse", script);
+        Assert.Contains("is typing…", script);
     }
 
     [Fact]
@@ -691,7 +693,7 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task ChatSend_WithKnowledge_DoesNotIncludeStage7Decision()
+    public async Task ChatSend_WithKnowledge_IncludesStage7Decision_WhenPlannerOutputIsValid()
     {
         var builder = AppHostApplication.CreateBuilder([], Environments.Development);
         builder.WebHost.UseTestServer();
@@ -757,10 +759,12 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         Assert.Equal("Return policy is 30 days with original receipt.", json.RootElement.GetProperty("response").GetString());
-        if (json.RootElement.TryGetProperty("stage7Decision", out var stage7Decision))
-        {
-            Assert.Equal(JsonValueKind.Null, stage7Decision.ValueKind);
-        }
+        Assert.True(json.RootElement.TryGetProperty("stage7Decision", out var stage7Decision));
+        Assert.Equal(JsonValueKind.Object, stage7Decision.ValueKind);
+        Assert.Equal("Valid", stage7Decision.GetProperty("validationStatus").GetString());
+        Assert.True(stage7Decision.TryGetProperty("recommendations", out var recommendations));
+        Assert.Equal(JsonValueKind.Array, recommendations.ValueKind);
+        Assert.True(recommendations.GetArrayLength() > 0);
     }
 
     [Fact]
@@ -813,6 +817,184 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
         {
             Assert.Equal(JsonValueKind.Null, stage7Decision.ValueKind);
         }
+    }
+
+    [Fact]
+    public async Task ChatSend_WithKnowledge_AndStage7LowConfidenceOutput_DoesNotBreakResponse()
+    {
+        var builder = AppHostApplication.CreateBuilder([], Environments.Development);
+        builder.WebHost.UseTestServer();
+        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Intentify:Jwt:Issuer"] = "intentify",
+            ["Intentify:Jwt:Audience"] = "intentify-users",
+            ["Intentify:Jwt:SigningKey"] = "test-signing-key-1234567890-EXTRA-KEY",
+            ["Intentify:Jwt:AccessTokenMinutes"] = "30",
+            ["Intentify:Mongo:ConnectionString"] = _mongo.ConnectionString,
+            ["Intentify:Mongo:DatabaseName"] = _mongo.DatabaseName
+        });
+
+        builder.WebHost.ConfigureTestServices(services =>
+        {
+            services.RemoveAll<IChatCompletionClient>();
+            services.AddSingleton<IChatCompletionClient>(new FakeChatCompletionClient(prompt =>
+            {
+                if (prompt.Contains("Stage 7 AI decision assistant.", StringComparison.Ordinal))
+                {
+                    return Result<string>.Success(
+                        """
+                        {
+                          "schemaVersion":"stage7.v1",
+                          "decisionId":"low-confidence",
+                          "overallConfidence":0.2,
+                          "recommendations":[
+                            {
+                              "type":"SuggestKnowledge",
+                              "confidence":0.2,
+                              "rationale":"weak",
+                              "evidenceRefs":[{"source":"knowledge","referenceId":"chunk-1"}],
+                              "requiresApproval":false
+                            }
+                          ],
+                          "shouldFallback":false,
+                          "fallbackReason":null,
+                          "noActionMessage":null
+                        }
+                        """);
+                }
+
+                return Result<string>.Success("Return policy is 30 days with original receipt.");
+            }));
+        });
+
+        await using var app = AppHostApplication.Build(builder);
+        await app.StartAsync();
+        using var client = app.GetTestClient();
+
+        var token = await RegisterUserAsync(client);
+        var site = await CreateSiteAsync(client, token);
+        await AddKnowledgeAsync(client, token, site.SiteId, "Return policy is 30 days with original receipt.");
+
+        var response = await client.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "what is your return policy?"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("Return policy is 30 days with original receipt.", json.RootElement.GetProperty("response").GetString());
+        if (json.RootElement.TryGetProperty("stage7Decision", out var stage7Decision))
+        {
+            Assert.Equal(JsonValueKind.Null, stage7Decision.ValueKind);
+        }
+    }
+
+    [Fact]
+    public async Task ChatSend_WithKnowledge_AndStage7ShouldFallbackOutput_DoesNotIncludeStage7Decision()
+    {
+        var builder = AppHostApplication.CreateBuilder([], Environments.Development);
+        builder.WebHost.UseTestServer();
+        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Intentify:Jwt:Issuer"] = "intentify",
+            ["Intentify:Jwt:Audience"] = "intentify-users",
+            ["Intentify:Jwt:SigningKey"] = "test-signing-key-1234567890-EXTRA-KEY",
+            ["Intentify:Jwt:AccessTokenMinutes"] = "30",
+            ["Intentify:Mongo:ConnectionString"] = _mongo.ConnectionString,
+            ["Intentify:Mongo:DatabaseName"] = _mongo.DatabaseName
+        });
+
+        builder.WebHost.ConfigureTestServices(services =>
+        {
+            services.RemoveAll<IChatCompletionClient>();
+            services.AddSingleton<IChatCompletionClient>(new FakeChatCompletionClient(prompt =>
+            {
+                if (prompt.Contains("Stage 7 AI decision assistant.", StringComparison.Ordinal))
+                {
+                    return Result<string>.Success(
+                        """
+                        {
+                          "schemaVersion":"stage7.v1",
+                          "decisionId":"fallback-decision",
+                          "overallConfidence":0.7,
+                          "recommendations":[],
+                          "shouldFallback":true,
+                          "fallbackReason":"LowConfidence",
+                          "noActionMessage":"No safe action available."
+                        }
+                        """);
+                }
+
+                return Result<string>.Success("Return policy is 30 days with original receipt.");
+            }));
+        });
+
+        await using var app = AppHostApplication.Build(builder);
+        await app.StartAsync();
+        using var client = app.GetTestClient();
+
+        var token = await RegisterUserAsync(client);
+        var site = await CreateSiteAsync(client, token);
+        await AddKnowledgeAsync(client, token, site.SiteId, "Return policy is 30 days with original receipt.");
+
+        var response = await client.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "what is your return policy?"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("Return policy is 30 days with original receipt.", json.RootElement.GetProperty("response").GetString());
+        if (json.RootElement.TryGetProperty("stage7Decision", out var stage7Decision))
+        {
+            Assert.Equal(JsonValueKind.Null, stage7Decision.ValueKind);
+        }
+    }
+
+    [Fact]
+    public async Task ChatSend_WithLongAnswerTail_ReturnsSecondaryResponse()
+    {
+        var builder = AppHostApplication.CreateBuilder([], Environments.Development);
+        builder.WebHost.UseTestServer();
+        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Intentify:Jwt:Issuer"] = "intentify",
+            ["Intentify:Jwt:Audience"] = "intentify-users",
+            ["Intentify:Jwt:SigningKey"] = "test-signing-key-1234567890-EXTRA-KEY",
+            ["Intentify:Jwt:AccessTokenMinutes"] = "30",
+            ["Intentify:Mongo:ConnectionString"] = _mongo.ConnectionString,
+            ["Intentify:Mongo:DatabaseName"] = _mongo.DatabaseName
+        });
+
+        builder.WebHost.ConfigureTestServices(services =>
+        {
+            services.RemoveAll<IChatCompletionClient>();
+            services.AddSingleton<IChatCompletionClient>(new FakeChatCompletionClient(_ =>
+                Result<string>.Success("We provide migration planning, cloud readiness assessments, workload prioritization, and execution support tailored to your current environment so teams can move in phases with minimal disruption and clear ownership. If helpful, I can give you a quick overview of a typical migration roadmap for your use case.")));
+        });
+
+        await using var app = AppHostApplication.Build(builder);
+        await app.StartAsync();
+        using var client = app.GetTestClient();
+
+        var token = await RegisterUserAsync(client);
+        var site = await CreateSiteAsync(client, token);
+        await AddKnowledgeAsync(client, token, site.SiteId, "We provide migration planning and cloud readiness support.");
+
+        var response = await client.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "Do you provide cloud migration services?"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Contains("We provide migration planning", json.RootElement.GetProperty("response").GetString(), StringComparison.Ordinal);
+        Assert.True(json.RootElement.TryGetProperty("secondaryResponse", out var secondary));
+        Assert.Equal(JsonValueKind.String, secondary.ValueKind);
+        Assert.Contains("quick overview", secondary.GetString(), StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -1462,6 +1644,34 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ChatSend_LeadCapture_ShortNameReply_ProgressesNaturally()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var first = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "We are looking to remodel our office and need a quote. Please contact me."
+        });
+
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+        using var firstJson = JsonDocument.Parse(await first.Content.ReadAsStringAsync());
+        var sessionId = firstJson.RootElement.GetProperty("sessionId").GetString();
+
+        var second = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            sessionId,
+            message = "Gray"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+        using var secondJson = JsonDocument.Parse(await second.Content.ReadAsStringAsync());
+        Assert.Equal("What’s the best way to reach you — email or phone?", secondJson.RootElement.GetProperty("response").GetString());
+    }
+
+    [Fact]
     public async Task ChatSend_LeadCapture_IAmName_IsCaptured()
     {
         var token = await RegisterUserAsync();
@@ -1545,6 +1755,153 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
         Assert.NotNull(createdLead);
         Assert.Equal("+1 (415) 555-0101", createdLead!.Phone);
         Assert.Equal("Phone", createdLead.PreferredContactMethod);
+    }
+
+    [Fact]
+    public async Task ChatSend_LeadCapture_EmailPreferenceReply_RequestsEmailDetail()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var first = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "We are looking to remodel our office and need a quote. Please contact me."
+        });
+
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+        using var firstJson = JsonDocument.Parse(await first.Content.ReadAsStringAsync());
+        var sessionId = firstJson.RootElement.GetProperty("sessionId").GetString();
+
+        var second = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            sessionId,
+            message = "Sam"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+        using var secondJson = JsonDocument.Parse(await second.Content.ReadAsStringAsync());
+        Assert.Equal("What’s the best way to reach you — email or phone?", secondJson.RootElement.GetProperty("response").GetString());
+
+        var third = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            sessionId,
+            message = "email"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, third.StatusCode);
+        using var thirdJson = JsonDocument.Parse(await third.Content.ReadAsStringAsync());
+        Assert.Equal("Thanks — what’s your best email?", thirdJson.RootElement.GetProperty("response").GetString());
+    }
+
+    [Fact]
+    public async Task ChatSend_Discovery_ShortContextReply_DoesNotJumpToNameCapture()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var first = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "We are looking to remodel our office"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+        using var firstJson = JsonDocument.Parse(await first.Content.ReadAsStringAsync());
+        var sessionId = firstJson.RootElement.GetProperty("sessionId").GetString();
+        Assert.Equal("What kind of business or use case is this for?", firstJson.RootElement.GetProperty("response").GetString());
+
+        var second = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            sessionId,
+            message = "Austin"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+        using var secondJson = JsonDocument.Parse(await second.Content.ReadAsStringAsync());
+        Assert.Equal("What location should we plan for?", secondJson.RootElement.GetProperty("response").GetString());
+        Assert.DoesNotContain("first name", secondJson.RootElement.GetProperty("response").GetString()!, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ChatSend_AlreadyToldYou_UsesContextualRecovery()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var first = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "We are looking to remodel our office and need a quote. Please contact me."
+        });
+
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+        using var firstJson = JsonDocument.Parse(await first.Content.ReadAsStringAsync());
+        var sessionId = firstJson.RootElement.GetProperty("sessionId").GetString();
+
+        var second = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            sessionId,
+            message = "my name is Sam"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+        using var secondJson = JsonDocument.Parse(await second.Content.ReadAsStringAsync());
+        Assert.Equal("What’s the best way to reach you — email or phone?", secondJson.RootElement.GetProperty("response").GetString());
+
+        var third = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            sessionId,
+            message = "i already told you"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, third.StatusCode);
+        using var thirdJson = JsonDocument.Parse(await third.Content.ReadAsStringAsync());
+        Assert.Equal("What’s the best way to reach you — email or phone?", thirdJson.RootElement.GetProperty("response").GetString());
+    }
+
+    [Fact]
+    public async Task ChatSend_PostCaptureAcknowledgement_UsesNaturalClose()
+    {
+        var token = await RegisterUserAsync();
+        var site = await CreateSiteAsync(token);
+
+        var first = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "I need support, payment failed."
+        });
+
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+        using var firstJson = JsonDocument.Parse(await first.Content.ReadAsStringAsync());
+        var sessionId = firstJson.RootElement.GetProperty("sessionId").GetString();
+
+        var second = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            sessionId,
+            message = "Sam sam@example.com"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+        using var secondJson = JsonDocument.Parse(await second.Content.ReadAsStringAsync());
+        Assert.Equal("Thanks — I’ve got your details. Our team will contact you shortly.", secondJson.RootElement.GetProperty("response").GetString());
+
+        var third = await _client!.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            sessionId,
+            message = "okay thanks"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, third.StatusCode);
+        using var thirdJson = JsonDocument.Parse(await third.Content.ReadAsStringAsync());
+        Assert.Equal("You’re welcome — our team will reach out shortly.", thirdJson.RootElement.GetProperty("response").GetString());
     }
 
     [Fact]

@@ -78,6 +78,7 @@ public sealed class EngageModule : IAppModule
                 serviceProvider.GetRequiredService<VisitorContextBundleHandler>(),
                 serviceProvider.GetRequiredService<TenantVocabularyResolver>(),
                 serviceProvider.GetRequiredService<EngageAiIntentInterpreter>(),
+                serviceProvider.GetRequiredService<AiDecisionGenerationService>(),
                 serviceProvider.GetRequiredService<IChatCompletionClient>(),
                 sessionTimeoutMinutes,
                 serviceProvider.GetRequiredService<Microsoft.Extensions.Logging.ILogger<ChatSendHandler>>());

@@ -481,6 +481,7 @@
       return Promise.resolve();
     }
 
+    removeTypingIndicator();
     isHydrating = true;
     input.disabled = true;
     sendButton.disabled = true;
@@ -612,15 +613,9 @@
         if (sessionId) {
           localStorage.setItem(storageKey, sessionId);
         }
-        addMessage('bot', payload.response || '');
-        if (payload && payload.response === contactDetailsPrompt) {
-          addContactDetailsForm();
-          shouldRestoreFocusAfterSend = false;
-        }
-        if (payload && payload.responseKind === 'promo' && payload.promoPublicKey) {
-          addPromoForm(payload);
-          shouldRestoreFocusAfterSend = false;
-        }
+        return renderAssistantPayload(payload).then(function(restoreFocus) {
+          shouldRestoreFocusAfterSend = restoreFocus;
+        });
       })
       .catch(function(error) {
         console.warn('Intentify Engage widget send failed:', error);
@@ -639,6 +634,33 @@
           restoreInputFocus();
         }
       });
+  }
+
+  function renderAssistantPayload(payload) {
+    var restoreFocus = true;
+    addMessage('bot', payload && payload.response ? payload.response : '');
+
+    if (payload && payload.response === contactDetailsPrompt) {
+      addContactDetailsForm();
+      restoreFocus = false;
+    }
+    if (payload && payload.responseKind === 'promo' && payload.promoPublicKey) {
+      addPromoForm(payload);
+      restoreFocus = false;
+    }
+
+    if (!payload || !payload.secondaryResponse) {
+      return Promise.resolve(restoreFocus);
+    }
+
+    showTypingIndicator();
+    return new Promise(function(resolve) {
+      setTimeout(function() {
+        removeTypingIndicator();
+        addMessage('bot', payload.secondaryResponse);
+        resolve(restoreFocus);
+      }, 700);
+    });
   }
 
   function waitForCollectorSessionId() {
