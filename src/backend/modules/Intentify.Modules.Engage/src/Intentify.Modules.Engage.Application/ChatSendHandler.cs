@@ -63,6 +63,14 @@ public sealed class ChatSendHandler
         "If you’d like",
         "What would you like to do next?"
     ];
+    private static readonly string[] SplitTailPrefixes =
+    [
+        "i can also",
+        "i can help with",
+        "if helpful, i can",
+        "would you like me to",
+        "i can give you a quick overview"
+    ];
     private const string SupportTroubleshootPrompt = "Sorry you’re running into that — what happens when you try it (any error text or the exact step where it fails)?";
     private readonly ISiteRepository _siteRepository;
     private readonly IEngageChatSessionRepository _sessionRepository;
@@ -283,18 +291,37 @@ public sealed class ChatSendHandler
             return await CreateHumanHelpResponseAsync(site, session, command.Message, now, sessionHandoffs, recentMessages, cancellationToken);
         }
 
-        if (!hasCommercialIntent && intent is ChatIntent.General or ChatIntent.AmbiguousShortPrompt)
+        var hasDirectQuestionContext = priorAssistantAskedQuestion;
+        var isContinuationReply = ConversationPolicy.IsContinuationReply(command.Message);
+        var shouldUsePlannerIntentAssist = !hasCommercialIntent
+            && (intent is ChatIntent.General or ChatIntent.AmbiguousShortPrompt
+                || hasDirectQuestionContext
+                || isContinuationReply);
+        if (shouldUsePlannerIntentAssist)
         {
             var tenantVocabulary = await _tenantVocabularyResolver.ResolveAsync(site.TenantId, site.Id, session.BotId, cancellationToken);
-            var interpreted = await _aiIntentInterpreter.InterpretAsync(command.Message, normalizedMessage, session, tenantVocabulary, cancellationToken);
+            var businessContext = await BuildRuntimeBusinessContextAsync(site, session, normalizedMessage, cancellationToken);
+            var interpreted = await _aiIntentInterpreter.InterpretAsync(command.Message, normalizedMessage, session, tenantVocabulary, businessContext, cancellationToken);
             if (interpreted is not null && interpreted.Confidence >= 0.65m && interpreted.Intent is not ChatIntent.General)
             {
                 intent = interpreted.Intent;
             }
         }
 
-        var hasDirectQuestionContext = priorAssistantAskedQuestion;
-        var isContinuationReply = ConversationPolicy.IsContinuationReply(command.Message);
+        if (!hasCommercialIntent && !IsRealQuestion(command.Message) && IsLikelyControlTurn(command.Message, normalizedMessage, hasDirectQuestionContext))
+        {
+            session.ConversationState = StateClarify;
+            return await CreateAssistantResponseAsync(
+                session,
+                now,
+                ConversationPolicy.BuildSoftFallbackResponse(bot, SoftFallbackResponse),
+                0.3m,
+                false,
+                "ControlTurn",
+                "PlannerBoundedControl",
+                cancellationToken);
+        }
+
         if (intent == ChatIntent.EscalationHelp)
         {
             return await CreateHumanHelpResponseAsync(site, session, command.Message, now, sessionHandoffs, recentMessages, cancellationToken);
@@ -381,13 +408,17 @@ public sealed class ChatSendHandler
         _logger.LogInformation("Engage chat decision: grounded answer path for session {SessionId}.", session.Id);
 
         var assistantResponse = ShapeAssistantResponse(NormalizeAiResponse(completion.Value), userAskedForDetail);
+        var (primaryAssistantResponse, secondaryAssistantResponse) = SplitAssistantResponseIfHelpful(assistantResponse);
+        var persistedAssistantResponse = string.IsNullOrWhiteSpace(secondaryAssistantResponse)
+            ? primaryAssistantResponse
+            : $"{primaryAssistantResponse} {secondaryAssistantResponse}".Trim();
         var stage7Decision = await TryBuildStage7DecisionAsync(site, session, normalizedMessage, cancellationToken);
         session.ConversationState = StateInform;
         await _messageRepository.InsertAsync(new EngageChatMessage
         {
             SessionId = session.Id,
             Role = "assistant",
-            Content = assistantResponse,
+            Content = persistedAssistantResponse,
             CreatedAtUtc = now,
             Confidence = confidence,
             Citations = citations.Select(item => new EngageCitation
@@ -405,11 +436,12 @@ public sealed class ChatSendHandler
 
         return OperationResult<ChatSendResult>.Success(new ChatSendResult(
             session.Id,
-            assistantResponse,
+            primaryAssistantResponse,
             confidence,
             false,
             citations,
             null,
+            SecondaryResponse: secondaryAssistantResponse,
             Stage7Decision: stage7Decision));
     }
 
@@ -630,6 +662,74 @@ Normalized user question (for typo recovery):
                 => AckResponse,
             _ => response
         };
+    }
+
+    private static bool IsLikelyControlTurn(string originalMessage, string normalizedMessage, bool hasDirectQuestionContext)
+    {
+        if (string.IsNullOrWhiteSpace(normalizedMessage))
+        {
+            return true;
+        }
+
+        if (hasDirectQuestionContext && normalizedMessage.Length <= 80)
+        {
+            return true;
+        }
+
+        if (normalizedMessage.Length <= 8)
+        {
+            return true;
+        }
+
+        var tokens = normalizedMessage.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (tokens.Length <= 2)
+        {
+            return true;
+        }
+
+        if (ContainsEmail(originalMessage) || ContainsPhone(originalMessage))
+        {
+            return true;
+        }
+
+        return normalizedMessage is "okay" or "ok" or "yes" or "yep" or "no" or "email" or "phone" or "already told you";
+    }
+
+    private static (string Primary, string? Secondary) SplitAssistantResponseIfHelpful(string response)
+    {
+        var normalized = response.Trim();
+        if (normalized.Length < 220)
+        {
+            return (normalized, null);
+        }
+
+        var sentences = Regex.Split(normalized, @"(?<=[\.\?\!])\s+")
+            .Where(item => !string.IsNullOrWhiteSpace(item))
+            .ToArray();
+        if (sentences.Length < 2)
+        {
+            return (normalized, null);
+        }
+
+        for (var i = 1; i < sentences.Length; i++)
+        {
+            var candidate = sentences[i].TrimStart().ToLowerInvariant();
+            if (!SplitTailPrefixes.Any(prefix => candidate.StartsWith(prefix, StringComparison.Ordinal)))
+            {
+                continue;
+            }
+
+            var primary = string.Join(" ", sentences.Take(i)).Trim();
+            var secondary = string.Join(" ", sentences.Skip(i)).Trim();
+            if (string.IsNullOrWhiteSpace(primary) || string.IsNullOrWhiteSpace(secondary))
+            {
+                break;
+            }
+
+            return (primary, secondary);
+        }
+
+        return (normalized, null);
     }
 
     private static void MergeDiscoverySlots(EngageChatSession session, string message)
@@ -943,11 +1043,16 @@ Normalized user message:
         string? qualityReason,
         CancellationToken cancellationToken)
     {
+        var (primaryResponse, secondaryResponse) = SplitAssistantResponseIfHelpful(response);
+        var persistedResponse = string.IsNullOrWhiteSpace(secondaryResponse)
+            ? primaryResponse
+            : $"{primaryResponse} {secondaryResponse}".Trim();
+
         await _messageRepository.InsertAsync(new EngageChatMessage
         {
             SessionId = session.Id,
             Role = "assistant",
-            Content = response,
+            Content = persistedResponse,
             CreatedAtUtc = now,
             Confidence = confidence
         }, cancellationToken);
@@ -955,7 +1060,7 @@ Normalized user message:
         session.UpdatedAtUtc = now;
         await _sessionRepository.UpdateStateAsync(session, cancellationToken);
         LogChatQualitySignal(session.Id, qualityPath, confidence, ticketCreated, 0, qualityReason, null);
-        return OperationResult<ChatSendResult>.Success(new ChatSendResult(session.Id, response, confidence, ticketCreated, []));
+        return OperationResult<ChatSendResult>.Success(new ChatSendResult(session.Id, primaryResponse, confidence, ticketCreated, [], SecondaryResponse: secondaryResponse));
     }
 
     private static bool ContainsEmail(string message)

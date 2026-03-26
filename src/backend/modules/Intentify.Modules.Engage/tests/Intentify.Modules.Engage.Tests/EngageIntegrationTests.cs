@@ -230,6 +230,8 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
         Assert.Contains("/entries", script);
         Assert.Contains("ensureCollectorSessionId", script);
         Assert.Contains("hydrateRequestId", script);
+        Assert.Contains("secondaryResponse", script);
+        Assert.Contains("is typing…", script);
     }
 
     [Fact]
@@ -949,6 +951,50 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
         {
             Assert.Equal(JsonValueKind.Null, stage7Decision.ValueKind);
         }
+    }
+
+    [Fact]
+    public async Task ChatSend_WithLongAnswerTail_ReturnsSecondaryResponse()
+    {
+        var builder = AppHostApplication.CreateBuilder([], Environments.Development);
+        builder.WebHost.UseTestServer();
+        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Intentify:Jwt:Issuer"] = "intentify",
+            ["Intentify:Jwt:Audience"] = "intentify-users",
+            ["Intentify:Jwt:SigningKey"] = "test-signing-key-1234567890-EXTRA-KEY",
+            ["Intentify:Jwt:AccessTokenMinutes"] = "30",
+            ["Intentify:Mongo:ConnectionString"] = _mongo.ConnectionString,
+            ["Intentify:Mongo:DatabaseName"] = _mongo.DatabaseName
+        });
+
+        builder.WebHost.ConfigureTestServices(services =>
+        {
+            services.RemoveAll<IChatCompletionClient>();
+            services.AddSingleton<IChatCompletionClient>(new FakeChatCompletionClient(_ =>
+                Result<string>.Success("We provide migration planning, cloud readiness assessments, workload prioritization, and execution support tailored to your current environment so teams can move in phases with minimal disruption and clear ownership. If helpful, I can give you a quick overview of a typical migration roadmap for your use case.")));
+        });
+
+        await using var app = AppHostApplication.Build(builder);
+        await app.StartAsync();
+        using var client = app.GetTestClient();
+
+        var token = await RegisterUserAsync(client);
+        var site = await CreateSiteAsync(client, token);
+        await AddKnowledgeAsync(client, token, site.SiteId, "We provide migration planning and cloud readiness support.");
+
+        var response = await client.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "Do you provide cloud migration services?"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Contains("We provide migration planning", json.RootElement.GetProperty("response").GetString(), StringComparison.Ordinal);
+        Assert.True(json.RootElement.TryGetProperty("secondaryResponse", out var secondary));
+        Assert.Equal(JsonValueKind.String, secondary.ValueKind);
+        Assert.Contains("quick overview", secondary.GetString(), StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

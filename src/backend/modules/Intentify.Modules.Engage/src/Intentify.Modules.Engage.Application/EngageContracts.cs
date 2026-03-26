@@ -18,6 +18,7 @@ public sealed record ChatSendResult(
     string? PromoPublicKey = null,
     string? PromoTitle = null,
     string? PromoDescription = null,
+    string? SecondaryResponse = null,
     AiDecisionContract? Stage7Decision = null,
     string? OpportunityLabel = null,
     int? IntentScore = null,
