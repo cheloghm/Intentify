@@ -300,8 +300,8 @@ public sealed class ChatSendHandler
         if (shouldUsePlannerIntentAssist)
         {
             var tenantVocabulary = await _tenantVocabularyResolver.ResolveAsync(site.TenantId, site.Id, session.BotId, cancellationToken);
-            var businessContext = await BuildRuntimeBusinessContextAsync(site, session, normalizedMessage, cancellationToken);
-            var interpreted = await _aiIntentInterpreter.InterpretAsync(command.Message, normalizedMessage, session, tenantVocabulary, businessContext, cancellationToken);
+            var plannerBusinessContext  = await BuildRuntimeBusinessContextAsync(site, session, normalizedMessage, cancellationToken);
+            var interpreted = await _aiIntentInterpreter.InterpretAsync(command.Message, normalizedMessage, session, tenantVocabulary, plannerBusinessContext, cancellationToken);
             if (interpreted is not null && interpreted.Confidence >= 0.65m && interpreted.Intent is not ChatIntent.General)
             {
                 intent = interpreted.Intent;
