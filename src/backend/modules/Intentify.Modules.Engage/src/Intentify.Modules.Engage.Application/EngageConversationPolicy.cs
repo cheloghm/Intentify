@@ -163,14 +163,21 @@ public sealed class EngageConversationPolicy
 
     public string BuildNextDiscoveryQuestion(EngageChatSession session)
     {
+        if (string.IsNullOrWhiteSpace(session.CaptureType)
+            && string.IsNullOrWhiteSpace(session.CaptureGoal)
+            && HasProjectIntentContext(session))
+        {
+            return "What kind of business is this for?";
+        }
+
         if (string.IsNullOrWhiteSpace(session.CaptureGoal))
         {
-            return "What outcome are you trying to achieve?";
+            return "What are you trying to achieve first?";
         }
 
         if (string.IsNullOrWhiteSpace(session.CaptureType))
         {
-            return "What kind of business or use case is this for?";
+            return "What kind of business is this for?";
         }
 
         if (string.IsNullOrWhiteSpace(session.CaptureLocation))
@@ -406,5 +413,18 @@ public sealed class EngageConversationPolicy
 
         question = string.Empty;
         return false;
+    }
+
+    private static bool HasProjectIntentContext(EngageChatSession session)
+    {
+        var context = $"{session.CaptureGoal} {session.CaptureType} {session.CaptureContext}".ToLowerInvariant();
+        return context.Contains("website", StringComparison.Ordinal)
+            || context.Contains("site", StringComparison.Ordinal)
+            || context.Contains("seo", StringComparison.Ordinal)
+            || context.Contains("quote", StringComparison.Ordinal)
+            || context.Contains("project", StringComparison.Ordinal)
+            || context.Contains("redesign", StringComparison.Ordinal)
+            || context.Contains("build", StringComparison.Ordinal)
+            || context.Contains("booking", StringComparison.Ordinal);
     }
 }

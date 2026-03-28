@@ -173,6 +173,7 @@ public sealed class ChatSendHandler
         var userAskedForDetail = UserRequestedDetail(command.Message);
         MergeDiscoverySlots(session, command.Message);
 
+        // 1) Manual promo override.
         if (TryResolveManualPromo(command.Message, out var promoPublicKey))
         {
             await _messageRepository.InsertAsync(new EngageChatMessage
@@ -198,6 +199,7 @@ public sealed class ChatSendHandler
                 promoPublicKey));
         }
 
+        // 2) Post-capture acknowledgement and context recovery.
         var priorAssistantAskedQuestion = TryGetLastAssistantDirectQuestion(recentMessages, out _);
         if (IsPostCaptureAcknowledgement(session, command.Message))
         {
@@ -214,12 +216,14 @@ public sealed class ChatSendHandler
             }
         }
 
+        // 3) Smalltalk / light acknowledgements.
         if (ConversationPolicy.TryBuildSmalltalkResponse(command.Message, priorAssistantAskedQuestion, GreetingResponse, AckResponse, out var smalltalkResponse))
         {
             session.ConversationState = smalltalkResponse == GreetingResponse ? StateGreeting : StateCloseIdle;
             return await CreateAssistantResponseAsync(session, now, ShapeAssistantResponse(smalltalkResponse, userAskedForDetail), 1m, false, "Smalltalk", null, cancellationToken);
         }
 
+        // 4) Active capture continuation (support or commercial lead capture).
         if (IsCaptureMode(session, CaptureModeSupport) || IsCaptureMode(session, CaptureModeLead))
         {
             var capture = await ContinueProgressiveCaptureAsync(site, session, command.Message, now, sessionHandoffs, cancellationToken);
@@ -229,6 +233,7 @@ public sealed class ChatSendHandler
             }
         }
 
+        // 5) Active discovery continuation from a prior direct question.
         if (string.Equals(session.ConversationState, StateDiscover, StringComparison.Ordinal)
             && priorAssistantAskedQuestion
             && TryGetLastAssistantDirectQuestion(recentMessages, out var priorQuestion)
@@ -260,6 +265,7 @@ public sealed class ChatSendHandler
                 cancellationToken);
         }
 
+        // 6) Coarse intent/commercial detection.
         var intent = ConversationPolicy.DetectIntent(normalizedMessage);
         var hasCommercialIntent = ConversationPolicy.TryBuildCommercialIntentContactPrompt(command.Message, CommercialContactDetailsPrefix, out var commercialPrompt)
             || ConversationPolicy.IsStrongCommercialIntent(command.Message);
@@ -267,10 +273,7 @@ public sealed class ChatSendHandler
         var isRecommendationIntent = ConversationPolicy.IsRecommendationIntent(normalizedMessage);
         if (isRecommendationIntent && !hasCommercialIntent)
         {
-            var recommendationResponse = ApplyPlannerSignalsToResponse(
-                ConversationPolicy.BuildRecommendationResponse(session, command.Message),
-                plannerSignals,
-                isCommercialTurn: false);
+            var recommendationResponse = ConversationPolicy.BuildRecommendationResponse(session, command.Message);
             session.ConversationState = StateDiscover;
             return await CreateAssistantResponseAsync(session, now, recommendationResponse, 0.45m, false, "Recommendation", ConversationPolicy.HasSufficientDiscoveryContext(session) ? "Direct" : "Clarify", cancellationToken);
         }
@@ -283,9 +286,24 @@ public sealed class ChatSendHandler
             return await CreateCommercialLeadCapturePromptAsync(site, session, command.Message, commercialResponse, now, sessionHandoffs, recentMessages, cancellationToken);
         }
 
-        var hasDirectQuestionContext = priorAssistantAskedQuestion;
-        var isContinuationReply = ConversationPolicy.IsContinuationReply(command.Message);
+        if (hasCommercialIntent
+            && !ConversationPolicy.IsCommercialCaptureReady(session, explicitCommercialContactRequest)
+            && intent is not ChatIntent.EscalationHelp
+            && !ConversationPolicy.NeedsHumanHelp(command.Message))
+        {
+            session.ConversationState = StateDiscover;
+            return await CreateAssistantResponseAsync(
+                session,
+                now,
+                ShapeAssistantResponse(ConversationPolicy.BuildNextDiscoveryQuestion(session), false, allowMultipleQuestions: true),
+                0.45m,
+                false,
+                "Discover",
+                "CommercialIntentDiscover",
+                cancellationToken);
+        }
 
+        // 7) Planner intent assist for ambiguous/general/continuation cases.
         var hasDirectQuestionContext = priorAssistantAskedQuestion;
         var isContinuationReply = ConversationPolicy.IsContinuationReply(command.Message);
         var shouldUsePlannerIntentAssist = !hasCommercialIntent
@@ -303,6 +321,7 @@ public sealed class ChatSendHandler
             }
         }
 
+        // 8) Control-turn clarification, explicit escalation, and ambiguous prompt handling.
         if (!hasCommercialIntent && !IsRealQuestion(command.Message) && IsLikelyControlTurn(command.Message, normalizedMessage, hasDirectQuestionContext))
         {
             session.ConversationState = StateClarify;
@@ -320,6 +339,39 @@ public sealed class ChatSendHandler
         if (intent == ChatIntent.EscalationHelp)
         {
             return await CreateHumanHelpResponseAsync(site, session, command.Message, now, sessionHandoffs, recentMessages, cancellationToken);
+        }
+
+        if (ConversationPolicy.NeedsHumanHelp(command.Message))
+        {
+            return await CreateHumanHelpResponseAsync(site, session, command.Message, now, sessionHandoffs, recentMessages, cancellationToken);
+        }
+
+        if (string.Equals(session.ConversationState, StateDiscover, StringComparison.Ordinal)
+            && !IsFactualIntent(intent))
+        {
+            if (ConversationPolicy.IsCommercialCaptureReady(session, explicitCommercialContactRequest))
+            {
+                return await CreateCommercialLeadCapturePromptAsync(
+                    site,
+                    session,
+                    command.Message,
+                    ConversationPolicy.BuildNextDiscoveryQuestion(session),
+                    now,
+                    sessionHandoffs,
+                    recentMessages,
+                    cancellationToken);
+            }
+
+            session.ConversationState = StateDiscover;
+            return await CreateAssistantResponseAsync(
+                session,
+                now,
+                ShapeAssistantResponse(ConversationPolicy.BuildNextDiscoveryQuestion(session), false, allowMultipleQuestions: true),
+                0.45m,
+                false,
+                "Discover",
+                "StickyDiscover",
+                cancellationToken);
         }
 
         if (intent == ChatIntent.AmbiguousShortPrompt)
@@ -341,6 +393,7 @@ public sealed class ChatSendHandler
                 cancellationToken);
         }
 
+        // 9) Retrieval path.
         var retrieved = await _retrieveTopChunksHandler.HandleAsync(
             new RetrieveTopChunksQuery(site.TenantId, site.Id, normalizedMessage, 3, bot.BotId),
             cancellationToken);
@@ -351,6 +404,7 @@ public sealed class ChatSendHandler
 
         _logger.LogInformation("Engage retrieval summary for session {SessionId}: hits={Hits}, topScore={TopScore}, confidence={Confidence}.", session.Id, retrieved.Count, topScore, confidence);
 
+        // 10) Low-confidence fallback, then grounded answer path.
         var isLowConfidence = retrieved.Count == 0 || topScore < TopChunkScoreThreshold || confidence < LowConfidenceThreshold;
         if (isLowConfidence)
         {
@@ -586,6 +640,15 @@ Normalized user question (for typo recovery):
             || normalized.StartsWith("did ", StringComparison.Ordinal)
             || normalized.StartsWith("will ", StringComparison.Ordinal)
             || normalized.StartsWith("would ", StringComparison.Ordinal);
+    }
+
+    private static bool IsFactualIntent(ChatIntent intent)
+    {
+        return intent is ChatIntent.Contact
+            or ChatIntent.Location
+            or ChatIntent.Hours
+            or ChatIntent.Services
+            or ChatIntent.Organization;
     }
 
     private static string NormalizeAiResponse(string response)
@@ -1265,45 +1328,27 @@ Normalized user message:
         var opportunityLabel = ConversationPolicy.BuildCommercialOpportunityLabel(intentScore);
         var conversationSummary = ConversationPolicy.BuildCommercialOpportunitySummary(session);
         var suggestedFollowUp = ConversationPolicy.BuildSuggestedFollowUpMessage(session);
-        var plannerSignals = await TryApplyPlannerSlotHintsAsync(site, session, userMessage, cancellationToken);
+        await TryApplyPlannerSlotHintsAsync(site, session, userMessage, cancellationToken);
         var followUpEmailDraft = string.Empty;
         var nextBestAction = string.Empty;
-        if (!string.IsNullOrWhiteSpace(plannerSignals?.SuggestedServiceFit)
-            && !conversationSummary.Contains(plannerSignals.SuggestedServiceFit, StringComparison.OrdinalIgnoreCase))
-        {
-            conversationSummary = $"{conversationSummary}; Service fit: {plannerSignals.SuggestedServiceFit}";
-        }
-
-        if (!string.IsNullOrWhiteSpace(plannerSignals?.SuggestedSalesFollowUpAngle)
-            && !suggestedFollowUp.Contains(plannerSignals.SuggestedSalesFollowUpAngle, StringComparison.OrdinalIgnoreCase))
-        {
-            suggestedFollowUp = $"{suggestedFollowUp} Suggested angle: {plannerSignals.SuggestedSalesFollowUpAngle}";
-        }
 
         if (createTicket && intentScore >= 60)
         {
-            nextBestAction = plannerSignals?.NextBestAction ?? "ScheduleCall";
+            nextBestAction = "ScheduleCall";
             if (!suggestedFollowUp.Contains(nextBestAction, StringComparison.OrdinalIgnoreCase))
             {
                 suggestedFollowUp = $"{suggestedFollowUp} Next best action: {nextBestAction}.";
             }
 
-            if (!string.IsNullOrWhiteSpace(plannerSignals?.FollowUpEmailDraft))
-            {
-                followUpEmailDraft = plannerSignals.FollowUpEmailDraft;
-            }
-            else
-            {
-                var goal = string.IsNullOrWhiteSpace(session.CaptureGoal) ? "your project goals" : session.CaptureGoal;
-                var serviceFit = string.IsNullOrWhiteSpace(plannerSignals?.SuggestedServiceFit) ? "the best-fit service option" : plannerSignals.SuggestedServiceFit;
-                var contactLine = string.IsNullOrWhiteSpace(session.CapturedPreferredContactMethod)
-                    ? "Reply with a preferred time for a quick follow-up."
-                    : string.Equals(session.CapturedPreferredContactMethod, PreferredContactMethodPhone, StringComparison.Ordinal)
-                        ? "If helpful, share a preferred callback window."
-                        : "If helpful, reply with your preferred next step and timing.";
+            var goal = string.IsNullOrWhiteSpace(session.CaptureGoal) ? "your project goals" : session.CaptureGoal;
+            var serviceFit = string.IsNullOrWhiteSpace(session.CaptureType) ? "the best-fit service option" : session.CaptureType;
+            var contactLine = string.IsNullOrWhiteSpace(session.CapturedPreferredContactMethod)
+                ? "Reply with a preferred time for a quick follow-up."
+                : string.Equals(session.CapturedPreferredContactMethod, PreferredContactMethodPhone, StringComparison.Ordinal)
+                    ? "If helpful, share a preferred callback window."
+                    : "If helpful, reply with your preferred next step and timing.";
 
-                followUpEmailDraft = $"Hi {(string.IsNullOrWhiteSpace(session.CapturedName) ? "there" : session.CapturedName)}, thanks for the conversation about {goal}. Based on what you shared, {serviceFit} looks like a strong fit. {contactLine}";
-            }
+            followUpEmailDraft = $"Hi {(string.IsNullOrWhiteSpace(session.CapturedName) ? "there" : session.CapturedName)}, thanks for the conversation about {goal}. Based on what you shared, {serviceFit} looks like a strong fit. {contactLine}";
 
             if (followUpEmailDraft.Length > 600)
             {
@@ -1569,7 +1614,8 @@ Grounding citations observed in session: {handoffPackage.CitationCount}
             return false;
         }
 
-        if (string.Equals(priorQuestion, "What outcome are you trying to achieve?", StringComparison.Ordinal)
+        if ((string.Equals(priorQuestion, "What outcome are you trying to achieve?", StringComparison.Ordinal)
+             || string.Equals(priorQuestion, "What are you trying to achieve first?", StringComparison.Ordinal))
             && string.IsNullOrWhiteSpace(session.CaptureGoal))
         {
             session.CaptureGoal = normalizedAnswer;
@@ -1577,7 +1623,8 @@ Grounding citations observed in session: {handoffPackage.CitationCount}
             return true;
         }
 
-        if (string.Equals(priorQuestion, "What kind of business or use case is this for?", StringComparison.Ordinal)
+        if ((string.Equals(priorQuestion, "What kind of business or use case is this for?", StringComparison.Ordinal)
+             || string.Equals(priorQuestion, "What kind of business is this for?", StringComparison.Ordinal))
             && string.IsNullOrWhiteSpace(session.CaptureType))
         {
             session.CaptureType = normalizedAnswer;
@@ -1745,7 +1792,9 @@ Grounding citations observed in session: {handoffPackage.CitationCount}
         static bool IsDiscoveryQuestion(string content)
         {
             return string.Equals(content, "What outcome are you trying to achieve?", StringComparison.Ordinal)
+                || string.Equals(content, "What are you trying to achieve first?", StringComparison.Ordinal)
                 || string.Equals(content, "What kind of business or use case is this for?", StringComparison.Ordinal)
+                || string.Equals(content, "What kind of business is this for?", StringComparison.Ordinal)
                 || string.Equals(content, "What location should we plan for?", StringComparison.Ordinal)
                 || content.StartsWith("Any key constraints like budget, timeline", StringComparison.Ordinal);
         }
@@ -1863,16 +1912,4 @@ Grounding citations observed in session: {handoffPackage.CitationCount}
 
         return value.Trim();
     }
-
-    private sealed record PlannerTurnSignals(
-        string? TurnSentiment,
-        string? UrgencyLevel,
-        string? FrustrationLevel,
-        string? BuyingReadiness,
-        string? SuggestedServiceFit,
-        string? SuggestedSalesFollowUpAngle,
-        string? SuggestedAssistantNextStep,
-        string? FollowUpEmailDraft,
-        string? NextBestAction);
-
 }
