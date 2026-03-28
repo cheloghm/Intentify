@@ -489,7 +489,6 @@
       return Promise.resolve();
     }
 
-    clearPendingSecondaryRender();
     removeTypingIndicator();
     isHydrating = true;
     input.disabled = true;
@@ -624,7 +623,7 @@
         if (sessionId) {
           localStorage.setItem(storageKey, sessionId);
         }
-        return renderAssistantPayload(payload, requestNonce).then(function(restoreFocus) {
+        return renderAssistantPayload(payload).then(function(restoreFocus) {
           shouldRestoreFocusAfterSend = restoreFocus;
         });
       })
@@ -648,7 +647,7 @@
       });
   }
 
-  function renderAssistantPayload(payload, requestNonce) {
+  function renderAssistantPayload(payload) {
     var restoreFocus = true;
     addMessage('bot', payload && payload.response ? payload.response : '');
 
@@ -667,13 +666,7 @@
 
     showTypingIndicator();
     return new Promise(function(resolve) {
-      pendingSecondaryTimer = setTimeout(function() {
-        pendingSecondaryTimer = null;
-        if (requestNonce !== sendNonce) {
-          removeTypingIndicator();
-          resolve(restoreFocus);
-          return;
-        }
+      setTimeout(function() {
         removeTypingIndicator();
         addMessage('bot', payload.secondaryResponse);
         resolve(restoreFocus);

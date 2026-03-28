@@ -232,7 +232,6 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
         Assert.Contains("hydrateRequestId", script);
         Assert.Contains("secondaryResponse", script);
         Assert.Contains("is typing…", script);
-        Assert.Contains("clearPendingSecondaryRender", script);
     }
 
     [Fact]
@@ -1161,6 +1160,131 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ChatSend_WithKnowledge_IncludesStage7Decision_WhenPlannerOutputIsValid()
+    {
+        var builder = AppHostApplication.CreateBuilder([], Environments.Development);
+        builder.WebHost.UseTestServer();
+        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Intentify:Jwt:Issuer"] = "intentify",
+            ["Intentify:Jwt:Audience"] = "intentify-users",
+            ["Intentify:Jwt:SigningKey"] = "test-signing-key-1234567890-EXTRA-KEY",
+            ["Intentify:Jwt:AccessTokenMinutes"] = "30",
+            ["Intentify:Mongo:ConnectionString"] = _mongo.ConnectionString,
+            ["Intentify:Mongo:DatabaseName"] = _mongo.DatabaseName
+        });
+
+        builder.WebHost.ConfigureTestServices(services =>
+        {
+            services.RemoveAll<IChatCompletionClient>();
+            services.AddSingleton<IChatCompletionClient>(new FakeChatCompletionClient(prompt =>
+            {
+                if (prompt.Contains("Stage 7 AI decision assistant.", StringComparison.Ordinal))
+                {
+                    return Result<string>.Success(
+                        """
+                        {
+                          "schemaVersion":"stage7.v1",
+                          "decisionId":"low-confidence",
+                          "overallConfidence":0.2,
+                          "recommendations":[
+                            {
+                              "type":"SuggestKnowledge",
+                              "confidence":0.2,
+                              "rationale":"weak",
+                              "evidenceRefs":[{"source":"knowledge","referenceId":"chunk-1"}],
+                              "requiresApproval":false
+                            }
+                          ],
+                          "shouldFallback":false,
+                          "fallbackReason":null,
+                          "noActionMessage":null
+                        }
+                        """);
+                }
+
+                return Result<string>.Success("Return policy is 30 days with original receipt.");
+            }));
+        });
+
+        await using var app = AppHostApplication.Build(builder);
+        await app.StartAsync();
+        using var client = app.GetTestClient();
+
+        var token = await RegisterUserAsync(client);
+        var site = await CreateSiteAsync(client, token);
+        await AddKnowledgeAsync(client, token, site.SiteId, "Return policy is 30 days with original receipt.");
+
+        var response = await client.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "what is your return policy?"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("Return policy is 30 days with original receipt.", json.RootElement.GetProperty("response").GetString());
+        Assert.True(json.RootElement.TryGetProperty("stage7Decision", out var stage7Decision));
+        Assert.Equal(JsonValueKind.Object, stage7Decision.ValueKind);
+        Assert.Equal("Valid", stage7Decision.GetProperty("validationStatus").GetString());
+        Assert.True(stage7Decision.TryGetProperty("recommendations", out var recommendations));
+        Assert.Equal(JsonValueKind.Array, recommendations.ValueKind);
+        Assert.True(recommendations.GetArrayLength() > 0);
+    }
+
+    [Fact]
+    public async Task ChatSend_WithKnowledge_AndStage7InvalidOutput_DoesNotBreakResponse()
+    {
+        var builder = AppHostApplication.CreateBuilder([], Environments.Development);
+        builder.WebHost.UseTestServer();
+        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Intentify:Jwt:Issuer"] = "intentify",
+            ["Intentify:Jwt:Audience"] = "intentify-users",
+            ["Intentify:Jwt:SigningKey"] = "test-signing-key-1234567890-EXTRA-KEY",
+            ["Intentify:Jwt:AccessTokenMinutes"] = "30",
+            ["Intentify:Mongo:ConnectionString"] = _mongo.ConnectionString,
+            ["Intentify:Mongo:DatabaseName"] = _mongo.DatabaseName
+        });
+
+        builder.WebHost.ConfigureTestServices(services =>
+        {
+            services.RemoveAll<IChatCompletionClient>();
+            services.AddSingleton<IChatCompletionClient>(new FakeChatCompletionClient(prompt =>
+            {
+                if (prompt.Contains("Stage 7 AI decision assistant.", StringComparison.Ordinal))
+                {
+                    return Result<string>.Success("not-json");
+                }
+
+                return Result<string>.Success("Return policy is 30 days with original receipt.");
+            }));
+        });
+
+        await using var app = AppHostApplication.Build(builder);
+        await app.StartAsync();
+        using var client = app.GetTestClient();
+
+        var token = await RegisterUserAsync(client);
+        var site = await CreateSiteAsync(client, token);
+        await AddKnowledgeAsync(client, token, site.SiteId, "Return policy is 30 days with original receipt.");
+
+        var response = await client.PostAsJsonAsync("/engage/chat/send", new
+        {
+            widgetKey = site.WidgetKey,
+            message = "what is your return policy?"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("Return policy is 30 days with original receipt.", json.RootElement.GetProperty("response").GetString());
+        if (json.RootElement.TryGetProperty("stage7Decision", out var stage7Decision))
+        {
+            Assert.Equal(JsonValueKind.Null, stage7Decision.ValueKind);
+        }
+    }
+
+    [Fact]
     public async Task ChatSend_WithKnowledge_AndStage7LowConfidenceOutput_DoesNotBreakResponse()
     {
         var builder = AppHostApplication.CreateBuilder([], Environments.Development);
@@ -1336,28 +1460,6 @@ public sealed class EngageIntegrationTests : IAsyncLifetime
         Assert.True(json.RootElement.TryGetProperty("secondaryResponse", out var secondary));
         Assert.Equal(JsonValueKind.String, secondary.ValueKind);
         Assert.Contains("quick overview", secondary.GetString(), StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public async Task ChatSend_WithShortAnswer_DoesNotLeakSecondaryResponse()
-    {
-        var token = await RegisterUserAsync();
-        var site = await CreateSiteAsync(token);
-        await AddKnowledgeAsync(_client!, token, site.SiteId, "Return policy is 30 days with original receipt.");
-
-        var response = await _client!.PostAsJsonAsync("/engage/chat/send", new
-        {
-            widgetKey = site.WidgetKey,
-            message = "what is your return policy?"
-        });
-
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        Assert.Equal("Return policy is 30 days with original receipt.", json.RootElement.GetProperty("response").GetString());
-        if (json.RootElement.TryGetProperty("secondaryResponse", out var secondary))
-        {
-            Assert.Equal(JsonValueKind.Null, secondary.ValueKind);
-        }
     }
 
     [Fact]

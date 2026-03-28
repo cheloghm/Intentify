@@ -199,26 +199,6 @@ public sealed class ChatSendHandler
         }
 
         var priorAssistantAskedQuestion = TryGetLastAssistantDirectQuestion(recentMessages, out _);
-        if (ConversationPolicy.NeedsHumanHelp(command.Message))
-        {
-            _logger.LogInformation("Engage chat decision: deterministic support hard-stop path for session {SessionId}.", session.Id);
-            if (ConversationPolicy.ShouldAttemptSupportTroubleshoot(session, command.Message, IsCaptureMode(session, CaptureModeSupport)))
-            {
-                session.ConversationState = StateSupportTriage;
-                return await CreateAssistantResponseAsync(session, now, SupportTroubleshootPrompt, 0.3m, false, "SupportTriage", "TroubleshootFirst", cancellationToken);
-            }
-
-            return await CreateHumanHelpResponseAsync(site, session, command.Message, now, sessionHandoffs, recentMessages, cancellationToken);
-        }
-
-        var plannerSignals = await TryApplyPlannerSlotHintsAsync(site, session, command.Message, cancellationToken);
-        var plannerIntentHint = await TryInterpretTurnIntentWithPlannerAsync(site, session, bot, command.Message, normalizedMessage, cancellationToken);
-        _logger.LogInformation(
-            "Engage planner participation for session {SessionId}: intentHint={IntentHint}, signalsApplied={SignalsApplied}.",
-            session.Id,
-            plannerIntentHint?.ToString() ?? "none",
-            plannerSignals is not null);
-
         if (IsPostCaptureAcknowledgement(session, command.Message))
         {
             session.ConversationState = StateConfirmHandoff;
@@ -280,7 +260,7 @@ public sealed class ChatSendHandler
                 cancellationToken);
         }
 
-        var intent = plannerIntentHint ?? ConversationPolicy.DetectIntent(normalizedMessage);
+        var intent = ConversationPolicy.DetectIntent(normalizedMessage);
         var hasCommercialIntent = ConversationPolicy.TryBuildCommercialIntentContactPrompt(command.Message, CommercialContactDetailsPrefix, out var commercialPrompt)
             || ConversationPolicy.IsStrongCommercialIntent(command.Message);
         var explicitCommercialContactRequest = ConversationPolicy.IsExplicitCommercialContactRequest(command.Message);
@@ -305,6 +285,23 @@ public sealed class ChatSendHandler
 
         var hasDirectQuestionContext = priorAssistantAskedQuestion;
         var isContinuationReply = ConversationPolicy.IsContinuationReply(command.Message);
+
+        var hasDirectQuestionContext = priorAssistantAskedQuestion;
+        var isContinuationReply = ConversationPolicy.IsContinuationReply(command.Message);
+        var shouldUsePlannerIntentAssist = !hasCommercialIntent
+            && (intent is ChatIntent.General or ChatIntent.AmbiguousShortPrompt
+                || hasDirectQuestionContext
+                || isContinuationReply);
+        if (shouldUsePlannerIntentAssist)
+        {
+            var tenantVocabulary = await _tenantVocabularyResolver.ResolveAsync(site.TenantId, site.Id, session.BotId, cancellationToken);
+            var plannerBusinessContext  = await BuildRuntimeBusinessContextAsync(site, session, normalizedMessage, cancellationToken);
+            var interpreted = await _aiIntentInterpreter.InterpretAsync(command.Message, normalizedMessage, session, tenantVocabulary, plannerBusinessContext, cancellationToken);
+            if (interpreted is not null && interpreted.Confidence >= 0.65m && interpreted.Intent is not ChatIntent.General)
+            {
+                intent = interpreted.Intent;
+            }
+        }
 
         if (!hasCommercialIntent && !IsRealQuestion(command.Message) && IsLikelyControlTurn(command.Message, normalizedMessage, hasDirectQuestionContext))
         {
@@ -406,12 +403,7 @@ public sealed class ChatSendHandler
         _logger.LogInformation("Engage chat decision: grounded answer path for session {SessionId}.", session.Id);
 
         var assistantResponse = ShapeAssistantResponse(NormalizeAiResponse(completion.Value), userAskedForDetail);
-        assistantResponse = ApplyPlannerSignalsToResponse(assistantResponse, plannerSignals, hasCommercialIntent);
         var (primaryAssistantResponse, secondaryAssistantResponse) = SplitAssistantResponseIfHelpful(assistantResponse);
-        if (!string.IsNullOrWhiteSpace(secondaryAssistantResponse))
-        {
-            _logger.LogInformation("Engage split-response selected for session {SessionId}.", session.Id);
-        }
         var persistedAssistantResponse = string.IsNullOrWhiteSpace(secondaryAssistantResponse)
             ? primaryAssistantResponse
             : $"{primaryAssistantResponse} {secondaryAssistantResponse}".Trim();
@@ -733,67 +725,6 @@ Normalized user question (for typo recovery):
         }
 
         return (normalized, null);
-    }
-
-    private static PlannerTurnSignals MergePlannerSignals(PlannerTurnSignals? existing, IReadOnlyDictionary<string, string> hint)
-    {
-        return new PlannerTurnSignals(
-            TurnSentiment: existing?.TurnSentiment ?? ReadBoundedSignal(hint, "turnSentiment"),
-            UrgencyLevel: existing?.UrgencyLevel ?? ReadBoundedSignal(hint, "urgencyLevel"),
-            FrustrationLevel: existing?.FrustrationLevel ?? ReadBoundedSignal(hint, "frustrationLevel"),
-            BuyingReadiness: existing?.BuyingReadiness ?? ReadBoundedSignal(hint, "buyingReadiness"),
-            SuggestedServiceFit: existing?.SuggestedServiceFit ?? ReadBoundedSignal(hint, "suggestedServiceFit", 120),
-            SuggestedSalesFollowUpAngle: existing?.SuggestedSalesFollowUpAngle ?? ReadBoundedSignal(hint, "suggestedSalesFollowUpAngle", 160),
-            SuggestedAssistantNextStep: existing?.SuggestedAssistantNextStep ?? ReadBoundedSignal(hint, "suggestedAssistantNextStep", 180),
-            FollowUpEmailDraft: existing?.FollowUpEmailDraft ?? ReadBoundedSignal(hint, "followUpEmailDraft", 600),
-            NextBestAction: existing?.NextBestAction ?? ReadBoundedSignal(hint, "nextBestAction"));
-    }
-
-    private static string? ReadBoundedSignal(IReadOnlyDictionary<string, string> hint, string key, int maxLength = 40)
-    {
-        if (!hint.TryGetValue(key, out var value) || string.IsNullOrWhiteSpace(value))
-        {
-            return null;
-        }
-
-        var trimmed = value.Trim();
-        return trimmed.Length <= maxLength ? trimmed : trimmed[..maxLength];
-    }
-
-    private static string ApplyPlannerSignalsToResponse(string response, PlannerTurnSignals? signals, bool isCommercialTurn)
-    {
-        if (signals is null)
-        {
-            return response;
-        }
-
-        var adjusted = response.Trim();
-        var isFrustrated = string.Equals(signals.TurnSentiment, "Frustrated", StringComparison.Ordinal)
-            || string.Equals(signals.FrustrationLevel, "High", StringComparison.Ordinal);
-        if (isFrustrated)
-        {
-            var compact = Regex.Split(adjusted, @"(?<=[\.\?\!])\s+").Where(item => !string.IsNullOrWhiteSpace(item)).Take(2);
-            adjusted = string.Join(" ", compact).Trim();
-            if (!adjusted.StartsWith("I understand", StringComparison.OrdinalIgnoreCase))
-            {
-                adjusted = $"I understand this is frustrating — {adjusted}";
-            }
-        }
-
-        if (string.Equals(signals.UrgencyLevel, "High", StringComparison.Ordinal) && !adjusted.Contains("right away", StringComparison.OrdinalIgnoreCase))
-        {
-            adjusted = $"{adjusted} I can help right away.";
-        }
-
-        if (isCommercialTurn
-            && string.Equals(signals.BuyingReadiness, "High", StringComparison.Ordinal)
-            && !string.IsNullOrWhiteSpace(signals.SuggestedAssistantNextStep)
-            && !adjusted.Contains(signals.SuggestedAssistantNextStep, StringComparison.OrdinalIgnoreCase))
-        {
-            adjusted = $"{adjusted} {signals.SuggestedAssistantNextStep}";
-        }
-
-        return adjusted.Trim();
     }
 
     private static void MergeDiscoverySlots(EngageChatSession session, string message)
@@ -1670,7 +1601,7 @@ Grounding citations observed in session: {handoffPackage.CitationCount}
         return false;
     }
 
-    private async Task<PlannerTurnSignals?> TryApplyPlannerSlotHintsAsync(
+    private async Task TryApplyPlannerSlotHintsAsync(
         Site site,
         EngageChatSession session,
         string userMessage,
@@ -1679,11 +1610,9 @@ Grounding citations observed in session: {handoffPackage.CitationCount}
         var decision = await TryBuildStage7DecisionAsync(site, session, userMessage, cancellationToken);
         if (decision?.Recommendations is null)
         {
-            _logger.LogDebug("Engage planner slot-hints skipped for session {SessionId}: no valid planner decision.", session.Id);
-            return null;
+            return;
         }
 
-        PlannerTurnSignals? signals = null;
         foreach (var hint in decision.Recommendations
                      .Select(item => item.ProposedCommand)
                      .Where(item => item is not null))
@@ -1730,48 +1659,6 @@ Grounding citations observed in session: {handoffPackage.CitationCount}
             {
                 session.CaptureLocation = hintedLocation.Trim();
             }
-
-            signals = MergePlannerSignals(signals, hint);
-        }
-
-        _logger.LogDebug("Engage planner slot-hints applied for session {SessionId}: signals={HasSignals}.", session.Id, signals is not null);
-        return signals;
-    }
-
-    private async Task<ChatIntent?> TryInterpretTurnIntentWithPlannerAsync(
-        Site site,
-        EngageChatSession session,
-        EngageBot bot,
-        string userMessage,
-        string normalizedUserMessage,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            var tenantVocabulary = await _tenantVocabularyResolver.ResolveAsync(site.TenantId, site.Id, session.BotId, cancellationToken);
-            var businessContext = await BuildRuntimeBusinessContextAsync(site, session, normalizedUserMessage, cancellationToken);
-            var interpreted = await _aiIntentInterpreter.InterpretAsync(
-                userMessage,
-                normalizedUserMessage,
-                session,
-                tenantVocabulary,
-                businessContext,
-                bot.Tone,
-                bot.Verbosity,
-                bot.FallbackStyle,
-                cancellationToken);
-
-            if (interpreted is null || interpreted.Confidence < 0.65m)
-            {
-                return null;
-            }
-
-            return interpreted.Intent;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Engage planner intent interpretation failed for session {SessionId}; using deterministic intent fallback.", session.Id);
-            return null;
         }
     }
 
@@ -1784,7 +1671,7 @@ Grounding citations observed in session: {handoffPackage.CitationCount}
         IReadOnlyCollection<EngageHandoffTicket> handoffs,
         CancellationToken cancellationToken)
     {
-        _ = await TryApplyPlannerSlotHintsAsync(site, session, normalizedMessage, cancellationToken);
+        await TryApplyPlannerSlotHintsAsync(site, session, normalizedMessage, cancellationToken);
 
         if (IsCaptureMode(session, CaptureModeSupport) || IsCaptureMode(session, CaptureModeLead))
         {
