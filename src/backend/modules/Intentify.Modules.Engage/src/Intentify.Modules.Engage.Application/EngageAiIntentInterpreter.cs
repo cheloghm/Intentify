@@ -19,9 +19,13 @@ public sealed class EngageAiIntentInterpreter
         string normalizedMessage,
         EngageChatSession session,
         IReadOnlyCollection<string> tenantVocabulary,
+        string? businessContext,
+        string? botTone,
+        string? botVerbosity,
+        string? botFallbackStyle,
         CancellationToken cancellationToken = default)
     {
-        var prompt = BuildPrompt(userMessage, normalizedMessage, session, tenantVocabulary);
+        var prompt = BuildPrompt(userMessage, normalizedMessage, session, tenantVocabulary, businessContext, botTone, botVerbosity, botFallbackStyle);
         var completion = await _chatCompletionClient.CompleteAsync(prompt, cancellationToken);
         if (!completion.IsSuccess || string.IsNullOrWhiteSpace(completion.Value))
         {
@@ -35,7 +39,11 @@ public sealed class EngageAiIntentInterpreter
         string userMessage,
         string normalizedMessage,
         EngageChatSession session,
-        IReadOnlyCollection<string> tenantVocabulary)
+        IReadOnlyCollection<string> tenantVocabulary,
+        string? businessContext,
+        string? botTone,
+        string? botVerbosity,
+        string? botFallbackStyle)
     {
         var vocabulary = string.Join(", ", tenantVocabulary.Take(60));
 
@@ -57,6 +65,8 @@ public sealed class EngageAiIntentInterpreter
         builder.AppendLine("- Do not invent entities.");
         builder.AppendLine("- Confidence between 0 and 1.");
         builder.AppendLine($"Tenant vocabulary: {(string.IsNullOrWhiteSpace(vocabulary) ? "none" : vocabulary)}");
+        builder.AppendLine($"Business context bundle: {(string.IsNullOrWhiteSpace(businessContext) ? "none" : businessContext)}");
+        builder.AppendLine($"Bot persona config: tone={(string.IsNullOrWhiteSpace(botTone) ? "default" : botTone)}, verbosity={(string.IsNullOrWhiteSpace(botVerbosity) ? "default" : botVerbosity)}, fallbackStyle={(string.IsNullOrWhiteSpace(botFallbackStyle) ? "default" : botFallbackStyle)}");
         builder.AppendLine($"Session capture context: {(contextSignals.Any() ? string.Join("; ", contextSignals) : "none")}");
         builder.AppendLine($"User message: {userMessage}");
         builder.AppendLine($"Normalized user message: {normalizedMessage}");

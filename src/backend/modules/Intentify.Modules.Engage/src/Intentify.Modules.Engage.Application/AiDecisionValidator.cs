@@ -10,6 +10,11 @@ public static class AiDecisionValidator
     private static readonly IReadOnlyCollection<AiRecommendationType> DefaultAllowlistedActions = Enum
         .GetValues<AiRecommendationType>()
         .ToArray();
+    private static readonly string[] AllowedSentimentValues = ["Calm", "Neutral", "Frustrated", "Positive", "Hesitant"];
+    private static readonly string[] AllowedUrgencyValues = ["Low", "Medium", "High"];
+    private static readonly string[] AllowedFrustrationValues = ["Low", "Medium", "High"];
+    private static readonly string[] AllowedBuyingReadinessValues = ["Low", "Medium", "High"];
+    private static readonly string[] AllowedNextBestActions = ["SendFollowUpEmail", "ScheduleCall", "ShareServiceOverview", "PrepareQuote", "ConfirmTimeline"];
 
     public static AiDecisionContract ValidateAndNormalize(AiDecisionContract decision)
     {
@@ -128,6 +133,8 @@ public static class AiDecisionValidator
             errors.Add($"recommendations[{index}].requiresApproval", "Mutating actions must require approval.");
         }
 
+        ValidateProposedCommand(index, recommendation.ProposedCommand, errors);
+
         switch (recommendation.Type)
         {
             case AiRecommendationType.SuggestPromo:
@@ -174,6 +181,79 @@ public static class AiDecisionValidator
             or AiRecommendationType.TagVisitor
             or AiRecommendationType.SuggestKnowledgeUpdate
             or AiRecommendationType.NotifyClientKnowledgeGap;
+
+    private static void ValidateProposedCommand(int index, IReadOnlyDictionary<string, string>? proposedCommand, ValidationErrors errors)
+    {
+        if (proposedCommand is null || proposedCommand.Count == 0)
+        {
+            return;
+        }
+
+        ValidateAllowlistedValue(index, proposedCommand, "turnSentiment", AllowedSentimentValues, errors);
+        ValidateAllowlistedValue(index, proposedCommand, "urgencyLevel", AllowedUrgencyValues, errors);
+        ValidateAllowlistedValue(index, proposedCommand, "frustrationLevel", AllowedFrustrationValues, errors);
+        ValidateAllowlistedValue(index, proposedCommand, "buyingReadiness", AllowedBuyingReadinessValues, errors);
+
+        ValidateBoundedText(index, proposedCommand, "suggestedServiceFit", 120, errors);
+        ValidateBoundedText(index, proposedCommand, "suggestedSalesFollowUpAngle", 160, errors);
+        ValidateBoundedText(index, proposedCommand, "suggestedAssistantNextStep", 180, errors);
+        ValidateAllowlistedValue(index, proposedCommand, "nextBestAction", AllowedNextBestActions, errors);
+        ValidateBoundedText(index, proposedCommand, "followUpEmailDraft", 600, errors);
+        ValidateFollowUpEmailDraft(index, proposedCommand, errors);
+    }
+
+    private static void ValidateAllowlistedValue(
+        int index,
+        IReadOnlyDictionary<string, string> command,
+        string key,
+        IReadOnlyCollection<string> allowedValues,
+        ValidationErrors errors)
+    {
+        if (!command.TryGetValue(key, out var value) || string.IsNullOrWhiteSpace(value))
+        {
+            return;
+        }
+
+        if (!allowedValues.Contains(value, StringComparer.Ordinal))
+        {
+            errors.Add($"recommendations[{index}].proposedCommand.{key}", $"{key} must be one of: {string.Join(", ", allowedValues)}.");
+        }
+    }
+
+    private static void ValidateBoundedText(
+        int index,
+        IReadOnlyDictionary<string, string> command,
+        string key,
+        int maxLength,
+        ValidationErrors errors)
+    {
+        if (!command.TryGetValue(key, out var value) || string.IsNullOrWhiteSpace(value))
+        {
+            return;
+        }
+
+        if (value.Trim().Length > maxLength)
+        {
+            errors.Add($"recommendations[{index}].proposedCommand.{key}", $"{key} exceeds max length {maxLength}.");
+        }
+    }
+
+    private static void ValidateFollowUpEmailDraft(int index, IReadOnlyDictionary<string, string> command, ValidationErrors errors)
+    {
+        if (!command.TryGetValue("followUpEmailDraft", out var value) || string.IsNullOrWhiteSpace(value))
+        {
+            return;
+        }
+
+        var normalized = value.Trim().ToLowerInvariant();
+        if (normalized.Contains("guarantee", StringComparison.Ordinal)
+            || normalized.Contains("100%", StringComparison.Ordinal)
+            || normalized.Contains("wire transfer", StringComparison.Ordinal)
+            || normalized.Contains("send payment", StringComparison.Ordinal))
+        {
+            errors.Add($"recommendations[{index}].proposedCommand.followUpEmailDraft", "followUpEmailDraft contains unsupported or unsafe claims.");
+        }
+    }
 
     private static AiDecisionContract CreateInvalidNoActionDecision(
         AiDecisionContract original,

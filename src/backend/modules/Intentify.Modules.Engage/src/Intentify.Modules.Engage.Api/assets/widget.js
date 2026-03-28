@@ -31,6 +31,7 @@
   var collectorSessionMaxWaitMs = 2200;
   var hydrateRequestId = 0;
   var sendNonce = 0;
+  var pendingSecondaryTimer = null;
 
   function endpoint(path) { return baseUrl + path; }
 
@@ -195,6 +196,13 @@
       typingIndicatorRow.parentNode.removeChild(typingIndicatorRow);
     }
     typingIndicatorRow = null;
+  }
+
+  function clearPendingSecondaryRender() {
+    if (pendingSecondaryTimer) {
+      clearTimeout(pendingSecondaryTimer);
+      pendingSecondaryTimer = null;
+    }
   }
 
   function showTypingIndicator() {
@@ -481,6 +489,8 @@
       return Promise.resolve();
     }
 
+    clearPendingSecondaryRender();
+    removeTypingIndicator();
     isHydrating = true;
     input.disabled = true;
     sendButton.disabled = true;
@@ -584,6 +594,7 @@
     var requestNonce = ++sendNonce;
     var optimisticUserRow = addMessage('user', message);
     var shouldRestoreFocusAfterSend = true;
+    clearPendingSecondaryRender();
     setSendingState(true);
     showTypingIndicator();
     return waitForCollectorSessionId()
@@ -608,23 +619,19 @@
           return;
         }
         removeTypingIndicator();
+        clearPendingSecondaryRender();
         sessionId = payload.sessionId || sessionId;
         if (sessionId) {
           localStorage.setItem(storageKey, sessionId);
         }
-        addMessage('bot', payload.response || '');
-        if (payload && payload.response === contactDetailsPrompt) {
-          addContactDetailsForm();
-          shouldRestoreFocusAfterSend = false;
-        }
-        if (payload && payload.responseKind === 'promo' && payload.promoPublicKey) {
-          addPromoForm(payload);
-          shouldRestoreFocusAfterSend = false;
-        }
+        return renderAssistantPayload(payload, requestNonce).then(function(restoreFocus) {
+          shouldRestoreFocusAfterSend = restoreFocus;
+        });
       })
       .catch(function(error) {
         console.warn('Intentify Engage widget send failed:', error);
         removeTypingIndicator();
+        clearPendingSecondaryRender();
         if (optimisticUserRow && optimisticUserRow.parentNode) {
           optimisticUserRow.parentNode.removeChild(optimisticUserRow);
         }
@@ -639,6 +646,39 @@
           restoreInputFocus();
         }
       });
+  }
+
+  function renderAssistantPayload(payload, requestNonce) {
+    var restoreFocus = true;
+    addMessage('bot', payload && payload.response ? payload.response : '');
+
+    if (payload && payload.response === contactDetailsPrompt) {
+      addContactDetailsForm();
+      restoreFocus = false;
+    }
+    if (payload && payload.responseKind === 'promo' && payload.promoPublicKey) {
+      addPromoForm(payload);
+      restoreFocus = false;
+    }
+
+    if (!payload || !payload.secondaryResponse) {
+      return Promise.resolve(restoreFocus);
+    }
+
+    showTypingIndicator();
+    return new Promise(function(resolve) {
+      pendingSecondaryTimer = setTimeout(function() {
+        pendingSecondaryTimer = null;
+        if (requestNonce !== sendNonce) {
+          removeTypingIndicator();
+          resolve(restoreFocus);
+          return;
+        }
+        removeTypingIndicator();
+        addMessage('bot', payload.secondaryResponse);
+        resolve(restoreFocus);
+      }, 700);
+    });
   }
 
   function waitForCollectorSessionId() {

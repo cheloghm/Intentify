@@ -142,12 +142,15 @@ internal static class EngageEndpoints
                 result.Value.PromoPublicKey,
                 result.Value.PromoTitle,
                 result.Value.PromoDescription,
+                result.Value.SecondaryResponse,
                 ToStage7DecisionResponse(result.Value.Stage7Decision),
                 result.Value.OpportunityLabel,
                 result.Value.IntentScore,
                 result.Value.ConversationSummary,
                 result.Value.SuggestedFollowUp,
-                result.Value.PreferredContactMethod))
+                result.Value.PreferredContactMethod,
+                result.Value.FollowUpEmailDraft,
+                result.Value.NextBestAction))
         };
     }
 

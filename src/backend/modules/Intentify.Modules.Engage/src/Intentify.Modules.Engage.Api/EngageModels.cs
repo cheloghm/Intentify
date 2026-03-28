@@ -49,12 +49,15 @@ public sealed record EngageChatSendResponse(
     string? PromoPublicKey = null,
     string? PromoTitle = null,
     string? PromoDescription = null,
+    string? SecondaryResponse = null,
     EngageAiDecisionResponse? Stage7Decision = null,
     string? OpportunityLabel = null,
     int? IntentScore = null,
     string? ConversationSummary = null,
     string? SuggestedFollowUp = null,
-    string? PreferredContactMethod = null);
+    string? PreferredContactMethod = null,
+    string? FollowUpEmailDraft = null,
+    string? NextBestAction = null);
 
 public sealed record ConversationSummaryResponse(string SessionId, DateTime CreatedAtUtc, DateTime UpdatedAtUtc);
 

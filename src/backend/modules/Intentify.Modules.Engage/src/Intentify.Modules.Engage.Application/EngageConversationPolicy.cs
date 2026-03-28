@@ -225,6 +225,17 @@ public sealed class EngageConversationPolicy
     public bool NeedsHumanHelp(string message)
         => SupportSignals.NeedsHumanHelp(message);
 
+    public bool IsAlreadyToldYouSignal(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return false;
+        }
+
+        var normalized = message.Trim().ToLowerInvariant();
+        return EngageContextRecoveryPhraseBank.AlreadyToldYouPhrases.Any(phrase => normalized.Contains(phrase, StringComparison.Ordinal));
+    }
+
     public bool ShouldAttemptSupportTroubleshoot(EngageChatSession session, string message, bool isSupportCaptureMode)
     {
         if (SupportSignals.IsExplicitEscalationRequest(message))
