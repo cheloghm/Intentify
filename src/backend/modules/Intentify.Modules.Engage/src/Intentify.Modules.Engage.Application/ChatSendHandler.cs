@@ -1597,7 +1597,8 @@ Grounding citations observed in session: {handoffPackage.CitationCount}
             return false;
         }
 
-        if (string.Equals(priorQuestion, "What outcome are you trying to achieve?", StringComparison.Ordinal)
+        if ((string.Equals(priorQuestion, "What outcome are you trying to achieve?", StringComparison.Ordinal)
+             || string.Equals(priorQuestion, "What are you trying to achieve first?", StringComparison.Ordinal))
             && string.IsNullOrWhiteSpace(session.CaptureGoal))
         {
             session.CaptureGoal = normalizedAnswer;
@@ -1605,7 +1606,8 @@ Grounding citations observed in session: {handoffPackage.CitationCount}
             return true;
         }
 
-        if (string.Equals(priorQuestion, "What kind of business or use case is this for?", StringComparison.Ordinal)
+        if ((string.Equals(priorQuestion, "What kind of business or use case is this for?", StringComparison.Ordinal)
+             || string.Equals(priorQuestion, "What kind of business is this for?", StringComparison.Ordinal))
             && string.IsNullOrWhiteSpace(session.CaptureType))
         {
             session.CaptureType = normalizedAnswer;
@@ -1773,7 +1775,9 @@ Grounding citations observed in session: {handoffPackage.CitationCount}
         static bool IsDiscoveryQuestion(string content)
         {
             return string.Equals(content, "What outcome are you trying to achieve?", StringComparison.Ordinal)
+                || string.Equals(content, "What are you trying to achieve first?", StringComparison.Ordinal)
                 || string.Equals(content, "What kind of business or use case is this for?", StringComparison.Ordinal)
+                || string.Equals(content, "What kind of business is this for?", StringComparison.Ordinal)
                 || string.Equals(content, "What location should we plan for?", StringComparison.Ordinal)
                 || content.StartsWith("Any key constraints like budget, timeline", StringComparison.Ordinal);
         }
