@@ -324,6 +324,39 @@ public sealed class ChatSendHandler
             return await CreateHumanHelpResponseAsync(site, session, command.Message, now, sessionHandoffs, recentMessages, cancellationToken);
         }
 
+        if (ConversationPolicy.NeedsHumanHelp(command.Message))
+        {
+            return await CreateHumanHelpResponseAsync(site, session, command.Message, now, sessionHandoffs, recentMessages, cancellationToken);
+        }
+
+        if (string.Equals(session.ConversationState, StateDiscover, StringComparison.Ordinal)
+            && !IsFactualIntent(intent))
+        {
+            if (ConversationPolicy.IsCommercialCaptureReady(session, explicitCommercialContactRequest))
+            {
+                return await CreateCommercialLeadCapturePromptAsync(
+                    site,
+                    session,
+                    command.Message,
+                    ConversationPolicy.BuildNextDiscoveryQuestion(session),
+                    now,
+                    sessionHandoffs,
+                    recentMessages,
+                    cancellationToken);
+            }
+
+            session.ConversationState = StateDiscover;
+            return await CreateAssistantResponseAsync(
+                session,
+                now,
+                ShapeAssistantResponse(ConversationPolicy.BuildNextDiscoveryQuestion(session), false, allowMultipleQuestions: true),
+                0.45m,
+                false,
+                "Discover",
+                "StickyDiscover",
+                cancellationToken);
+        }
+
         if (intent == ChatIntent.AmbiguousShortPrompt)
         {
             return await CreateLayeredFallbackResponseAsync(
@@ -590,6 +623,15 @@ Normalized user question (for typo recovery):
             || normalized.StartsWith("did ", StringComparison.Ordinal)
             || normalized.StartsWith("will ", StringComparison.Ordinal)
             || normalized.StartsWith("would ", StringComparison.Ordinal);
+    }
+
+    private static bool IsFactualIntent(ChatIntent intent)
+    {
+        return intent is ChatIntent.Contact
+            or ChatIntent.Location
+            or ChatIntent.Hours
+            or ChatIntent.Services
+            or ChatIntent.Organization;
     }
 
     private static string NormalizeAiResponse(string response)
