@@ -148,7 +148,9 @@ internal static class EngageEndpoints
                 result.Value.IntentScore,
                 result.Value.ConversationSummary,
                 result.Value.SuggestedFollowUp,
-                result.Value.PreferredContactMethod))
+                result.Value.PreferredContactMethod,
+                result.Value.FollowUpEmailDraft,
+                result.Value.NextBestAction))
         };
     }
 

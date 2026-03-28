@@ -144,6 +144,55 @@ public sealed class AiDecisionValidatorTests
         Assert.Equal(AiRecommendationType.NoAction, Assert.Single(validated.Recommendations!).Type);
     }
 
+    [Fact]
+    public void ValidateAndNormalize_InvalidSentimentSignalInProposedCommand_ReturnsInvalidNoAction()
+    {
+        var recommendation = new AiRecommendation(
+            AiRecommendationType.SuggestKnowledge,
+            0.8m,
+            "Signal test",
+            [new AiEvidenceRef("knowledge", Guid.NewGuid().ToString("N"))],
+            null,
+            false,
+            new Dictionary<string, string>
+            {
+                ["turnSentiment"] = "Angry"
+            });
+
+        var decision = CreateBaseDecision(recommendations: [recommendation]);
+
+        var validated = AiDecisionValidator.ValidateAndNormalize(decision);
+
+        Assert.Equal(AiDecisionValidationStatus.Invalid, validated.ValidationStatus);
+        Assert.True(validated.ShouldFallback);
+        Assert.Contains(validated.ValidationErrors!, message => message.Contains("turnSentiment", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void ValidateAndNormalize_UnsafeFollowUpEmailDraftInProposedCommand_ReturnsInvalidNoAction()
+    {
+        var recommendation = new AiRecommendation(
+            AiRecommendationType.SuggestKnowledge,
+            0.8m,
+            "Signal test",
+            [new AiEvidenceRef("knowledge", Guid.NewGuid().ToString("N"))],
+            null,
+            false,
+            new Dictionary<string, string>
+            {
+                ["nextBestAction"] = "ScheduleCall",
+                ["followUpEmailDraft"] = "We guarantee 100% outcomes if you send payment now."
+            });
+
+        var decision = CreateBaseDecision(recommendations: [recommendation]);
+
+        var validated = AiDecisionValidator.ValidateAndNormalize(decision);
+
+        Assert.Equal(AiDecisionValidationStatus.Invalid, validated.ValidationStatus);
+        Assert.True(validated.ShouldFallback);
+        Assert.Contains(validated.ValidationErrors!, message => message.Contains("followUpEmailDraft", StringComparison.OrdinalIgnoreCase));
+    }
+
     private static AiDecisionContract CreateBaseDecision(
         IReadOnlyCollection<AiRecommendation>? recommendations,
         decimal overallConfidence = 0.8m,

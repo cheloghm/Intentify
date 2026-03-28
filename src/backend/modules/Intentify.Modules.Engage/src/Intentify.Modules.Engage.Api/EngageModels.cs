@@ -55,7 +55,9 @@ public sealed record EngageChatSendResponse(
     int? IntentScore = null,
     string? ConversationSummary = null,
     string? SuggestedFollowUp = null,
-    string? PreferredContactMethod = null);
+    string? PreferredContactMethod = null,
+    string? FollowUpEmailDraft = null,
+    string? NextBestAction = null);
 
 public sealed record ConversationSummaryResponse(string SessionId, DateTime CreatedAtUtc, DateTime UpdatedAtUtc);
 

@@ -267,7 +267,10 @@ public sealed class ChatSendHandler
         var isRecommendationIntent = ConversationPolicy.IsRecommendationIntent(normalizedMessage);
         if (isRecommendationIntent && !hasCommercialIntent)
         {
-            var recommendationResponse = ConversationPolicy.BuildRecommendationResponse(session, command.Message);
+            var recommendationResponse = ApplyPlannerSignalsToResponse(
+                ConversationPolicy.BuildRecommendationResponse(session, command.Message),
+                plannerSignals,
+                isCommercialTurn: false);
             session.ConversationState = StateDiscover;
             return await CreateAssistantResponseAsync(session, now, recommendationResponse, 0.45m, false, "Recommendation", ConversationPolicy.HasSufficientDiscoveryContext(session) ? "Direct" : "Clarify", cancellationToken);
         }
@@ -280,16 +283,8 @@ public sealed class ChatSendHandler
             return await CreateCommercialLeadCapturePromptAsync(site, session, command.Message, commercialResponse, now, sessionHandoffs, recentMessages, cancellationToken);
         }
 
-        if (ConversationPolicy.NeedsHumanHelp(command.Message))
-        {
-            if (ConversationPolicy.ShouldAttemptSupportTroubleshoot(session, command.Message, IsCaptureMode(session, CaptureModeSupport)))
-            {
-                session.ConversationState = StateSupportTriage;
-                return await CreateAssistantResponseAsync(session, now, SupportTroubleshootPrompt, 0.3m, false, "SupportTriage", "TroubleshootFirst", cancellationToken);
-            }
-
-            return await CreateHumanHelpResponseAsync(site, session, command.Message, now, sessionHandoffs, recentMessages, cancellationToken);
-        }
+        var hasDirectQuestionContext = priorAssistantAskedQuestion;
+        var isContinuationReply = ConversationPolicy.IsContinuationReply(command.Message);
 
         var hasDirectQuestionContext = priorAssistantAskedQuestion;
         var isContinuationReply = ConversationPolicy.IsContinuationReply(command.Message);
@@ -1270,6 +1265,58 @@ Normalized user message:
         var opportunityLabel = ConversationPolicy.BuildCommercialOpportunityLabel(intentScore);
         var conversationSummary = ConversationPolicy.BuildCommercialOpportunitySummary(session);
         var suggestedFollowUp = ConversationPolicy.BuildSuggestedFollowUpMessage(session);
+        var plannerSignals = await TryApplyPlannerSlotHintsAsync(site, session, userMessage, cancellationToken);
+        var followUpEmailDraft = string.Empty;
+        var nextBestAction = string.Empty;
+        if (!string.IsNullOrWhiteSpace(plannerSignals?.SuggestedServiceFit)
+            && !conversationSummary.Contains(plannerSignals.SuggestedServiceFit, StringComparison.OrdinalIgnoreCase))
+        {
+            conversationSummary = $"{conversationSummary}; Service fit: {plannerSignals.SuggestedServiceFit}";
+        }
+
+        if (!string.IsNullOrWhiteSpace(plannerSignals?.SuggestedSalesFollowUpAngle)
+            && !suggestedFollowUp.Contains(plannerSignals.SuggestedSalesFollowUpAngle, StringComparison.OrdinalIgnoreCase))
+        {
+            suggestedFollowUp = $"{suggestedFollowUp} Suggested angle: {plannerSignals.SuggestedSalesFollowUpAngle}";
+        }
+
+        if (createTicket && intentScore >= 60)
+        {
+            nextBestAction = plannerSignals?.NextBestAction ?? "ScheduleCall";
+            if (!suggestedFollowUp.Contains(nextBestAction, StringComparison.OrdinalIgnoreCase))
+            {
+                suggestedFollowUp = $"{suggestedFollowUp} Next best action: {nextBestAction}.";
+            }
+
+            if (!string.IsNullOrWhiteSpace(plannerSignals?.FollowUpEmailDraft))
+            {
+                followUpEmailDraft = plannerSignals.FollowUpEmailDraft;
+            }
+            else
+            {
+                var goal = string.IsNullOrWhiteSpace(session.CaptureGoal) ? "your project goals" : session.CaptureGoal;
+                var serviceFit = string.IsNullOrWhiteSpace(plannerSignals?.SuggestedServiceFit) ? "the best-fit service option" : plannerSignals.SuggestedServiceFit;
+                var contactLine = string.IsNullOrWhiteSpace(session.CapturedPreferredContactMethod)
+                    ? "Reply with a preferred time for a quick follow-up."
+                    : string.Equals(session.CapturedPreferredContactMethod, PreferredContactMethodPhone, StringComparison.Ordinal)
+                        ? "If helpful, share a preferred callback window."
+                        : "If helpful, reply with your preferred next step and timing.";
+
+                followUpEmailDraft = $"Hi {(string.IsNullOrWhiteSpace(session.CapturedName) ? "there" : session.CapturedName)}, thanks for the conversation about {goal}. Based on what you shared, {serviceFit} looks like a strong fit. {contactLine}";
+            }
+
+            if (followUpEmailDraft.Length > 600)
+            {
+                followUpEmailDraft = followUpEmailDraft[..600];
+            }
+
+            _logger.LogInformation(
+                "Engage commercial artifacts generated for session {SessionId}: nextBestAction={NextBestAction}, hasFollowUpEmailDraft={HasFollowUpEmailDraft}.",
+                session.Id,
+                nextBestAction,
+                !string.IsNullOrWhiteSpace(followUpEmailDraft));
+        }
+
         session.OpportunityLabel = opportunityLabel;
         session.IntentScore = intentScore;
         session.ConversationSummary = conversationSummary;
@@ -1337,7 +1384,9 @@ Normalized user message:
             IntentScore: createTicket ? intentScore : null,
             ConversationSummary: createTicket ? conversationSummary : null,
             SuggestedFollowUp: createTicket ? suggestedFollowUp : null,
-            PreferredContactMethod: createTicket ? session.CapturedPreferredContactMethod : null));
+            PreferredContactMethod: createTicket ? session.CapturedPreferredContactMethod : null,
+            FollowUpEmailDraft: createTicket && !string.IsNullOrWhiteSpace(followUpEmailDraft) ? followUpEmailDraft : null,
+            NextBestAction: createTicket && !string.IsNullOrWhiteSpace(nextBestAction) ? nextBestAction : null));
     }
 
     private async Task CreateCommercialOpportunityTicketAsync(
@@ -1814,5 +1863,16 @@ Grounding citations observed in session: {handoffPackage.CitationCount}
 
         return value.Trim();
     }
+
+    private sealed record PlannerTurnSignals(
+        string? TurnSentiment,
+        string? UrgencyLevel,
+        string? FrustrationLevel,
+        string? BuyingReadiness,
+        string? SuggestedServiceFit,
+        string? SuggestedSalesFollowUpAngle,
+        string? SuggestedAssistantNextStep,
+        string? FollowUpEmailDraft,
+        string? NextBestAction);
 
 }

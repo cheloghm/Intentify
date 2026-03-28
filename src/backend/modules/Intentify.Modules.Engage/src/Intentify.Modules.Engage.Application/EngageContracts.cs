@@ -24,7 +24,9 @@ public sealed record ChatSendResult(
     int? IntentScore = null,
     string? ConversationSummary = null,
     string? SuggestedFollowUp = null,
-    string? PreferredContactMethod = null);
+    string? PreferredContactMethod = null,
+    string? FollowUpEmailDraft = null,
+    string? NextBestAction = null);
 
 public sealed record ListConversationsQuery(Guid TenantId, Guid SiteId, string? CollectorSessionId);
 
