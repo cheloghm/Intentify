@@ -286,23 +286,6 @@ public sealed class ChatSendHandler
             return await CreateCommercialLeadCapturePromptAsync(site, session, command.Message, commercialResponse, now, sessionHandoffs, recentMessages, cancellationToken);
         }
 
-        if (hasCommercialIntent
-            && !ConversationPolicy.IsCommercialCaptureReady(session, explicitCommercialContactRequest)
-            && intent is not ChatIntent.EscalationHelp
-            && !ConversationPolicy.NeedsHumanHelp(command.Message))
-        {
-            session.ConversationState = StateDiscover;
-            return await CreateAssistantResponseAsync(
-                session,
-                now,
-                ShapeAssistantResponse(ConversationPolicy.BuildNextDiscoveryQuestion(session), false, allowMultipleQuestions: true),
-                0.45m,
-                false,
-                "Discover",
-                "CommercialIntentDiscover",
-                cancellationToken);
-        }
-
         // 7) Planner intent assist for ambiguous/general/continuation cases.
         var hasDirectQuestionContext = priorAssistantAskedQuestion;
         var isContinuationReply = ConversationPolicy.IsContinuationReply(command.Message);
