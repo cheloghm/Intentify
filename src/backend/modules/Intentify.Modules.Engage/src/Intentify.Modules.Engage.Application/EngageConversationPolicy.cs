@@ -163,14 +163,21 @@ public sealed class EngageConversationPolicy
 
     public string BuildNextDiscoveryQuestion(EngageChatSession session)
     {
+        if (string.IsNullOrWhiteSpace(session.CaptureType)
+            && string.IsNullOrWhiteSpace(session.CaptureGoal)
+            && HasProjectIntentContext(session))
+        {
+            return "What kind of business is this for?";
+        }
+
         if (string.IsNullOrWhiteSpace(session.CaptureGoal))
         {
-            return "What outcome are you trying to achieve?";
+            return "What are you trying to achieve first?";
         }
 
         if (string.IsNullOrWhiteSpace(session.CaptureType))
         {
-            return "What kind of business or use case is this for?";
+            return "What kind of business is this for?";
         }
 
         if (string.IsNullOrWhiteSpace(session.CaptureLocation))
@@ -251,65 +258,40 @@ public sealed class EngageConversationPolicy
     {
         var normalized = message.Trim().ToLowerInvariant();
 
-        if (normalized.Length <= 3 || normalized is "help" or "info" or "details" or "price")
+        if (normalized.Length <= 3 || EngageConversationPolicySignalBank.ContainsAny(normalized, EngageConversationPolicySignalBank.AmbiguousPromptTerms))
         {
             return ChatIntent.AmbiguousShortPrompt;
         }
 
-        var containsHumanTarget = normalized.Contains("human", StringComparison.Ordinal)
-            || normalized.Contains("agent", StringComparison.Ordinal)
-            || normalized.Contains("representative", StringComparison.Ordinal)
-            || normalized.Contains("person", StringComparison.Ordinal);
-        var containsHandoffVerb = normalized.Contains("need", StringComparison.Ordinal)
-            || normalized.Contains("want", StringComparison.Ordinal)
-            || normalized.Contains("speak", StringComparison.Ordinal)
-            || normalized.Contains("talk", StringComparison.Ordinal)
-            || normalized.Contains("connect", StringComparison.Ordinal)
-            || normalized.Contains("help", StringComparison.Ordinal);
+        var containsHumanTarget = EngageConversationPolicySignalBank.ContainsAny(normalized, EngageConversationPolicySignalBank.HumanTargetTerms);
+        var containsHandoffVerb = EngageConversationPolicySignalBank.ContainsAny(normalized, EngageConversationPolicySignalBank.HandoffVerbTerms);
 
         if (containsHumanTarget && containsHandoffVerb)
         {
             return ChatIntent.EscalationHelp;
         }
 
-        if (normalized.Contains("contact", StringComparison.Ordinal)
-            || normalized.Contains("phone", StringComparison.Ordinal)
-            || normalized.Contains("email", StringComparison.Ordinal)
-            || normalized.Contains("call", StringComparison.Ordinal))
+        if (EngageConversationPolicySignalBank.ContainsAny(normalized, EngageConversationPolicySignalBank.ContactIntentTerms))
         {
             return ChatIntent.Contact;
         }
 
-        if (normalized.Contains("location", StringComparison.Ordinal)
-            || normalized.Contains("address", StringComparison.Ordinal)
-            || normalized.Contains("where", StringComparison.Ordinal)
-            || normalized.Contains("located", StringComparison.Ordinal))
+        if (EngageConversationPolicySignalBank.ContainsAny(normalized, EngageConversationPolicySignalBank.LocationIntentTerms))
         {
             return ChatIntent.Location;
         }
 
-        if (normalized.Contains("hours", StringComparison.Ordinal)
-            || normalized.Contains("open", StringComparison.Ordinal)
-            || normalized.Contains("close", StringComparison.Ordinal)
-            || normalized.Contains("time", StringComparison.Ordinal))
+        if (EngageConversationPolicySignalBank.ContainsAny(normalized, EngageConversationPolicySignalBank.HoursIntentTerms))
         {
             return ChatIntent.Hours;
         }
 
-        if (normalized.Contains("service", StringComparison.Ordinal)
-            || normalized.Contains("menu", StringComparison.Ordinal)
-            || normalized.Contains("offer", StringComparison.Ordinal)
-            || normalized.Contains("pricing", StringComparison.Ordinal)
-            || normalized.Contains("order", StringComparison.Ordinal))
+        if (EngageConversationPolicySignalBank.ContainsAny(normalized, EngageConversationPolicySignalBank.ServicesIntentTerms))
         {
             return ChatIntent.Services;
         }
 
-        if (normalized.Contains("org", StringComparison.Ordinal)
-            || normalized.Contains("organization", StringComparison.Ordinal)
-            || normalized.Contains("business name", StringComparison.Ordinal)
-            || normalized.Contains("company name", StringComparison.Ordinal)
-            || normalized.Contains("name of", StringComparison.Ordinal))
+        if (EngageConversationPolicySignalBank.ContainsAny(normalized, EngageConversationPolicySignalBank.OrganizationIntentTerms))
         {
             return ChatIntent.Organization;
         }
@@ -369,11 +351,7 @@ public sealed class EngageConversationPolicy
     private static bool TryBuildBusinessAwareConstraintQuestion(EngageChatSession session, out string question)
     {
         var context = $"{session.CaptureGoal} {session.CaptureType} {session.CaptureContext}".ToLowerInvariant();
-        var isDigitalContext = context.Contains("website", StringComparison.Ordinal)
-            || context.Contains("site", StringComparison.Ordinal)
-            || context.Contains("online store", StringComparison.Ordinal)
-            || context.Contains("ecommerce", StringComparison.Ordinal)
-            || context.Contains("e-commerce", StringComparison.Ordinal);
+        var isDigitalContext = EngageConversationPolicySignalBank.ContainsAny(context, EngageConversationPolicySignalBank.DigitalContextTerms);
 
         if (isDigitalContext)
         {
@@ -381,23 +359,14 @@ public sealed class EngageConversationPolicy
             return true;
         }
 
-        var isBookingContext = context.Contains("booking", StringComparison.Ordinal)
-            || context.Contains("appointment", StringComparison.Ordinal)
-            || context.Contains("reservation", StringComparison.Ordinal)
-            || context.Contains("schedule", StringComparison.Ordinal);
+        var isBookingContext = EngageConversationPolicySignalBank.ContainsAny(context, EngageConversationPolicySignalBank.BookingContextTerms);
         if (isBookingContext)
         {
             question = "Any key constraints like budget, timeline, or scheduling requirements?";
             return true;
         }
 
-        var isCommerceContext = context.Contains("retail", StringComparison.Ordinal)
-            || context.Contains("restaurant", StringComparison.Ordinal)
-            || context.Contains("food", StringComparison.Ordinal)
-            || context.Contains("drink", StringComparison.Ordinal)
-            || context.Contains("menu", StringComparison.Ordinal)
-            || context.Contains("inventory", StringComparison.Ordinal)
-            || context.Contains("order", StringComparison.Ordinal);
+        var isCommerceContext = EngageConversationPolicySignalBank.ContainsAny(context, EngageConversationPolicySignalBank.CommerceContextTerms);
         if (isCommerceContext)
         {
             question = "Any key constraints like budget, timeline, or fulfillment capacity?";
@@ -406,5 +375,11 @@ public sealed class EngageConversationPolicy
 
         question = string.Empty;
         return false;
+    }
+
+    private static bool HasProjectIntentContext(EngageChatSession session)
+    {
+        var context = $"{session.CaptureGoal} {session.CaptureType} {session.CaptureContext}".ToLowerInvariant();
+        return EngageConversationPolicySignalBank.IsProjectIntentContext(context);
     }
 }
