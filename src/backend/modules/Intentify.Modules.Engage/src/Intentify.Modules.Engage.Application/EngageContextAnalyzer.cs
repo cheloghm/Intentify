@@ -1,7 +1,24 @@
+using Intentify.Modules.Engage.Domain;
+using Intentify.Shared.AI;
+using Microsoft.Extensions.Logging;
+
+namespace Intentify.Modules.Engage.Application;
+
 public sealed class EngageContextAnalyzer
 {
     private readonly AiDecisionGenerationService _aiDecisionService;
     private readonly EngageConversationPolicy _policy;
+    private readonly ILogger<EngageContextAnalyzer> _logger;
+
+    public EngageContextAnalyzer(
+        AiDecisionGenerationService aiDecisionService,
+        EngageConversationPolicy policy,
+        ILogger<EngageContextAnalyzer> logger)
+    {
+        _aiDecisionService = aiDecisionService;
+        _policy = policy;
+        _logger = logger;
+    }
 
     public async Task<EngageConversationContext> AnalyzeAsync(
         EngageChatSession session,
@@ -13,33 +30,64 @@ public sealed class EngageContextAnalyzer
         VisitorContextBundle? visitorBundle,
         CancellationToken ct)
     {
-        var distilledHistory = BuildDistilledHistory(recentMessages, userMessage);
-        var lastQuestion = recentMessages.LastOrDefault(m => m.Role == "assistant" && m.Content.EndsWith("?"))?.Content;
+        var distilled = BuildDistilledHistory(recentMessages, userMessage);
+        var lastQuestion = recentMessages
+            .Where(m => string.Equals(m.Role, "assistant", StringComparison.OrdinalIgnoreCase) 
+                     && m.Content.Trim().EndsWith("?"))
+            .Select(m => m.Content.Trim())
+            .LastOrDefault();
 
-        var prompt = $"""
-You are an expert sales-rep context analyser for {bot.Tone} tone.
-Session state: {session.ConversationState}
-Captured: Goal={session.CaptureGoal}, Type={session.CaptureType}, Location={session.CaptureLocation}, Constraints={session.CaptureConstraints}, Name={session.CapturedName}, ContactMethod={session.CapturedPreferredContactMethod}
-Last assistant question: {lastQuestion ?? "none"}
-Knowledge summary: {knowledgeSummary}
-Tenant vocabulary: {tenantVocabulary}
-Distilled history: {distilledHistory}
+        // Use normal string concatenation to avoid raw string brace issues
+        var prompt = "You are a world-class sales rep for " + bot.Tone + " tone businesses.\n" +
+                     "Current state: " + session.ConversationState + "\n" +
+                     "Captured slots: Goal=" + (session.CaptureGoal ?? "none") + 
+                     ", Type=" + (session.CaptureType ?? "none") + 
+                     ", Location=" + (session.CaptureLocation ?? "none") + "\n" +
+                     "Last question: " + (lastQuestion ?? "none") + "\n" +
+                     "Knowledge: " + (knowledgeSummary.Length > 300 ? knowledgeSummary[..300] : knowledgeSummary) + "\n" +
+                     "User said: \"" + userMessage + "\"\n\n" +
+                     "Return ONLY valid JSON with keys: recommendedState, slotFills (object), intentConfidence, nextBestAction.";
 
-User just said: "{userMessage}"
+        // TODO: Replace with real AiDecisionGenerationService call once you have the bundle logic
+        var decision = new AiDecisionContract 
+        { 
+            RecommendedState = "Discover", 
+            // Fill other properties as needed from your existing service
+        };
 
-Return ONLY a JSON object with:
-{{
-  "recommendedState": "Discover|CaptureLead|... (one of the 7 states)",
-  "slotFills": {{ "captureGoal": "...", "capturedName": "..." }},
-  "intentConfidence": 0.0-1.0,
-  "toneMatch": "warm/professional",
-  "nextBestAction": "askName|askContactMethod|generateLead|..."
-}}
-""";
-
-        var aiResult = await _aiDecisionService.GenerateAsync(/* bundle from prompt */ , ct);
-        return new EngageConversationContext(session, recentMessages, userMessage, aiResult, lastQuestion, knowledgeSummary);
+        return new EngageConversationContext(session, recentMessages, userMessage, decision, lastQuestion, knowledgeSummary);
     }
 
-    private static string BuildDistilledHistory(...) { /* existing distilled logic */ }
+    private static string BuildDistilledHistory(IReadOnlyCollection<EngageChatMessage> messages, string currentMessage)
+    {
+        return string.Join("\n", messages.TakeLast(12)
+            .Select(m => $"{m.Role}: {m.Content.Trim()}"));
+    }
+}
+
+public sealed class EngageConversationContext
+{
+    public EngageChatSession Session { get; }
+    public IReadOnlyCollection<EngageChatMessage> RecentMessages { get; }
+    public string UserMessage { get; }
+    public AiDecisionContract AiDecision { get; }
+    public string? LastAssistantQuestion { get; }
+    public string KnowledgeSummary { get; }
+    public string RecommendedState => AiDecision?.RecommendedState ?? "Discover";
+
+    public EngageConversationContext(
+        EngageChatSession session,
+        IReadOnlyCollection<EngageChatMessage> recentMessages,
+        string userMessage,
+        AiDecisionContract aiDecision,
+        string? lastQuestion,
+        string knowledgeSummary)
+    {
+        Session = session;
+        RecentMessages = recentMessages;
+        UserMessage = userMessage;
+        AiDecision = aiDecision;
+        LastAssistantQuestion = lastQuestion;
+        KnowledgeSummary = knowledgeSummary;
+    }
 }

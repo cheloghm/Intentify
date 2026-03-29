@@ -7,293 +7,81 @@ public sealed class EngageInputInterpreter
     public string NormalizeUserMessage(string message)
     {
         if (string.IsNullOrWhiteSpace(message))
-        {
             return string.Empty;
-        }
 
         var collapsed = Regex.Replace(message.Trim().ToLowerInvariant(), "[^a-z0-9 ]", " ");
         var normalized = Regex.Replace(collapsed, "\\s+", " ").Trim();
 
         return normalized
-            .Replace("contct", "contact", StringComparison.Ordinal)
-            .Replace("cntact", "contact", StringComparison.Ordinal)
-            .Replace("dtails", "details", StringComparison.Ordinal)
-            .Replace("detals", "details", StringComparison.Ordinal)
-            .Replace("servces", "services", StringComparison.Ordinal)
-            .Replace("webstie", "website", StringComparison.Ordinal)
-            .Replace("websiet", "website", StringComparison.Ordinal)
-            .Replace("yur", "your", StringComparison.Ordinal)
-            .Replace("recomend", "recommend", StringComparison.Ordinal)
-            .Replace("orgnization", "organization", StringComparison.Ordinal)
-            .Replace("organisation", "organization", StringComparison.Ordinal)
-            .Replace("adress", "address", StringComparison.Ordinal)
-            .Replace("locaton", "location", StringComparison.Ordinal);
-    }
-
-    public bool IsLikelyGreetingTypo(string normalizedMessage)
-    {
-        if (string.IsNullOrWhiteSpace(normalizedMessage))
-        {
-            return false;
-        }
-
-        return EngageGreetingPhraseBank.GreetingTypos.Contains(normalizedMessage, StringComparer.Ordinal);
-    }
-
-    public bool ContainsSupportProblemSignal(string normalizedMessage)
-    {
-        if (string.IsNullOrWhiteSpace(normalizedMessage))
-        {
-            return false;
-        }
-
-        if (EngageSupportProblemSignalBank.ProblemPhrases.Any(phrase => normalizedMessage.Contains(phrase, StringComparison.Ordinal)))
-        {
-            return true;
-        }
-
-        var hasProblemTerm = EngageSupportProblemSignalBank.ProblemTerms.Any(term => normalizedMessage.Contains(term, StringComparison.Ordinal));
-        if (!hasProblemTerm)
-        {
-            return false;
-        }
-
-        return EngageSupportProblemSignalBank.SurfaceTerms.Any(term => normalizedMessage.Contains(term, StringComparison.Ordinal));
+            .Replace("contct", "contact")
+            .Replace("cntact", "contact")
+            .Replace("yur", "your")
+            .Replace("webstie", "website")
+            .Replace("websiet", "website");
     }
 
     public string? TryExtractEmail(string message)
     {
-        if (string.IsNullOrWhiteSpace(message))
-        {
-            return null;
-        }
-
+        if (string.IsNullOrWhiteSpace(message)) return null;
         var match = Regex.Match(message, @"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", RegexOptions.IgnoreCase);
         return match.Success ? match.Value.Trim() : null;
     }
 
     public string? TryExtractPhone(string message)
     {
-        if (string.IsNullOrWhiteSpace(message))
-        {
-            return null;
-        }
-
+        if (string.IsNullOrWhiteSpace(message)) return null;
         var match = Regex.Match(message, @"(?:\+?\d[\d\-\.\(\)\s]{6,}\d)");
         return match.Success ? match.Value.Trim() : null;
     }
 
     public string? TryExtractName(string message, string? email, string? phone)
     {
-        if (string.IsNullOrWhiteSpace(message))
-        {
-            return null;
-        }
+        if (string.IsNullOrWhiteSpace(message)) return null;
 
-        var withoutEmail = !string.IsNullOrWhiteSpace(email)
-            ? message.Replace(email, string.Empty, StringComparison.OrdinalIgnoreCase)
-            : message;
+        var cleaned = message;
+        if (!string.IsNullOrWhiteSpace(email)) cleaned = cleaned.Replace(email, "");
+        if (!string.IsNullOrWhiteSpace(phone)) cleaned = cleaned.Replace(phone, "");
 
-        var withoutContact = !string.IsNullOrWhiteSpace(phone)
-            ? withoutEmail.Replace(phone, string.Empty, StringComparison.OrdinalIgnoreCase)
-            : withoutEmail;
+        cleaned = cleaned.Trim(' ', ',', '.', ';', ':', '-', '_');
+        if (string.IsNullOrWhiteSpace(cleaned) || cleaned.Length > 50) return null;
 
-        var candidate = withoutContact.Trim(' ', ',', '.', ';', ':', '-', '_');
-        if (string.IsNullOrWhiteSpace(candidate))
-        {
-            return null;
-        }
-
-        // Explicit self-identification first
-        var explicitName = TryExtractExplicitName(candidate);
-        if (!string.IsNullOrWhiteSpace(explicitName))
-        {
-            return explicitName;
-        }
-
-        // Reject obvious location/context replies
-        if (LooksLikeLocationOrContext(candidate))
-        {
-            return null;
-        }
-
-        // Conservative fallback: only short, person-like values
-        if (IsShortPersonLikeName(candidate))
-        {
-            return candidate.Length <= 200 ? candidate : candidate[..200];
-        }
-
-        return null;
+        return cleaned;
     }
 
     public string? TryExtractPreferredContactMethod(string message, string? email, string? phone)
     {
-        if (string.IsNullOrWhiteSpace(message))
-        {
-            return null;
-        }
+        if (!string.IsNullOrWhiteSpace(email)) return "Email";
+        if (!string.IsNullOrWhiteSpace(phone)) return "Phone";
 
-        if (!string.IsNullOrWhiteSpace(email))
-        {
-            return "Email";
-        }
-
-        if (!string.IsNullOrWhiteSpace(phone))
-        {
-            return "Phone";
-        }
-
-        var normalized = $" {message.Trim().ToLowerInvariant()} ";
-
-        var emailSignal = normalized.Contains(" email ", StringComparison.Ordinal)
-            || normalized.Contains(" by email ", StringComparison.Ordinal)
-            || normalized.Contains(" via email ", StringComparison.Ordinal)
-            || normalized.Contains(" reach me by email ", StringComparison.Ordinal);
-
-        var phoneSignal = normalized.Contains(" phone ", StringComparison.Ordinal)
-            || normalized.Contains(" by phone ", StringComparison.Ordinal)
-            || normalized.Contains(" via phone ", StringComparison.Ordinal)
-            || normalized.Contains(" call me ", StringComparison.Ordinal)
-            || normalized.Contains(" text me ", StringComparison.Ordinal)
-            || normalized.Contains(" sms ", StringComparison.Ordinal)
-            || normalized.Contains(" call back ", StringComparison.Ordinal)
-            || normalized.Contains(" callback ", StringComparison.Ordinal);
-
-        if (emailSignal == phoneSignal)
-        {
-            return null;
-        }
-
-        return emailSignal ? "Email" : "Phone";
-    }
-
-    public bool IsLocationLikeText(string text)
-    {
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            return false;
-        }
-
-        var normalized = $" {text.Trim().ToLowerInvariant()} ";
-        return EngageInputExtractionSignalBank.LocationMarkers.Any(marker => normalized.Contains(marker, StringComparison.Ordinal))
-            || normalized.Contains("city", StringComparison.Ordinal)
-            || normalized.Contains("state", StringComparison.Ordinal)
-            || normalized.Contains("country", StringComparison.Ordinal)
-            || normalized.Contains("zip", StringComparison.Ordinal)
-            || normalized.Contains("postal", StringComparison.Ordinal);
-    }
-
-    private string? CleanNameCandidate(string rawCandidate, bool allowContextTail)
-    {
-        if (string.IsNullOrWhiteSpace(rawCandidate))
-        {
-            return null;
-        }
-
-        var candidate = rawCandidate.Trim();
-        if (allowContextTail)
-        {
-            var markerIndex = IndexOfAny(candidate, [",", ";", " in ", " at ", " from ", " near ", " around "]);
-            if (markerIndex > 0)
-            {
-                candidate = candidate[..markerIndex].Trim();
-            }
-        }
-
-        candidate = candidate.Trim(' ', ',', '.', ';', ':', '-', '_');
-        if (string.IsNullOrWhiteSpace(candidate))
-        {
-            return null;
-        }
-
-        if (candidate.Contains('@', StringComparison.Ordinal) || candidate.Any(char.IsDigit))
-        {
-            return null;
-        }
-
-        if (candidate.Contains(',', StringComparison.Ordinal) || IsLocationLikeText(candidate))
-        {
-            return null;
-        }
-
-        var lowered = $" {candidate.ToLowerInvariant()} ";
-        if (EngageInputExtractionSignalBank.NonNameContextTerms.Any(term => lowered.Contains($" {term} ", StringComparison.Ordinal)))
-        {
-            return null;
-        }
-
-        var words = candidate.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        if (words.Length == 0 || words.Length > 3)
-        {
-            return null;
-        }
-
-        if (candidate.Length > 40)
-        {
-            return null;
-        }
-
-        return candidate.Length <= 200 ? candidate : candidate[..200];
-    }
-
-    private string? TryExtractExplicitName(string candidate)
-    {
-        if (string.IsNullOrWhiteSpace(candidate))
-        {
-            return null;
-        }
-
-        var normalized = candidate.Trim();
-
-        foreach (var prefix in EngageInputExtractionSignalBank.ExplicitNamePrefixes)
-        {
-            if (normalized.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-            {
-                var remainder = normalized[prefix.Length..].Trim(' ', ',', '.', ';', ':', '-', '_');
-                return CleanNameCandidate(remainder, allowContextTail: true);
-            }
-        }
+        var normalized = " " + NormalizeUserMessage(message) + " ";
+        if (normalized.Contains(" email ") || normalized.Contains(" by email ")) return "Email";
+        if (normalized.Contains(" phone ") || normalized.Contains(" by phone ") || normalized.Contains(" call me ")) return "Phone";
 
         return null;
     }
 
-    private bool LooksLikeLocationOrContext(string candidate)
+    // Context-aware short reply helper
+    public bool TryExtractShortReplySlot(string message, string? lastQuestion, out string slotType, out string value)
     {
-        if (string.IsNullOrWhiteSpace(candidate))
+        slotType = "";
+        value = "";
+
+        if (string.IsNullOrWhiteSpace(message)) return false;
+
+        if (lastQuestion != null && lastQuestion.Contains("name", StringComparison.OrdinalIgnoreCase))
         {
-            return true;
+            slotType = "capturedName";
+            value = TryExtractName(message, null, null) ?? "";
+            return !string.IsNullOrWhiteSpace(value);
         }
 
-        if (IsLocationLikeText(candidate))
+        if (lastQuestion != null && (lastQuestion.Contains("email or phone", StringComparison.OrdinalIgnoreCase) || lastQuestion.Contains("reach you", StringComparison.OrdinalIgnoreCase)))
         {
-            return true;
-        }
-
-        if (candidate.Contains(',', StringComparison.Ordinal))
-        {
-            return true;
-        }
-
-        var lowered = $" {candidate.Trim().ToLowerInvariant()} ";
-        if (EngageInputExtractionSignalBank.NonNameContextTerms.Any(term => lowered.Contains($" {term} ", StringComparison.Ordinal)))
-        {
-            return true;
+            slotType = "capturedPreferredContactMethod";
+            value = TryExtractPreferredContactMethod(message, null, null) ?? "";
+            return !string.IsNullOrWhiteSpace(value);
         }
 
         return false;
-    }
-
-    private bool IsShortPersonLikeName(string candidate)
-    {
-        return !string.IsNullOrWhiteSpace(CleanNameCandidate(candidate, allowContextTail: false));
-    }
-
-    private static int IndexOfAny(string input, IReadOnlyCollection<string> markers)
-    {
-        var positions = markers
-            .Select(marker => input.IndexOf(marker, StringComparison.OrdinalIgnoreCase))
-            .Where(index => index >= 0)
-            .ToArray();
-        return positions.Length == 0 ? -1 : positions.Min();
     }
 }

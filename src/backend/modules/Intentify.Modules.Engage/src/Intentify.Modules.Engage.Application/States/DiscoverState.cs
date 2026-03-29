@@ -1,3 +1,6 @@
+using Intentify.Modules.Engage.Domain;
+using Intentify.Shared.Validation;
+
 public sealed class DiscoverState : IEngageState
 {
     public string StateName => "Discover";

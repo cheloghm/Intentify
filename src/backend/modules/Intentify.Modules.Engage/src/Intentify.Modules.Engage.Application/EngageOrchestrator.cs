@@ -5,6 +5,7 @@ using Intentify.Modules.Sites.Application;
 using Intentify.Modules.Tickets.Application;
 using Intentify.Shared.AI;
 using Microsoft.Extensions.Logging;
+using Intentify.Shared.Validation;
 
 namespace Intentify.Modules.Engage.Application;
 
@@ -76,11 +77,32 @@ public sealed class EngageOrchestrator
         return result;
     }
 
-    private async Task<EngageChatSession> ResolveOrCreateSessionAsync(Site site, EngageBot bot, ChatSendCommand command, CancellationToken ct)
+    private async Task<EngageChatSession> ResolveOrCreateSessionAsync(
+    Site site, EngageBot bot, ChatSendCommand command, CancellationToken ct)
     {
-        // (existing ResolveSessionAsync logic moved here - unchanged)
-        // ... (kept identical to previous implementation for zero breakage)
-        return new EngageChatSession { /* populated */ };
+        var now = DateTime.UtcNow;
+
+        if (command.SessionId.HasValue)
+        {
+            var existing = await _sessionRepository.GetByIdAsync(site.TenantId, site.Id, command.SessionId.Value, ct);
+            if (existing != null && (now - existing.UpdatedAtUtc) <= TimeSpan.FromMinutes(30))
+                return existing;
+        }
+
+        var newSession = new EngageChatSession
+        {
+            TenantId = site.TenantId,
+            SiteId = site.Id,
+            BotId = bot.BotId,
+            WidgetKey = command.WidgetKey,
+            CollectorSessionId = command.CollectorSessionId,
+            CreatedAtUtc = now,
+            UpdatedAtUtc = now,
+            ConversationState = "Greeting"
+        };
+
+        await _sessionRepository.InsertAsync(newSession, ct);
+        return newSession;
     }
 
     private async Task<string> GetKnowledgeSummaryAsync(Site site, EngageBot bot, string message, CancellationToken ct)

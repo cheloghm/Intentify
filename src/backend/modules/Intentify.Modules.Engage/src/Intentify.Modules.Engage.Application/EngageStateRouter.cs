@@ -1,3 +1,6 @@
+using Intentify.Modules.Engage.Domain;
+using Intentify.Shared.Validation;   // for OperationResult<T>
+
 public sealed class EngageStateRouter
 {
     private readonly Dictionary<string, IEngageState> _states;
