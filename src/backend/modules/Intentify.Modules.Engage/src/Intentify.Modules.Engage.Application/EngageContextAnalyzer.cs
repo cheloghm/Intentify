@@ -1,4 +1,6 @@
 using Intentify.Modules.Engage.Domain;
+using Intentify.Shared.Validation;   // for OperationResult<T> and ChatSendResult
+using Intentify.Modules.Sites.Application; // for Site in Orchestrator
 using Intentify.Shared.AI;
 using Microsoft.Extensions.Logging;
 

@@ -24,10 +24,13 @@ public sealed class EngageModule : IAppModule
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configuration);
 
+        // Infrastructure repositories
         services.AddSingleton<IEngageChatSessionRepository, EngageChatSessionRepository>();
         services.AddSingleton<IEngageBotRepository, EngageBotRepository>();
         services.AddSingleton<IEngageChatMessageRepository, EngageChatMessageRepository>();
         services.AddSingleton<IEngageHandoffTicketRepository, EngageHandoffTicketRepository>();
+
+        // AI configuration
         var aiOptions = new AiOptions
         {
             ApiBaseUrl = configuration["Intentify:AI:ApiBaseUrl"],
@@ -38,6 +41,7 @@ public sealed class EngageModule : IAppModule
             MaxPromptChars = configuration.GetValue<int?>("Intentify:AI:MaxPromptChars") ?? 0
         };
         services.TryAddSingleton(aiOptions);
+
         services.AddHttpClient(HttpChatCompletionClient.ClientName, (serviceProvider, client) =>
         {
             var options = serviceProvider.GetRequiredService<AiOptions>();
@@ -48,8 +52,9 @@ public sealed class EngageModule : IAppModule
                 client.BaseAddress = apiBaseUri;
             }
         });
+
         services.TryAddSingleton<IChatCompletionClient>(serviceProvider =>
-{
+        {
             var options = serviceProvider.GetRequiredService<AiOptions>();
 
             if (!string.IsNullOrWhiteSpace(options.ApiBaseUrl) && !string.IsNullOrWhiteSpace(options.ApiKey))
@@ -61,34 +66,36 @@ public sealed class EngageModule : IAppModule
 
             return new NullChatCompletionClient(options);
         });
-        services.AddSingleton<WidgetBootstrapHandler>();
-        services.AddSingleton(serviceProvider =>
-        {
-            var sessionTimeoutMinutes = configuration.GetValue<int?>("Intentify:Engage:SessionTimeoutMinutes") ?? 30;
-            return new ChatSendHandler(
-                serviceProvider.GetRequiredService<ISiteRepository>(),
-                serviceProvider.GetRequiredService<IEngageChatSessionRepository>(),
-                serviceProvider.GetRequiredService<IEngageBotRepository>(),
-                serviceProvider.GetRequiredService<IEngageChatMessageRepository>(),
-                serviceProvider.GetRequiredService<IEngageHandoffTicketRepository>(),
-                serviceProvider.GetRequiredService<CreateTicketHandler>(),
-                serviceProvider.GetRequiredService<ILeadVisitorLinker>(),
-                serviceProvider.GetRequiredService<UpsertLeadFromPromoEntryHandler>(),
-                serviceProvider.GetRequiredService<RetrieveTopChunksHandler>(),
-                serviceProvider.GetRequiredService<VisitorContextBundleHandler>(),
-                serviceProvider.GetRequiredService<TenantVocabularyResolver>(),
-                serviceProvider.GetRequiredService<EngageAiIntentInterpreter>(),
-                serviceProvider.GetRequiredService<AiDecisionGenerationService>(),
-                serviceProvider.GetRequiredService<IChatCompletionClient>(),
-                sessionTimeoutMinutes,
-                serviceProvider.GetRequiredService<Microsoft.Extensions.Logging.ILogger<ChatSendHandler>>());
 
-        });
+        // NEW Engage Orchestrator Stack
+        services.AddScoped<EngageConversationPolicy>();
+        services.AddScoped<EngageInputInterpreter>();
+        services.AddScoped<ResponseShaper>();
+        services.AddScoped<EngageContextAnalyzer>();
+        services.AddScoped<EngageStateRouter>();
+
+        // Register all concrete state handlers
+        services.AddScoped<IEngageState, GreetingState>();
+        services.AddScoped<IEngageState, DiscoverState>();
+        services.AddScoped<IEngageState, CaptureLeadState>();
+        services.AddScoped<IEngageState, CaptureSupportState>();
+        services.AddScoped<IEngageState, InformState>();
+        services.AddScoped<IEngageState, ClarifyState>();
+        services.AddScoped<IEngageState, ConfirmHandoffState>();
+
+        services.AddScoped<EngageOrchestrator>();
+
+        // Thin handler (the only one exposed to endpoints)
+        services.AddScoped<ChatSendHandler>();
+
+        // Existing handlers and services you still need
+        services.AddSingleton<WidgetBootstrapHandler>();
         services.AddSingleton<GetEngageBotHandler>();
         services.AddSingleton<UpdateEngageBotHandler>();
         services.AddSingleton<ListConversationsHandler>();
         services.AddSingleton<GetOpportunityAnalyticsHandler>();
         services.AddSingleton<GetConversationMessagesHandler>();
+
         services.AddSingleton(serviceProvider =>
         {
             var sessionTimeoutMinutes = configuration.GetValue<int?>("Intentify:Engage:SessionTimeoutMinutes") ?? 30;
@@ -99,11 +106,12 @@ public sealed class EngageModule : IAppModule
                 serviceProvider.GetRequiredService<IEngageChatMessageRepository>(),
                 sessionTimeoutMinutes);
         });
+
         services.AddSingleton<VisitorContextBundleHandler>();
         services.AddSingleton<TenantVocabularyResolver>();
-        services.AddSingleton<EngageAiIntentInterpreter>();
         services.AddSingleton<AiDecisionGenerationService>();
         services.AddSingleton<UpsertLeadFromPromoEntryHandler>();
+        services.AddSingleton<CreateTicketHandler>(); // assuming this exists in Tickets.Application
     }
 
     public void MapEndpoints(IEndpointRouteBuilder endpoints)
