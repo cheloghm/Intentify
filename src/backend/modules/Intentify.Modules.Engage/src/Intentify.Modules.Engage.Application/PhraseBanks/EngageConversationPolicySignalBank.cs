@@ -23,9 +23,4 @@ internal static class EngageConversationPolicySignalBank
     {
         return terms.Any(term => message.Contains(term, StringComparison.Ordinal));
     }
-
-    internal static bool IsProjectIntentContext(string context)
-    {
-        return ContainsAny(context, ProjectIntentContextTerms);
-    }
 }

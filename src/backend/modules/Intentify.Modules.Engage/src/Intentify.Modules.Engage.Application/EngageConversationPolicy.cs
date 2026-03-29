@@ -380,6 +380,13 @@ public sealed class EngageConversationPolicy
     private static bool HasProjectIntentContext(EngageChatSession session)
     {
         var context = $"{session.CaptureGoal} {session.CaptureType} {session.CaptureContext}".ToLowerInvariant();
-        return EngageConversationPolicySignalBank.IsProjectIntentContext(context);
+        return context.Contains("website", StringComparison.Ordinal)
+            || context.Contains("site", StringComparison.Ordinal)
+            || context.Contains("seo", StringComparison.Ordinal)
+            || context.Contains("quote", StringComparison.Ordinal)
+            || context.Contains("project", StringComparison.Ordinal)
+            || context.Contains("redesign", StringComparison.Ordinal)
+            || context.Contains("build", StringComparison.Ordinal)
+            || context.Contains("booking", StringComparison.Ordinal);
     }
 }
