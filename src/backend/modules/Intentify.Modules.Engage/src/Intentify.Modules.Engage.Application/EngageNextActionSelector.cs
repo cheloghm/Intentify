@@ -14,6 +14,7 @@ public sealed class EngageNextActionSelector
     public EngageNextActionDecision Select(EngageConversationContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
+
         var memory = EngageSessionMemorySnapshot.FromContext(context, _policy);
 
         if (_policy.IsExplicitEscalationRequest(context.UserMessage) || _policy.NeedsHumanHelp(context.UserMessage))
@@ -63,11 +64,17 @@ public sealed class EngageNextActionSelector
     private bool ShouldCapture(EngageConversationContext context, EngageSessionMemorySnapshot memory)
     {
         if (context.Analysis.AiSuggestedCapture)
+        if (string.Equals(context.Session.ConversationState, "CaptureLead", StringComparison.Ordinal))
         {
             return true;
         }
 
         if (memory.LeadReady)
+        {
+            return true;
+        }
+
+        if (context.Analysis.AiSuggestedCapture)
         {
             return true;
         }
