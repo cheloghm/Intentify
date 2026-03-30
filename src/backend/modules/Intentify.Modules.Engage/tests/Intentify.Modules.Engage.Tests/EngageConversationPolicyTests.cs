@@ -29,7 +29,7 @@ public sealed class EngageConversationPolicyTests
 
         var question = Policy.BuildNextDiscoveryQuestion(session);
 
-        Assert.Equal("Any key constraints like budget, timeline, or scheduling requirements?", question);
+        Assert.Equal("Any key constraints like budget or timeline?", question);
     }
 
     [Fact]
@@ -80,14 +80,32 @@ public sealed class EngageConversationPolicyTests
         Assert.Equal(string.Empty, response);
     }
 
-    [Fact]
-    public void BuildSoftFallbackResponse_ProfessionalTone_UsesSofterTransition()
+    [Theory]
+    [InlineData("What location should we plan for?", "dublin", "dublin")]
+    [InlineData("Any key constraints like budget or timeline?", "5k", "5k")]
+    [InlineData("Any key constraints like budget or timeline?", "next month", "next month")]
+    public void TryApplyStageContinuation_ShortReply_UpdatesExpectedSlot(string lastQuestion, string reply, string expected)
     {
-        var response = Policy.BuildSoftFallbackResponse(
-            new EngageBot { Tone = "professional" },
-            "I can help with that — what would you like to sort out first?");
+        var session = CreateSession(captureGoal: "new site", captureType: "retail");
 
-        Assert.Equal("Happy to help — which part should we focus on first?", response);
+        var changed = Policy.TryApplyStageContinuation(session, reply, lastQuestion);
+
+        Assert.True(changed);
+        if (lastQuestion.Contains("location", StringComparison.OrdinalIgnoreCase))
+        {
+            Assert.Equal(expected, session.CaptureLocation);
+        }
+        else
+        {
+            Assert.Equal(expected, session.CaptureConstraints);
+        }
+    }
+
+    [Fact]
+    public void IsContextRecoverySignal_RecognizesAlreadyToldYou()
+    {
+        var signal = Policy.IsContextRecoverySignal("I already told you that.");
+        Assert.True(signal);
     }
 
     private static EngageChatSession CreateSession(
