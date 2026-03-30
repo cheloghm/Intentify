@@ -70,6 +70,44 @@ public sealed class EngageNextActionSelectorTests
         Assert.Equal("Discover", decision.TargetState);
     }
 
+    [Fact]
+    public void Select_ExplicitSupportEscalation_HasHighestPrecedence()
+    {
+        var context = CreateContext(
+            session: new EngageChatSession { ConversationState = "CaptureLead", PendingCaptureMode = "Commercial" },
+            recentMessages:
+            [
+                new EngageChatMessage { Role = "assistant", Content = "What is your budget?", CreatedAtUtc = DateTime.UtcNow.AddMinutes(-1) },
+                new EngageChatMessage { Role = "user", Content = "I need to speak to a human agent right now", CreatedAtUtc = DateTime.UtcNow }
+            ],
+            analysis: new EngageAnalysisSummary("CaptureLead", false, true, 0.9m, false),
+            userMessage: "I need to speak to a human agent right now");
+
+        var decision = Selector.Select(context);
+
+        Assert.Equal(EngageNextAction.EscalateSupport, decision.Action);
+        Assert.Equal("Discover", decision.TargetState);
+    }
+
+    [Fact]
+    public void Select_CaptureContinuation_BeatsFactualAnswer()
+    {
+        var context = CreateContext(
+            session: new EngageChatSession { ConversationState = "CaptureLead", PendingCaptureMode = "Commercial" },
+            recentMessages:
+            [
+                new EngageChatMessage { Role = "assistant", Content = "What budget should we plan for?", CreatedAtUtc = DateTime.UtcNow.AddMinutes(-1) },
+                new EngageChatMessage { Role = "user", Content = "5k", CreatedAtUtc = DateTime.UtcNow }
+            ],
+            analysis: new EngageAnalysisSummary("CaptureLead", true, false, 0.85m, false),
+            userMessage: "5k");
+
+        var decision = Selector.Select(context);
+
+        Assert.Equal(EngageNextAction.AskCaptureQuestion, decision.Action);
+        Assert.Equal("CaptureLead", decision.TargetState);
+    }
+
     private static EngageConversationContext CreateContext(
         EngageChatSession session,
         IReadOnlyCollection<EngageChatMessage> recentMessages,

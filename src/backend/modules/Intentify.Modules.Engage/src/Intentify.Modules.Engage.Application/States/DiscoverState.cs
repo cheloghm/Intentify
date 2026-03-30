@@ -18,8 +18,36 @@ public sealed class DiscoverState : IEngageState
 
     public async Task<OperationResult<ChatSendResult>> HandleAsync(EngageConversationContext ctx, CancellationToken ct)
     {
-        // Merge short replies into slots (fixes "Grey", "the website", etc.)
-        _policy.TryMergeShortReplySlots(ctx.Session, ctx.UserMessage, ctx.LastAssistantQuestion);
+        _policy.TryApplyStageContinuation(ctx.Session, ctx.UserMessage, ctx.LastAssistantQuestion);
+
+        var action = ctx.PrimaryActionDecision?.Action ?? EngageNextAction.AskDiscoveryQuestion;
+        var reason = ctx.PrimaryActionDecision?.Reason ?? string.Empty;
+
+        if (action == EngageNextAction.EscalateSupport)
+        {
+            ctx.Session.PendingCaptureMode = "Support";
+            ctx.Session.ConversationState = "Discover";
+            var escalation = _shaper.Shape(
+                "I can get a human teammate to help with this. What is the main issue and how should we contact you?",
+                ctx);
+            return CreateAssistantResponse(ctx.Session, escalation, 0.9m, "SupportEscalation", reason);
+        }
+
+        if (_policy.IsContextRecoverySignal(ctx.UserMessage))
+        {
+            var recovered = _shaper.Shape(_policy.BuildContextRecoveryPrompt(ctx.Session), ctx);
+            ctx.Session.ConversationState = "Discover";
+            return CreateAssistantResponse(ctx.Session, recovered, 0.82m, "ContextRecovery", "AlreadyProvidedContext");
+        }
+
+        if (action == EngageNextAction.AnswerFactual && !string.IsNullOrWhiteSpace(ctx.KnowledgeSummary))
+        {
+            var topAnswer = ctx.KnowledgeSummary.Split('\n', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()
+                ?? "Here’s what I found.";
+            var factual = _shaper.Shape($"{topAnswer} { _policy.BuildNaturalNextQuestion(ctx.Session, ctx) }", ctx);
+            ctx.Session.ConversationState = "Discover";
+            return CreateAssistantResponse(ctx.Session, factual, 0.84m, "FactualAnswer", "KnowledgeBacked");
+        }
 
         var nextQuestion = _policy.BuildNaturalNextQuestion(ctx.Session, ctx);
         var response = _shaper.Shape(nextQuestion, ctx);

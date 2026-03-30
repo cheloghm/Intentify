@@ -100,6 +100,25 @@ public sealed class EngageOrchestrator
         context.SetPrimaryAction(_nextActionSelector.Select(context));
         var result = await _stateRouter.RouteAndHandleAsync(context, cancellationToken);
 
+        if (result.Status == OperationStatus.Success && result.Value is not null)
+        {
+            await _messageRepository.InsertAsync(new EngageChatMessage
+            {
+                SessionId = session.Id,
+                Role = "assistant",
+                Content = result.Value.Response,
+                CreatedAtUtc = DateTime.UtcNow,
+                Confidence = result.Value.Confidence,
+                Citations = result.Value.Sources.Select(item => new EngageCitation
+                {
+                    SourceId = item.SourceId,
+                    ChunkId = item.ChunkId,
+                    ChunkIndex = item.ChunkIndex
+                }).ToArray()
+            }, cancellationToken);
+        }
+
+        session.UpdatedAtUtc = DateTime.UtcNow;
         await _sessionRepository.UpdateStateAsync(session, cancellationToken);
         return result;
     }

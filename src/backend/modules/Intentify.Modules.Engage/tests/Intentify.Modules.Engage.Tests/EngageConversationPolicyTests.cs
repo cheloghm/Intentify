@@ -80,6 +80,34 @@ public sealed class EngageConversationPolicyTests
         Assert.Equal(string.Empty, response);
     }
 
+    [Theory]
+    [InlineData("What location should we plan for?", "dublin", "dublin")]
+    [InlineData("Any key constraints like budget or timeline?", "5k", "5k")]
+    [InlineData("Any key constraints like budget or timeline?", "next month", "next month")]
+    public void TryApplyStageContinuation_ShortReply_UpdatesExpectedSlot(string lastQuestion, string reply, string expected)
+    {
+        var session = CreateSession(captureGoal: "new site", captureType: "retail");
+
+        var changed = Policy.TryApplyStageContinuation(session, reply, lastQuestion);
+
+        Assert.True(changed);
+        if (lastQuestion.Contains("location", StringComparison.OrdinalIgnoreCase))
+        {
+            Assert.Equal(expected, session.CaptureLocation);
+        }
+        else
+        {
+            Assert.Equal(expected, session.CaptureConstraints);
+        }
+    }
+
+    [Fact]
+    public void IsContextRecoverySignal_RecognizesAlreadyToldYou()
+    {
+        var signal = Policy.IsContextRecoverySignal("I already told you that.");
+        Assert.True(signal);
+    }
+
     private static EngageChatSession CreateSession(
         string? captureGoal = null,
         string? captureType = null,

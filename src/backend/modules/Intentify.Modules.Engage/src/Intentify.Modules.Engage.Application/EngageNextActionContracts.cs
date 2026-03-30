@@ -4,6 +4,9 @@ public enum EngageNextAction
 {
     Greeting = 0,
     AskDiscoveryQuestion = 1,
+    AskCaptureQuestion = 2,
+    EscalateSupport = 3,
+    AnswerFactual = 4
     AskCaptureQuestion = 2
 }
 
