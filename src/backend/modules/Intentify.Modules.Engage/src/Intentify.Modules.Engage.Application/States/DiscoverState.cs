@@ -21,13 +21,6 @@ public sealed class DiscoverState : IEngageState
         // Merge short replies into slots (fixes "Grey", "the website", etc.)
         _policy.TryMergeShortReplySlots(ctx.Session, ctx.UserMessage, ctx.LastAssistantQuestion);
 
-        if (_policy.IsCommercialCaptureReady(ctx.Session, false))
-        {
-            // Transition to capture lead state
-            var captureState = new CaptureLeadState(_policy, _shaper); // or inject it
-            return await captureState.HandleAsync(ctx, ct);
-        }
-
         var nextQuestion = _policy.BuildNaturalNextQuestion(ctx.Session, ctx);
         var response = _shaper.Shape(nextQuestion, ctx);
 

@@ -18,6 +18,8 @@ public sealed class EngageConversationPolicy
     public bool IsStrongCommercialIntent(string message) => _commercial.IsStrongCommercialIntent(message);
     public bool IsExplicitCommercialContactRequest(string message) => _commercial.IsExplicitCommercialContactRequest(message);
     public bool IsRecommendationIntent(string normalizedMessage) => _commercial.IsRecommendationIntent(normalizedMessage);
+    public bool TryBuildCommercialIntentContactPrompt(string message, string prefix, out string prompt)
+        => _commercial.TryBuildCommercialIntentContactPrompt(message, prefix, out prompt);
 
     public int ComputeCommercialIntentScore(EngageChatSession session)
     {
