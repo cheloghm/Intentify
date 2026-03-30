@@ -24,13 +24,13 @@ public sealed class EngageModule : IAppModule
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configuration);
 
-        // Infrastructure repositories
+        // Repositories
         services.AddSingleton<IEngageChatSessionRepository, EngageChatSessionRepository>();
         services.AddSingleton<IEngageBotRepository, EngageBotRepository>();
         services.AddSingleton<IEngageChatMessageRepository, EngageChatMessageRepository>();
         services.AddSingleton<IEngageHandoffTicketRepository, EngageHandoffTicketRepository>();
 
-        // AI configuration
+        // AI Configuration
         var aiOptions = new AiOptions
         {
             ApiBaseUrl = configuration["Intentify:AI:ApiBaseUrl"],
@@ -42,39 +42,35 @@ public sealed class EngageModule : IAppModule
         };
         services.TryAddSingleton(aiOptions);
 
-        services.AddHttpClient(HttpChatCompletionClient.ClientName, (serviceProvider, client) =>
+        services.AddHttpClient(HttpChatCompletionClient.ClientName, (sp, client) =>
         {
-            var options = serviceProvider.GetRequiredService<AiOptions>();
+            var options = sp.GetRequiredService<AiOptions>();
             client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds > 0 ? options.TimeoutSeconds : 30);
 
-            if (Uri.TryCreate(options.ApiBaseUrl, UriKind.Absolute, out var apiBaseUri))
-            {
-                client.BaseAddress = apiBaseUri;
-            }
+            if (Uri.TryCreate(options.ApiBaseUrl, UriKind.Absolute, out var uri))
+                client.BaseAddress = uri;
         });
 
-        services.TryAddSingleton<IChatCompletionClient>(serviceProvider =>
+        services.TryAddSingleton<IChatCompletionClient>(sp =>
         {
-            var options = serviceProvider.GetRequiredService<AiOptions>();
-
+            var options = sp.GetRequiredService<AiOptions>();
             if (!string.IsNullOrWhiteSpace(options.ApiBaseUrl) && !string.IsNullOrWhiteSpace(options.ApiKey))
             {
-                var httpClientFactory = serviceProvider.GetRequiredService<IHttpClientFactory>();
-                var httpClient = httpClientFactory.CreateClient(HttpChatCompletionClient.ClientName);
-                return new HttpChatCompletionClient(options, httpClient);
+                var factory = sp.GetRequiredService<IHttpClientFactory>();
+                var client = factory.CreateClient(HttpChatCompletionClient.ClientName);
+                return new HttpChatCompletionClient(options, client);
             }
-
             return new NullChatCompletionClient(options);
         });
 
-        // NEW Engage Orchestrator Stack
+        // === NEW ORCHESTRATOR STACK ===
         services.AddScoped<EngageConversationPolicy>();
         services.AddScoped<EngageInputInterpreter>();
         services.AddScoped<ResponseShaper>();
         services.AddScoped<EngageContextAnalyzer>();
         services.AddScoped<EngageStateRouter>();
 
-        // Register all concrete state handlers
+        // All state handlers
         services.AddScoped<IEngageState, GreetingState>();
         services.AddScoped<IEngageState, DiscoverState>();
         services.AddScoped<IEngageState, CaptureLeadState>();
@@ -85,10 +81,10 @@ public sealed class EngageModule : IAppModule
 
         services.AddScoped<EngageOrchestrator>();
 
-        // Thin handler (the only one exposed to endpoints)
+        // Thin handler used by endpoints
         services.AddScoped<ChatSendHandler>();
 
-        // Existing handlers and services you still need
+        // Keep all your existing handlers
         services.AddSingleton<WidgetBootstrapHandler>();
         services.AddSingleton<GetEngageBotHandler>();
         services.AddSingleton<UpdateEngageBotHandler>();
@@ -111,23 +107,18 @@ public sealed class EngageModule : IAppModule
         services.AddSingleton<TenantVocabularyResolver>();
         services.AddSingleton<AiDecisionGenerationService>();
         services.AddSingleton<UpsertLeadFromPromoEntryHandler>();
-        services.AddSingleton<CreateTicketHandler>(); // assuming this exists in Tickets.Application
+        services.AddSingleton<CreateTicketHandler>();
     }
 
     public void MapEndpoints(IEndpointRouteBuilder endpoints)
     {
-        // Public endpoints (for client websites)
         var publicGroup = endpoints.MapGroup("/engage");
-
         publicGroup.MapGet("/widget.js", EngageEndpoints.WidgetScriptAsync);
         publicGroup.MapGet("/widget/bootstrap", EngageEndpoints.WidgetBootstrapAsync);
         publicGroup.MapPost("/chat/send", EngageEndpoints.ChatSendAsync);
         publicGroup.MapGet("/widget/conversations/{sessionId}/messages", EngageEndpoints.GetWidgetConversationMessagesAsync);
 
-        // Admin endpoints (dashboard / authenticated)
-        var adminGroup = endpoints.MapGroup("/engage")
-            .RequireAuthorization();
-
+        var adminGroup = endpoints.MapGroup("/engage").RequireAuthorization();
         adminGroup.MapGet("/bot", EngageEndpoints.GetBotAsync);
         adminGroup.MapPut("/bot", EngageEndpoints.UpdateBotAsync);
         adminGroup.MapGet("/conversations", EngageEndpoints.ListConversationsAsync);

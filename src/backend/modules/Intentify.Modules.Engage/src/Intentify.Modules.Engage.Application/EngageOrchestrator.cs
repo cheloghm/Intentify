@@ -2,6 +2,7 @@ using Intentify.Modules.Engage.Domain;
 using Intentify.Modules.Knowledge.Application;
 using Intentify.Modules.Leads.Application;
 using Intentify.Modules.Sites.Application;
+using Intentify.Modules.Sites.Domain;
 using Intentify.Modules.Tickets.Application;
 using Intentify.Shared.AI;
 using Microsoft.Extensions.Logging;
@@ -65,11 +66,33 @@ public sealed class EngageOrchestrator
         var recentMessages = await _messageRepository.ListBySessionAsync(session.Id, cancellationToken);
         var knowledgeSummary = await GetKnowledgeSummaryAsync(site, bot, command.Message, cancellationToken);
         var tenantVocab = await _tenantVocabularyResolver.ResolveAsync(site.TenantId, site.Id, bot.BotId, cancellationToken);
-        var visitorBundle = await _visitorContextBundleHandler.HandleAsync(
-            new BuildVisitorContextBundleQuery(site.TenantId, site.Id, null, session.Id, command.Message, 3, 5, 12, 5, 3), cancellationToken);
+
+        // Corrected: Use named parameters to match the constructor exactly
+        var visitorBundleResult = await _visitorContextBundleHandler.HandleAsync(
+            new BuildVisitorContextBundleQuery(
+                TenantId: site.TenantId,
+                SiteId: site.Id,
+                VisitorId: null,
+                SessionId: session.Id,
+                NormalizedUserMessage: command.Message,   // This is the string parameter causing the error
+                KnowledgeTop: 3,
+                TimelineLimit: 5,
+                EngageMessageLimit: 12,
+                TicketsLimit: 5,
+                PromoEntriesLimit: 3),
+            cancellationToken);
+
+        var visitorBundle = visitorBundleResult?.Value;
 
         var context = await _contextAnalyzer.AnalyzeAsync(
-            session, recentMessages, command.Message, knowledgeSummary, tenantVocab, bot, visitorBundle.Value, cancellationToken);
+            session, 
+            recentMessages, 
+            command.Message, 
+            knowledgeSummary, 
+            tenantVocab, 
+            bot, 
+            visitorBundle,                    // Pass the bundle (nullable is fine)
+            cancellationToken);
 
         var result = await _stateRouter.RouteAndHandleAsync(context, cancellationToken);
 
@@ -78,7 +101,7 @@ public sealed class EngageOrchestrator
     }
 
     private async Task<EngageChatSession> ResolveOrCreateSessionAsync(
-    Site site, EngageBot bot, ChatSendCommand command, CancellationToken ct)
+        Site site, EngageBot bot, ChatSendCommand command, CancellationToken ct)
     {
         var now = DateTime.UtcNow;
 

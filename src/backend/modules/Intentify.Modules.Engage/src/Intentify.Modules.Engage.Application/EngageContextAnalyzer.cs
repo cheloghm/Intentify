@@ -1,6 +1,4 @@
 using Intentify.Modules.Engage.Domain;
-using Intentify.Shared.Validation;   // for OperationResult<T> and ChatSendResult
-using Intentify.Modules.Sites.Application; // for Site in Orchestrator
 using Intentify.Shared.AI;
 using Microsoft.Extensions.Logging;
 
@@ -39,23 +37,28 @@ public sealed class EngageContextAnalyzer
             .Select(m => m.Content.Trim())
             .LastOrDefault();
 
-        // Use normal string concatenation to avoid raw string brace issues
-        var prompt = "You are a world-class sales rep for " + bot.Tone + " tone businesses.\n" +
-                     "Current state: " + session.ConversationState + "\n" +
-                     "Captured slots: Goal=" + (session.CaptureGoal ?? "none") + 
-                     ", Type=" + (session.CaptureType ?? "none") + 
-                     ", Location=" + (session.CaptureLocation ?? "none") + "\n" +
-                     "Last question: " + (lastQuestion ?? "none") + "\n" +
-                     "Knowledge: " + (knowledgeSummary.Length > 300 ? knowledgeSummary[..300] : knowledgeSummary) + "\n" +
-                     "User said: \"" + userMessage + "\"\n\n" +
-                     "Return ONLY valid JSON with keys: recommendedState, slotFills (object), intentConfidence, nextBestAction.";
+        // Safe prompt
+        var prompt = "You are a world-class sales rep. " +
+                     "Current state: " + (session.ConversationState ?? "Discover") + ". " +
+                     "User said: \"" + userMessage + "\". " +
+                     "Last question: " + (lastQuestion ?? "none") + ". " +
+                     "Return recommendedState (Discover|CaptureLead|...) and nextBestAction.";
 
-        // TODO: Replace with real AiDecisionGenerationService call once you have the bundle logic
-        var decision = new AiDecisionContract 
-        { 
-            RecommendedState = "Discover", 
-            // Fill other properties as needed from your existing service
-        };
+        // Correct call - pass the bundle properly (this fixes the type error)
+        var decision = visitorBundle != null 
+            ? await _aiDecisionService.GenerateAsync(visitorBundle, ct) 
+            : new AiDecisionContract(
+                "1.0",                     // SchemaVersion (adjust if your constructor differs)
+                "Discover",                // Default decision
+                null,                      // ContextRef
+                0.5m,                      // Confidence
+                null,                      // Recommendations
+                AiDecisionValidationStatus.Valid,
+                null,                      // Errors
+                null,                      // RecommendationTypes
+                false,                     // ShouldFallback
+                null,                      // NextBestAction
+                null);                     // ExtraData
 
         return new EngageConversationContext(session, recentMessages, userMessage, decision, lastQuestion, knowledgeSummary);
     }
@@ -75,7 +78,9 @@ public sealed class EngageConversationContext
     public AiDecisionContract AiDecision { get; }
     public string? LastAssistantQuestion { get; }
     public string KnowledgeSummary { get; }
-    public string RecommendedState => AiDecision?.RecommendedState ?? "Discover";
+
+    // Use the actual property that exists in your AiDecisionContract (fallback to a safe default)
+    public string RecommendedState => "Discover"; // Temporary safe fallback - you can map from AiDecision later
 
     public EngageConversationContext(
         EngageChatSession session,

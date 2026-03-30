@@ -60,7 +60,6 @@ public sealed class EngageInputInterpreter
         return null;
     }
 
-    // Context-aware short reply helper
     public bool TryExtractShortReplySlot(string message, string? lastQuestion, out string slotType, out string value)
     {
         slotType = "";
@@ -83,5 +82,23 @@ public sealed class EngageInputInterpreter
         }
 
         return false;
+    }
+
+    // Added to fix Smalltalk matcher
+    public bool IsLikelyGreetingTypo(string normalizedMessage)
+    {
+        if (string.IsNullOrWhiteSpace(normalizedMessage)) return false;
+        return EngageGreetingPhraseBank.GreetingTypos.Contains(normalizedMessage, StringComparer.Ordinal);
+    }
+
+    // Added to fix Support matcher
+    public bool ContainsSupportProblemSignal(string normalizedMessage)
+    {
+        if (string.IsNullOrWhiteSpace(normalizedMessage)) return false;
+
+        if (EngageSupportProblemSignalBank.ProblemPhrases.Any(p => normalizedMessage.Contains(p, StringComparison.Ordinal)))
+            return true;
+
+        return EngageSupportProblemSignalBank.ProblemTerms.Any(t => normalizedMessage.Contains(t, StringComparison.Ordinal));
     }
 }
