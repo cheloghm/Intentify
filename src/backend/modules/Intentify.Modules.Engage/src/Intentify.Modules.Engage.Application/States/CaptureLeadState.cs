@@ -6,6 +6,7 @@ namespace Intentify.Modules.Engage.Application.States;
 public sealed class CaptureLeadState : IEngageState
 {
     public string StateName => "CaptureLead";
+
     private readonly EngageConversationPolicy _policy;
     private readonly ResponseShaper _shaper;
 
@@ -24,13 +25,32 @@ public sealed class CaptureLeadState : IEngageState
             var recovered = _shaper.Shape(_policy.BuildContextRecoveryPrompt(ctx.Session), ctx);
             ctx.Session.PendingCaptureMode = "Commercial";
             ctx.Session.ConversationState = "CaptureLead";
-            return OperationResult<ChatSendResult>.Success(new ChatSendResult(ctx.Session.Id, recovered, 0.85m, false, Array.Empty<EngageCitationResult>(), "CaptureLead"));
+
+            return Task.FromResult(
+                OperationResult<ChatSendResult>.Success(
+                    new ChatSendResult(
+                        ctx.Session.Id,
+                        recovered,
+                        0.85m,
+                        false,
+                        Array.Empty<EngageCitationResult>(),
+                        "CaptureLead")));
         }
 
         var response = _policy.BuildNaturalNextQuestion(ctx.Session, ctx);
         var shaped = _shaper.Shape(response, ctx);
+
         ctx.Session.PendingCaptureMode = "Commercial";
         ctx.Session.ConversationState = "CaptureLead";
-        return Task.FromResult(OperationResult<ChatSendResult>.Success(new ChatSendResult(ctx.Session.Id, shaped, 0.8m, false, Array.Empty<EngageCitationResult>(), "CaptureLead")));
+
+        return Task.FromResult(
+            OperationResult<ChatSendResult>.Success(
+                new ChatSendResult(
+                    ctx.Session.Id,
+                    shaped,
+                    0.8m,
+                    false,
+                    Array.Empty<EngageCitationResult>(),
+                    "CaptureLead")));
     }
 }
