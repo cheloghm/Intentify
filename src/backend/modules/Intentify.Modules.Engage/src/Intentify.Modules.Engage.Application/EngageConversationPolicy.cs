@@ -18,6 +18,8 @@ public sealed class EngageConversationPolicy
     public bool IsStrongCommercialIntent(string message) => _commercial.IsStrongCommercialIntent(message);
     public bool IsExplicitCommercialContactRequest(string message) => _commercial.IsExplicitCommercialContactRequest(message);
     public bool IsRecommendationIntent(string normalizedMessage) => _commercial.IsRecommendationIntent(normalizedMessage);
+    public bool TryBuildCommercialIntentContactPrompt(string message, string prefix, out string prompt)
+        => _commercial.TryBuildCommercialIntentContactPrompt(message, prefix, out prompt);
 
     public int ComputeCommercialIntentScore(EngageChatSession session)
     {
@@ -66,6 +68,7 @@ public sealed class EngageConversationPolicy
     }
 
     public bool NeedsHumanHelp(string message) => _support.NeedsHumanHelp(message);
+    public bool IsExplicitEscalationRequest(string message) => _support.IsExplicitEscalationRequest(message);
 
     // Fixed & improved short-reply merging (no syntax errors)
     public bool TryMergeShortReplySlots(EngageChatSession session, string message, string? lastAssistantQuestion)
@@ -73,11 +76,29 @@ public sealed class EngageConversationPolicy
         if (string.IsNullOrWhiteSpace(message)) return false;
 
         var normalized = _interpreter.NormalizeUserMessage(message);
+        var email = _interpreter.TryExtractEmail(message);
+        var phone = _interpreter.TryExtractPhone(message);
+
+        if (!string.IsNullOrWhiteSpace(email))
+        {
+            session.CapturedEmail = email;
+        }
+
+        if (!string.IsNullOrWhiteSpace(phone))
+        {
+            session.CapturedPhone = phone;
+        }
+
+        var contactMethod = _interpreter.TryExtractPreferredContactMethod(message, email, phone);
+        if (!string.IsNullOrWhiteSpace(contactMethod))
+        {
+            session.CapturedPreferredContactMethod = contactMethod;
+        }
 
         // Name
         if (lastAssistantQuestion != null && lastAssistantQuestion.Contains("name", StringComparison.OrdinalIgnoreCase))
         {
-            var name = _interpreter.TryExtractName(message, null, null);
+            var name = _interpreter.TryExtractName(message, email, phone);
             if (!string.IsNullOrWhiteSpace(name))
             {
                 session.CapturedName = name;
@@ -88,7 +109,7 @@ public sealed class EngageConversationPolicy
         // Preferred contact method
         if (lastAssistantQuestion != null && (lastAssistantQuestion.Contains("email or phone", StringComparison.OrdinalIgnoreCase) || lastAssistantQuestion.Contains("reach you", StringComparison.OrdinalIgnoreCase)))
         {
-            var method = _interpreter.TryExtractPreferredContactMethod(message, null, null);
+            var method = _interpreter.TryExtractPreferredContactMethod(message, email, phone);
             if (!string.IsNullOrWhiteSpace(method))
             {
                 session.CapturedPreferredContactMethod = method;
@@ -105,6 +126,131 @@ public sealed class EngageConversationPolicy
 
         session.CaptureContext ??= normalized.Length > 200 ? normalized[..200] : normalized;
         return true;
+    }
+
+    public bool TryApplyStageContinuation(EngageChatSession session, string message, string? lastAssistantQuestion)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return false;
+        }
+
+        var normalized = _interpreter.NormalizeUserMessage(message);
+        var trimmed = message.Trim();
+        var updated = TryMergeShortReplySlots(session, message, lastAssistantQuestion);
+
+        if (!string.IsNullOrWhiteSpace(lastAssistantQuestion))
+        {
+            if (lastAssistantQuestion.Contains("trying to achieve", StringComparison.OrdinalIgnoreCase)
+                && string.IsNullOrWhiteSpace(session.CaptureGoal))
+            {
+                session.CaptureGoal = trimmed;
+                updated = true;
+            }
+
+            if ((lastAssistantQuestion.Contains("kind of business", StringComparison.OrdinalIgnoreCase)
+                 || lastAssistantQuestion.Contains("use case", StringComparison.OrdinalIgnoreCase))
+                && string.IsNullOrWhiteSpace(session.CaptureType))
+            {
+                session.CaptureType = trimmed;
+                updated = true;
+            }
+
+            if (lastAssistantQuestion.Contains("location", StringComparison.OrdinalIgnoreCase)
+                && string.IsNullOrWhiteSpace(session.CaptureLocation))
+            {
+                session.CaptureLocation = trimmed;
+                updated = true;
+            }
+
+            if ((lastAssistantQuestion.Contains("constraint", StringComparison.OrdinalIgnoreCase)
+                 || lastAssistantQuestion.Contains("budget", StringComparison.OrdinalIgnoreCase)
+                 || lastAssistantQuestion.Contains("timeline", StringComparison.OrdinalIgnoreCase))
+                && string.IsNullOrWhiteSpace(session.CaptureConstraints))
+            {
+                session.CaptureConstraints = trimmed;
+                updated = true;
+            }
+        }
+
+        if (IsContextRecoverySignal(message))
+        {
+            return true;
+        }
+
+        if (normalized.Contains("just browsing", StringComparison.Ordinal)
+            || normalized.Contains("maybe later", StringComparison.Ordinal)
+            || normalized.Contains("not ready", StringComparison.Ordinal))
+        {
+            session.CaptureContext = string.IsNullOrWhiteSpace(session.CaptureContext)
+                ? $"hesitation: {trimmed}"
+                : $"{session.CaptureContext}; hesitation: {trimmed}";
+            updated = true;
+        }
+
+        return updated;
+    }
+
+    public bool IsContextRecoverySignal(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return false;
+        }
+
+        var normalized = _interpreter.NormalizeUserMessage(message);
+        return EngageContextRecoveryPhraseBank.AlreadyToldYouPhrases.Any(item =>
+            normalized.Contains(item, StringComparison.Ordinal));
+    }
+
+    public bool IsNarrowObjectionSignal(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return false;
+        }
+
+        var normalized = _interpreter.NormalizeUserMessage(message);
+        return normalized.Contains("too expensive", StringComparison.Ordinal)
+            || normalized.Contains("not interested", StringComparison.Ordinal)
+            || normalized.Contains("not now", StringComparison.Ordinal)
+            || normalized.Contains("maybe later", StringComparison.Ordinal)
+            || normalized.Contains("just browsing", StringComparison.Ordinal);
+    }
+
+    public string BuildNarrowObjectionFollowUp(EngageChatSession session)
+    {
+        if (string.IsNullOrWhiteSpace(session.CaptureGoal))
+        {
+            return "No pressure. What outcome would make this worth revisiting for you?";
+        }
+
+        return "Totally fair. What would need to be true for this to feel worth doing now?";
+    }
+
+    public string BuildContextRecoveryPrompt(EngageChatSession session)
+    {
+        if (string.IsNullOrWhiteSpace(session.CaptureGoal))
+        {
+            return "Got it — I have your context so far. What are you trying to achieve first?";
+        }
+
+        if (string.IsNullOrWhiteSpace(session.CaptureType))
+        {
+            return $"You already shared your goal ({session.CaptureGoal}). What kind of business or use case is this for?";
+        }
+
+        if (string.IsNullOrWhiteSpace(session.CaptureLocation))
+        {
+            return $"I have your goal and use case noted. What location should we plan for?";
+        }
+
+        if (string.IsNullOrWhiteSpace(session.CaptureConstraints))
+        {
+            return "Thanks — I have the basics. Any key constraints like budget or timeline?";
+        }
+
+        return "Thanks — I have your details so far. Please share your first name and preferred contact method.";
     }
 
     public string BuildNaturalNextQuestion(EngageChatSession session, EngageConversationContext ctx)

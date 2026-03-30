@@ -83,6 +83,8 @@ public sealed record ConversationMessageResponse(
     IReadOnlyCollection<EngageCitationResponse> Citations);
 
 
+// TODO(tracking): The first field name is SiteId but endpoints currently populate it with BotId (N format).
+// Keep as-is for compatibility in this phase; align DTO naming/serialization in a dedicated cleanup.
 public sealed record EngageBotResponse(string SiteId, string Name, string? PrimaryColor = null, bool? LauncherVisible = null, string? Tone = null, string? Verbosity = null, string? FallbackStyle = null);
 
 public sealed record UpdateEngageBotRequest(string Name, string? PrimaryColor = null, bool? LauncherVisible = null, string? Tone = null, string? Verbosity = null, string? FallbackStyle = null);

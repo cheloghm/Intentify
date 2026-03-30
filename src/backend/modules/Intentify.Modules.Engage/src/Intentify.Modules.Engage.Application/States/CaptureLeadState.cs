@@ -15,18 +15,22 @@ public sealed class CaptureLeadState : IEngageState
         _shaper = shaper;
     }
 
-    public async Task<OperationResult<ChatSendResult>> HandleAsync(EngageConversationContext ctx, CancellationToken ct)
+    public Task<OperationResult<ChatSendResult>> HandleAsync(EngageConversationContext ctx, CancellationToken ct)
     {
+        _policy.TryApplyStageContinuation(ctx.Session, ctx.UserMessage, ctx.LastAssistantQuestion);
+
+        if (_policy.IsContextRecoverySignal(ctx.UserMessage))
+        {
+            var recovered = _shaper.Shape(_policy.BuildContextRecoveryPrompt(ctx.Session), ctx);
+            ctx.Session.PendingCaptureMode = "Commercial";
+            ctx.Session.ConversationState = "CaptureLead";
+            return Task.FromResult(OperationResult<ChatSendResult>.Success(new ChatSendResult(ctx.Session.Id, recovered, 0.85m, false, Array.Empty<EngageCitationResult>(), "CaptureLead")));
+        }
+
         var response = _policy.BuildNaturalNextQuestion(ctx.Session, ctx);
         var shaped = _shaper.Shape(response, ctx);
+        ctx.Session.PendingCaptureMode = "Commercial";
         ctx.Session.ConversationState = "CaptureLead";
-        return OperationResult<ChatSendResult>.Success(new ChatSendResult(ctx.Session.Id, shaped, 0.8m, false, Array.Empty<EngageCitationResult>(), "CaptureLead"));
-    }
-
-    // Helper for transition from Discover
-    public static async Task<OperationResult<ChatSendResult>> TransitionToCapture(EngageConversationContext ctx, CancellationToken ct)
-    {
-        var state = new CaptureLeadState(null!, null!); // inject properly in real code
-        return await state.HandleAsync(ctx, ct);
+        return Task.FromResult(OperationResult<ChatSendResult>.Success(new ChatSendResult(ctx.Session.Id, shaped, 0.8m, false, Array.Empty<EngageCitationResult>(), "CaptureLead")));
     }
 }

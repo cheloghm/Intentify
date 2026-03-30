@@ -16,7 +16,14 @@ public sealed class ResponseShaper
         cleaned = Regex.Replace(cleaned, @"(If you want|If you'd like|What would you like to do next\?|Thanks for confirming)", "", RegexOptions.IgnoreCase);
         cleaned = Regex.Replace(cleaned, @"\s{2,}", " ").Trim();
 
-        // Enforce at most one question and natural flow
+        // Enforce a single, executable prompt contract: one short response with at most one question.
+        var questionCount = cleaned.Count(c => c == '?');
+        if (questionCount > 1)
+        {
+            var firstQuestion = cleaned.IndexOf('?');
+            cleaned = cleaned[..(firstQuestion + 1)];
+        }
+
         if (!cleaned.EndsWith("?") && !cleaned.Contains("?"))
         {
             var fallback = ctx.LastAssistantQuestion ?? "How can I help you move forward?";
