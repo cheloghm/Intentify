@@ -14,7 +14,9 @@ public sealed class EngageStateRouter
 
     public async Task<OperationResult<ChatSendResult>> RouteAndHandleAsync(EngageConversationContext context, CancellationToken ct)
     {
-        if (!_states.TryGetValue(context.RecommendedState, out var state))
+        var targetState = context.PrimaryActionDecision?.TargetState ?? "Discover";
+
+        if (!_states.TryGetValue(targetState, out var state))
         {
             // Fallback to Discover if state not found
             state = _states["Discover"];

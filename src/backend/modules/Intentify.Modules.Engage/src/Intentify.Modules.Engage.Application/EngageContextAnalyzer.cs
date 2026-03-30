@@ -7,17 +7,12 @@ namespace Intentify.Modules.Engage.Application;
 public sealed class EngageContextAnalyzer
 {
     private readonly AiDecisionGenerationService _aiDecisionService;
-    private readonly EngageConversationPolicy _policy;
-    private readonly ILogger<EngageContextAnalyzer> _logger;
 
     public EngageContextAnalyzer(
         AiDecisionGenerationService aiDecisionService,
-        EngageConversationPolicy policy,
         ILogger<EngageContextAnalyzer> logger)
     {
         _aiDecisionService = aiDecisionService;
-        _policy = policy;
-        _logger = logger;
     }
 
     public async Task<EngageConversationContext> AnalyzeAsync(
@@ -25,27 +20,19 @@ public sealed class EngageContextAnalyzer
         IReadOnlyCollection<EngageChatMessage> recentMessages,
         string userMessage,
         string knowledgeSummary,
-        string tenantVocabulary,
+        IReadOnlyCollection<string> tenantVocabulary,
         EngageBot bot,
         VisitorContextBundle? visitorBundle,
         CancellationToken ct)
     {
-        var distilled = BuildDistilledHistory(recentMessages, userMessage);
+        _ = BuildDistilledHistory(recentMessages, userMessage);
         var lastQuestion = recentMessages
             .Where(m => string.Equals(m.Role, "assistant", StringComparison.OrdinalIgnoreCase) 
                      && m.Content.Trim().EndsWith("?"))
             .Select(m => m.Content.Trim())
             .LastOrDefault();
 
-        // Safe prompt
-        var prompt = "You are a world-class sales rep. " +
-                     "Current state: " + (session.ConversationState ?? "Discover") + ". " +
-                     "User said: \"" + userMessage + "\". " +
-                     "Last question: " + (lastQuestion ?? "none") + ". " +
-                     "Return recommendedState (Discover|CaptureLead|...) and nextBestAction.";
-
-        // Correct call - pass the bundle properly (this fixes the type error)
-        var decision = visitorBundle != null 
+        var decision = visitorBundle != null
             ? await _aiDecisionService.GenerateAsync(visitorBundle, ct) 
             : new AiDecisionContract(
                 "1.0",                     // SchemaVersion (adjust if your constructor differs)
@@ -60,13 +47,52 @@ public sealed class EngageContextAnalyzer
                 null,                      // NextBestAction
                 null);                     // ExtraData
 
-        return new EngageConversationContext(session, recentMessages, userMessage, decision, lastQuestion, knowledgeSummary);
+        var analysis = BuildAnalysisSummary(session, recentMessages, userMessage, decision);
+
+        return new EngageConversationContext(session, recentMessages, userMessage, decision, lastQuestion, knowledgeSummary, analysis);
     }
 
     private static string BuildDistilledHistory(IReadOnlyCollection<EngageChatMessage> messages, string currentMessage)
     {
         return string.Join("\n", messages.TakeLast(12)
             .Select(m => $"{m.Role}: {m.Content.Trim()}"));
+    }
+
+    private static EngageAnalysisSummary BuildAnalysisSummary(
+        EngageChatSession session,
+        IReadOnlyCollection<EngageChatMessage> recentMessages,
+        string userMessage,
+        AiDecisionContract decision)
+    {
+        var trimmedMessage = userMessage.Trim();
+        var assistantMessages = recentMessages.Count(item => string.Equals(item.Role, "assistant", StringComparison.OrdinalIgnoreCase));
+        var isInitialTurn = assistantMessages == 0;
+        var answersPreviousQuestion = !string.IsNullOrWhiteSpace(trimmedMessage)
+            && trimmedMessage.Length <= 80
+            && !trimmedMessage.Contains('?', StringComparison.Ordinal);
+
+        var aiSuggestedCapture = decision.Recommendations?.Any(item =>
+            item.ProposedCommand is { Count: > 0 } proposed
+            && (proposed.ContainsKey("captureGoal")
+                || proposed.ContainsKey("captureType")
+                || proposed.ContainsKey("captureLocation")
+                || proposed.ContainsKey("capturedName")
+                || proposed.ContainsKey("capturedPreferredContactMethod"))) == true;
+
+        var likelyStateHint = isInitialTurn
+            ? "Greeting"
+            : string.Equals(session.ConversationState, "CaptureLead", StringComparison.Ordinal)
+                ? "CaptureLead"
+                : aiSuggestedCapture
+                    ? "CaptureLead"
+                    : "Discover";
+
+        return new EngageAnalysisSummary(
+            likelyStateHint,
+            answersPreviousQuestion,
+            aiSuggestedCapture,
+            decision.OverallConfidence,
+            isInitialTurn);
     }
 }
 
@@ -78,9 +104,8 @@ public sealed class EngageConversationContext
     public AiDecisionContract AiDecision { get; }
     public string? LastAssistantQuestion { get; }
     public string KnowledgeSummary { get; }
-
-    // Use the actual property that exists in your AiDecisionContract (fallback to a safe default)
-    public string RecommendedState => "Discover"; // Temporary safe fallback - you can map from AiDecision later
+    public EngageAnalysisSummary Analysis { get; }
+    public EngageNextActionDecision? PrimaryActionDecision { get; private set; }
 
     public EngageConversationContext(
         EngageChatSession session,
@@ -88,7 +113,8 @@ public sealed class EngageConversationContext
         string userMessage,
         AiDecisionContract aiDecision,
         string? lastQuestion,
-        string knowledgeSummary)
+        string knowledgeSummary,
+        EngageAnalysisSummary analysis)
     {
         Session = session;
         RecentMessages = recentMessages;
@@ -96,5 +122,18 @@ public sealed class EngageConversationContext
         AiDecision = aiDecision;
         LastAssistantQuestion = lastQuestion;
         KnowledgeSummary = knowledgeSummary;
+        Analysis = analysis;
+    }
+
+    public void SetPrimaryAction(EngageNextActionDecision decision)
+    {
+        PrimaryActionDecision = decision;
     }
 }
+
+public sealed record EngageAnalysisSummary(
+    string LikelyStateHint,
+    bool AnswersPreviousQuestion,
+    bool AiSuggestedCapture,
+    decimal OverallConfidence,
+    bool IsInitialTurn);

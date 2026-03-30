@@ -13,6 +13,7 @@ namespace Intentify.Modules.Engage.Application;
 public sealed class EngageOrchestrator
 {
     private readonly EngageContextAnalyzer _contextAnalyzer;
+    private readonly EngageNextActionSelector _nextActionSelector;
     private readonly EngageStateRouter _stateRouter;
     private readonly ISiteRepository _siteRepository;
     private readonly IEngageChatSessionRepository _sessionRepository;
@@ -25,6 +26,7 @@ public sealed class EngageOrchestrator
 
     public EngageOrchestrator(
         EngageContextAnalyzer contextAnalyzer,
+        EngageNextActionSelector nextActionSelector,
         EngageStateRouter stateRouter,
         ISiteRepository siteRepository,
         IEngageChatSessionRepository sessionRepository,
@@ -36,6 +38,7 @@ public sealed class EngageOrchestrator
         ILogger<EngageOrchestrator> logger)
     {
         _contextAnalyzer = contextAnalyzer;
+        _nextActionSelector = nextActionSelector;
         _stateRouter = stateRouter;
         _siteRepository = siteRepository;
         _sessionRepository = sessionRepository;
@@ -94,6 +97,7 @@ public sealed class EngageOrchestrator
             visitorBundle, 
             cancellationToken);
 
+        context.SetPrimaryAction(_nextActionSelector.Select(context));
         var result = await _stateRouter.RouteAndHandleAsync(context, cancellationToken);
 
         await _sessionRepository.UpdateStateAsync(session, cancellationToken);

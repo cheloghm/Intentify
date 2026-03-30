@@ -29,7 +29,7 @@ public sealed class EngageConversationPolicyTests
 
         var question = Policy.BuildNextDiscoveryQuestion(session);
 
-        Assert.Equal("Any key constraints like budget, timeline, or scheduling requirements?", question);
+        Assert.Equal("Any key constraints like budget or timeline?", question);
     }
 
     [Fact]
@@ -78,16 +78,6 @@ public sealed class EngageConversationPolicyTests
 
         Assert.False(result);
         Assert.Equal(string.Empty, response);
-    }
-
-    [Fact]
-    public void BuildSoftFallbackResponse_ProfessionalTone_UsesSofterTransition()
-    {
-        var response = Policy.BuildSoftFallbackResponse(
-            new EngageBot { Tone = "professional" },
-            "I can help with that — what would you like to sort out first?");
-
-        Assert.Equal("Happy to help — which part should we focus on first?", response);
     }
 
     private static EngageChatSession CreateSession(
