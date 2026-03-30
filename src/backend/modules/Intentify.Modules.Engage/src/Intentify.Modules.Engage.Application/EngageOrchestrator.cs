@@ -105,22 +105,11 @@ public sealed class EngageOrchestrator
 
         if (result.Status == OperationStatus.Success && result.Value is not null)
         {
-            var sideEffects = await _businessOutcomeExecutor.ExecuteAsync(context, command, result.Value, cancellationToken);
-            var ticketCreated = result.Value.TicketCreated || sideEffects.TicketTouched;
-            result = OperationResult<ChatSendResult>.Success(result.Value with
-            {
-                TicketCreated = ticketCreated
-            });
-        }
-
-        if (result.Status == OperationStatus.Success && result.Value is not null)
-        {
-            var playbookResponse = ApplyTenantPlaybook(result.Value.Response, bot, tenantVocab);
             await _messageRepository.InsertAsync(new EngageChatMessage
             {
                 SessionId = session.Id,
                 Role = "assistant",
-                Content = playbookResponse,
+                Content = result.Value.Response,
                 CreatedAtUtc = DateTime.UtcNow,
                 Confidence = result.Value.Confidence,
                 Citations = result.Value.Sources.Select(item => new EngageCitation

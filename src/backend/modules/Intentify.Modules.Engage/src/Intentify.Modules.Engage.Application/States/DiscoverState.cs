@@ -30,21 +30,21 @@ public sealed class DiscoverState : IEngageState
             var escalation = _shaper.Shape(
                 "I can get a human teammate to help with this. What is the main issue and how should we contact you?",
                 ctx);
-            return Task.FromResult(CreateAssistantResponse(ctx.Session, escalation, 0.9m, "SupportEscalation", reason));
+            return CreateAssistantResponse(ctx.Session, escalation, 0.9m, "SupportEscalation", reason);
         }
 
         if (_policy.IsContextRecoverySignal(ctx.UserMessage))
         {
             var recovered = _shaper.Shape(_policy.BuildContextRecoveryPrompt(ctx.Session), ctx);
             ctx.Session.ConversationState = "Discover";
-            return Task.FromResult(CreateAssistantResponse(ctx.Session, recovered, 0.82m, "ContextRecovery", "AlreadyProvidedContext"));
+            return CreateAssistantResponse(ctx.Session, recovered, 0.82m, "ContextRecovery", "AlreadyProvidedContext");
         }
 
         if (action == EngageNextAction.HandleNarrowObjection)
         {
             var objectionResponse = _shaper.Shape(_policy.BuildNarrowObjectionFollowUp(ctx.Session), ctx);
             ctx.Session.ConversationState = "Discover";
-            return Task.FromResult(CreateAssistantResponse(ctx.Session, objectionResponse, 0.8m, "ObjectionHandling", reason));
+            return CreateAssistantResponse(ctx.Session, objectionResponse, 0.8m, "ObjectionHandling", reason);
         }
 
         if (action == EngageNextAction.AnswerFactual && !string.IsNullOrWhiteSpace(ctx.KnowledgeSummary))
@@ -53,7 +53,7 @@ public sealed class DiscoverState : IEngageState
                 ?? "Here’s what I found.";
             var factual = _shaper.Shape($"{topAnswer} { _policy.BuildNaturalNextQuestion(ctx.Session, ctx) }", ctx);
             ctx.Session.ConversationState = "Discover";
-            return Task.FromResult(CreateAssistantResponse(ctx.Session, factual, 0.84m, "FactualAnswer", "KnowledgeBacked"));
+            return CreateAssistantResponse(ctx.Session, factual, 0.84m, "FactualAnswer", "KnowledgeBacked");
         }
 
         var nextQuestion = _policy.BuildNaturalNextQuestion(ctx.Session, ctx);

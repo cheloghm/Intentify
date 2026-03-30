@@ -24,7 +24,7 @@ public sealed class CaptureLeadState : IEngageState
             var recovered = _shaper.Shape(_policy.BuildContextRecoveryPrompt(ctx.Session), ctx);
             ctx.Session.PendingCaptureMode = "Commercial";
             ctx.Session.ConversationState = "CaptureLead";
-            return Task.FromResult(OperationResult<ChatSendResult>.Success(new ChatSendResult(ctx.Session.Id, recovered, 0.85m, false, Array.Empty<EngageCitationResult>(), "CaptureLead")));
+            return OperationResult<ChatSendResult>.Success(new ChatSendResult(ctx.Session.Id, recovered, 0.85m, false, Array.Empty<EngageCitationResult>(), "CaptureLead"));
         }
 
         var response = _policy.BuildNaturalNextQuestion(ctx.Session, ctx);
