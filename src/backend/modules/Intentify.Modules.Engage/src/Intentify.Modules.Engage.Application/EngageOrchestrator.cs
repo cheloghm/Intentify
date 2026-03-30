@@ -67,19 +67,19 @@ public sealed class EngageOrchestrator
         var knowledgeSummary = await GetKnowledgeSummaryAsync(site, bot, command.Message, cancellationToken);
         var tenantVocab = await _tenantVocabularyResolver.ResolveAsync(site.TenantId, site.Id, bot.BotId, cancellationToken);
 
-        // Corrected: Use named parameters to match the constructor exactly
+        // FIXED: Correct constructor call using positional arguments + named where safe
         var visitorBundleResult = await _visitorContextBundleHandler.HandleAsync(
             new BuildVisitorContextBundleQuery(
-                TenantId: site.TenantId,
-                SiteId: site.Id,
-                VisitorId: null,
-                SessionId: session.Id,
-                NormalizedUserMessage: command.Message,   // This is the string parameter causing the error
-                KnowledgeTop: 3,
-                TimelineLimit: 5,
-                EngageMessageLimit: 12,
-                TicketsLimit: 5,
-                PromoEntriesLimit: 3),
+                site.TenantId,           // TenantId
+                site.Id,                 // SiteId
+                null,                    // VisitorId (null)
+                session.Id,              // Engage Session ID (4th parameter)
+                command.Message,         // NormalizedUserMessage (5th parameter - this was the problem)
+                3,                       // KnowledgeTop
+                5,                       // TimelineLimit
+                12,                      // EngageMessageLimit
+                5,                       // TicketsLimit
+                3),                      // PromoEntriesLimit
             cancellationToken);
 
         var visitorBundle = visitorBundleResult?.Value;
@@ -91,7 +91,7 @@ public sealed class EngageOrchestrator
             knowledgeSummary, 
             tenantVocab, 
             bot, 
-            visitorBundle,                    // Pass the bundle (nullable is fine)
+            visitorBundle, 
             cancellationToken);
 
         var result = await _stateRouter.RouteAndHandleAsync(context, cancellationToken);
