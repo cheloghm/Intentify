@@ -7,7 +7,6 @@ public enum EngageNextAction
     AskCaptureQuestion = 2,
     EscalateSupport = 3,
     AnswerFactual = 4
-    AskCaptureQuestion = 2
 }
 
 public sealed record EngageNextActionDecision(
