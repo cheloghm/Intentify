@@ -16,7 +16,7 @@ public sealed class DiscoverState : IEngageState
         _shaper = shaper;
     }
 
-    public async Task<OperationResult<ChatSendResult>> HandleAsync(EngageConversationContext ctx, CancellationToken ct)
+    public Task<OperationResult<ChatSendResult>> HandleAsync(EngageConversationContext ctx, CancellationToken ct)
     {
         _policy.TryApplyStageContinuation(ctx.Session, ctx.UserMessage, ctx.LastAssistantQuestion);
 
@@ -62,7 +62,7 @@ public sealed class DiscoverState : IEngageState
         ctx.Session.ConversationState = "Discover";
 
         // Helper method - you'll need to implement CreateAssistantResponse in Orchestrator or a shared helper
-        return CreateAssistantResponse(ctx.Session, response, 0.65m, "Discover", "ContextAware");
+        return Task.FromResult(CreateAssistantResponse(ctx.Session, response, 0.65m, "Discover", "ContextAware"));
     }
 
     // Temporary helper - move this to EngageOrchestrator later if needed

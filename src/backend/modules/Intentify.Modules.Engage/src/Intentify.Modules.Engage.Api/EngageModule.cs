@@ -71,6 +71,7 @@ public sealed class EngageModule : IAppModule
         services.AddScoped<EngageContextAnalyzer>();
         services.AddScoped<EngageNextActionSelector>();
         services.AddScoped<EngageStateRouter>();
+        services.AddScoped<EngageBusinessOutcomeExecutor>();
 
         // All state handlers
         services.AddScoped<IEngageState, GreetingState>();
@@ -106,6 +107,8 @@ public sealed class EngageModule : IAppModule
         services.AddSingleton<AiDecisionGenerationService>();
         services.AddSingleton<UpsertLeadFromPromoEntryHandler>();
         services.AddSingleton<CreateTicketHandler>();
+        services.AddSingleton<ListTicketsHandler>();
+        services.AddSingleton<UpdateTicketHandler>();
     }
 
     public void MapEndpoints(IEndpointRouteBuilder endpoints)

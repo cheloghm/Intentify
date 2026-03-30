@@ -74,11 +74,6 @@ public sealed class EngageNextActionSelector
             return true;
         }
 
-        if (context.Analysis.AiSuggestedCapture)
-        {
-            return true;
-        }
-
         return _policy.IsStrongCommercialIntent(context.UserMessage) && memory.DiscoveryFieldCount >= 2;
     }
 

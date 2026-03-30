@@ -76,11 +76,29 @@ public sealed class EngageConversationPolicy
         if (string.IsNullOrWhiteSpace(message)) return false;
 
         var normalized = _interpreter.NormalizeUserMessage(message);
+        var email = _interpreter.TryExtractEmail(message);
+        var phone = _interpreter.TryExtractPhone(message);
+
+        if (!string.IsNullOrWhiteSpace(email))
+        {
+            session.CapturedEmail = email;
+        }
+
+        if (!string.IsNullOrWhiteSpace(phone))
+        {
+            session.CapturedPhone = phone;
+        }
+
+        var contactMethod = _interpreter.TryExtractPreferredContactMethod(message, email, phone);
+        if (!string.IsNullOrWhiteSpace(contactMethod))
+        {
+            session.CapturedPreferredContactMethod = contactMethod;
+        }
 
         // Name
         if (lastAssistantQuestion != null && lastAssistantQuestion.Contains("name", StringComparison.OrdinalIgnoreCase))
         {
-            var name = _interpreter.TryExtractName(message, null, null);
+            var name = _interpreter.TryExtractName(message, email, phone);
             if (!string.IsNullOrWhiteSpace(name))
             {
                 session.CapturedName = name;
@@ -91,7 +109,7 @@ public sealed class EngageConversationPolicy
         // Preferred contact method
         if (lastAssistantQuestion != null && (lastAssistantQuestion.Contains("email or phone", StringComparison.OrdinalIgnoreCase) || lastAssistantQuestion.Contains("reach you", StringComparison.OrdinalIgnoreCase)))
         {
-            var method = _interpreter.TryExtractPreferredContactMethod(message, null, null);
+            var method = _interpreter.TryExtractPreferredContactMethod(message, email, phone);
             if (!string.IsNullOrWhiteSpace(method))
             {
                 session.CapturedPreferredContactMethod = method;
