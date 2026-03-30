@@ -43,6 +43,7 @@ public sealed class EngageNextActionSelector
         }
 
         if (memory.IsCommercialCaptureActive || ShouldCapture(context, memory))
+        if (ShouldCapture(context))
         {
             return new EngageNextActionDecision(EngageNextAction.AskCaptureQuestion, "CaptureLead", "CaptureSignal");
         }
@@ -58,11 +59,18 @@ public sealed class EngageNextActionSelector
     private bool ShouldCapture(EngageConversationContext context, EngageSessionMemorySnapshot memory)
     {
         if (context.Analysis.AiSuggestedCapture)
+        return new EngageNextActionDecision(EngageNextAction.AskDiscoveryQuestion, "Discover", "DefaultDiscovery");
+    }
+
+    private bool ShouldCapture(EngageConversationContext context)
+    {
+        if (string.Equals(context.Session.ConversationState, "CaptureLead", StringComparison.Ordinal))
         {
             return true;
         }
 
         if (memory.LeadReady)
+        if (context.Analysis.AiSuggestedCapture)
         {
             return true;
         }
@@ -83,5 +91,7 @@ public sealed class EngageNextActionSelector
             || message.StartsWith("how ", StringComparison.OrdinalIgnoreCase)
             || message.StartsWith("when ", StringComparison.OrdinalIgnoreCase)
             || message.StartsWith("where ", StringComparison.OrdinalIgnoreCase);
+        var explicitContactRequest = _policy.IsExplicitCommercialContactRequest(context.UserMessage);
+        return _policy.IsCommercialCaptureReady(context.Session, explicitContactRequest);
     }
 }
