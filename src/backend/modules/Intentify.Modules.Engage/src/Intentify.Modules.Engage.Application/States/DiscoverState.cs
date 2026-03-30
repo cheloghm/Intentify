@@ -40,6 +40,13 @@ public sealed class DiscoverState : IEngageState
             return CreateAssistantResponse(ctx.Session, recovered, 0.82m, "ContextRecovery", "AlreadyProvidedContext");
         }
 
+        if (action == EngageNextAction.HandleNarrowObjection)
+        {
+            var objectionResponse = _shaper.Shape(_policy.BuildNarrowObjectionFollowUp(ctx.Session), ctx);
+            ctx.Session.ConversationState = "Discover";
+            return CreateAssistantResponse(ctx.Session, objectionResponse, 0.8m, "ObjectionHandling", reason);
+        }
+
         if (action == EngageNextAction.AnswerFactual && !string.IsNullOrWhiteSpace(ctx.KnowledgeSummary))
         {
             var topAnswer = ctx.KnowledgeSummary.Split('\n', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()

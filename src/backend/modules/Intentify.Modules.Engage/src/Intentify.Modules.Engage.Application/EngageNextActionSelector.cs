@@ -43,6 +43,11 @@ public sealed class EngageNextActionSelector
             return new EngageNextActionDecision(EngageNextAction.Greeting, "Greeting", "InitialTurn");
         }
 
+        if (_policy.IsNarrowObjectionSignal(context.UserMessage))
+        {
+            return new EngageNextActionDecision(EngageNextAction.HandleNarrowObjection, "Discover", "NarrowObjection");
+        }
+
         if (memory.IsCommercialCaptureActive || ShouldCapture(context, memory))
         {
             return new EngageNextActionDecision(EngageNextAction.AskCaptureQuestion, "CaptureLead", "CaptureSignal");
@@ -58,6 +63,7 @@ public sealed class EngageNextActionSelector
 
     private bool ShouldCapture(EngageConversationContext context, EngageSessionMemorySnapshot memory)
     {
+        if (context.Analysis.AiSuggestedCapture)
         if (string.Equals(context.Session.ConversationState, "CaptureLead", StringComparison.Ordinal))
         {
             return true;

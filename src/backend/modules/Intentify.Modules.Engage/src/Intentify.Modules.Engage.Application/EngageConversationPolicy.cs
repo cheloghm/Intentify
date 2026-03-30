@@ -185,6 +185,31 @@ public sealed class EngageConversationPolicy
             normalized.Contains(item, StringComparison.Ordinal));
     }
 
+    public bool IsNarrowObjectionSignal(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return false;
+        }
+
+        var normalized = _interpreter.NormalizeUserMessage(message);
+        return normalized.Contains("too expensive", StringComparison.Ordinal)
+            || normalized.Contains("not interested", StringComparison.Ordinal)
+            || normalized.Contains("not now", StringComparison.Ordinal)
+            || normalized.Contains("maybe later", StringComparison.Ordinal)
+            || normalized.Contains("just browsing", StringComparison.Ordinal);
+    }
+
+    public string BuildNarrowObjectionFollowUp(EngageChatSession session)
+    {
+        if (string.IsNullOrWhiteSpace(session.CaptureGoal))
+        {
+            return "No pressure. What outcome would make this worth revisiting for you?";
+        }
+
+        return "Totally fair. What would need to be true for this to feel worth doing now?";
+    }
+
     public string BuildContextRecoveryPrompt(EngageChatSession session)
     {
         if (string.IsNullOrWhiteSpace(session.CaptureGoal))

@@ -6,7 +6,8 @@ public enum EngageNextAction
     AskDiscoveryQuestion = 1,
     AskCaptureQuestion = 2,
     EscalateSupport = 3,
-    AnswerFactual = 4
+    AnswerFactual = 4,
+    HandleNarrowObjection = 5
 }
 
 public sealed record EngageNextActionDecision(
