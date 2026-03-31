@@ -1,5 +1,6 @@
 using Intentify.Modules.Auth.Api;
 using Intentify.Modules.Engage.Application;
+using Intentify.Modules.Engage.Application.States;
 using Intentify.Modules.Engage.Infrastructure;
 using Intentify.Modules.Tickets.Application;
 using Intentify.Modules.Sites.Application;
@@ -68,16 +69,14 @@ public sealed class EngageModule : IAppModule
         services.AddScoped<EngageInputInterpreter>();
         services.AddScoped<ResponseShaper>();
         services.AddScoped<EngageContextAnalyzer>();
+        services.AddScoped<EngageNextActionSelector>();
         services.AddScoped<EngageStateRouter>();
+        services.AddScoped<EngageBusinessOutcomeExecutor>();
 
         // All state handlers
         services.AddScoped<IEngageState, GreetingState>();
         services.AddScoped<IEngageState, DiscoverState>();
         services.AddScoped<IEngageState, CaptureLeadState>();
-        services.AddScoped<IEngageState, CaptureSupportState>();
-        services.AddScoped<IEngageState, InformState>();
-        services.AddScoped<IEngageState, ClarifyState>();
-        services.AddScoped<IEngageState, ConfirmHandoffState>();
 
         services.AddScoped<EngageOrchestrator>();
 
@@ -108,6 +107,8 @@ public sealed class EngageModule : IAppModule
         services.AddSingleton<AiDecisionGenerationService>();
         services.AddSingleton<UpsertLeadFromPromoEntryHandler>();
         services.AddSingleton<CreateTicketHandler>();
+        services.AddSingleton<ListTicketsHandler>();
+        services.AddSingleton<UpdateTicketHandler>();
     }
 
     public void MapEndpoints(IEndpointRouteBuilder endpoints)

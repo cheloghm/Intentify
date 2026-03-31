@@ -13,6 +13,7 @@ namespace Intentify.Modules.Engage.Application;
 public sealed class EngageOrchestrator
 {
     private readonly EngageContextAnalyzer _contextAnalyzer;
+    private readonly EngageNextActionSelector _nextActionSelector;
     private readonly EngageStateRouter _stateRouter;
     private readonly ISiteRepository _siteRepository;
     private readonly IEngageChatSessionRepository _sessionRepository;
@@ -21,10 +22,12 @@ public sealed class EngageOrchestrator
     private readonly RetrieveTopChunksHandler _retrieveTopChunksHandler;
     private readonly VisitorContextBundleHandler _visitorContextBundleHandler;
     private readonly TenantVocabularyResolver _tenantVocabularyResolver;
+    private readonly EngageBusinessOutcomeExecutor _businessOutcomeExecutor;
     private readonly ILogger<EngageOrchestrator> _logger;
 
     public EngageOrchestrator(
         EngageContextAnalyzer contextAnalyzer,
+        EngageNextActionSelector nextActionSelector,
         EngageStateRouter stateRouter,
         ISiteRepository siteRepository,
         IEngageChatSessionRepository sessionRepository,
@@ -33,9 +36,11 @@ public sealed class EngageOrchestrator
         RetrieveTopChunksHandler retrieveTopChunksHandler,
         VisitorContextBundleHandler visitorContextBundleHandler,
         TenantVocabularyResolver tenantVocabularyResolver,
+        EngageBusinessOutcomeExecutor businessOutcomeExecutor,
         ILogger<EngageOrchestrator> logger)
     {
         _contextAnalyzer = contextAnalyzer;
+        _nextActionSelector = nextActionSelector;
         _stateRouter = stateRouter;
         _siteRepository = siteRepository;
         _sessionRepository = sessionRepository;
@@ -44,6 +49,7 @@ public sealed class EngageOrchestrator
         _retrieveTopChunksHandler = retrieveTopChunksHandler;
         _visitorContextBundleHandler = visitorContextBundleHandler;
         _tenantVocabularyResolver = tenantVocabularyResolver;
+        _businessOutcomeExecutor = businessOutcomeExecutor;
         _logger = logger;
     }
 
@@ -94,9 +100,46 @@ public sealed class EngageOrchestrator
             visitorBundle, 
             cancellationToken);
 
+        context.SetPrimaryAction(_nextActionSelector.Select(context));
         var result = await _stateRouter.RouteAndHandleAsync(context, cancellationToken);
 
+        if (result.Status == OperationStatus.Success && result.Value is not null)
+        {
+            var sideEffects = await _businessOutcomeExecutor.ExecuteAsync(context, command, result.Value, cancellationToken);
+            var ticketCreated = result.Value.TicketCreated || sideEffects.TicketTouched;
+            result = OperationResult<ChatSendResult>.Success(result.Value with
+            {
+                TicketCreated = ticketCreated
+            });
+        }
+
+        if (result.Status == OperationStatus.Success && result.Value is not null)
+        {
+            var playbookResponse = ApplyTenantPlaybook(result.Value.Response, bot, tenantVocab);
+            await _messageRepository.InsertAsync(new EngageChatMessage
+            {
+                SessionId = session.Id,
+                Role = "assistant",
+                Content = playbookResponse,
+                CreatedAtUtc = DateTime.UtcNow,
+                Confidence = result.Value.Confidence,
+                Citations = result.Value.Sources.Select(item => new EngageCitation
+                {
+                    SourceId = item.SourceId,
+                    ChunkId = item.ChunkId,
+                    ChunkIndex = item.ChunkIndex
+                }).ToArray()
+            }, cancellationToken);
+        }
+
+        session.UpdatedAtUtc = DateTime.UtcNow;
         await _sessionRepository.UpdateStateAsync(session, cancellationToken);
+        if (result.Status == OperationStatus.Success && result.Value is not null)
+        {
+            var playbookResponse = ApplyTenantPlaybook(result.Value.Response, bot, tenantVocab);
+            result = OperationResult<ChatSendResult>.Success(result.Value with { Response = playbookResponse });
+        }
+
         return result;
     }
 
@@ -133,5 +176,39 @@ public sealed class EngageOrchestrator
         var chunks = await _retrieveTopChunksHandler.HandleAsync(
             new RetrieveTopChunksQuery(site.TenantId, site.Id, message, 3, bot.BotId), ct);
         return string.Join("\n", chunks.Select(c => c.Content));
+    }
+
+    internal static string ApplyTenantPlaybook(string response, EngageBot bot, IReadOnlyCollection<string> tenantVocabulary)
+    {
+        if (string.IsNullOrWhiteSpace(response))
+        {
+            return response;
+        }
+
+        var tuned = response;
+
+        if (string.Equals(bot.Tone, "formal", StringComparison.OrdinalIgnoreCase))
+        {
+            tuned = tuned.Replace("Hi!", "Hello.", StringComparison.Ordinal);
+        }
+
+        if (string.Equals(bot.Verbosity, "concise", StringComparison.OrdinalIgnoreCase))
+        {
+            var firstQuestion = tuned.IndexOf('?', StringComparison.Ordinal);
+            if (firstQuestion > 0)
+            {
+                tuned = tuned[..(firstQuestion + 1)];
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(bot.FallbackStyle)
+            && bot.FallbackStyle.Contains("tenant-vocab", StringComparison.OrdinalIgnoreCase)
+            && tenantVocabulary.Count > 0
+            && !tuned.Contains(tenantVocabulary.First(), StringComparison.OrdinalIgnoreCase))
+        {
+            tuned = $"{tuned} ({tenantVocabulary.First()})";
+        }
+
+        return tuned;
     }
 }

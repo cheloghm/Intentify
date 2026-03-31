@@ -16,16 +16,52 @@ public sealed class DiscoverState : IEngageState
         _shaper = shaper;
     }
 
-    public async Task<OperationResult<ChatSendResult>> HandleAsync(EngageConversationContext ctx, CancellationToken ct)
+    public Task<OperationResult<ChatSendResult>> HandleAsync(EngageConversationContext ctx, CancellationToken ct)
     {
-        // Merge short replies into slots (fixes "Grey", "the website", etc.)
-        _policy.TryMergeShortReplySlots(ctx.Session, ctx.UserMessage, ctx.LastAssistantQuestion);
+        _policy.TryApplyStageContinuation(ctx.Session, ctx.UserMessage, ctx.LastAssistantQuestion);
 
-        if (_policy.IsCommercialCaptureReady(ctx.Session, false))
+        var action = ctx.PrimaryActionDecision?.Action ?? EngageNextAction.AskDiscoveryQuestion;
+        var reason = ctx.PrimaryActionDecision?.Reason ?? string.Empty;
+
+        if (action == EngageNextAction.CloseConversation)
         {
-            // Transition to capture lead state
-            var captureState = new CaptureLeadState(_policy, _shaper); // or inject it
-            return await captureState.HandleAsync(ctx, ct);
+            var closing = _shaper.Shape(_policy.BuildClosureResponse(ctx.Session), ctx);
+            ctx.Session.PendingCaptureMode = null;
+            ctx.Session.ConversationState = "Discover";
+            return Task.FromResult(CreateAssistantResponse(ctx.Session, closing, 0.88m, "Closure", reason));
+        }
+
+        if (action == EngageNextAction.EscalateSupport)
+        {
+            ctx.Session.PendingCaptureMode = "Support";
+            ctx.Session.ConversationState = "Discover";
+            var escalation = _shaper.Shape(
+                "I can get a human teammate to help with this. What is the main issue and how should we contact you?",
+                ctx);
+            return Task.FromResult(CreateAssistantResponse(ctx.Session, escalation, 0.9m, "SupportEscalation", reason));
+        }
+
+        if (_policy.IsContextRecoverySignal(ctx.UserMessage))
+        {
+            var recovered = _shaper.Shape(_policy.BuildContextRecoveryPrompt(ctx.Session), ctx);
+            ctx.Session.ConversationState = "Discover";
+            return Task.FromResult(CreateAssistantResponse(ctx.Session, recovered, 0.82m, "ContextRecovery", "AlreadyProvidedContext"));
+        }
+
+        if (action == EngageNextAction.HandleNarrowObjection)
+        {
+            var objectionResponse = _shaper.Shape(_policy.BuildNarrowObjectionFollowUp(ctx.Session), ctx);
+            ctx.Session.ConversationState = "Discover";
+            return Task.FromResult(CreateAssistantResponse(ctx.Session, objectionResponse, 0.8m, "ObjectionHandling", reason));
+        }
+
+        if (action == EngageNextAction.AnswerFactual && !string.IsNullOrWhiteSpace(ctx.KnowledgeSummary))
+        {
+            var topAnswer = ctx.KnowledgeSummary.Split('\n', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()
+                ?? "Here’s what I found.";
+            var factual = _shaper.Shape($"{topAnswer} { _policy.BuildNaturalNextQuestion(ctx.Session, ctx) }", ctx);
+            ctx.Session.ConversationState = "Discover";
+            return Task.FromResult(CreateAssistantResponse(ctx.Session, factual, 0.84m, "FactualAnswer", "KnowledgeBacked"));
         }
 
         var nextQuestion = _policy.BuildNaturalNextQuestion(ctx.Session, ctx);
@@ -34,7 +70,7 @@ public sealed class DiscoverState : IEngageState
         ctx.Session.ConversationState = "Discover";
 
         // Helper method - you'll need to implement CreateAssistantResponse in Orchestrator or a shared helper
-        return CreateAssistantResponse(ctx.Session, response, 0.65m, "Discover", "ContextAware");
+        return Task.FromResult(CreateAssistantResponse(ctx.Session, response, 0.65m, "Discover", "ContextAware"));
     }
 
     // Temporary helper - move this to EngageOrchestrator later if needed
