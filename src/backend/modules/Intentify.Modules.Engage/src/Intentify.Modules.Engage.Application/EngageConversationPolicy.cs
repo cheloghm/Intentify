@@ -58,13 +58,21 @@ public sealed class EngageConversationPolicy
         if (string.IsNullOrWhiteSpace(session.CapturedName))
             return "Thanks — that gives me enough context. Please share your first name.";
 
-        var hasContact = !string.IsNullOrWhiteSpace(session.CapturedPreferredContactMethod)
-            || !string.IsNullOrWhiteSpace(session.CapturedEmail)
-            || !string.IsNullOrWhiteSpace(session.CapturedPhone);
-        if (!hasContact)
+        if (string.IsNullOrWhiteSpace(session.CapturedPreferredContactMethod))
             return "Great, and what’s the best contact method for follow-up?";
 
-        return "Thanks — I have what I need. Is there anything else you’d like help with?";
+        if (string.Equals(session.CapturedPreferredContactMethod, "Email", StringComparison.OrdinalIgnoreCase)
+            && string.IsNullOrWhiteSpace(session.CapturedEmail))
+            return "Perfect — what’s the best email address to reach you?";
+
+        if (string.Equals(session.CapturedPreferredContactMethod, "Phone", StringComparison.OrdinalIgnoreCase)
+            && string.IsNullOrWhiteSpace(session.CapturedPhone))
+            return "Perfect — what’s the best phone number to reach you?";
+
+        if (string.IsNullOrWhiteSpace(session.CapturedEmail) && string.IsNullOrWhiteSpace(session.CapturedPhone))
+            return "Perfect — please share your best email or phone number for follow-up.";
+
+        return "Perfect — I’ve got the key details. Is there anything else you’d like help with?";
     }
 
     public bool IsCommercialCaptureReady(EngageChatSession session, bool explicitContactRequest)

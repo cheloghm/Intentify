@@ -84,10 +84,7 @@ public sealed class DiscoverState : IEngageState
                 ctx.Session.PendingCaptureMode = null;
             }
 
-            var topAnswer = ctx.KnowledgeSummary
-                .Split('\n', StringSplitOptions.RemoveEmptyEntries)
-                .FirstOrDefault()
-                ?? "Here’s what I found.";
+            var topAnswer = ComposeFactualAnswer(ctx.KnowledgeSummary, ctx.UserMessage);
 
             var factual = _shaper.Shape(topAnswer, ctx);
 
@@ -121,5 +118,41 @@ public sealed class DiscoverState : IEngageState
                 false,
                 Array.Empty<EngageCitationResult>(),
                 path));
+    }
+
+    private static string ComposeFactualAnswer(string knowledgeSummary, string userMessage)
+    {
+        var lines = knowledgeSummary
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(item => !string.IsNullOrWhiteSpace(item))
+            .ToArray();
+
+        if (lines.Length == 0)
+        {
+            return "Here’s what I found.";
+        }
+
+        var primary = lines.FirstOrDefault(item =>
+                item.Length >= 35
+                || item.Contains('.', StringComparison.Ordinal)
+                || item.Contains(',', StringComparison.Ordinal))
+            ?? lines[0];
+
+        var normalized = userMessage.Trim().ToLowerInvariant();
+        var serviceIntent = normalized.Contains("service", StringComparison.Ordinal)
+            || normalized.Contains("offer", StringComparison.Ordinal)
+            || normalized.Contains("pricing", StringComparison.Ordinal)
+            || normalized.Contains("cost", StringComparison.Ordinal);
+
+        if (serviceIntent && primary.Length < 55 && lines.Length > 1)
+        {
+            var next = lines.FirstOrDefault(item => !string.Equals(item, primary, StringComparison.Ordinal));
+            if (!string.IsNullOrWhiteSpace(next))
+            {
+                return $"{primary} {next}";
+            }
+        }
+
+        return primary;
     }
 }
