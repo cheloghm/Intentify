@@ -108,11 +108,74 @@ public sealed class EngageNextActionSelectorTests
         Assert.Equal("CaptureLead", decision.TargetState);
     }
 
+    [Fact]
+    public void Select_ActiveSupportCapture_FactualPivot_UsesKnowledgePath()
+    {
+        var session = new EngageChatSession
+        {
+            ConversationState = "Discover",
+            PendingCaptureMode = "Support",
+            CaptureContext = "payment failed"
+        };
+
+        var context = CreateContext(
+            session,
+            recentMessages: [],
+            analysis: new EngageAnalysisSummary("Discover", false, false, 0.8m, false),
+            userMessage: "your services?",
+            knowledge: "We offer web design and SEO.");
+
+        var decision = Selector.Select(context);
+
+        Assert.Equal(EngageNextAction.AnswerFactual, decision.Action);
+        Assert.Equal("SupportPivotFactual", decision.Reason);
+    }
+
+    [Fact]
+    public void Select_ActiveSupportCapture_WithCompleteContact_AllowsNaturalContinuation()
+    {
+        var session = new EngageChatSession
+        {
+            ConversationState = "Discover",
+            PendingCaptureMode = "Support",
+            CaptureContext = "checkout failed",
+            CapturedPreferredContactMethod = "Email",
+            CapturedEmail = "alex@example.com"
+        };
+
+        var context = CreateContext(
+            session,
+            recentMessages: [],
+            analysis: new EngageAnalysisSummary("Discover", true, false, 0.8m, false),
+            userMessage: "alex@example.com");
+
+        var decision = Selector.Select(context);
+
+        Assert.Equal(EngageNextAction.AskDiscoveryQuestion, decision.Action);
+        Assert.Equal("SupportCaptureComplete", decision.Reason);
+    }
+
+    [Fact]
+    public void Select_CloseSignal_ReturnsCloseConversationAction()
+    {
+        var context = CreateContext(
+            session: new EngageChatSession { ConversationState = "Discover" },
+            recentMessages: [],
+            analysis: new EngageAnalysisSummary("Discover", false, false, 0.8m, false),
+            userMessage: "thanks that's all");
+
+        var decision = Selector.Select(context);
+
+        Assert.Equal(EngageNextAction.CloseConversation, decision.Action);
+        Assert.Equal("ConversationClose", decision.Reason);
+    }
+
     private static EngageConversationContext CreateContext(
         EngageChatSession session,
         IReadOnlyCollection<EngageChatMessage> recentMessages,
         EngageAnalysisSummary analysis,
-        string userMessage = "hello")
+        string userMessage = "hello",
+        string knowledge = "")
     {
         return new EngageConversationContext(
             session,
@@ -120,7 +183,7 @@ public sealed class EngageNextActionSelectorTests
             userMessage,
             new AiDecisionContract("stage7.v1", "d1", null, 0.9m, [], AiDecisionValidationStatus.Valid, [], null, false, null, null),
             null,
-            string.Empty,
+            knowledge,
             analysis);
     }
 }

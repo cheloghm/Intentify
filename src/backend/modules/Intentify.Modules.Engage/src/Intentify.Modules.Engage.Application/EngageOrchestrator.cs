@@ -1,5 +1,4 @@
 using Intentify.Modules.Engage.Domain;
-using Intentify.Modules.Knowledge.Application;
 using Intentify.Modules.Leads.Application;
 using Intentify.Modules.Sites.Application;
 using Intentify.Modules.Sites.Domain;
@@ -19,7 +18,6 @@ public sealed class EngageOrchestrator
     private readonly IEngageChatSessionRepository _sessionRepository;
     private readonly IEngageChatMessageRepository _messageRepository;
     private readonly IEngageBotRepository _botRepository;
-    private readonly RetrieveTopChunksHandler _retrieveTopChunksHandler;
     private readonly VisitorContextBundleHandler _visitorContextBundleHandler;
     private readonly TenantVocabularyResolver _tenantVocabularyResolver;
     private readonly EngageBusinessOutcomeExecutor _businessOutcomeExecutor;
@@ -33,7 +31,6 @@ public sealed class EngageOrchestrator
         IEngageChatSessionRepository sessionRepository,
         IEngageChatMessageRepository messageRepository,
         IEngageBotRepository botRepository,
-        RetrieveTopChunksHandler retrieveTopChunksHandler,
         VisitorContextBundleHandler visitorContextBundleHandler,
         TenantVocabularyResolver tenantVocabularyResolver,
         EngageBusinessOutcomeExecutor businessOutcomeExecutor,
@@ -46,7 +43,6 @@ public sealed class EngageOrchestrator
         _sessionRepository = sessionRepository;
         _messageRepository = messageRepository;
         _botRepository = botRepository;
-        _retrieveTopChunksHandler = retrieveTopChunksHandler;
         _visitorContextBundleHandler = visitorContextBundleHandler;
         _tenantVocabularyResolver = tenantVocabularyResolver;
         _businessOutcomeExecutor = businessOutcomeExecutor;
@@ -70,7 +66,6 @@ public sealed class EngageOrchestrator
         }, cancellationToken);
 
         var recentMessages = await _messageRepository.ListBySessionAsync(session.Id, cancellationToken);
-        var knowledgeSummary = await GetKnowledgeSummaryAsync(site, bot, command.Message, cancellationToken);
         var tenantVocab = await _tenantVocabularyResolver.ResolveAsync(site.TenantId, site.Id, bot.BotId, cancellationToken);
 
         // FIXED: Correct constructor call using positional arguments + named where safe
@@ -89,6 +84,9 @@ public sealed class EngageOrchestrator
             cancellationToken);
 
         var visitorBundle = visitorBundleResult?.Value;
+        var knowledgeSummary = visitorBundle is null
+            ? string.Empty
+            : string.Join("\n", visitorBundle.KnowledgeRetrievalSnapshot.TopChunks.Select(item => item.ContentExcerpt));
 
         var context = await _contextAnalyzer.AnalyzeAsync(
             session, 
@@ -158,13 +156,6 @@ public sealed class EngageOrchestrator
 
         await _sessionRepository.InsertAsync(newSession, ct);
         return newSession;
-    }
-
-    private async Task<string> GetKnowledgeSummaryAsync(Site site, EngageBot bot, string message, CancellationToken ct)
-    {
-        var chunks = await _retrieveTopChunksHandler.HandleAsync(
-            new RetrieveTopChunksQuery(site.TenantId, site.Id, message, 3, bot.BotId), ct);
-        return string.Join("\n", chunks.Select(c => c.Content));
     }
 
     internal static string ApplyTenantPlaybook(string response, EngageBot bot, IReadOnlyCollection<string> tenantVocabulary)

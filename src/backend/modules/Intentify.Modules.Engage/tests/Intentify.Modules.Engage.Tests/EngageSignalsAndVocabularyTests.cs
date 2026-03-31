@@ -59,6 +59,16 @@ public sealed class EngageSignalsAndVocabularyTests
     }
 
     [Fact]
+    public void ConversationPolicy_CloseSignal_IsDetected()
+    {
+        var policy = new EngageConversationPolicy();
+
+        var result = policy.IsConversationCloseSignal("thanks that's all");
+
+        Assert.True(result);
+    }
+
+    [Fact]
     public async Task TenantVocabularyResolver_UsesSiteAndKnowledgeTerms_WithBotScoping()
     {
         var tenantId = Guid.NewGuid();
