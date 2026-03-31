@@ -34,6 +34,14 @@ public sealed class ResponseShaper
             return cleaned;
         }
 
+        // Enforce a single, executable prompt contract: one short response with at most one question.
+        var questionCount = cleaned.Count(c => c == '?');
+        if (questionCount > 1)
+        {
+            var firstQuestion = cleaned.IndexOf('?');
+            cleaned = cleaned[..(firstQuestion + 1)];
+        }
+
         if (!cleaned.EndsWith("?") && !cleaned.Contains("?"))
         {
             var fallback = ctx.LastAssistantQuestion ?? "How can I help you move forward?";

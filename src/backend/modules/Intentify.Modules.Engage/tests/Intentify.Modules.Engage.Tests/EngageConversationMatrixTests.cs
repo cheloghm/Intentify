@@ -87,14 +87,6 @@ public sealed class EngageConversationMatrixTests
         Assert.Contains("hvac", adjusted, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact]
-    public void Matrix_ClosureSignal_ProducesCloseAction()
-    {
-        var ctx = CreateContext("that will be all", new EngageAnalysisSummary("Discover", false, false, 0.8m, false));
-        var action = Selector.Select(ctx);
-        Assert.Equal(EngageNextAction.CloseConversation, action.Action);
-    }
-
     private static EngageConversationContext CreateContext(
         string userMessage,
         EngageAnalysisSummary analysis,

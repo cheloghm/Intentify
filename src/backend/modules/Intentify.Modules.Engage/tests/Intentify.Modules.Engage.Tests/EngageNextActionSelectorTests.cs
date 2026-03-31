@@ -108,25 +108,6 @@ public sealed class EngageNextActionSelectorTests
         Assert.Equal("CaptureLead", decision.TargetState);
     }
 
-    [Fact]
-    public void Select_ClosureSignal_ReturnsCloseConversation()
-    {
-        var context = CreateContext(
-            session: new EngageChatSession { ConversationState = "CaptureLead", PendingCaptureMode = "Commercial" },
-            recentMessages:
-            [
-                new EngageChatMessage { Role = "assistant", Content = "Anything else I can help with?", CreatedAtUtc = DateTime.UtcNow.AddMinutes(-1) },
-                new EngageChatMessage { Role = "user", Content = "no thanks", CreatedAtUtc = DateTime.UtcNow }
-            ],
-            analysis: new EngageAnalysisSummary("CaptureLead", false, false, 0.8m, false),
-            userMessage: "no thanks");
-
-        var decision = Selector.Select(context);
-
-        Assert.Equal(EngageNextAction.CloseConversation, decision.Action);
-        Assert.Equal("Discover", decision.TargetState);
-    }
-
     private static EngageConversationContext CreateContext(
         EngageChatSession session,
         IReadOnlyCollection<EngageChatMessage> recentMessages,

@@ -228,39 +228,6 @@ public sealed class EngageConversationPolicy
             || normalized.Contains("just browsing", StringComparison.Ordinal);
     }
 
-    public bool IsClosureSignal(string message)
-    {
-        if (string.IsNullOrWhiteSpace(message))
-        {
-            return false;
-        }
-
-        var normalized = _interpreter.NormalizeUserMessage(message);
-        return normalized is "no" or "no thanks" or "no thank you" or "thats all" or "that is all" or "nothing else" or "im good" or "i am good"
-            || normalized.Contains("that will be all", StringComparison.Ordinal)
-            || normalized.Contains("nothing else", StringComparison.Ordinal)
-            || normalized.Contains("all good", StringComparison.Ordinal);
-    }
-
-    public string BuildClosureResponse(EngageChatSession session)
-    {
-        var hasLeadContact = !string.IsNullOrWhiteSpace(session.CapturedEmail)
-            || !string.IsNullOrWhiteSpace(session.CapturedPhone)
-            || !string.IsNullOrWhiteSpace(session.CapturedPreferredContactMethod);
-
-        if (string.Equals(session.PendingCaptureMode, "Support", StringComparison.OrdinalIgnoreCase))
-        {
-            return "Thanks for the details — our support team will follow up shortly.";
-        }
-
-        if (hasLeadContact)
-        {
-            return "Perfect, thank you. We have your details and our team will reach out soon.";
-        }
-
-        return "Great, thanks for chatting with me today.";
-    }
-
     public string BuildNarrowObjectionFollowUp(EngageChatSession session)
     {
         if (string.IsNullOrWhiteSpace(session.CaptureGoal))
@@ -293,20 +260,7 @@ public sealed class EngageConversationPolicy
             return "Thanks — I have the basics. Any key constraints like budget or timeline?";
         }
 
-        if (string.IsNullOrWhiteSpace(session.CapturedName))
-        {
-            return "Thanks — I have your details so far. Please share your first name.";
-        }
-
-        var hasContact = !string.IsNullOrWhiteSpace(session.CapturedPreferredContactMethod)
-            || !string.IsNullOrWhiteSpace(session.CapturedEmail)
-            || !string.IsNullOrWhiteSpace(session.CapturedPhone);
-        if (!hasContact)
-        {
-            return "Thanks — please share your preferred contact method.";
-        }
-
-        return "Thanks — I have your details so far. Is there anything else you’d like help with?";
+        return "Thanks — I have your details so far. Please share your first name and preferred contact method.";
     }
 
     public string BuildNaturalNextQuestion(EngageChatSession session, EngageConversationContext ctx)

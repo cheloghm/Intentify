@@ -14,6 +14,7 @@ public sealed class EngageNextActionSelector
     public EngageNextActionDecision Select(EngageConversationContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
+
         var memory = EngageSessionMemorySnapshot.FromContext(context, _policy);
 
         if (_policy.IsExplicitEscalationRequest(context.UserMessage) || _policy.NeedsHumanHelp(context.UserMessage))
@@ -24,11 +25,6 @@ public sealed class EngageNextActionSelector
         if (memory.IsSupportCaptureActive)
         {
             return new EngageNextActionDecision(EngageNextAction.EscalateSupport, "Discover", "ActiveSupportCapture");
-        }
-
-        if (_policy.IsClosureSignal(context.UserMessage))
-        {
-            return new EngageNextActionDecision(EngageNextAction.CloseConversation, "Discover", "ClosureSignal");
         }
 
         if (context.Analysis.AnswersPreviousQuestion && memory.IsCommercialCaptureActive)
@@ -68,6 +64,7 @@ public sealed class EngageNextActionSelector
     private bool ShouldCapture(EngageConversationContext context, EngageSessionMemorySnapshot memory)
     {
         if (context.Analysis.AiSuggestedCapture)
+        if (string.Equals(context.Session.ConversationState, "CaptureLead", StringComparison.Ordinal))
         {
             return true;
         }

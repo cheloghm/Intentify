@@ -108,34 +108,6 @@ public sealed class EngageConversationPolicyTests
         Assert.True(signal);
     }
 
-    [Fact]
-    public void BuildNextDiscoveryQuestion_WhenContactAlreadyCaptured_DoesNotReaskNameOrContact()
-    {
-        var session = CreateSession(
-            captureGoal: "increase leads",
-            captureType: "home services",
-            captureLocation: "Austin",
-            captureConstraints: "3 month timeline");
-        session.CapturedName = "Taylor";
-        session.CapturedEmail = "taylor@example.com";
-        session.CapturedPreferredContactMethod = "Email";
-
-        var question = Policy.BuildNextDiscoveryQuestion(session);
-
-        Assert.DoesNotContain("first name", question, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("contact method", question, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Theory]
-    [InlineData("no thanks")]
-    [InlineData("that's all")]
-    [InlineData("nothing else")]
-    [InlineData("i'm good")]
-    public void IsClosureSignal_RecognizesCommonClosePhrases(string message)
-    {
-        Assert.True(Policy.IsClosureSignal(message));
-    }
-
     private static EngageChatSession CreateSession(
         string? captureGoal = null,
         string? captureType = null,
