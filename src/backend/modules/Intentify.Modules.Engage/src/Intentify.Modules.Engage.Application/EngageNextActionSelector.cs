@@ -34,16 +34,6 @@ public sealed class EngageNextActionSelector
             return new EngageNextActionDecision(EngageNextAction.EscalateSupport, "Discover", "SupportEscalation");
         }
 
-        if (_policy.IsPricingIntent(context.UserMessage) && _policy.HasSufficientPricingContext(context.Session))
-        {
-            return new EngageNextActionDecision(EngageNextAction.AnswerFactual, "Discover", "PricingEstimate");
-        }
-
-        if (_policy.IsAcknowledgementTurn(context.UserMessage))
-        {
-            return new EngageNextActionDecision(EngageNextAction.AnswerFactual, "Discover", "AcknowledgementContinue");
-        }
-
         if (TryResolveAiAuthoredAction(context.AiDecision, out var aiDecision))
         {
             return aiDecision;
@@ -69,12 +59,10 @@ public sealed class EngageNextActionSelector
             return new EngageNextActionDecision(EngageNextAction.HandleNarrowObjection, "Discover", "NarrowObjection");
         }
 
-        var captureSignal = (_policy.IsStrongCommercialIntent(context.UserMessage)
+        var captureSignal = _policy.IsStrongCommercialIntent(context.UserMessage)
                             || _policy.IsExplicitCommercialContactRequest(context.UserMessage)
                             || memory.IsCommercialCaptureActive
-                            || (context.Analysis.AnswersPreviousQuestion && memory.DiscoveryFieldCount > 0))
-                            && !_policy.IsAcknowledgementTurn(context.UserMessage)
-                            && !_policy.IsPricingIntent(context.UserMessage);
+                            || (context.Analysis.AnswersPreviousQuestion && memory.DiscoveryFieldCount > 0);
 
         if (captureSignal)
         {

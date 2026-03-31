@@ -23,26 +23,6 @@ public sealed class ResponseShaper
         cleaned = Regex.Replace(cleaned, @"(.+?)(?:\s+\1)+$", "$1", RegexOptions.IgnoreCase).Trim();
 
         var action = ctx.PrimaryActionDecision?.Action;
-
-        var recentAssistant = ctx.RecentMessages
-            .Where(item => string.Equals(item.Role, "assistant", StringComparison.OrdinalIgnoreCase))
-            .Select(item => item.Content?.Trim() ?? string.Empty)
-            .Where(item => !string.IsNullOrWhiteSpace(item))
-            .TakeLast(2)
-            .ToArray();
-
-        if (recentAssistant.Any(prev => IsNearDuplicate(prev, cleaned)))
-        {
-            if (action is EngageNextAction.AskCaptureQuestion or EngageNextAction.AskDiscoveryQuestion)
-            {
-                cleaned = $"{cleaned.TrimEnd('.', '!')} — to move this forward, share the one detail I’m missing.";
-            }
-            else if (action == EngageNextAction.AnswerFactual)
-            {
-                cleaned = $"{cleaned} If you want, I can tailor this to your exact scope next.";
-            }
-        }
-
         if (action is EngageNextAction.CloseConversation or EngageNextAction.AnswerFactual)
         {
             return cleaned;

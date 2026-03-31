@@ -85,16 +85,7 @@ public sealed class DiscoverState : IEngageState
                 ctx.Session.PendingCaptureMode = null;
             }
 
-            var topAnswer = ResolveDraftReply(ctx);
-            if (string.IsNullOrWhiteSpace(topAnswer))
-            {
-                topAnswer = string.Equals(reason, "PricingEstimate", StringComparison.Ordinal)
-                    ? _policy.BuildScopedEstimate(ctx.Session, ctx.RecentMessages)
-                    : string.Equals(reason, "AcknowledgementContinue", StringComparison.Ordinal)
-                        ? _policy.BuildAcknowledgementProgressReply(ctx)
-                        : _policy.BuildGroundedKnowledgeAnswer(ctx.KnowledgeSummary, ctx.UserMessage);
-            }
-
+            var topAnswer = ResolveDraftReply(ctx) ?? _policy.BuildGroundedKnowledgeAnswer(ctx.KnowledgeSummary, ctx.UserMessage);
             var factual = _shaper.Shape(topAnswer, ctx);
             ctx.Session.ConversationState = "Discover";
             ctx.Session.IsConversationComplete = false;
@@ -104,9 +95,6 @@ public sealed class DiscoverState : IEngageState
         }
 
         var nextQuestion = ResolveDraftReply(ctx) ?? _policy.BuildNaturalNextQuestion(ctx.Session, ctx);
-        if (nextQuestion.Contains("overview", StringComparison.OrdinalIgnoreCase)) ctx.Session.LastAssistantAskType = "overview";
-        if (nextQuestion.Contains("outline", StringComparison.OrdinalIgnoreCase) || nextQuestion.Contains("structure", StringComparison.OrdinalIgnoreCase)) ctx.Session.LastAssistantAskType = "outline";
-        if (nextQuestion.Contains("estimate", StringComparison.OrdinalIgnoreCase) || nextQuestion.Contains("range", StringComparison.OrdinalIgnoreCase)) ctx.Session.LastAssistantAskType = "estimate";
         var response = _shaper.Shape(nextQuestion, ctx);
 
         ctx.Session.ConversationState = "Discover";

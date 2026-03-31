@@ -375,114 +375,6 @@ public sealed class EngageConversationPolicy
         return $"{opening} {string.Join(" ", lines)}";
     }
 
-
-    public bool IsAcknowledgementTurn(string message)
-    {
-        if (string.IsNullOrWhiteSpace(message)) return false;
-        var normalized = Interpreter.NormalizeUserMessage(message);
-        return normalized is "ok" or "okay" or "okay good" or "yes" or "yes please" or "please do" or "go ahead" or "sounds good" or "that works"
-               || normalized.StartsWith("yes ", StringComparison.Ordinal)
-               || normalized.StartsWith("ok ", StringComparison.Ordinal)
-               || normalized.StartsWith("okay ", StringComparison.Ordinal)
-               || normalized.Contains("go ahead", StringComparison.Ordinal)
-               || normalized.Contains("please do", StringComparison.Ordinal);
-    }
-
-    public bool IsPricingIntent(string message)
-    {
-        var normalized = Interpreter.NormalizeUserMessage(message);
-        return normalized.Contains("how much", StringComparison.Ordinal)
-               || normalized.Contains("cost", StringComparison.Ordinal)
-               || normalized.Contains("pricing", StringComparison.Ordinal)
-               || normalized.Contains("estimate", StringComparison.Ordinal)
-               || normalized.Contains("quote", StringComparison.Ordinal);
-    }
-
-    public bool HasSufficientPricingContext(EngageChatSession session)
-    {
-        return !string.IsNullOrWhiteSpace(session.CaptureType)
-               && (!string.IsNullOrWhiteSpace(session.CaptureGoal) || !string.IsNullOrWhiteSpace(session.CaptureContext));
-    }
-
-    public string BuildScopedEstimate(EngageChatSession session, IReadOnlyCollection<EngageChatMessage> recentMessages)
-    {
-        var features = ExtractFeatureScope(session, recentMessages);
-        var hasDelivery = features.Contains("delivery", StringComparison.OrdinalIgnoreCase) || features.Contains("ordering", StringComparison.OrdinalIgnoreCase);
-        var hasCatering = features.Contains("catering", StringComparison.OrdinalIgnoreCase);
-
-        var low = 1800;
-        var high = 3500;
-
-        if (hasDelivery)
-        {
-            low += 700;
-            high += 1800;
-        }
-
-        if (hasCatering)
-        {
-            low += 400;
-            high += 900;
-        }
-
-        if (!string.IsNullOrWhiteSpace(session.CaptureConstraints))
-        {
-            var normalizedConstraints = Interpreter.NormalizeUserMessage(session.CaptureConstraints);
-            if (normalizedConstraints.Contains("week", StringComparison.Ordinal) || normalizedConstraints.Contains("urgent", StringComparison.Ordinal))
-            {
-                high += 800;
-            }
-        }
-
-        var scopeSummary = string.IsNullOrWhiteSpace(features)
-            ? (session.CaptureType ?? "your project")
-            : $"{session.CaptureType ?? "your project"} with {features}";
-
-        return $"Based on what you’ve shared ({scopeSummary}), a realistic range is ${low:N0}–${high:N0}. Main price drivers are ordering/delivery complexity, content readiness, and timeline. If you want, I can tighten this to a narrower estimate with one final preference (template-led vs custom design).";
-    }
-
-    public string BuildAcknowledgementProgressReply(EngageConversationContext ctx)
-    {
-        var lastAsk = ctx.Session.LastAssistantAskType ?? string.Empty;
-        if (lastAsk.Contains("estimate", StringComparison.OrdinalIgnoreCase) || IsPricingIntent(ctx.LastAssistantQuestion ?? string.Empty))
-        {
-            return BuildScopedEstimate(ctx.Session, ctx.RecentMessages);
-        }
-
-        if (lastAsk.Contains("overview", StringComparison.OrdinalIgnoreCase)
-            || (ctx.LastAssistantQuestion?.Contains("overview", StringComparison.OrdinalIgnoreCase) ?? false))
-        {
-            var type = string.IsNullOrWhiteSpace(ctx.Session.CaptureType) ? "business" : ctx.Session.CaptureType;
-            return $"Great — here’s a practical overview for your {type}: clear value proposition, trust signals, service/menu highlights, streamlined ordering/contact flow, and mobile-first performance.";
-        }
-
-        if (lastAsk.Contains("outline", StringComparison.OrdinalIgnoreCase)
-            || (ctx.LastAssistantQuestion?.Contains("outline", StringComparison.OrdinalIgnoreCase) ?? false))
-        {
-            var features = ExtractFeatureScope(ctx.Session, ctx.RecentMessages);
-            return string.IsNullOrWhiteSpace(features)
-                ? "Sure — a solid structure is: Home, Services/Menu, About, Ordering/Booking, and Contact."
-                : $"Sure — based on your scope, I’d structure it as: {features}.";
-        }
-
-        return BuildNaturalNextQuestion(ctx.Session, ctx);
-    }
-
-    public string ExtractFeatureScope(EngageChatSession session, IReadOnlyCollection<EngageChatMessage> recentMessages)
-    {
-        var fromContext = session.CaptureContext ?? string.Empty;
-        var recentUser = recentMessages
-            .Where(m => string.Equals(m.Role, "user", StringComparison.OrdinalIgnoreCase))
-            .Select(m => m.Content)
-            .TakeLast(4);
-
-        var combined = string.Join(" ", new[] { fromContext }.Concat(recentUser));
-        var normalized = Interpreter.NormalizeUserMessage(combined);
-        var keywords = new[] { "home page", "services", "menu", "ordering", "delivery", "catering", "contact", "about", "booking" };
-        var hits = keywords.Where(k => normalized.Contains(k.Replace(" ", " "), StringComparison.Ordinal)).Distinct().ToArray();
-        return string.Join(", ", hits);
-    }
-
     public void MarkConversationCompleted(EngageChatSession session, string reason)
     {
         session.IsConversationComplete = true;
@@ -539,19 +431,6 @@ public sealed class EngageConversationPolicy
                     session.CaptureLocation ??= originalMessage.Trim();
                 }
             }
-        }
-
-        if ((originalMessage.Contains(",", StringComparison.Ordinal) || originalMessage.Contains(" and ", StringComparison.OrdinalIgnoreCase))
-            && (normalized.Contains("menu", StringComparison.Ordinal)
-                || normalized.Contains("ordering", StringComparison.Ordinal)
-                || normalized.Contains("delivery", StringComparison.Ordinal)
-                || normalized.Contains("catering", StringComparison.Ordinal)
-                || normalized.Contains("contact", StringComparison.Ordinal)))
-        {
-            session.CaptureContext = string.IsNullOrWhiteSpace(session.CaptureContext)
-                ? originalMessage.Trim()
-                : $"{session.CaptureContext}; scope: {originalMessage.Trim()}";
-            updated = true;
         }
 
         if (string.IsNullOrWhiteSpace(session.CaptureConstraints)

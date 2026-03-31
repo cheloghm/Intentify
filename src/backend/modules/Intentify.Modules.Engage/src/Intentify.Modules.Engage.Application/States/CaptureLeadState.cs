@@ -41,19 +41,6 @@ public sealed class CaptureLeadState : IEngageState
                 "CaptureLead")));
         }
 
-        if (_policy.IsAcknowledgementTurn(ctx.UserMessage))
-        {
-            var continued = _shaper.Shape(_policy.BuildAcknowledgementProgressReply(ctx), ctx);
-            ctx.Session.IsConversationComplete = false;
-            return Task.FromResult(OperationResult<ChatSendResult>.Success(new ChatSendResult(
-                ctx.Session.Id,
-                continued,
-                0.83m,
-                false,
-                Array.Empty<EngageCitationResult>(),
-                "CaptureLead")));
-        }
-
         var missing = _policy.DeterminePrimaryMissingField(ctx.Session);
         string response;
         if (string.Equals(missing, "none", StringComparison.Ordinal))
