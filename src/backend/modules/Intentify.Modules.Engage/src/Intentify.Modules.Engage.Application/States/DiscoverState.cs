@@ -89,9 +89,7 @@ public sealed class DiscoverState : IEngageState
                 .FirstOrDefault()
                 ?? "Here’s what I found.";
 
-            var factual = _shaper.Shape(
-                $"{topAnswer} {_policy.BuildNaturalNextQuestion(ctx.Session, ctx)}",
-                ctx);
+            var factual = _shaper.Shape(topAnswer, ctx);
 
             ctx.Session.ConversationState = "Discover";
 
