@@ -30,6 +30,21 @@ public sealed class EngageConversationMatrixTests
     }
 
     [Fact]
+    public void Matrix_TypoServicesQuestion_WithKnowledge_GoesFactual()
+    {
+        var session = new EngageChatSession { ConversationState = "Discover", PendingCaptureMode = "Support", CaptureContext = "login issue" };
+        var ctx = CreateContext(
+            "yur services?",
+            new EngageAnalysisSummary("Discover", false, false, 0.8m, false),
+            session,
+            knowledge: "We offer HVAC repair.");
+
+        var action = Selector.Select(ctx);
+
+        Assert.Equal(EngageNextAction.AnswerFactual, action.Action);
+    }
+
+    [Fact]
     public void Matrix_DiscoveryContinuation_ShortReply_UpdatesLocation()
     {
         var session = new EngageChatSession { CaptureGoal = "new site", CaptureType = "clinic" };
@@ -64,6 +79,14 @@ public sealed class EngageConversationMatrixTests
         var ctx = CreateContext("I need human support", new EngageAnalysisSummary("Discover", false, false, 0.8m, false));
         var action = Selector.Select(ctx);
         Assert.Equal(EngageNextAction.EscalateSupport, action.Action);
+    }
+
+    [Fact]
+    public void Matrix_CloseSignal_PrefersNaturalClose()
+    {
+        var ctx = CreateContext("thanks that's all", new EngageAnalysisSummary("Discover", false, false, 0.8m, false));
+        var action = Selector.Select(ctx);
+        Assert.Equal(EngageNextAction.CloseConversation, action.Action);
     }
 
     [Fact]

@@ -65,11 +65,16 @@ public sealed class EngageContextAnalyzer
         AiDecisionContract decision)
     {
         var trimmedMessage = userMessage.Trim();
+        var normalizedMessage = new EngageInputInterpreter().NormalizeUserMessage(userMessage);
         var assistantMessages = recentMessages.Count(item => string.Equals(item.Role, "assistant", StringComparison.OrdinalIgnoreCase));
         var isInitialTurn = assistantMessages == 0;
+        var looksLikePivotQuestion = trimmedMessage.Contains('?', StringComparison.Ordinal)
+            || normalizedMessage.Contains("services", StringComparison.Ordinal)
+            || normalizedMessage.Contains("pricing", StringComparison.Ordinal)
+            || normalizedMessage.Contains("cost", StringComparison.Ordinal);
         var answersPreviousQuestion = !string.IsNullOrWhiteSpace(trimmedMessage)
             && trimmedMessage.Length <= 80
-            && !trimmedMessage.Contains('?', StringComparison.Ordinal);
+            && !looksLikePivotQuestion;
 
         var aiSuggestedCapture = decision.Recommendations?.Any(item =>
             item.ProposedCommand is { Count: > 0 } proposed

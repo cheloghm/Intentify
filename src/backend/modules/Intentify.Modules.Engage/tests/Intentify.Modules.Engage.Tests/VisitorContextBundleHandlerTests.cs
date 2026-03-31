@@ -145,6 +145,18 @@ public sealed class VisitorContextBundleHandlerTests
         Assert.DoesNotContain(value.KnowledgeRetrievalSnapshot.TopChunks, item => item.SourceId == fixture.OtherBotSourceId);
     }
 
+    [Fact]
+    public async Task HandleAsync_RetrievesKnowledgeOncePerBundle()
+    {
+        var fixture = new Fixture();
+        var query = fixture.CreateQuery(visitorId: fixture.Visitor.Id, engageSessionId: fixture.EngageSession.Id);
+
+        var result = await fixture.Handler.HandleAsync(query);
+
+        Assert.Equal(OperationStatus.Success, result.Status);
+        Assert.Equal(1, fixture.KnowledgeChunkRepository.ListBySiteCalls);
+    }
+
     private sealed class Fixture
     {
         public Guid TenantId { get; } = Guid.NewGuid();
@@ -152,6 +164,7 @@ public sealed class VisitorContextBundleHandlerTests
         public Visitor Visitor { get; }
         public EngageChatSession EngageSession { get; }
         public Guid OtherBotSourceId { get; }
+        public FakeKnowledgeChunkRepository KnowledgeChunkRepository { get; }
         public VisitorContextBundleHandler Handler { get; }
 
         public Fixture(bool includeOptionalData = true)
@@ -212,12 +225,12 @@ public sealed class VisitorContextBundleHandlerTests
                 new KnowledgeSource { Id = matchingBotSourceId, TenantId = TenantId, SiteId = SiteId, BotId = EngageSession.BotId, Type = "text", CreatedAtUtc = DateTime.UtcNow, UpdatedAtUtc = DateTime.UtcNow },
                 new KnowledgeSource { Id = OtherBotSourceId, TenantId = TenantId, SiteId = SiteId, BotId = Guid.NewGuid(), Type = "text", CreatedAtUtc = DateTime.UtcNow, UpdatedAtUtc = DateTime.UtcNow }
             ]);
-            var knowledgeChunks = new FakeKnowledgeChunkRepository([
+            KnowledgeChunkRepository = new FakeKnowledgeChunkRepository([
                 new KnowledgeChunk { Id = Guid.NewGuid(), TenantId = TenantId, SiteId = SiteId, SourceId = fallbackSourceId, ChunkIndex = 0, Content = "return policy fallback content", CreatedAtUtc = DateTime.UtcNow },
                 new KnowledgeChunk { Id = Guid.NewGuid(), TenantId = TenantId, SiteId = SiteId, SourceId = matchingBotSourceId, ChunkIndex = 1, Content = "return policy matching bot content", CreatedAtUtc = DateTime.UtcNow },
                 new KnowledgeChunk { Id = Guid.NewGuid(), TenantId = TenantId, SiteId = SiteId, SourceId = OtherBotSourceId, ChunkIndex = 2, Content = "return policy other bot content", CreatedAtUtc = DateTime.UtcNow }
             ]);
-            var retrieveTopChunks = new RetrieveTopChunksHandler(knowledgeChunks, knowledgeSources, NullLogger<RetrieveTopChunksHandler>.Instance);
+            var retrieveTopChunks = new RetrieveTopChunksHandler(KnowledgeChunkRepository, knowledgeSources, NullLogger<RetrieveTopChunksHandler>.Instance);
 
             var visitorRepository = new FakeVisitorRepository(Visitor);
             var visitorTimelineReader = new FakeTimelineReader();
@@ -326,13 +339,18 @@ public sealed class VisitorContextBundleHandlerTests
 
     private sealed class FakeKnowledgeChunkRepository(IReadOnlyCollection<KnowledgeChunk> chunks) : IKnowledgeChunkRepository
     {
+        public int ListBySiteCalls { get; private set; }
+
         public Task UpsertChunksAsync(Guid tenantId, Guid sourceId, IReadOnlyCollection<KnowledgeChunk> chunksArg, CancellationToken cancellationToken = default)
             => Task.CompletedTask;
 
         public Task<IReadOnlyCollection<KnowledgeChunk>> ListBySiteAsync(Guid tenantId, Guid siteId, CancellationToken cancellationToken = default)
-            => Task.FromResult((IReadOnlyCollection<KnowledgeChunk>)chunks
+        {
+            ListBySiteCalls++;
+            return Task.FromResult((IReadOnlyCollection<KnowledgeChunk>)chunks
                 .Where(item => item.TenantId == tenantId && item.SiteId == siteId)
                 .ToArray());
+        }
 
         public Task DeleteBySourceAsync(Guid tenantId, Guid sourceId, CancellationToken cancellationToken = default)
             => Task.CompletedTask;

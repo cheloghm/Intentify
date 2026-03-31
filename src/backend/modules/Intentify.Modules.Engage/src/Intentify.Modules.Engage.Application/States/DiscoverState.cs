@@ -28,12 +28,23 @@ public sealed class DiscoverState : IEngageState
             ctx.Session.PendingCaptureMode = "Support";
             ctx.Session.ConversationState = "Discover";
 
-            var escalation = _shaper.Shape(
-                "I can get a human teammate to help with this. What is the main issue and how should we contact you?",
-                ctx);
+            var escalation = _shaper.Shape(_policy.BuildSupportCapturePrompt(ctx.Session), ctx);
 
             return Task.FromResult(
                 CreateAssistantResponse(ctx.Session, escalation, 0.9m, "SupportEscalation", reason));
+        }
+
+        if (action == EngageNextAction.CloseConversation)
+        {
+            ctx.Session.PendingCaptureMode = null;
+            ctx.Session.ConversationState = "Discover";
+
+            var close = _shaper.Shape(
+                "You’re all set — happy to help. If anything comes up, just message me.",
+                ctx);
+
+            return Task.FromResult(
+                CreateAssistantResponse(ctx.Session, close, 0.88m, "ConversationClose", reason));
         }
 
         if (_policy.IsContextRecoverySignal(ctx.UserMessage))
@@ -43,6 +54,18 @@ public sealed class DiscoverState : IEngageState
 
             return Task.FromResult(
                 CreateAssistantResponse(ctx.Session, recovered, 0.82m, "ContextRecovery", "AlreadyProvidedContext"));
+        }
+
+        if (string.Equals(reason, "SupportCaptureComplete", StringComparison.Ordinal))
+        {
+            ctx.Session.PendingCaptureMode = null;
+            ctx.Session.ConversationState = "Discover";
+            var done = _shaper.Shape(
+                "Thanks — I’ve captured what our support team needs. Is there anything else you’d like help with?",
+                ctx);
+
+            return Task.FromResult(
+                CreateAssistantResponse(ctx.Session, done, 0.86m, "SupportEscalation", reason));
         }
 
         if (action == EngageNextAction.HandleNarrowObjection)
@@ -56,6 +79,11 @@ public sealed class DiscoverState : IEngageState
 
         if (action == EngageNextAction.AnswerFactual && !string.IsNullOrWhiteSpace(ctx.KnowledgeSummary))
         {
+            if (string.Equals(ctx.Session.PendingCaptureMode, "Support", StringComparison.OrdinalIgnoreCase))
+            {
+                ctx.Session.PendingCaptureMode = null;
+            }
+
             var topAnswer = ctx.KnowledgeSummary
                 .Split('\n', StringSplitOptions.RemoveEmptyEntries)
                 .FirstOrDefault()

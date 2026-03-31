@@ -79,6 +79,59 @@ public sealed class EngageConversationPolicy
 
     public bool NeedsHumanHelp(string message) => _support.NeedsHumanHelp(message);
     public bool IsExplicitEscalationRequest(string message) => _support.IsExplicitEscalationRequest(message);
+    public bool IsConversationCloseSignal(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return false;
+        }
+
+        var normalized = _interpreter.NormalizeUserMessage(message);
+        return EngageConversationClosePhraseBank.ClosePhrases.Contains(normalized, StringComparer.Ordinal);
+    }
+
+    public bool IsSupportCaptureComplete(EngageChatSession session)
+    {
+        var hasIssue = !string.IsNullOrWhiteSpace(session.CaptureContext);
+        var hasMethod = !string.IsNullOrWhiteSpace(session.CapturedPreferredContactMethod);
+        var hasContactDetail = !string.IsNullOrWhiteSpace(session.CapturedEmail) || !string.IsNullOrWhiteSpace(session.CapturedPhone);
+        return hasIssue && hasMethod && hasContactDetail;
+    }
+
+    public string BuildSupportCapturePrompt(EngageChatSession session)
+    {
+        var hasIssue = !string.IsNullOrWhiteSpace(session.CaptureContext);
+        var hasMethod = !string.IsNullOrWhiteSpace(session.CapturedPreferredContactMethod);
+        var hasEmail = !string.IsNullOrWhiteSpace(session.CapturedEmail);
+        var hasPhone = !string.IsNullOrWhiteSpace(session.CapturedPhone);
+
+        if (!hasIssue)
+        {
+            return "Got it — what is the main issue you need help with?";
+        }
+
+        if (!hasMethod)
+        {
+            return "Thanks — what’s the best way for our team to contact you (email or phone)?";
+        }
+
+        if (string.Equals(session.CapturedPreferredContactMethod, "Email", StringComparison.OrdinalIgnoreCase) && !hasEmail)
+        {
+            return "Thanks — what’s the best email address to reach you?";
+        }
+
+        if (string.Equals(session.CapturedPreferredContactMethod, "Phone", StringComparison.OrdinalIgnoreCase) && !hasPhone)
+        {
+            return "Thanks — what’s the best phone number to reach you?";
+        }
+
+        if (!hasEmail && !hasPhone)
+        {
+            return "Thanks — please share your best email or phone number so our team can follow up.";
+        }
+
+        return "Thanks — I’ve captured that. A human teammate can follow up shortly. Is there anything else you’d like help with?";
+    }
 
     // Fixed & improved short-reply merging (no syntax errors)
     public bool TryMergeShortReplySlots(EngageChatSession session, string message, string? lastAssistantQuestion)
