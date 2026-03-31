@@ -15,6 +15,7 @@ public static class AiDecisionValidator
     private static readonly string[] AllowedFrustrationValues = ["Low", "Medium", "High"];
     private static readonly string[] AllowedBuyingReadinessValues = ["Low", "Medium", "High"];
     private static readonly string[] AllowedNextBestActions = ["SendFollowUpEmail", "ScheduleCall", "ShareServiceOverview", "PrepareQuote", "ConfirmTimeline"];
+    private static readonly string[] AllowedAssistantMoves = ["greet", "factual", "capture", "discover", "escalate", "close"];
 
     public static AiDecisionContract ValidateAndNormalize(AiDecisionContract decision)
     {
@@ -198,6 +199,10 @@ public static class AiDecisionValidator
         ValidateBoundedText(index, proposedCommand, "suggestedSalesFollowUpAngle", 160, errors);
         ValidateBoundedText(index, proposedCommand, "suggestedAssistantNextStep", 180, errors);
         ValidateAllowlistedValue(index, proposedCommand, "nextBestAction", AllowedNextBestActions, errors);
+        ValidateAllowlistedValue(index, proposedCommand, "assistantMove", AllowedAssistantMoves, errors);
+        ValidateBoundedText(index, proposedCommand, "draftReply", 700, errors);
+        ValidateBoundedText(index, proposedCommand, "missingField", 40, errors);
+        ValidateBoundedText(index, proposedCommand, "interpretedTurnType", 40, errors);
         ValidateBoundedText(index, proposedCommand, "followUpEmailDraft", 600, errors);
         ValidateFollowUpEmailDraft(index, proposedCommand, errors);
     }

@@ -15,7 +15,8 @@ public sealed class EngageInputInterpreter
         return normalized
             .Replace("contct", "contact")
             .Replace("cntact", "contact")
-            .Replace("yur", "your")
+                        .Replace("yur", "your")
+            .Replace("yor", "your")
             .Replace("webstie", "website")
             .Replace("websiet", "website");
     }

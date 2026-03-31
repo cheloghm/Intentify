@@ -1,5 +1,4 @@
 using Intentify.Modules.Engage.Domain;
-using Intentify.Shared.AI;
 using Microsoft.Extensions.Logging;
 
 namespace Intentify.Modules.Engage.Application;
@@ -7,12 +6,17 @@ namespace Intentify.Modules.Engage.Application;
 public sealed class EngageContextAnalyzer
 {
     private readonly AiDecisionGenerationService _aiDecisionService;
+    private readonly EngageConversationPolicy _policy;
+    private readonly ILogger<EngageContextAnalyzer> _logger;
 
     public EngageContextAnalyzer(
         AiDecisionGenerationService aiDecisionService,
+        EngageConversationPolicy policy,
         ILogger<EngageContextAnalyzer> logger)
     {
         _aiDecisionService = aiDecisionService;
+        _policy = policy;
+        _logger = logger;
     }
 
     public async Task<EngageConversationContext> AnalyzeAsync(
@@ -25,7 +29,6 @@ public sealed class EngageContextAnalyzer
         VisitorContextBundle? visitorBundle,
         CancellationToken ct)
     {
-        _ = BuildDistilledHistory(recentMessages, userMessage);
         var lastQuestion = recentMessages
             .Where(m => string.Equals(m.Role, "assistant", StringComparison.OrdinalIgnoreCase)
                      && !string.IsNullOrWhiteSpace(m.Content))
@@ -33,48 +36,53 @@ public sealed class EngageContextAnalyzer
             .LastOrDefault();
 
         var decision = visitorBundle != null
-            ? await _aiDecisionService.GenerateAsync(visitorBundle, ct) 
+            ? await _aiDecisionService.GenerateAsync(visitorBundle, ct)
             : new AiDecisionContract(
-                "1.0",                     // SchemaVersion (adjust if your constructor differs)
-                "Discover",                // Default decision
-                null,                      // ContextRef
-                0.5m,                      // Confidence
-                null,                      // Recommendations
+                "stage7.v1",
+                "fallback",
+                null,
+                0.4m,
+                [],
                 AiDecisionValidationStatus.Valid,
-                null,                      // Errors
-                null,                      // RecommendationTypes
-                false,                     // ShouldFallback
-                null,                      // NextBestAction
-                null);                     // ExtraData
+                [],
+                null,
+                true,
+                "NoVisitorBundle",
+                null);
 
-        var analysis = BuildAnalysisSummary(session, recentMessages, userMessage, decision);
+        var analysis = BuildAnalysisSummary(session, recentMessages, userMessage, knowledgeSummary, decision);
+
+        _logger.LogInformation(
+            "Engage turn analyzed. stage={Stage}; complete={IsComplete}; close={IsClose}; support={IsSupport}; factual={IsFactual}; capture={IsCapture}; reopen={ShouldReopen}; answeredPrior={AnsweredPrior}; aiConfidence={AiConfidence}",
+            session.ConversationState ?? "Discover",
+            session.IsConversationComplete,
+            analysis.IsCloseSignal,
+            analysis.IsSupportSignal,
+            analysis.IsFactualSignal,
+            analysis.IsCaptureSignal,
+            analysis.ShouldReopen,
+            analysis.AnswersPreviousQuestion,
+            decision.OverallConfidence);
 
         return new EngageConversationContext(session, recentMessages, userMessage, decision, lastQuestion, knowledgeSummary, analysis);
     }
 
-    private static string BuildDistilledHistory(IReadOnlyCollection<EngageChatMessage> messages, string currentMessage)
-    {
-        return string.Join("\n", messages.TakeLast(12)
-            .Select(m => $"{m.Role}: {m.Content.Trim()}"));
-    }
-
-    private static EngageAnalysisSummary BuildAnalysisSummary(
+    private EngageAnalysisSummary BuildAnalysisSummary(
         EngageChatSession session,
         IReadOnlyCollection<EngageChatMessage> recentMessages,
         string userMessage,
+        string knowledgeSummary,
         AiDecisionContract decision)
     {
         var trimmedMessage = userMessage.Trim();
         var normalizedMessage = new EngageInputInterpreter().NormalizeUserMessage(userMessage);
         var assistantMessages = recentMessages.Count(item => string.Equals(item.Role, "assistant", StringComparison.OrdinalIgnoreCase));
         var isInitialTurn = assistantMessages == 0;
-        var looksLikePivotQuestion = trimmedMessage.Contains('?', StringComparison.Ordinal)
-            || normalizedMessage.Contains("services", StringComparison.Ordinal)
-            || normalizedMessage.Contains("pricing", StringComparison.Ordinal)
-            || normalizedMessage.Contains("cost", StringComparison.Ordinal);
         var answersPreviousQuestion = !string.IsNullOrWhiteSpace(trimmedMessage)
-            && trimmedMessage.Length <= 80
-            && !looksLikePivotQuestion;
+            && trimmedMessage.Length <= 120
+            && !trimmedMessage.Contains('?', StringComparison.Ordinal)
+            && !normalizedMessage.StartsWith("what ", StringComparison.Ordinal)
+            && !normalizedMessage.StartsWith("how ", StringComparison.Ordinal);
 
         var aiSuggestedCapture = decision.Recommendations?.Any(item =>
             item.ProposedCommand is { Count: > 0 } proposed
@@ -84,20 +92,31 @@ public sealed class EngageContextAnalyzer
                 || proposed.ContainsKey("capturedName")
                 || proposed.ContainsKey("capturedPreferredContactMethod"))) == true;
 
+        var isClose = _policy.IsConversationCloseSignal(userMessage);
+        var isSupport = _policy.IsExplicitEscalationRequest(userMessage) || _policy.NeedsHumanHelp(userMessage);
+        var isFactual = _policy.IsServiceQuestion(userMessage)
+                        || trimmedMessage.Contains('?', StringComparison.Ordinal)
+                        || (!string.IsNullOrWhiteSpace(knowledgeSummary) && normalizedMessage.Contains("pricing", StringComparison.Ordinal));
+        var isCapture = _policy.IsStrongCommercialIntent(userMessage) || _policy.IsExplicitCommercialContactRequest(userMessage) || aiSuggestedCapture;
+        var shouldReopen = _policy.ShouldReopenCompletedConversation(session, userMessage);
+
         var likelyStateHint = isInitialTurn
             ? "Greeting"
-            : string.Equals(session.ConversationState, "CaptureLead", StringComparison.Ordinal)
+            : isCapture
                 ? "CaptureLead"
-                : aiSuggestedCapture
-                    ? "CaptureLead"
-                    : "Discover";
+                : "Discover";
 
         return new EngageAnalysisSummary(
             likelyStateHint,
             answersPreviousQuestion,
             aiSuggestedCapture,
             decision.OverallConfidence,
-            isInitialTurn);
+            isInitialTurn,
+            isClose,
+            isSupport,
+            isFactual,
+            isCapture,
+            shouldReopen);
     }
 }
 
@@ -141,4 +160,9 @@ public sealed record EngageAnalysisSummary(
     bool AnswersPreviousQuestion,
     bool AiSuggestedCapture,
     decimal OverallConfidence,
-    bool IsInitialTurn);
+    bool IsInitialTurn,
+    bool IsCloseSignal,
+    bool IsSupportSignal,
+    bool IsFactualSignal,
+    bool IsCaptureSignal,
+    bool ShouldReopen);
