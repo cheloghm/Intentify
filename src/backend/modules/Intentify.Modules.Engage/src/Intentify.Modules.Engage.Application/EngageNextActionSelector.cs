@@ -61,6 +61,16 @@ public sealed class EngageNextActionSelector
 
         if (context.Analysis.IsInitialTurn)
         {
+            if (ShouldAnswerFactual(context))
+            {
+                return new EngageNextActionDecision(EngageNextAction.AnswerFactual, "Discover", "InitialTurnFactual");
+            }
+
+            if (ShouldCapture(context, memory))
+            {
+                return new EngageNextActionDecision(EngageNextAction.AskCaptureQuestion, "CaptureLead", "InitialTurnCapture");
+            }
+
             return new EngageNextActionDecision(EngageNextAction.Greeting, "Greeting", "InitialTurn");
         }
 

@@ -37,6 +37,12 @@ public sealed class ResponseShaper
             }
         }
 
+        var action = ctx.PrimaryActionDecision?.Action;
+        if (action is EngageNextAction.CloseConversation or EngageNextAction.AnswerFactual)
+        {
+            return cleaned;
+        }
+
         var isClosureStyle =
             cleaned.EndsWith(".", StringComparison.Ordinal) &&
             (cleaned.Contains("thank", StringComparison.OrdinalIgnoreCase)

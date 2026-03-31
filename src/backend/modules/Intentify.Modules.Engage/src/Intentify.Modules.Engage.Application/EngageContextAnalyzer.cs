@@ -27,8 +27,8 @@ public sealed class EngageContextAnalyzer
     {
         _ = BuildDistilledHistory(recentMessages, userMessage);
         var lastQuestion = recentMessages
-            .Where(m => string.Equals(m.Role, "assistant", StringComparison.OrdinalIgnoreCase) 
-                     && m.Content.Trim().EndsWith("?"))
+            .Where(m => string.Equals(m.Role, "assistant", StringComparison.OrdinalIgnoreCase)
+                     && !string.IsNullOrWhiteSpace(m.Content))
             .Select(m => m.Content.Trim())
             .LastOrDefault();
 
