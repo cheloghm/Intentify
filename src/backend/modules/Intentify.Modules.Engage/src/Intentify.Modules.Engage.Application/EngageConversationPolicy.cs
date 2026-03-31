@@ -54,7 +54,17 @@ public sealed class EngageConversationPolicy
             return "What location should we plan for?";
         if (string.IsNullOrWhiteSpace(session.CaptureConstraints))
             return "Any key constraints like budget or timeline?";
-        return "Thanks — that gives me enough context. Please share your first name and best contact method.";
+
+        if (string.IsNullOrWhiteSpace(session.CapturedName))
+            return "Thanks — that gives me enough context. Please share your first name.";
+
+        var hasContact = !string.IsNullOrWhiteSpace(session.CapturedPreferredContactMethod)
+            || !string.IsNullOrWhiteSpace(session.CapturedEmail)
+            || !string.IsNullOrWhiteSpace(session.CapturedPhone);
+        if (!hasContact)
+            return "Great, and what’s the best contact method for follow-up?";
+
+        return "Thanks — I have what I need. Is there anything else you’d like help with?";
     }
 
     public bool IsCommercialCaptureReady(EngageChatSession session, bool explicitContactRequest)
