@@ -14,6 +14,8 @@ public sealed class GreetingState : IEngageState
     {
         var response = _shaper.Shape("Hi! How can I help you today?", ctx);
         ctx.Session.ConversationState = "Greeting";
+        ctx.Session.IsConversationComplete = false;
+        ctx.Session.LastAssistantAskType = "none";
         return OperationResult<ChatSendResult>.Success(new ChatSendResult(ctx.Session.Id, response, 1.0m, false, Array.Empty<EngageCitationResult>(), "Greeting"));
     }
 }

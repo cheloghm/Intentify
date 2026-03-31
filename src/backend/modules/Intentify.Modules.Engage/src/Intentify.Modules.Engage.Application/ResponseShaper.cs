@@ -1,4 +1,3 @@
-using Intentify.Modules.Engage.Domain;
 using System.Text.RegularExpressions;
 
 namespace Intentify.Modules.Engage.Application;
@@ -14,28 +13,14 @@ public sealed class ResponseShaper
 
         var cleaned = raw.Trim();
 
-        // Remove common filler phrases
         cleaned = Regex.Replace(
             cleaned,
-            @"(If you want|If you'd like|What would you like to do next\?|Thanks for confirming)",
+            @"(If you want|If you'd like|Thanks for confirming)",
             "",
             RegexOptions.IgnoreCase);
 
         cleaned = Regex.Replace(cleaned, @"\s{2,}", " ").Trim();
-
-        // Collapse repeated trailing duplicate text blocks
         cleaned = Regex.Replace(cleaned, @"(.+?)(?:\s+\1)+$", "$1", RegexOptions.IgnoreCase).Trim();
-
-        // Enforce at most one question
-        var questionCount = cleaned.Count(c => c == '?');
-        if (questionCount > 1)
-        {
-            var firstQuestion = cleaned.IndexOf('?');
-            if (firstQuestion >= 0)
-            {
-                cleaned = cleaned[..(firstQuestion + 1)].Trim();
-            }
-        }
 
         var action = ctx.PrimaryActionDecision?.Action;
         if (action is EngageNextAction.CloseConversation or EngageNextAction.AnswerFactual)
@@ -43,24 +28,17 @@ public sealed class ResponseShaper
             return cleaned;
         }
 
-        var isClosureStyle =
-            cleaned.EndsWith(".", StringComparison.Ordinal) &&
-            (cleaned.Contains("thank", StringComparison.OrdinalIgnoreCase)
-             || cleaned.Contains("reach out", StringComparison.OrdinalIgnoreCase)
-             || cleaned.Contains("follow up", StringComparison.OrdinalIgnoreCase));
-
-        if (isClosureStyle)
+        if (ctx.Session.IsConversationComplete)
         {
             return cleaned;
         }
 
         if (!cleaned.Contains('?'))
         {
-            var fallback = ctx.LastAssistantQuestion ?? "How can I help you move forward?";
-
-            if (!cleaned.Contains(fallback, StringComparison.OrdinalIgnoreCase))
+            var likelyPrompt = action is EngageNextAction.AskCaptureQuestion or EngageNextAction.AskDiscoveryQuestion;
+            if (likelyPrompt)
             {
-                cleaned = $"{cleaned} {fallback}".Trim();
+                cleaned = $"{cleaned.TrimEnd('.', '!')}?";
             }
         }
 

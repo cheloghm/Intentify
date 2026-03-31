@@ -297,6 +297,10 @@ public sealed class AiDecisionGenerationService
         builder.AppendLine("        \"suggestedServiceFit\":\"short\",");
         builder.AppendLine("        \"suggestedSalesFollowUpAngle\":\"short\",");
         builder.AppendLine("        \"suggestedAssistantNextStep\":\"short\",");
+        builder.AppendLine("        \"assistantMove\":\"greet|factual|capture|discover|escalate|close\",");
+        builder.AppendLine("        \"draftReply\":\"final customer-facing reply for this turn\",");
+        builder.AppendLine("        \"missingField\":\"goal|type|location|constraints|name|method|email|phone|none\",");
+        builder.AppendLine("        \"interpretedTurnType\":\"answer|new_topic|close|support|factual|capture\",");
         builder.AppendLine("        \"nextBestAction\":\"SendFollowUpEmail|ScheduleCall|ShareServiceOverview|PrepareQuote|ConfirmTimeline\",");
         builder.AppendLine("        \"followUpEmailDraft\":\"short email draft\",");
         builder.AppendLine("        \"captureGoal\":\"short\",");
@@ -316,6 +320,8 @@ public sealed class AiDecisionGenerationService
         builder.AppendLine("- If uncertain, return NoAction with shouldFallback=true.");
         builder.AppendLine("- Do not propose action execution steps.");
         builder.AppendLine("- Keep recommendations to max 3.");
+        builder.AppendLine("- Always provide proposedCommand.assistantMove and proposedCommand.draftReply.");
+        builder.AppendLine("- Prefer grounded factual answers when knowledge chunks are relevant.");
         builder.AppendLine();
         builder.AppendLine("Context:");
         builder.AppendLine($"tenantId: {contextBundle.ContextRef.TenantId:D}");

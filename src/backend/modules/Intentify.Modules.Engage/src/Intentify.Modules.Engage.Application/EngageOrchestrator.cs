@@ -99,10 +99,22 @@ public sealed class EngageOrchestrator
             cancellationToken);
 
         context.SetPrimaryAction(_nextActionSelector.Select(context));
+        _logger.LogInformation("Engage selected action {Action} targetState {TargetState} reason {Reason} completeBefore={CompleteBefore}",
+            context.PrimaryActionDecision?.Action,
+            context.PrimaryActionDecision?.TargetState,
+            context.PrimaryActionDecision?.Reason,
+            session.IsConversationComplete);
+
         var result = await _stateRouter.RouteAndHandleAsync(context, cancellationToken);
 
         if (result.Status == OperationStatus.Success && result.Value is not null)
         {
+            var businessOutcome = await _businessOutcomeExecutor.ExecuteAsync(context, command, result.Value, cancellationToken);
+            if (businessOutcome.TicketTouched)
+            {
+                result = OperationResult<ChatSendResult>.Success(result.Value with { TicketCreated = true });
+            }
+
             await _messageRepository.InsertAsync(new EngageChatMessage
             {
                 SessionId = session.Id,
@@ -117,6 +129,12 @@ public sealed class EngageOrchestrator
                     ChunkIndex = item.ChunkIndex
                 }).ToArray()
             }, cancellationToken);
+
+            _logger.LogInformation("Engage outcome persisted. completeAfter={CompleteAfter}; pendingMode={PendingMode}; ticketTouched={TicketTouched}; leadTouched={LeadTouched}",
+                session.IsConversationComplete,
+                session.PendingCaptureMode,
+                businessOutcome.TicketTouched,
+                businessOutcome.LeadTouched);
         }
 
         session.UpdatedAtUtc = DateTime.UtcNow;
@@ -151,7 +169,9 @@ public sealed class EngageOrchestrator
             CollectorSessionId = command.CollectorSessionId,
             CreatedAtUtc = now,
             UpdatedAtUtc = now,
-            ConversationState = "Greeting"
+            ConversationState = "Greeting",
+            IsConversationComplete = false,
+            LastAssistantAskType = "none"
         };
 
         await _sessionRepository.InsertAsync(newSession, ct);
