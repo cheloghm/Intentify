@@ -8,6 +8,7 @@ using Intentify.Modules.Tickets.Application;
 using Intentify.Modules.Tickets.Domain;
 using Intentify.Modules.Visitors.Application;
 using Intentify.Modules.Visitors.Domain;
+using Intentify.Shared.Validation;
 
 namespace Intentify.Modules.Engage.Tests;
 
@@ -69,7 +70,8 @@ public sealed class RecommendationExecutorTests
             false,
             null);
 
-        var result = await fixture.Executor.ExecuteAsync(fixture.CreateCommand(recommendation, approved: false) with { SiteId = Guid.NewGuid() });
+        var result = await fixture.Executor.ExecuteAsync(
+            fixture.CreateCommand(recommendation, approved: false) with { SiteId = Guid.NewGuid() });
 
         Assert.Equal(OperationStatus.ValidationFailed, result.Status);
     }
@@ -265,6 +267,7 @@ public sealed class RecommendationExecutorTests
                 UpdatedAtUtc = DateTime.UtcNow
             });
         }
+
         public Task<EngageChatSession?> GetByIdAsync(Guid tenantIdArg, Guid siteIdArg, Guid sessionId, CancellationToken cancellationToken = default)
         {
             if (tenantIdArg != tenantId || siteIdArg != siteId)
@@ -275,10 +278,16 @@ public sealed class RecommendationExecutorTests
             return GetByIdAsync(sessionId, cancellationToken);
         }
 
-
         public Task InsertAsync(EngageChatSession session, CancellationToken cancellationToken = default) => Task.CompletedTask;
+
         public Task TouchAsync(Guid sessionId, DateTime timestampUtc, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task SetCollectorSessionIdIfEmptyAsync(Guid sessionId, string collectorSessionId, CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task SetCollectorSessionIdIfEmptyAsync(Guid sessionId, string collectorSessionId, CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+
+        public Task UpdateStateAsync(EngageChatSession session, CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+
         public Task<IReadOnlyCollection<EngageChatSession>> ListBySiteAsync(Guid tenantIdArg, Guid siteIdArg, string? collectorSessionId, CancellationToken cancellationToken = default)
             => Task.FromResult((IReadOnlyCollection<EngageChatSession>)Array.Empty<EngageChatSession>());
     }
@@ -322,10 +331,26 @@ public sealed class RecommendationExecutorTests
         public Task<IReadOnlyCollection<KnowledgeSource>> ListSourcesAsync(Guid tenantId, Guid siteId, CancellationToken cancellationToken = default)
             => Task.FromResult((IReadOnlyCollection<KnowledgeSource>)new[] { source });
 
-        public Task UpdateStatusAsync(Guid tenantId, Guid sourceId, IndexStatus status, string? failureReason, DateTime? indexedAtUtc, CancellationToken cancellationToken = default)
+        public Task UpdateStatusAsync(
+            Guid tenantId,
+            Guid sourceId,
+            IndexStatus status,
+            string? failureReason,
+            DateTime? indexedAtUtc,
+            int? chunkCount,
+            CancellationToken cancellationToken = default)
             => Task.CompletedTask;
 
-        public Task ReplaceSourceContentAsync(Guid tenantId, Guid sourceId, byte[] pdfBytes, IndexStatus status, DateTime updatedAtUtc, CancellationToken cancellationToken = default)
+        public Task ReplaceSourceContentAsync(
+            Guid tenantId,
+            Guid sourceId,
+            byte[] pdfBytes,
+            IndexStatus status,
+            DateTime updatedAtUtc,
+            CancellationToken cancellationToken = default)
             => Task.CompletedTask;
+
+        public Task<bool> DeleteSourceAsync(Guid tenantId, Guid sourceId, CancellationToken cancellationToken = default)
+            => Task.FromResult(true);
     }
 }

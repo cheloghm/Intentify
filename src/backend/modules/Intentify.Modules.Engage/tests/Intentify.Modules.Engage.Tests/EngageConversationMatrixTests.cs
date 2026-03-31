@@ -19,8 +19,13 @@ public sealed class EngageConversationMatrixTests
     [Fact]
     public void Matrix_ServicesQuestion_WithKnowledge_GoesFactual()
     {
-        var ctx = CreateContext("What services do you offer?", new EngageAnalysisSummary("Discover", false, false, 0.8m, false), knowledge: "We offer HVAC repair.");
+        var ctx = CreateContext(
+            "What services do you offer?",
+            new EngageAnalysisSummary("Discover", false, false, 0.8m, false),
+            knowledge: "We offer HVAC repair.");
+
         var action = Selector.Select(ctx);
+
         Assert.Equal(EngageNextAction.AnswerFactual, action.Action);
     }
 
@@ -29,6 +34,7 @@ public sealed class EngageConversationMatrixTests
     {
         var session = new EngageChatSession { CaptureGoal = "new site", CaptureType = "clinic" };
         var changed = Policy.TryApplyStageContinuation(session, "Dallas", "What location should we plan for?");
+
         Assert.True(changed);
         Assert.Equal("Dallas", session.CaptureLocation);
     }
@@ -38,7 +44,9 @@ public sealed class EngageConversationMatrixTests
     {
         var session = new EngageChatSession { ConversationState = "CaptureLead", PendingCaptureMode = "Commercial" };
         var ctx = CreateContext("5k", new EngageAnalysisSummary("CaptureLead", true, false, 0.8m, false), session);
+
         var action = Selector.Select(ctx);
+
         Assert.Equal(EngageNextAction.AskCaptureQuestion, action.Action);
     }
 
@@ -69,22 +77,31 @@ public sealed class EngageConversationMatrixTests
     {
         var session = new EngageChatSession();
         var changed = Policy.TryMergeShortReplySlots(session, "alex@example.com", "How should we reach you?");
+
         Assert.True(changed);
         Assert.Equal("alex@example.com", session.CapturedEmail);
         Assert.Equal("Email", session.CapturedPreferredContactMethod);
     }
 
     [Fact]
-    public void Matrix_TenantPlaybook_FormalConciseAndVocab_AdjustsResponse()
+    public void Matrix_BuildNextDiscoveryQuestion_UsesCurrentSequence()
     {
-        var adjusted = EngageOrchestrator.ApplyTenantPlaybook(
-            "Hi! We can help with setup. What do you need?",
-            new EngageBot { Tone = "formal", Verbosity = "concise", FallbackStyle = "tenant-vocab" },
-            ["hvac"]);
+        var session = new EngageChatSession();
 
-        Assert.StartsWith("Hello.", adjusted, StringComparison.Ordinal);
-        Assert.Contains("?", adjusted, StringComparison.Ordinal);
-        Assert.Contains("hvac", adjusted, StringComparison.OrdinalIgnoreCase);
+        var first = Policy.BuildNextDiscoveryQuestion(session);
+        Assert.Equal("What are you trying to achieve first?", first);
+
+        session.CaptureGoal = "launch a new site";
+        var second = Policy.BuildNextDiscoveryQuestion(session);
+        Assert.Equal("What kind of business is this for?", second);
+
+        session.CaptureType = "hvac";
+        var third = Policy.BuildNextDiscoveryQuestion(session);
+        Assert.Equal("What location should we plan for?", third);
+
+        session.CaptureLocation = "Dallas";
+        var fourth = Policy.BuildNextDiscoveryQuestion(session);
+        Assert.Equal("Any key constraints like budget or timeline?", fourth);
     }
 
     private static EngageConversationContext CreateContext(

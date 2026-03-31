@@ -289,11 +289,19 @@ public sealed class VisitorContextBundleHandlerTests
             => Task.FromResult(sessions.FirstOrDefault(item => item.Id == sessionId && item.TenantId == tenantId && item.SiteId == siteId));
 
         public Task InsertAsync(EngageChatSession session, CancellationToken cancellationToken = default) => Task.CompletedTask;
+
         public Task TouchAsync(Guid sessionId, DateTime timestampUtc, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task SetCollectorSessionIdIfEmptyAsync(Guid sessionId, string collectorSessionId, CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task SetCollectorSessionIdIfEmptyAsync(Guid sessionId, string collectorSessionId, CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+
+        public Task UpdateStateAsync(EngageChatSession session, CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
 
         public Task<IReadOnlyCollection<EngageChatSession>> ListBySiteAsync(Guid tenantId, Guid siteId, string? collectorSessionId, CancellationToken cancellationToken = default)
-            => Task.FromResult((IReadOnlyCollection<EngageChatSession>)sessions.Where(item => item.TenantId == tenantId && item.SiteId == siteId).ToArray());
+            => Task.FromResult((IReadOnlyCollection<EngageChatSession>)sessions
+                .Where(item => item.TenantId == tenantId && item.SiteId == siteId)
+                .ToArray());
     }
 
     private sealed class FakeEngageChatMessageRepository(IReadOnlyCollection<EngageChatMessage> messages) : IEngageChatMessageRepository
@@ -318,26 +326,48 @@ public sealed class VisitorContextBundleHandlerTests
 
     private sealed class FakeKnowledgeChunkRepository(IReadOnlyCollection<KnowledgeChunk> chunks) : IKnowledgeChunkRepository
     {
-        public Task UpsertChunksAsync(Guid tenantId, Guid sourceId, IReadOnlyCollection<KnowledgeChunk> chunksArg, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task UpsertChunksAsync(Guid tenantId, Guid sourceId, IReadOnlyCollection<KnowledgeChunk> chunksArg, CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
 
         public Task<IReadOnlyCollection<KnowledgeChunk>> ListBySiteAsync(Guid tenantId, Guid siteId, CancellationToken cancellationToken = default)
-            => Task.FromResult((IReadOnlyCollection<KnowledgeChunk>)chunks.Where(item => item.TenantId == tenantId && item.SiteId == siteId).ToArray());
+            => Task.FromResult((IReadOnlyCollection<KnowledgeChunk>)chunks
+                .Where(item => item.TenantId == tenantId && item.SiteId == siteId)
+                .ToArray());
+
+        public Task DeleteBySourceAsync(Guid tenantId, Guid sourceId, CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
     }
 
     private sealed class FakeKnowledgeSourceRepository(IReadOnlyCollection<KnowledgeSource> items) : IKnowledgeSourceRepository
     {
         public IReadOnlyCollection<KnowledgeSource> Items { get; } = items;
 
-        public Task InsertSourceAsync(KnowledgeSource source, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task InsertSourceAsync(KnowledgeSource source, CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+
         public Task<KnowledgeSource?> GetSourceByIdAsync(Guid tenantId, Guid sourceId, CancellationToken cancellationToken = default)
             => Task.FromResult(items.FirstOrDefault(item => item.TenantId == tenantId && item.Id == sourceId));
 
         public Task<IReadOnlyCollection<KnowledgeSource>> ListSourcesAsync(Guid tenantId, Guid siteId, CancellationToken cancellationToken = default)
-            => Task.FromResult((IReadOnlyCollection<KnowledgeSource>)items.Where(item => item.TenantId == tenantId && item.SiteId == siteId).ToArray());
+            => Task.FromResult((IReadOnlyCollection<KnowledgeSource>)items
+                .Where(item => item.TenantId == tenantId && item.SiteId == siteId)
+                .ToArray());
 
-        public Task UpdateStatusAsync(Guid tenantId, Guid sourceId, IndexStatus status, string? failureReason, DateTime? indexedAtUtc, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task UpdateStatusAsync(
+            Guid tenantId,
+            Guid sourceId,
+            IndexStatus status,
+            string? failureReason,
+            DateTime? indexedAtUtc,
+            int? chunkCount,
+            CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
 
-        public Task ReplaceSourceContentAsync(Guid tenantId, Guid sourceId, byte[] pdfBytes, IndexStatus status, DateTime updatedAtUtc, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task ReplaceSourceContentAsync(Guid tenantId, Guid sourceId, byte[] pdfBytes, IndexStatus status, DateTime updatedAtUtc, CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+
+        public Task<bool> DeleteSourceAsync(Guid tenantId, Guid sourceId, CancellationToken cancellationToken = default)
+            => Task.FromResult(true);
     }
 
     private sealed class FakeVisitorRepository(Visitor visitor) : IVisitorRepository
