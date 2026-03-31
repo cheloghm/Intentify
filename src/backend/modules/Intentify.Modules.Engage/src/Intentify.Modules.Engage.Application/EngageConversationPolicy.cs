@@ -87,7 +87,19 @@ public sealed class EngageConversationPolicy
         }
 
         var normalized = _interpreter.NormalizeUserMessage(message);
-        return EngageConversationClosePhraseBank.ClosePhrases.Contains(normalized, StringComparer.Ordinal);
+        if (EngageConversationClosePhraseBank.ClosePhrases.Any(item =>
+                string.Equals(_interpreter.NormalizeUserMessage(item), normalized, StringComparison.Ordinal)))
+        {
+            return true;
+        }
+
+        var compact = normalized.Replace(" ", string.Empty, StringComparison.Ordinal);
+        return EngageConversationClosePhraseBank.ClosePhrases.Any(item =>
+        {
+            var phraseNormalized = _interpreter.NormalizeUserMessage(item);
+            return !string.IsNullOrWhiteSpace(phraseNormalized)
+                   && string.Equals(phraseNormalized.Replace(" ", string.Empty, StringComparison.Ordinal), compact, StringComparison.Ordinal);
+        });
     }
 
     public bool IsSupportCaptureComplete(EngageChatSession session)
