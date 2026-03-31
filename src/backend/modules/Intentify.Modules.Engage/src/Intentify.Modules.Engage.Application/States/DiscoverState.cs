@@ -23,87 +23,107 @@ public sealed class DiscoverState : IEngageState
         var action = ctx.PrimaryActionDecision?.Action ?? EngageNextAction.AskDiscoveryQuestion;
         var reason = ctx.PrimaryActionDecision?.Reason ?? string.Empty;
 
+        if (string.Equals(reason, "ReopenConversation", StringComparison.Ordinal))
+        {
+            _policy.ReopenConversation(ctx.Session, "reopen");
+            var reopened = _shaper.Shape("Absolutely — happy to help with a new question. What would you like to explore?", ctx);
+            return Task.FromResult(CreateAssistantResponse(ctx.Session, reopened, 0.9m, "Reopen", reason));
+        }
+
         if (action == EngageNextAction.EscalateSupport)
         {
             ctx.Session.PendingCaptureMode = "Support";
             ctx.Session.ConversationState = "Discover";
+            ctx.Session.IsConversationComplete = false;
 
-            var escalation = _shaper.Shape(_policy.BuildSupportCapturePrompt(ctx.Session), ctx);
+            var escalation = ResolveDraftReply(ctx) ?? _policy.BuildSupportCapturePrompt(ctx.Session);
+            escalation = _shaper.Shape(escalation, ctx);
 
-            return Task.FromResult(
-                CreateAssistantResponse(ctx.Session, escalation, 0.9m, "SupportEscalation", reason));
+            return Task.FromResult(CreateAssistantResponse(ctx.Session, escalation, 0.9m, "SupportEscalation", reason));
         }
 
         if (action == EngageNextAction.CloseConversation)
         {
-            ctx.Session.PendingCaptureMode = null;
-            ctx.Session.ConversationState = "Discover";
+            _policy.MarkConversationCompleted(ctx.Session, "closed");
+            var close = ResolveDraftReply(ctx) ?? "You’re all set — happy to help. If anything new comes up, just message me.";
+            close = _shaper.Shape(close, ctx);
 
-            var close = _shaper.Shape(
-                "You’re all set — happy to help. If anything comes up, just message me.",
-                ctx);
-
-            return Task.FromResult(
-                CreateAssistantResponse(ctx.Session, close, 0.88m, "ConversationClose", reason));
+            return Task.FromResult(CreateAssistantResponse(ctx.Session, close, 0.9m, "ConversationClose", reason));
         }
 
         if (_policy.IsContextRecoverySignal(ctx.UserMessage))
         {
             var recovered = _shaper.Shape(_policy.BuildContextRecoveryPrompt(ctx.Session), ctx);
             ctx.Session.ConversationState = "Discover";
+            ctx.Session.IsConversationComplete = false;
 
-            return Task.FromResult(
-                CreateAssistantResponse(ctx.Session, recovered, 0.82m, "ContextRecovery", "AlreadyProvidedContext"));
+            return Task.FromResult(CreateAssistantResponse(ctx.Session, recovered, 0.82m, "ContextRecovery", "AlreadyProvidedContext"));
         }
 
         if (string.Equals(reason, "SupportCaptureComplete", StringComparison.Ordinal))
         {
             ctx.Session.PendingCaptureMode = null;
             ctx.Session.ConversationState = "Discover";
-            var done = _shaper.Shape(
-                "Thanks — I’ve captured what our support team needs. Is there anything else you’d like help with?",
-                ctx);
+            var done = _shaper.Shape("Thanks — I’ve captured what our support team needs. Anything else I can help with?", ctx);
 
-            return Task.FromResult(
-                CreateAssistantResponse(ctx.Session, done, 0.86m, "SupportEscalation", reason));
+            return Task.FromResult(CreateAssistantResponse(ctx.Session, done, 0.86m, "SupportEscalation", reason));
         }
 
         if (action == EngageNextAction.HandleNarrowObjection)
         {
             var objectionResponse = _shaper.Shape(_policy.BuildNarrowObjectionFollowUp(ctx.Session), ctx);
             ctx.Session.ConversationState = "Discover";
+            ctx.Session.IsConversationComplete = false;
 
-            return Task.FromResult(
-                CreateAssistantResponse(ctx.Session, objectionResponse, 0.8m, "ObjectionHandling", reason));
+            return Task.FromResult(CreateAssistantResponse(ctx.Session, objectionResponse, 0.8m, "ObjectionHandling", reason));
         }
 
-        if (action == EngageNextAction.AnswerFactual && !string.IsNullOrWhiteSpace(ctx.KnowledgeSummary))
+        if (action == EngageNextAction.AnswerFactual)
         {
             if (string.Equals(ctx.Session.PendingCaptureMode, "Support", StringComparison.OrdinalIgnoreCase))
             {
                 ctx.Session.PendingCaptureMode = null;
             }
 
-            var topAnswer = ComposeFactualAnswer(ctx.KnowledgeSummary, ctx.UserMessage);
+            var topAnswer = ResolveDraftReply(ctx);
+            if (string.IsNullOrWhiteSpace(topAnswer))
+            {
+                topAnswer = string.Equals(reason, "PricingEstimate", StringComparison.Ordinal)
+                    ? _policy.BuildScopedEstimate(ctx.Session, ctx.RecentMessages)
+                    : string.Equals(reason, "AcknowledgementContinue", StringComparison.Ordinal)
+                        ? _policy.BuildAcknowledgementProgressReply(ctx)
+                        : _policy.BuildGroundedKnowledgeAnswer(ctx.KnowledgeSummary, ctx.UserMessage);
+            }
 
             var factual = _shaper.Shape(topAnswer, ctx);
-
             ctx.Session.ConversationState = "Discover";
+            ctx.Session.IsConversationComplete = false;
+            ctx.Session.LastAssistantAskType = "none";
 
-            return Task.FromResult(
-                CreateAssistantResponse(ctx.Session, factual, 0.84m, "FactualAnswer", "KnowledgeBacked"));
+            return Task.FromResult(CreateAssistantResponse(ctx.Session, factual, 0.86m, "FactualAnswer", "KnowledgeBacked"));
         }
 
-        var nextQuestion = _policy.BuildNaturalNextQuestion(ctx.Session, ctx);
+        var nextQuestion = ResolveDraftReply(ctx) ?? _policy.BuildNaturalNextQuestion(ctx.Session, ctx);
+        if (nextQuestion.Contains("overview", StringComparison.OrdinalIgnoreCase)) ctx.Session.LastAssistantAskType = "overview";
+        if (nextQuestion.Contains("outline", StringComparison.OrdinalIgnoreCase) || nextQuestion.Contains("structure", StringComparison.OrdinalIgnoreCase)) ctx.Session.LastAssistantAskType = "outline";
+        if (nextQuestion.Contains("estimate", StringComparison.OrdinalIgnoreCase) || nextQuestion.Contains("range", StringComparison.OrdinalIgnoreCase)) ctx.Session.LastAssistantAskType = "estimate";
         var response = _shaper.Shape(nextQuestion, ctx);
 
         ctx.Session.ConversationState = "Discover";
+        var missing = _policy.DeterminePrimaryMissingField(ctx.Session);
+        if (string.Equals(missing, "none", StringComparison.Ordinal))
+        {
+            _policy.MarkConversationCompleted(ctx.Session, "capture_complete");
+        }
+        else
+        {
+            ctx.Session.IsConversationComplete = false;
+        }
 
-        return Task.FromResult(
-            CreateAssistantResponse(ctx.Session, response, 0.65m, "Discover", "ContextAware"));
+        return Task.FromResult(CreateAssistantResponse(ctx.Session, response, 0.72m, "Discover", reason));
     }
 
-    private OperationResult<ChatSendResult> CreateAssistantResponse(
+    private static OperationResult<ChatSendResult> CreateAssistantResponse(
         EngageChatSession session,
         string response,
         decimal confidence,
@@ -120,39 +140,19 @@ public sealed class DiscoverState : IEngageState
                 path));
     }
 
-    private static string ComposeFactualAnswer(string knowledgeSummary, string userMessage)
+    private static string? ResolveDraftReply(EngageConversationContext ctx)
     {
-        var lines = knowledgeSummary
-            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Where(item => !string.IsNullOrWhiteSpace(item))
-            .ToArray();
+        var command = ctx.AiDecision.Recommendations?
+            .Select(item => item.ProposedCommand)
+            .FirstOrDefault(item => item is { Count: > 0 });
 
-        if (lines.Length == 0)
+        if (command is null)
         {
-            return "Here’s what I found.";
+            return null;
         }
 
-        var primary = lines.FirstOrDefault(item =>
-                item.Length >= 35
-                || item.Contains('.', StringComparison.Ordinal)
-                || item.Contains(',', StringComparison.Ordinal))
-            ?? lines[0];
-
-        var normalized = userMessage.Trim().ToLowerInvariant();
-        var serviceIntent = normalized.Contains("service", StringComparison.Ordinal)
-            || normalized.Contains("offer", StringComparison.Ordinal)
-            || normalized.Contains("pricing", StringComparison.Ordinal)
-            || normalized.Contains("cost", StringComparison.Ordinal);
-
-        if (serviceIntent && primary.Length < 55 && lines.Length > 1)
-        {
-            var next = lines.FirstOrDefault(item => !string.Equals(item, primary, StringComparison.Ordinal));
-            if (!string.IsNullOrWhiteSpace(next))
-            {
-                return $"{primary} {next}";
-            }
-        }
-
-        return primary;
+        return command.TryGetValue("draftReply", out var draft) && !string.IsNullOrWhiteSpace(draft)
+            ? draft.Trim()
+            : null;
     }
 }

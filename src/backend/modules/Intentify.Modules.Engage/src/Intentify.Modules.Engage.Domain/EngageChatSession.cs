@@ -22,6 +22,12 @@ public sealed class EngageChatSession
 
     public string? PendingCaptureMode { get; set; }
 
+    public bool IsConversationComplete { get; set; }
+
+    public DateTime? LastCompletedAtUtc { get; set; }
+
+    public string? LastAssistantAskType { get; set; }
+
     public string? CaptureGoal { get; set; }
 
     public string? CaptureContext { get; set; }

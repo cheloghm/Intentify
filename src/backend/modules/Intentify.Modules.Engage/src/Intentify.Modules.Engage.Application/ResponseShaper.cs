@@ -1,4 +1,3 @@
-using Intentify.Modules.Engage.Domain;
 using System.Text.RegularExpressions;
 
 namespace Intentify.Modules.Engage.Application;
@@ -14,56 +13,67 @@ public sealed class ResponseShaper
 
         var cleaned = raw.Trim();
 
-        // Remove common filler phrases
         cleaned = Regex.Replace(
             cleaned,
-            @"(If you want|If you'd like|What would you like to do next\?|Thanks for confirming)",
+            @"(If you want|If you'd like|Thanks for confirming)",
             "",
             RegexOptions.IgnoreCase);
 
         cleaned = Regex.Replace(cleaned, @"\s{2,}", " ").Trim();
-
-        // Collapse repeated trailing duplicate text blocks
         cleaned = Regex.Replace(cleaned, @"(.+?)(?:\s+\1)+$", "$1", RegexOptions.IgnoreCase).Trim();
 
-        // Enforce at most one question
-        var questionCount = cleaned.Count(c => c == '?');
-        if (questionCount > 1)
+        var action = ctx.PrimaryActionDecision?.Action;
+
+        var recentAssistant = ctx.RecentMessages
+            .Where(item => string.Equals(item.Role, "assistant", StringComparison.OrdinalIgnoreCase))
+            .Select(item => item.Content?.Trim() ?? string.Empty)
+            .Where(item => !string.IsNullOrWhiteSpace(item))
+            .TakeLast(2)
+            .ToArray();
+
+        if (recentAssistant.Any(prev => IsNearDuplicate(prev, cleaned)))
         {
-            var firstQuestion = cleaned.IndexOf('?');
-            if (firstQuestion >= 0)
+            if (action is EngageNextAction.AskCaptureQuestion or EngageNextAction.AskDiscoveryQuestion)
             {
-                cleaned = cleaned[..(firstQuestion + 1)].Trim();
+                cleaned = $"{cleaned.TrimEnd('.', '!')} — to move this forward, share the one detail I’m missing.";
+            }
+            else if (action == EngageNextAction.AnswerFactual)
+            {
+                cleaned = $"{cleaned} If you want, I can tailor this to your exact scope next.";
             }
         }
 
-        var action = ctx.PrimaryActionDecision?.Action;
         if (action is EngageNextAction.CloseConversation or EngageNextAction.AnswerFactual)
         {
             return cleaned;
         }
 
-        var isClosureStyle =
-            cleaned.EndsWith(".", StringComparison.Ordinal) &&
-            (cleaned.Contains("thank", StringComparison.OrdinalIgnoreCase)
-             || cleaned.Contains("reach out", StringComparison.OrdinalIgnoreCase)
-             || cleaned.Contains("follow up", StringComparison.OrdinalIgnoreCase));
-
-        if (isClosureStyle)
+        if (ctx.Session.IsConversationComplete)
         {
             return cleaned;
         }
 
         if (!cleaned.Contains('?'))
         {
-            var fallback = ctx.LastAssistantQuestion ?? "How can I help you move forward?";
-
-            if (!cleaned.Contains(fallback, StringComparison.OrdinalIgnoreCase))
+            var likelyPrompt = action is EngageNextAction.AskCaptureQuestion or EngageNextAction.AskDiscoveryQuestion;
+            if (likelyPrompt)
             {
-                cleaned = $"{cleaned} {fallback}".Trim();
+                cleaned = $"{cleaned.TrimEnd('.', '!')}?";
             }
         }
 
         return cleaned;
+    }
+
+    private static bool IsNearDuplicate(string prior, string current)
+    {
+        static string Normalize(string input)
+            => Regex.Replace(input.ToLowerInvariant(), "[^a-z0-9 ]", " ").Replace("  ", " ").Trim();
+
+        var a = Normalize(prior);
+        var b = Normalize(current);
+        if (string.IsNullOrWhiteSpace(a) || string.IsNullOrWhiteSpace(b)) return false;
+        if (a == b) return true;
+        return a.Contains(b, StringComparison.Ordinal) || b.Contains(a, StringComparison.Ordinal);
     }
 }

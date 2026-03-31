@@ -47,6 +47,9 @@ public sealed class EngageChatSessionRepository : IEngageChatSessionRepository
         var update = Builders<EngageChatSession>.Update
             .Set(item => item.ConversationState, session.ConversationState)
             .Set(item => item.PendingCaptureMode, session.PendingCaptureMode)
+            .Set(item => item.IsConversationComplete, session.IsConversationComplete)
+            .Set(item => item.LastCompletedAtUtc, session.LastCompletedAtUtc)
+            .Set(item => item.LastAssistantAskType, session.LastAssistantAskType)
             .Set(item => item.CaptureGoal, session.CaptureGoal)
             .Set(item => item.CaptureContext, session.CaptureContext)
             .Set(item => item.CaptureType, session.CaptureType)

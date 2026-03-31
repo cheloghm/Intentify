@@ -20,37 +20,80 @@ public sealed class CaptureLeadState : IEngageState
     {
         _policy.TryApplyStageContinuation(ctx.Session, ctx.UserMessage, ctx.LastAssistantQuestion);
 
+        if (_policy.ShouldReopenCompletedConversation(ctx.Session, ctx.UserMessage))
+        {
+            _policy.ReopenConversation(ctx.Session, "reopen");
+        }
+
         if (_policy.IsContextRecoverySignal(ctx.UserMessage))
         {
             var recovered = _shaper.Shape(_policy.BuildContextRecoveryPrompt(ctx.Session), ctx);
             ctx.Session.PendingCaptureMode = "Commercial";
             ctx.Session.ConversationState = "CaptureLead";
+            ctx.Session.IsConversationComplete = false;
 
-            return Task.FromResult(
-                OperationResult<ChatSendResult>.Success(
-                    new ChatSendResult(
-                        ctx.Session.Id,
-                        recovered,
-                        0.85m,
-                        false,
-                        Array.Empty<EngageCitationResult>(),
-                        "CaptureLead")));
+            return Task.FromResult(OperationResult<ChatSendResult>.Success(new ChatSendResult(
+                ctx.Session.Id,
+                recovered,
+                0.85m,
+                false,
+                Array.Empty<EngageCitationResult>(),
+                "CaptureLead")));
         }
 
-        var response = _policy.BuildNaturalNextQuestion(ctx.Session, ctx);
+        if (_policy.IsAcknowledgementTurn(ctx.UserMessage))
+        {
+            var continued = _shaper.Shape(_policy.BuildAcknowledgementProgressReply(ctx), ctx);
+            ctx.Session.IsConversationComplete = false;
+            return Task.FromResult(OperationResult<ChatSendResult>.Success(new ChatSendResult(
+                ctx.Session.Id,
+                continued,
+                0.83m,
+                false,
+                Array.Empty<EngageCitationResult>(),
+                "CaptureLead")));
+        }
+
+        var missing = _policy.DeterminePrimaryMissingField(ctx.Session);
+        string response;
+        if (string.Equals(missing, "none", StringComparison.Ordinal))
+        {
+            _policy.MarkConversationCompleted(ctx.Session, "capture_complete");
+            ctx.Session.PendingCaptureMode = null;
+            response = ResolveDraftReply(ctx) ?? "Perfect — I’ve got the key details. Would you like me to have a teammate follow up?";
+        }
+        else
+        {
+            ctx.Session.PendingCaptureMode = "Commercial";
+            ctx.Session.ConversationState = "CaptureLead";
+            ctx.Session.IsConversationComplete = false;
+            response = ResolveDraftReply(ctx) ?? _policy.BuildNaturalNextQuestion(ctx.Session, ctx);
+        }
+
         var shaped = _shaper.Shape(response, ctx);
 
-        ctx.Session.PendingCaptureMode = "Commercial";
-        ctx.Session.ConversationState = "CaptureLead";
+        return Task.FromResult(OperationResult<ChatSendResult>.Success(new ChatSendResult(
+            ctx.Session.Id,
+            shaped,
+            0.82m,
+            false,
+            Array.Empty<EngageCitationResult>(),
+            "CaptureLead")));
+    }
 
-        return Task.FromResult(
-            OperationResult<ChatSendResult>.Success(
-                new ChatSendResult(
-                    ctx.Session.Id,
-                    shaped,
-                    0.8m,
-                    false,
-                    Array.Empty<EngageCitationResult>(),
-                    "CaptureLead")));
+    private static string? ResolveDraftReply(EngageConversationContext ctx)
+    {
+        var command = ctx.AiDecision.Recommendations?
+            .Select(item => item.ProposedCommand)
+            .FirstOrDefault(item => item is { Count: > 0 });
+
+        if (command is null)
+        {
+            return null;
+        }
+
+        return command.TryGetValue("draftReply", out var draft) && !string.IsNullOrWhiteSpace(draft)
+            ? draft.Trim()
+            : null;
     }
 }
