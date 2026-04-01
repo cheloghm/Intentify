@@ -44,4 +44,16 @@ public sealed class ResponseShaper
 
         return cleaned;
     }
+
+    private static bool IsNearDuplicate(string prior, string current)
+    {
+        static string Normalize(string input)
+            => Regex.Replace(input.ToLowerInvariant(), "[^a-z0-9 ]", " ").Replace("  ", " ").Trim();
+
+        var a = Normalize(prior);
+        var b = Normalize(current);
+        if (string.IsNullOrWhiteSpace(a) || string.IsNullOrWhiteSpace(b)) return false;
+        if (a == b) return true;
+        return a.Contains(b, StringComparison.Ordinal) || b.Contains(a, StringComparison.Ordinal);
+    }
 }
