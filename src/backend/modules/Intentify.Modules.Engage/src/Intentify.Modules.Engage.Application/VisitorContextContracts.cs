@@ -23,6 +23,17 @@ public sealed record BuildVisitorContextBundleQuery(
     string? IntelligenceAudienceType = null,
     int? IntelligenceLimit = 5);
 
+public sealed record KnowledgeQuickFactsSummary(
+    Guid SourceId,
+    string? ServicesOffered,
+    string? PricingSignals,
+    string? LocationCoverage,
+    string? HoursAvailability,
+    string? TeamCredentials,
+    string? FaqsText,
+    string? UniqueSellingPoints,
+    DateTime ExtractedAtUtc);
+
 public sealed record VisitorContextBundle(
     AiDecisionContextRef ContextRef,
     IReadOnlyCollection<string> CollectorSessionIds,
@@ -32,7 +43,8 @@ public sealed record VisitorContextBundle(
     EngageSessionSummary? RecentEngageSummary,
     IReadOnlyCollection<TicketSummary>? LinkedTicketsSummary,
     IReadOnlyCollection<PromoInteractionSummary>? PromoInteractionSummary,
-    IntelligenceSnapshot? IntelligenceSnapshot);
+    IntelligenceSnapshot? IntelligenceSnapshot,
+    IReadOnlyCollection<KnowledgeQuickFactsSummary>? QuickFacts = null);
 
 public sealed record VisitorProfileSummary(
     Guid VisitorId,

@@ -1,11 +1,13 @@
 using Intentify.Modules.Auth.Api;
 using Intentify.Modules.Knowledge.Application;
 using Intentify.Modules.Knowledge.Infrastructure;
+using Intentify.Shared.AI;
 using Intentify.Shared.Web;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Intentify.Modules.Knowledge.Api;
 
@@ -43,7 +45,13 @@ public sealed class KnowledgeModule : IAppModule
 
         services.AddSingleton<IKnowledgeSourceRepository, KnowledgeSourceRepository>();
         services.AddSingleton<IKnowledgeChunkRepository, KnowledgeChunkRepository>();
+        services.AddSingleton<IKnowledgeQuickFactsRepository, KnowledgeQuickFactsRepository>();
         services.AddSingleton<IEngageBotResolver, EngageBotResolver>();
+
+        // IChatCompletionClient is registered by EngageModule via TryAddSingleton.
+        // Register a null fallback here so IndexKnowledgeSourceHandler resolves cleanly
+        // even if the Engage module is not loaded (e.g. integration test environments).
+        services.TryAddSingleton<IChatCompletionClient>(new NullChatCompletionClient(new AiOptions()));
         services.AddSingleton<IKnowledgeTextExtractor, KnowledgeTextExtractor>();
         services.AddSingleton<IKnowledgeChunker, KnowledgeChunker>();
         services.AddSingleton<CreateKnowledgeSourceHandler>();

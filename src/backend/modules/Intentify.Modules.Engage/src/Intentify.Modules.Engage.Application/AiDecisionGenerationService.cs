@@ -1,5 +1,7 @@
 using System.Text;
 using System.Text.Json;
+using Intentify.Modules.Engage.Domain;
+using Intentify.Modules.Engage.Application.PhraseBanks;
 using Intentify.Shared.AI;
 
 namespace Intentify.Modules.Engage.Application;
@@ -8,11 +10,6 @@ public sealed class AiDecisionGenerationService
 {
     private const decimal LowConfidenceThreshold = 0.5m;
 
-
-    private static readonly IReadOnlyCollection<AiRecommendationType> DefaultAllowlistedActions = Enum
-        .GetValues<AiRecommendationType>()
-        .ToArray();
-
     private readonly IChatCompletionClient _chatCompletionClient;
 
     public AiDecisionGenerationService(IChatCompletionClient chatCompletionClient)
@@ -20,83 +17,229 @@ public sealed class AiDecisionGenerationService
         _chatCompletionClient = chatCompletionClient;
     }
 
-    public async Task<AiDecisionContract> GenerateAsync(
+    public async Task<EngageTurnDecision> GenerateAsync(
         VisitorContextBundle contextBundle,
+        EngageBot bot,
+        IReadOnlyCollection<string> tenantVocabulary,
+        EngageSessionMemorySnapshot sessionMemory,
+        IReadOnlyCollection<EngageChatMessage> recentMessages,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(contextBundle);
+        ArgumentNullException.ThrowIfNull(bot);
+        ArgumentNullException.ThrowIfNull(sessionMemory);
 
-        var prompt = BuildPrompt(contextBundle);
+        var prompt = BuildPrompt(contextBundle, bot, tenantVocabulary, sessionMemory, recentMessages);
         var completion = await _chatCompletionClient.CompleteAsync(prompt, cancellationToken);
 
         if (!completion.IsSuccess || string.IsNullOrWhiteSpace(completion.Value))
-        {
-            return CreateInvalidNoAction(contextBundle.ContextRef, "AiUnavailable", "AI decision generation is unavailable.");
-        }
+            return CreateFallback("AiUnavailable", "AI is unavailable.");
 
-        if (!TryParseDecision(completion.Value, contextBundle.ContextRef, out var parsedDecision))
-        {
-            return CreateInvalidNoAction(contextBundle.ContextRef, "MalformedOutput", "AI decision output was malformed.");
-        }
+        if (!TryParseDecision(completion.Value, out var parsed))
+            return CreateFallback("MalformedOutput", "AI output could not be parsed.");
 
-        var validated = AiDecisionValidator.ValidateAndNormalize(parsedDecision);
-        if (validated.ValidationStatus == AiDecisionValidationStatus.Invalid)
-        {
+        var validated = AiDecisionValidator.ValidateAndNormalize(parsed);
+        if (!validated.IsValid)
             return validated;
-        }
 
-        if (validated.OverallConfidence < LowConfidenceThreshold)
-        {
-            return CreateSafeNoAction(
-                contextBundle.ContextRef,
-                validated.OverallConfidence,
-                "LowConfidence",
-                "Decision confidence is below safe threshold.");
-        }
+        if (validated.Confidence < LowConfidenceThreshold)
+            return validated with { FallbackReason = "LowConfidence" };
 
         return validated;
     }
 
-    private static bool TryParseDecision(string rawOutput, AiDecisionContextRef contextRef, out AiDecisionContract decision)
+    private static string BuildPrompt(
+        VisitorContextBundle contextBundle,
+        EngageBot bot,
+        IReadOnlyCollection<string> tenantVocabulary,
+        EngageSessionMemorySnapshot sessionMemory,
+        IReadOnlyCollection<EngageChatMessage> recentMessages)
     {
-        decision = CreateInvalidNoAction(contextRef, "MalformedOutput", "AI decision output was malformed.");
+        var sb = new StringBuilder();
+
+        // Assemble business briefing from available runtime data
+        var briefing = new EngageBriefingContext(
+            BusinessName: bot.Name ?? bot.DisplayName,
+            Industry: contextBundle.IntelligenceSnapshot?.Category,
+            ServicesDescription: tenantVocabulary.Count > 0
+                ? string.Join(", ", tenantVocabulary.Take(12))
+                : null,
+            GeoFocus: contextBundle.IntelligenceSnapshot?.Location,
+            Tone: bot.Tone,
+            PersonalityDescriptor: null);   // derived from tone inside EngageSalesGuideline
+
+        // Layers 1–6 briefing + current session state
+        sb.AppendLine(EngageSalesGuideline.Build(briefing, sessionMemory));
+
+        // Signal pattern examples for AI intent recognition
+        sb.AppendLine(EngageSignalExamples.BuildSection());
+
+        // --- Turn context ---
+        sb.AppendLine("## Turn Context");
+        sb.AppendLine();
+
+        if (contextBundle.VisitorProfile is { } profile)
+        {
+            sb.AppendLine($"Visitor: {(string.IsNullOrWhiteSpace(profile.DisplayName) ? "anonymous" : profile.DisplayName)}, " +
+                          $"{profile.VisitCount} prior visit(s), first seen {profile.FirstSeenAtUtc:yyyy-MM-dd}.");
+        }
+
+        // Full conversation history — everything in the session, oldest first
+        if (recentMessages.Count > 0)
+        {
+            sb.AppendLine();
+            sb.AppendLine("### Conversation History (oldest first)");
+            foreach (var msg in recentMessages.OrderBy(m => m.CreatedAtUtc))
+            {
+                var label = string.Equals(msg.Role, "user", StringComparison.OrdinalIgnoreCase)
+                    ? "Visitor"
+                    : "Assistant";
+                sb.AppendLine($"[{label}]: {msg.Content}");
+            }
+        }
+
+        // Knowledge base — quick facts first, then relevant chunks
+        sb.AppendLine();
+        sb.AppendLine("### Knowledge Base");
+
+        if (contextBundle.QuickFacts is { Count: > 0 } quickFacts)
+        {
+            sb.AppendLine("#### Quick Facts (pre-extracted from indexed sources)");
+            foreach (var facts in quickFacts)
+            {
+                if (!string.IsNullOrWhiteSpace(facts.ServicesOffered))
+                    sb.AppendLine($"Services offered: {facts.ServicesOffered}");
+                if (!string.IsNullOrWhiteSpace(facts.PricingSignals))
+                    sb.AppendLine($"Pricing signals: {facts.PricingSignals}");
+                if (!string.IsNullOrWhiteSpace(facts.LocationCoverage))
+                    sb.AppendLine($"Location / coverage: {facts.LocationCoverage}");
+                if (!string.IsNullOrWhiteSpace(facts.HoursAvailability))
+                    sb.AppendLine($"Hours / availability: {facts.HoursAvailability}");
+                if (!string.IsNullOrWhiteSpace(facts.TeamCredentials))
+                    sb.AppendLine($"Team / credentials: {facts.TeamCredentials}");
+                if (!string.IsNullOrWhiteSpace(facts.UniqueSellingPoints))
+                    sb.AppendLine($"Unique selling points: {facts.UniqueSellingPoints}");
+                if (!string.IsNullOrWhiteSpace(facts.FaqsText))
+                    sb.AppendLine($"FAQs:\n{facts.FaqsText}");
+            }
+            sb.AppendLine();
+        }
+
+        if (contextBundle.KnowledgeRetrievalSnapshot.TopChunks.Count > 0)
+        {
+            sb.AppendLine($"#### Relevant chunks for query: \"{contextBundle.KnowledgeRetrievalSnapshot.Query}\"");
+            sb.AppendLine();
+            foreach (var chunk in contextBundle.KnowledgeRetrievalSnapshot.TopChunks)
+            {
+                sb.AppendLine($"[Source {chunk.SourceId:D}, chunk {chunk.ChunkIndex}, relevance score {chunk.Score}]");
+                sb.AppendLine(chunk.ContentExcerpt);
+                sb.AppendLine();
+            }
+        }
+        else
+        {
+            sb.AppendLine("No matching knowledge chunks found for this query.");
+            sb.AppendLine("If the visitor is asking about specifics, acknowledge honestly that you cannot confirm the details.");
+        }
+
+        // Open support tickets linked to this visitor
+        if (contextBundle.LinkedTicketsSummary is { Count: > 0 } tickets)
+        {
+            sb.AppendLine();
+            sb.AppendLine("### Open Support Tickets");
+            foreach (var ticket in tickets)
+            {
+                sb.AppendLine($"- [{ticket.Status}] {ticket.Subject} (ticket {ticket.TicketId:D})");
+            }
+        }
+
+        // Previous promo interactions
+        if (contextBundle.PromoInteractionSummary is { Count: > 0 } promos)
+        {
+            sb.AppendLine();
+            sb.AppendLine("### Previous Promo Interactions");
+            foreach (var promo in promos)
+            {
+                var name = string.IsNullOrWhiteSpace(promo.Name) ? string.Empty : $" — {promo.Name}";
+                sb.AppendLine($"- Promo submitted {promo.SubmittedAtUtc:yyyy-MM-dd}{name}");
+            }
+        }
+
+        // JSON output schema
+        sb.AppendLine();
+        sb.AppendLine("## Required Output");
+        sb.AppendLine();
+        sb.AppendLine("Respond with ONLY valid JSON. No markdown, no prose, no explanation before or after.");
+        sb.AppendLine("The JSON must follow this schema exactly:");
+        sb.AppendLine("""
+            {
+              "reply": "the response to send to the visitor — final, natural, customer-facing text",
+              "intent": "one sentence describing what the visitor is doing this turn",
+              "capturedSlots": {
+                "name": "string or null",
+                "email": "string or null",
+                "phone": "string or null",
+                "location": "string or null",
+                "goal": "string or null",
+                "type": "string or null",
+                "timeline": "string or null",
+                "budget": "string or null",
+                "constraints": "string or null",
+                "decisionStage": "exploring | evaluating | deciding | null"
+              },
+              "createLead": false,
+              "createTicket": false,
+              "ticketSummary": "string or null — required when createTicket is true",
+              "suggestedFollowUp": "string or null — short internal note for the follow-up team",
+              "conversationComplete": false,
+              "confidence": 0.9
+            }
+            """);
+        sb.AppendLine();
+        sb.AppendLine("Rules:");
+        sb.AppendLine("- reply is mandatory. It is the only thing the visitor sees. Make it count.");
+        sb.AppendLine("- Only populate capturedSlots fields that were explicitly stated or clearly implied this turn.");
+        sb.AppendLine("  Do not invent or guess values. An empty string is not the same as null — use null.");
+        sb.AppendLine("- Set createLead = true when you have: name + a contact method + a meaningful goal.");
+        sb.AppendLine("- Set createTicket = true when the visitor needs human follow-up and you have enough context.");
+        sb.AppendLine("- Set conversationComplete = true when the visitor has what they need and is ready to close.");
+        sb.AppendLine("- confidence is your self-assessed reliability (0.0 to 1.0).");
+        sb.AppendLine("  Use 0.5 or below if you are uncertain, knowledge is sparse, or the query is out of scope.");
+
+        return sb.ToString();
+    }
+
+    private static bool TryParseDecision(string rawOutput, out EngageTurnDecision decision)
+    {
+        decision = CreateFallback("MalformedOutput", "AI decision output was malformed.");
 
         var json = TryExtractJson(rawOutput);
         if (string.IsNullOrWhiteSpace(json))
-        {
             return false;
-        }
 
         try
         {
             using var document = JsonDocument.Parse(json);
             var root = document.RootElement;
             if (root.ValueKind != JsonValueKind.Object)
-            {
                 return false;
-            }
 
-            var schemaVersion = ReadString(root, "schemaVersion") ?? string.Empty;
-            var decisionId = ReadString(root, "decisionId") ?? string.Empty;
-            var overallConfidence = ReadDecimal(root, "overallConfidence");
-            var shouldFallback = ReadBoolean(root, "shouldFallback");
-            var fallbackReason = ReadString(root, "fallbackReason");
-            var noActionMessage = ReadString(root, "noActionMessage");
+            var reply = ReadString(root, "reply");
+            if (string.IsNullOrWhiteSpace(reply))
+                return false;
 
-            var recommendations = ParseRecommendations(root);
-
-            decision = new AiDecisionContract(
-                schemaVersion,
-                decisionId,
-                contextRef,
-                overallConfidence,
-                recommendations,
-                AiDecisionValidationStatus.Valid,
-                [],
-                DefaultAllowlistedActions,
-                shouldFallback,
-                fallbackReason,
-                noActionMessage);
+            decision = new EngageTurnDecision(
+                Reply: reply,
+                Intent: ReadString(root, "intent") ?? string.Empty,
+                CapturedSlots: ReadSlots(root),
+                CreateLead: ReadBoolean(root, "createLead"),
+                CreateTicket: ReadBoolean(root, "createTicket"),
+                TicketSummary: ReadString(root, "ticketSummary"),
+                SuggestedFollowUp: ReadString(root, "suggestedFollowUp"),
+                ConversationComplete: ReadBoolean(root, "conversationComplete"),
+                Confidence: ReadDecimal(root, "confidence"),
+                IsValid: true,
+                FallbackReason: null);
 
             return true;
         }
@@ -106,277 +249,50 @@ public sealed class AiDecisionGenerationService
         }
     }
 
-    private static IReadOnlyCollection<AiRecommendation> ParseRecommendations(JsonElement root)
+    private static EngageTurnSlots ReadSlots(JsonElement root)
     {
-        if (!root.TryGetProperty("recommendations", out var recommendationsElement)
-            || recommendationsElement.ValueKind != JsonValueKind.Array)
+        if (!root.TryGetProperty("capturedSlots", out var slotsElement)
+            || slotsElement.ValueKind != JsonValueKind.Object)
         {
-            return [];
+            return new EngageTurnSlots();
         }
 
-        var recommendations = new List<AiRecommendation>();
-
-        foreach (var item in recommendationsElement.EnumerateArray())
-        {
-            if (item.ValueKind != JsonValueKind.Object)
-            {
-                continue;
-            }
-
-            var typeName = ReadString(item, "type");
-            var recommendationType = Enum.TryParse<AiRecommendationType>(typeName, ignoreCase: true, out var parsed)
-                ? parsed
-                : (AiRecommendationType)int.MaxValue;
-
-            var evidenceRefs = ParseEvidenceRefs(item);
-            var targetRefs = ParseTargetRefs(item);
-            var proposedCommand = ParseProposedCommand(item);
-
-            recommendations.Add(new AiRecommendation(
-                recommendationType,
-                ReadDecimal(item, "confidence"),
-                ReadString(item, "rationale") ?? string.Empty,
-                evidenceRefs,
-                targetRefs,
-                ReadBoolean(item, "requiresApproval"),
-                proposedCommand));
-        }
-
-        return recommendations;
+        return new EngageTurnSlots(
+            Name: ReadString(slotsElement, "name"),
+            Email: ReadString(slotsElement, "email"),
+            Phone: ReadString(slotsElement, "phone"),
+            Location: ReadString(slotsElement, "location"),
+            Goal: ReadString(slotsElement, "goal"),
+            Type: ReadString(slotsElement, "type"),
+            Timeline: ReadString(slotsElement, "timeline"),
+            Budget: ReadString(slotsElement, "budget"),
+            Constraints: ReadString(slotsElement, "constraints"),
+            DecisionStage: ReadString(slotsElement, "decisionStage"));
     }
 
-    private static IReadOnlyCollection<AiEvidenceRef>? ParseEvidenceRefs(JsonElement recommendation)
-    {
-        if (!recommendation.TryGetProperty("evidenceRefs", out var evidenceElement)
-            || evidenceElement.ValueKind != JsonValueKind.Array)
-        {
-            return null;
-        }
-
-        var result = new List<AiEvidenceRef>();
-        foreach (var item in evidenceElement.EnumerateArray())
-        {
-            if (item.ValueKind != JsonValueKind.Object)
-            {
-                continue;
-            }
-
-            result.Add(new AiEvidenceRef(
-                ReadString(item, "source") ?? string.Empty,
-                ReadString(item, "referenceId") ?? string.Empty,
-                ReadString(item, "detail")));
-        }
-
-        return result;
-    }
-
-    private static AiTargetRefs? ParseTargetRefs(JsonElement recommendation)
-    {
-        if (!recommendation.TryGetProperty("targetRefs", out var targetElement)
-            || targetElement.ValueKind != JsonValueKind.Object)
-        {
-            return null;
-        }
-
-        return new AiTargetRefs(
-            ReadGuid(targetElement, "promoId"),
-            ReadString(targetElement, "promoPublicKey"),
-            ReadGuid(targetElement, "knowledgeSourceId"),
-            ReadGuid(targetElement, "ticketId"),
-            ReadGuid(targetElement, "visitorId"));
-    }
-
-    private static IReadOnlyDictionary<string, string>? ParseProposedCommand(JsonElement recommendation)
-    {
-        if (!recommendation.TryGetProperty("proposedCommand", out var commandElement)
-            || commandElement.ValueKind != JsonValueKind.Object)
-        {
-            return null;
-        }
-
-        var command = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var property in commandElement.EnumerateObject())
-        {
-            command[property.Name] = property.Value.ValueKind switch
-            {
-                JsonValueKind.String => property.Value.GetString() ?? string.Empty,
-                JsonValueKind.Number => property.Value.GetRawText(),
-                JsonValueKind.True => "true",
-                JsonValueKind.False => "false",
-                JsonValueKind.Null => string.Empty,
-                _ => property.Value.GetRawText()
-            };
-        }
-
-        return command;
-    }
-
-    private static AiDecisionContract CreateInvalidNoAction(
-        AiDecisionContextRef contextRef,
-        string fallbackReason,
-        string noActionMessage)
-    {
-        return new AiDecisionContract(
-            SchemaVersion: "stage7.v1",
-            DecisionId: Guid.NewGuid().ToString("N"),
-            ContextRef: contextRef,
-            OverallConfidence: 0m,
-            Recommendations:
-            [
-                new AiRecommendation(
-                    AiRecommendationType.NoAction,
-                    0m,
-                    "Unable to produce a valid decision. Falling back to no-action.",
-                    [],
-                    null,
-                    false,
-                    null)
-            ],
-            ValidationStatus: AiDecisionValidationStatus.Invalid,
-            ValidationErrors: ["AI decision output failed validation."],
-            AllowlistedActions: DefaultAllowlistedActions,
-            ShouldFallback: true,
-            FallbackReason: fallbackReason,
-            NoActionMessage: noActionMessage);
-    }
-
-    private static AiDecisionContract CreateSafeNoAction(
-        AiDecisionContextRef contextRef,
-        decimal confidence,
-        string fallbackReason,
-        string noActionMessage)
-    {
-        return new AiDecisionContract(
-            SchemaVersion: "stage7.v1",
-            DecisionId: Guid.NewGuid().ToString("N"),
-            ContextRef: contextRef,
-            OverallConfidence: confidence,
-            Recommendations:
-            [
-                new AiRecommendation(
-                    AiRecommendationType.NoAction,
-                    confidence,
-                    "Confidence is below safe threshold.",
-                    [],
-                    null,
-                    false,
-                    null)
-            ],
-            ValidationStatus: AiDecisionValidationStatus.Valid,
-            ValidationErrors: [],
-            AllowlistedActions: DefaultAllowlistedActions,
-            ShouldFallback: true,
-            FallbackReason: fallbackReason,
-            NoActionMessage: noActionMessage);
-    }
-
-    private static string BuildPrompt(VisitorContextBundle contextBundle)
-    {
-        var builder = new StringBuilder();
-
-        builder.AppendLine("You are Intentify Stage 7 AI decision assistant.");
-        builder.AppendLine("Output ONLY valid JSON. No markdown, no prose.");
-        builder.AppendLine("The JSON must follow this schema exactly:");
-        builder.AppendLine("{");
-        builder.AppendLine("  \"schemaVersion\": \"stage7.v1\",");
-        builder.AppendLine("  \"decisionId\": \"<guid-like-id>\",");
-        builder.AppendLine("  \"overallConfidence\": <0..1>,");
-        builder.AppendLine("  \"recommendations\": [");
-        builder.AppendLine("    {");
-        builder.AppendLine("      \"type\": \"SuggestPromo|SuggestKnowledge|EscalateTicket|TagVisitor|SuggestKnowledgeUpdate|NotifyClientKnowledgeGap|NoAction\",");
-        builder.AppendLine("      \"confidence\": <0..1>,");
-        builder.AppendLine("      \"rationale\": \"short\",");
-        builder.AppendLine("      \"evidenceRefs\": [{\"source\":\"...\",\"referenceId\":\"...\",\"detail\":\"...\"}],");
-        builder.AppendLine("      \"targetRefs\": {\"promoId\":\"...\",\"promoPublicKey\":\"...\",\"knowledgeSourceId\":\"...\",\"ticketId\":\"...\",\"visitorId\":\"...\"},");
-        builder.AppendLine("      \"requiresApproval\": true|false,");
-        builder.AppendLine("      \"proposedCommand\": {");
-        builder.AppendLine("        \"turnSentiment\":\"Calm|Neutral|Frustrated|Positive|Hesitant\",");
-        builder.AppendLine("        \"urgencyLevel\":\"Low|Medium|High\",");
-        builder.AppendLine("        \"frustrationLevel\":\"Low|Medium|High\",");
-        builder.AppendLine("        \"buyingReadiness\":\"Low|Medium|High\",");
-        builder.AppendLine("        \"suggestedServiceFit\":\"short\",");
-        builder.AppendLine("        \"suggestedSalesFollowUpAngle\":\"short\",");
-        builder.AppendLine("        \"suggestedAssistantNextStep\":\"short\",");
-        builder.AppendLine("        \"assistantMove\":\"greet|factual|capture|discover|escalate|close\",");
-        builder.AppendLine("        \"draftReply\":\"final customer-facing reply for this turn\",");
-        builder.AppendLine("        \"missingField\":\"goal|type|location|constraints|name|method|email|phone|none\",");
-        builder.AppendLine("        \"interpretedTurnType\":\"answer|new_topic|close|support|factual|capture\",");
-        builder.AppendLine("        \"nextBestAction\":\"SendFollowUpEmail|ScheduleCall|ShareServiceOverview|PrepareQuote|ConfirmTimeline\",");
-        builder.AppendLine("        \"followUpEmailDraft\":\"short email draft\",");
-        builder.AppendLine("        \"captureGoal\":\"short\",");
-        builder.AppendLine("        \"captureType\":\"short\",");
-        builder.AppendLine("        \"captureLocation\":\"short\",");
-        builder.AppendLine("        \"capturedName\":\"short\",");
-        builder.AppendLine("        \"capturedPreferredContactMethod\":\"Email|Phone\"");
-        builder.AppendLine("      }");
-        builder.AppendLine("    }");
-        builder.AppendLine("  ],");
-        builder.AppendLine("  \"shouldFallback\": true|false,");
-        builder.AppendLine("  \"fallbackReason\": \"...\",");
-        builder.AppendLine("  \"noActionMessage\": \"...\"");
-        builder.AppendLine("}");
-        builder.AppendLine();
-        builder.AppendLine("Rules:");
-        builder.AppendLine("- If uncertain, return NoAction with shouldFallback=true.");
-        builder.AppendLine("- Do not propose action execution steps.");
-        builder.AppendLine("- Keep recommendations to max 3.");
-        builder.AppendLine("- Always provide proposedCommand.assistantMove and proposedCommand.draftReply.");
-        builder.AppendLine("- Prefer grounded factual answers when knowledge chunks are relevant.");
-        builder.AppendLine();
-        builder.AppendLine("Context:");
-        builder.AppendLine($"tenantId: {contextBundle.ContextRef.TenantId:D}");
-        builder.AppendLine($"siteId: {contextBundle.ContextRef.SiteId:D}");
-        builder.AppendLine($"visitorId: {(contextBundle.ContextRef.VisitorId?.ToString("D") ?? "null")}");
-        builder.AppendLine($"engageSessionId: {(contextBundle.ContextRef.EngageSessionId?.ToString("D") ?? "null")}");
-        builder.AppendLine($"knowledgeQuery: {contextBundle.KnowledgeRetrievalSnapshot.Query}");
-
-        foreach (var chunk in contextBundle.KnowledgeRetrievalSnapshot.TopChunks.Take(3))
-        {
-            builder.AppendLine($"knowledgeChunk: sourceId={chunk.SourceId:D}; chunkId={chunk.ChunkId:D}; score={chunk.Score}; excerpt={chunk.ContentExcerpt}");
-        }
-
-        if (contextBundle.RecentEngageSummary is { } engageSummary)
-        {
-            builder.AppendLine($"engageSummary: messages={engageSummary.Messages.Count}");
-            foreach (var message in engageSummary.Messages.TakeLast(6))
-            {
-                builder.AppendLine($"engageMessage: role={message.Role}; confidence={(message.Confidence?.ToString() ?? "null")}; excerpt={message.ContentExcerpt}");
-            }
-        }
-
-        if (contextBundle.LinkedTicketsSummary is { Count: > 0 } tickets)
-        {
-            foreach (var ticket in tickets.Take(5))
-            {
-                builder.AppendLine($"ticket: id={ticket.TicketId:D}; status={ticket.Status}; subject={ticket.Subject}");
-            }
-        }
-
-        if (contextBundle.PromoInteractionSummary is { Count: > 0 } promos)
-        {
-            foreach (var promo in promos.Take(5))
-            {
-                builder.AppendLine($"promoEntry: id={promo.PromoEntryId:D}; promoId={promo.PromoId:D}; submittedAt={promo.SubmittedAtUtc:O}");
-            }
-        }
-
-        return builder.ToString();
-    }
+    private static EngageTurnDecision CreateFallback(string reason, string message) =>
+        new(Reply: string.Empty,
+            Intent: "unknown",
+            CapturedSlots: new EngageTurnSlots(),
+            CreateLead: false,
+            CreateTicket: false,
+            TicketSummary: null,
+            SuggestedFollowUp: null,
+            ConversationComplete: false,
+            Confidence: 0m,
+            IsValid: false,
+            FallbackReason: reason);
 
     private static string? TryExtractJson(string rawOutput)
     {
         var trimmed = rawOutput.Trim();
         if (trimmed.StartsWith('{') && trimmed.EndsWith('}'))
-        {
             return trimmed;
-        }
 
         var start = trimmed.IndexOf('{');
         var end = trimmed.LastIndexOf('}');
         if (start >= 0 && end > start)
-        {
             return trimmed[start..(end + 1)];
-        }
 
         return null;
     }
@@ -389,19 +305,13 @@ public sealed class AiDecisionGenerationService
     private static decimal ReadDecimal(JsonElement element, string propertyName)
     {
         if (!element.TryGetProperty(propertyName, out var value))
-        {
             return 0m;
-        }
 
         if (value.ValueKind == JsonValueKind.Number && value.TryGetDecimal(out var number))
-        {
             return number;
-        }
 
         if (value.ValueKind == JsonValueKind.String && decimal.TryParse(value.GetString(), out var parsed))
-        {
             return parsed;
-        }
 
         return 0m;
     }
@@ -409,35 +319,14 @@ public sealed class AiDecisionGenerationService
     private static bool ReadBoolean(JsonElement element, string propertyName)
     {
         if (!element.TryGetProperty(propertyName, out var value))
-        {
             return false;
-        }
 
-        if (value.ValueKind == JsonValueKind.True)
+        return value.ValueKind switch
         {
-            return true;
-        }
-
-        if (value.ValueKind == JsonValueKind.False)
-        {
-            return false;
-        }
-
-        if (value.ValueKind == JsonValueKind.String && bool.TryParse(value.GetString(), out var parsed))
-        {
-            return parsed;
-        }
-
-        return false;
-    }
-
-    private static Guid? ReadGuid(JsonElement element, string propertyName)
-    {
-        if (!element.TryGetProperty(propertyName, out var value) || value.ValueKind != JsonValueKind.String)
-        {
-            return null;
-        }
-
-        return Guid.TryParse(value.GetString(), out var parsed) ? parsed : null;
+            JsonValueKind.True  => true,
+            JsonValueKind.False => false,
+            JsonValueKind.String when bool.TryParse(value.GetString(), out var parsed) => parsed,
+            _ => false
+        };
     }
 }

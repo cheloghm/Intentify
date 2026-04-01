@@ -21,6 +21,7 @@ public sealed class VisitorContextBundleHandler
     private readonly IEngageChatMessageRepository _chatMessageRepository;
     private readonly ILeadVisitorLinker _leadVisitorLinker;
     private readonly RetrieveTopChunksHandler _retrieveTopChunksHandler;
+    private readonly IKnowledgeQuickFactsRepository _quickFactsRepository;
     private readonly GetVisitorDetailHandler _getVisitorDetailHandler;
     private readonly GetVisitorTimelineHandler _getVisitorTimelineHandler;
     private readonly ListTicketsHandler _listTicketsHandler;
@@ -32,6 +33,7 @@ public sealed class VisitorContextBundleHandler
         IEngageChatMessageRepository chatMessageRepository,
         ILeadVisitorLinker leadVisitorLinker,
         RetrieveTopChunksHandler retrieveTopChunksHandler,
+        IKnowledgeQuickFactsRepository quickFactsRepository,
         GetVisitorDetailHandler getVisitorDetailHandler,
         GetVisitorTimelineHandler getVisitorTimelineHandler,
         ListTicketsHandler listTicketsHandler,
@@ -42,6 +44,7 @@ public sealed class VisitorContextBundleHandler
         _chatMessageRepository = chatMessageRepository;
         _leadVisitorLinker = leadVisitorLinker;
         _retrieveTopChunksHandler = retrieveTopChunksHandler;
+        _quickFactsRepository = quickFactsRepository;
         _getVisitorDetailHandler = getVisitorDetailHandler;
         _getVisitorTimelineHandler = getVisitorTimelineHandler;
         _listTicketsHandler = listTicketsHandler;
@@ -100,18 +103,55 @@ public sealed class VisitorContextBundleHandler
                 engageSession?.BotId),
             cancellationToken);
 
+        var topChunks = retrievedChunks
+            .Take(knowledgeTop)
+            .Select(item => new RetrievedKnowledgeChunkSummary(
+                item.SourceId,
+                item.ChunkId,
+                item.ChunkIndex,
+                item.Score,
+                ToExcerpt(item.Content, ExcerptLength)))
+            .ToArray();
+
         var knowledgeSnapshot = new KnowledgeRetrievalSnapshot(
             query.KnowledgeQuery.Trim(),
             knowledgeTop,
-            retrievedChunks
-                .Take(knowledgeTop)
-                .Select(item => new RetrievedKnowledgeChunkSummary(
-                    item.SourceId,
-                    item.ChunkId,
-                    item.ChunkIndex,
-                    item.Score,
-                    ToExcerpt(item.Content, ExcerptLength)))
-                .ToArray());
+            topChunks);
+
+        // Load pre-extracted quick facts for the sources that returned chunks
+        IReadOnlyCollection<KnowledgeQuickFactsSummary>? quickFacts = null;
+        try
+        {
+            var sourceIds = topChunks.Select(c => c.SourceId).Distinct().ToArray();
+            if (sourceIds.Length > 0)
+            {
+                var rawFacts = await _quickFactsRepository.GetBySourceIdsAsync(
+                    query.TenantId,
+                    query.SiteId,
+                    sourceIds,
+                    cancellationToken);
+
+                if (rawFacts.Count > 0)
+                {
+                    quickFacts = rawFacts
+                        .Select(f => new KnowledgeQuickFactsSummary(
+                            f.SourceId,
+                            f.ServicesOffered,
+                            f.PricingSignals,
+                            f.LocationCoverage,
+                            f.HoursAvailability,
+                            f.TeamCredentials,
+                            f.FaqsText,
+                            f.UniqueSellingPoints,
+                            f.ExtractedAtUtc))
+                        .ToArray();
+                }
+            }
+        }
+        catch
+        {
+            // Optional source: fail-soft.
+        }
 
         VisitorProfileSummary? visitorProfile = null;
         IReadOnlyCollection<TimelineItemSummary>? timelineSummary = null;
@@ -303,7 +343,8 @@ public sealed class VisitorContextBundleHandler
             engageSummary,
             ticketsSummary,
             promoSummary,
-            intelligenceSnapshot);
+            intelligenceSnapshot,
+            quickFacts);
 
         return OperationResult<VisitorContextBundle>.Success(bundle);
     }

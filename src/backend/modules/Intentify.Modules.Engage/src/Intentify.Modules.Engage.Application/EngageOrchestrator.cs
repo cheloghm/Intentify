@@ -84,26 +84,24 @@ public sealed class EngageOrchestrator
             cancellationToken);
 
         var visitorBundle = visitorBundleResult?.Value;
-        var knowledgeSummary = visitorBundle is null
-            ? string.Empty
-            : string.Join("\n", visitorBundle.KnowledgeRetrievalSnapshot.TopChunks.Select(item => item.ContentExcerpt));
 
         var context = await _contextAnalyzer.AnalyzeAsync(
-            session, 
-            recentMessages, 
-            command.Message, 
-            knowledgeSummary, 
-            tenantVocab, 
-            bot, 
-            visitorBundle, 
+            session,
+            recentMessages,
+            command.Message,
+            tenantVocab,
+            bot,
+            visitorBundle,
             cancellationToken);
 
         context.SetPrimaryAction(_nextActionSelector.Select(context));
-        _logger.LogInformation("Engage selected action {Action} targetState {TargetState} reason {Reason} completeBefore={CompleteBefore}",
+        _logger.LogInformation(
+            "Engage action selected. action={Action} target={Target} reason={Reason} initial={Initial} confidence={Confidence}",
             context.PrimaryActionDecision?.Action,
             context.PrimaryActionDecision?.TargetState,
             context.PrimaryActionDecision?.Reason,
-            session.IsConversationComplete);
+            context.Analysis.IsInitialTurn,
+            context.Analysis.AiConfidence);
 
         var result = await _stateRouter.RouteAndHandleAsync(context, cancellationToken);
 

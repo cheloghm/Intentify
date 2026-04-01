@@ -3,84 +3,45 @@ using Intentify.Shared.Validation;
 
 namespace Intentify.Modules.Engage.Application.States;
 
+/// <summary>
+/// Thin slot-persistence layer for commercial capture turns.
+/// The AI decides what to ask next based on what is missing and what feels natural —
+/// this state applies the reply and persists whatever the AI extracted.
+/// No field-by-field interrogation or hardcoded question strings live here.
+/// </summary>
 public sealed class CaptureLeadState : IEngageState
 {
     public string StateName => "CaptureLead";
 
-    private readonly EngageConversationPolicy _policy;
     private readonly ResponseShaper _shaper;
 
-    public CaptureLeadState(EngageConversationPolicy policy, ResponseShaper shaper)
+    public CaptureLeadState(ResponseShaper shaper)
     {
-        _policy = policy;
         _shaper = shaper;
     }
 
     public Task<OperationResult<ChatSendResult>> HandleAsync(EngageConversationContext ctx, CancellationToken ct)
     {
-        _policy.TryApplyStageContinuation(ctx.Session, ctx.UserMessage, ctx.LastAssistantQuestion);
+        var decision = ctx.TurnDecision;
 
-        if (_policy.ShouldReopenCompletedConversation(ctx.Session, ctx.UserMessage))
-        {
-            _policy.ReopenConversation(ctx.Session, "reopen");
-        }
+        // Persist all slots the AI extracted this turn
+        EngageSlotApplicator.Apply(ctx.Session, decision);
 
-        if (_policy.IsContextRecoverySignal(ctx.UserMessage))
-        {
-            var recovered = _shaper.Shape(_policy.BuildContextRecoveryPrompt(ctx.Session), ctx);
-            ctx.Session.PendingCaptureMode = "Commercial";
-            ctx.Session.ConversationState = "CaptureLead";
-            ctx.Session.IsConversationComplete = false;
+        ctx.Session.PendingCaptureMode = decision.ConversationComplete ? null : "Commercial";
+        ctx.Session.ConversationState = "CaptureLead";
+        ctx.Session.IsConversationComplete = decision.ConversationComplete;
 
-            return Task.FromResult(OperationResult<ChatSendResult>.Success(new ChatSendResult(
-                ctx.Session.Id,
-                recovered,
-                0.85m,
-                false,
-                Array.Empty<EngageCitationResult>(),
-                "CaptureLead")));
-        }
+        if (decision.ConversationComplete)
+            ctx.Session.LastCompletedAtUtc = DateTime.UtcNow;
 
-        var missing = _policy.DeterminePrimaryMissingField(ctx.Session);
-        string response;
-        if (string.Equals(missing, "none", StringComparison.Ordinal))
-        {
-            _policy.MarkConversationCompleted(ctx.Session, "capture_complete");
-            ctx.Session.PendingCaptureMode = null;
-            response = ResolveDraftReply(ctx) ?? "Perfect — I’ve got the key details. Would you like me to have a teammate follow up?";
-        }
-        else
-        {
-            ctx.Session.PendingCaptureMode = "Commercial";
-            ctx.Session.ConversationState = "CaptureLead";
-            ctx.Session.IsConversationComplete = false;
-            response = ResolveDraftReply(ctx) ?? _policy.BuildNaturalNextQuestion(ctx.Session, ctx);
-        }
+        // The AI reply is the response — no fallback copy.
+        var rawReply = !string.IsNullOrWhiteSpace(decision.Reply)
+            ? decision.Reply
+            : "Thanks — let me make sure I have the right details to pass along.";
 
-        var shaped = _shaper.Shape(response, ctx);
+        var reply = _shaper.Shape(rawReply, ctx);
 
-        return Task.FromResult(OperationResult<ChatSendResult>.Success(new ChatSendResult(
-            ctx.Session.Id,
-            shaped,
-            0.82m,
-            false,
-            Array.Empty<EngageCitationResult>(),
-            "CaptureLead")));
-    }
-
-    private static string? ResolveDraftReply(EngageConversationContext ctx)
-    {
-        var command = ctx.AiDecision.Recommendations?
-            .Select(item => item.ProposedCommand)
-            .FirstOrDefault(item => item is { Count: > 0 });
-
-        if (command is null)
-        {
-            return null;
-        }
-
-        return command.TryGetValue("draftReply", out var draft) && !string.IsNullOrWhiteSpace(draft)
-            ? draft.Trim()
-            : null;
+        return Task.FromResult(OperationResult<ChatSendResult>.Success(
+            new ChatSendResult(ctx.Session.Id, reply, decision.Confidence, false, Array.Empty<EngageCitationResult>(), "CaptureLead")));
     }
 }

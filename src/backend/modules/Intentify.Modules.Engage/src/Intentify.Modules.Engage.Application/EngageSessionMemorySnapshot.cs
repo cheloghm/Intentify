@@ -20,39 +20,37 @@ public sealed record EngageSessionMemorySnapshot(
     bool IsCommercialCaptureActive,
     bool IsConversationComplete)
 {
-    public static EngageSessionMemorySnapshot FromContext(EngageConversationContext context, EngageConversationPolicy policy)
+    /// <summary>
+    /// Builds a session memory snapshot directly from the session entity.
+    /// No policy dependency — the AI now decides lead readiness via the createLead flag.
+    /// </summary>
+    public static EngageSessionMemorySnapshot FromSession(EngageChatSession session, string? lastAssistantQuestion)
     {
-        var stage = string.IsNullOrWhiteSpace(context.Session.ConversationState)
-            ? "Discover"
-            : context.Session.ConversationState!;
+        var stage = string.IsNullOrWhiteSpace(session.ConversationState) ? "Discover" : session.ConversationState;
 
         var discoveryFields = 0;
-        if (!string.IsNullOrWhiteSpace(context.Session.CaptureGoal)) discoveryFields++;
-        if (!string.IsNullOrWhiteSpace(context.Session.CaptureType)) discoveryFields++;
-        if (!string.IsNullOrWhiteSpace(context.Session.CaptureLocation)) discoveryFields++;
-        if (!string.IsNullOrWhiteSpace(context.Session.CaptureConstraints)) discoveryFields++;
-
-        var explicitContactRequest = policy.IsExplicitCommercialContactRequest(context.UserMessage);
-        var leadReady = policy.IsCommercialCaptureReady(context.Session, explicitContactRequest);
-        var pendingMode = context.Session.PendingCaptureMode ?? string.Empty;
+        if (!string.IsNullOrWhiteSpace(session.CaptureGoal)) discoveryFields++;
+        if (!string.IsNullOrWhiteSpace(session.CaptureType)) discoveryFields++;
+        if (!string.IsNullOrWhiteSpace(session.CaptureLocation)) discoveryFields++;
+        if (!string.IsNullOrWhiteSpace(session.CaptureConstraints)) discoveryFields++;
 
         return new EngageSessionMemorySnapshot(
             ActiveStage: stage,
-            LastAssistantQuestion: context.LastAssistantQuestion,
-            LastAssistantAskType: context.Session.LastAssistantAskType,
-            Goal: context.Session.CaptureGoal,
-            Type: context.Session.CaptureType,
-            Location: context.Session.CaptureLocation,
-            Constraints: context.Session.CaptureConstraints,
-            Name: context.Session.CapturedName,
-            PreferredContactMethod: context.Session.CapturedPreferredContactMethod,
-            Email: context.Session.CapturedEmail,
-            Phone: context.Session.CapturedPhone,
+            LastAssistantQuestion: lastAssistantQuestion,
+            LastAssistantAskType: session.LastAssistantAskType,
+            Goal: session.CaptureGoal,
+            Type: session.CaptureType,
+            Location: session.CaptureLocation,
+            Constraints: session.CaptureConstraints,
+            Name: session.CapturedName,
+            PreferredContactMethod: session.CapturedPreferredContactMethod,
+            Email: session.CapturedEmail,
+            Phone: session.CapturedPhone,
             DiscoveryFieldCount: discoveryFields,
-            LeadReady: leadReady,
-            IsSupportCaptureActive: string.Equals(pendingMode, "Support", StringComparison.OrdinalIgnoreCase),
-            IsCommercialCaptureActive: string.Equals(pendingMode, "Commercial", StringComparison.OrdinalIgnoreCase)
-                                     || string.Equals(stage, "CaptureLead", StringComparison.Ordinal),
-            IsConversationComplete: context.Session.IsConversationComplete);
+            LeadReady: false,   // AI decides via createLead; this field is kept for structural compatibility
+            IsSupportCaptureActive: string.Equals(session.PendingCaptureMode, "Support", StringComparison.OrdinalIgnoreCase),
+            IsCommercialCaptureActive: string.Equals(session.PendingCaptureMode, "Commercial", StringComparison.OrdinalIgnoreCase)
+                                      || string.Equals(stage, "CaptureLead", StringComparison.Ordinal),
+            IsConversationComplete: session.IsConversationComplete);
     }
 }

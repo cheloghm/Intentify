@@ -34,7 +34,7 @@ public sealed class GoogleAdsHistoricalMetricsProvider(
 
         try
         {
-            using var request = BuildRequest(query, keywords);
+            var request = BuildRequest(query, keywords);
             using var response = await httpClient.SendAsync(request, ct);
             if (!response.IsSuccessStatusCode)
             {
