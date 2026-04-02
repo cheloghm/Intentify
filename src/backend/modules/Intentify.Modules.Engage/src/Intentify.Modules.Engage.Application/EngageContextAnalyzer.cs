@@ -65,6 +65,7 @@ public sealed class EngageContextAnalyzer
                 CapturedSlots: new EngageTurnSlots(),
                 CreateLead: false,
                 CreateTicket: false,
+                TicketSubject: null,
                 TicketSummary: null,
                 SuggestedFollowUp: null,
                 ConversationComplete: false,

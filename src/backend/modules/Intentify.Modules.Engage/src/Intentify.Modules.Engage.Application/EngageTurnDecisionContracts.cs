@@ -28,6 +28,7 @@ public sealed record EngageTurnDecision(
     EngageTurnSlots CapturedSlots,
     bool CreateLead,
     bool CreateTicket,
+    string? TicketSubject,
     string? TicketSummary,
     string? SuggestedFollowUp,
     bool ConversationComplete,

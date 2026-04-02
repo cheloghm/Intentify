@@ -58,8 +58,12 @@ public sealed class EngageBusinessOutcomeExecutor
         ChatSendCommand command,
         CancellationToken cancellationToken)
     {
-        var ticketSubject = "Engage support escalation";
-        var ticketDescription = $"User: {context.UserMessage}\n\nAssistant: {context.LastAssistantQuestion ?? "(none)"}";
+        var ticketSubject = !string.IsNullOrWhiteSpace(context.TurnDecision.TicketSubject)
+            ? context.TurnDecision.TicketSubject
+            : "Engage support escalation";
+        var ticketDescription = !string.IsNullOrWhiteSpace(context.TurnDecision.TicketSummary)
+            ? context.TurnDecision.TicketSummary
+            : $"User: {context.UserMessage}\n\nAssistant: {context.LastAssistantQuestion ?? "(none)"}";
 
         var existing = await FindSessionEscalationTicketAsync(context.Session, cancellationToken);
         if (existing is { } item)

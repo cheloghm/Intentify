@@ -36,6 +36,33 @@ public static class EngageSalesGuideline
         return sb.ToString();
     }
 
+    /// <summary>
+    /// Builds only the static briefing layers (1–6), without per-turn session state.
+    /// Used as the cacheable system prompt — identical for all turns from the same bot.
+    /// </summary>
+    public static string BuildStaticBriefing(EngageBriefingContext briefing)
+    {
+        var sb = new StringBuilder();
+        AppendLayer1_Identity(sb, briefing);
+        AppendLayer2_Goals(sb);
+        AppendLayer3_ProfileTargets(sb);
+        AppendLayer4_Principles(sb);
+        AppendLayer5_OutputFormat(sb);
+        AppendLayer6_KnowledgeScope(sb);
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Builds the per-turn session state section only.
+    /// Used as the opening of the dynamic user prompt.
+    /// </summary>
+    public static string BuildSessionState(EngageSessionMemorySnapshot memory)
+    {
+        var sb = new StringBuilder();
+        AppendCurrentSessionState(sb, memory);
+        return sb.ToString();
+    }
+
     private static void AppendLayer1_Identity(StringBuilder sb, EngageBriefingContext briefing)
     {
         sb.AppendLine("## LAYER 1 — Identity and Business Context");

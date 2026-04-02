@@ -37,7 +37,7 @@ public sealed class HttpChatCompletionClientTests
             ChatModel = configuredModel
         }, httpClient);
 
-        var result = await client.CompleteAsync("hello", CancellationToken.None);
+        var result = await client.CompleteAsync("system instructions", "hello", CancellationToken.None);
 
         Assert.True(result.IsSuccess);
         Assert.NotNull(handler.LastRequest);

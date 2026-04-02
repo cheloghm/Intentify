@@ -32,6 +32,14 @@
   var hydrateRequestId = 0;
   var sendNonce = 0;
   var pendingSecondaryTimer = null;
+  var chunkDeliveryTimers = [];
+
+  if (!document.getElementById('intentify-engage-styles')) {
+    var styleTag = document.createElement('style');
+    styleTag.id = 'intentify-engage-styles';
+    styleTag.textContent = '@keyframes intentify-dot-pulse{0%,80%,100%{opacity:.2;transform:scale(.8)}40%{opacity:1;transform:scale(1)}}.intentify-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:#94a3b8;margin:0 2px;animation:intentify-dot-pulse 1.4s infinite both}.intentify-dot:nth-child(2){animation-delay:.16s}.intentify-dot:nth-child(3){animation-delay:.32s}';
+    document.head.appendChild(styleTag);
+  }
 
   function endpoint(path) { return baseUrl + path; }
 
@@ -198,11 +206,42 @@
     typingIndicatorRow = null;
   }
 
-  function clearPendingSecondaryRender() {
+  function cancelChunkDelivery() {
+    for (var i = 0; i < chunkDeliveryTimers.length; i++) {
+      clearTimeout(chunkDeliveryTimers[i]);
+    }
+    chunkDeliveryTimers = [];
     if (pendingSecondaryTimer) {
       clearTimeout(pendingSecondaryTimer);
       pendingSecondaryTimer = null;
     }
+    removeTypingIndicator();
+  }
+
+  function splitIntoChunks(text) {
+    // Split at sentence-ending punctuation followed by whitespace
+    var sentences = text.replace(/([.!?])\s+/g, '$1\u0000').split('\u0000');
+    sentences = sentences.map(function(s) { return s.trim(); }).filter(Boolean);
+
+    if (sentences.length <= 1) {
+      return [text];
+    }
+
+    var chunks = [];
+    var current = [];
+    var currentLen = 0;
+
+    for (var i = 0; i < sentences.length; i++) {
+      current.push(sentences[i]);
+      currentLen += sentences[i].length;
+      if (current.length >= 3 || currentLen >= 200 || i === sentences.length - 1) {
+        chunks.push(current.join(' '));
+        current = [];
+        currentLen = 0;
+      }
+    }
+
+    return chunks.length > 1 ? chunks : [text];
   }
 
   function showTypingIndicator() {
@@ -213,12 +252,19 @@
     typingIndicatorRow.style.justifyContent = 'flex-start';
 
     var indicator = document.createElement('div');
-    indicator.textContent = assistantName + ' is typing…';
-    indicator.style.fontSize = '12px';
-    indicator.style.color = '#475569';
-    indicator.style.padding = '6px 10px';
-    indicator.style.borderRadius = '999px';
-    indicator.style.background = '#e2e8f0';
+    indicator.style.padding = '10px 14px';
+    indicator.style.borderRadius = '12px 12px 12px 4px';
+    indicator.style.background = '#ffffff';
+    indicator.style.border = '1px solid #e2e8f0';
+    indicator.style.boxShadow = '0 2px 8px rgba(15,23,42,.06)';
+    indicator.style.display = 'flex';
+    indicator.style.alignItems = 'center';
+
+    for (var i = 0; i < 3; i++) {
+      var dot = document.createElement('span');
+      dot.className = 'intentify-dot';
+      indicator.appendChild(dot);
+    }
 
     typingIndicatorRow.appendChild(indicator);
     messages.appendChild(typingIndicatorRow);
@@ -593,7 +639,7 @@
     var requestNonce = ++sendNonce;
     var optimisticUserRow = addMessage('user', message);
     var shouldRestoreFocusAfterSend = true;
-    clearPendingSecondaryRender();
+    cancelChunkDelivery();
     setSendingState(true);
     showTypingIndicator();
     return waitForCollectorSessionId()
@@ -618,7 +664,7 @@
           return;
         }
         removeTypingIndicator();
-        clearPendingSecondaryRender();
+        cancelChunkDelivery();
         sessionId = payload.sessionId || sessionId;
         if (sessionId) {
           localStorage.setItem(storageKey, sessionId);
@@ -630,7 +676,7 @@
       .catch(function(error) {
         console.warn('Intentify Engage widget send failed:', error);
         removeTypingIndicator();
-        clearPendingSecondaryRender();
+        cancelChunkDelivery();
         if (optimisticUserRow && optimisticUserRow.parentNode) {
           optimisticUserRow.parentNode.removeChild(optimisticUserRow);
         }
@@ -648,17 +694,50 @@
   }
 
   function renderAssistantPayload(payload) {
-    var restoreFocus = true;
-    addMessage('bot', payload && payload.response ? payload.response : '');
+    var response = (payload && payload.response) ? payload.response : '';
+    var hasContactForm = response === contactDetailsPrompt;
+    var hasPromo = !!(payload && payload.responseKind === 'promo' && payload.promoPublicKey);
 
-    if (payload && payload.response === contactDetailsPrompt) {
+    // Chunked delivery for long responses that aren't special forms
+    if (!hasContactForm && !hasPromo && response.length > 280) {
+      var chunks = splitIntoChunks(response);
+      if (chunks.length > 1) {
+        addMessage('bot', chunks[0]);
+        // Re-enable input immediately — user can send at any time during delivery
+        setSendingState(false);
+        showTypingIndicator();
+
+        for (var i = 1; i < chunks.length; i++) {
+          (function(chunk, idx) {
+            var timer = setTimeout(function() {
+              removeTypingIndicator();
+              addMessage('bot', chunk);
+              if (idx < chunks.length - 1) {
+                showTypingIndicator();
+              } else {
+                restoreInputFocus();
+              }
+            }, idx * 1200);
+            chunkDeliveryTimers.push(timer);
+          })(chunks[i], i);
+        }
+
+        // Return false so .finally() skips restoreInputFocus — last chunk timer handles it
+        return Promise.resolve(false);
+      }
+    }
+
+    // Short response or special form — display immediately
+    addMessage('bot', response);
+
+    if (hasContactForm) {
       addContactDetailsForm();
-      restoreFocus = false;
     }
-    if (payload && payload.responseKind === 'promo' && payload.promoPublicKey) {
+    if (hasPromo) {
       addPromoForm(payload);
-      restoreFocus = false;
     }
+
+    var restoreFocus = !hasContactForm && !hasPromo;
 
     if (!payload || !payload.secondaryResponse) {
       return Promise.resolve(restoreFocus);
@@ -666,7 +745,8 @@
 
     showTypingIndicator();
     return new Promise(function(resolve) {
-      setTimeout(function() {
+      pendingSecondaryTimer = setTimeout(function() {
+        pendingSecondaryTimer = null;
         removeTypingIndicator();
         addMessage('bot', payload.secondaryResponse);
         resolve(restoreFocus);

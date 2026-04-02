@@ -7,7 +7,7 @@ public sealed class NullAiClientsTests
     {
         var client = new NullChatCompletionClient(new AiOptions());
 
-        var result = await client.CompleteAsync("prompt", CancellationToken.None);
+        var result = await client.CompleteAsync(string.Empty, "prompt", CancellationToken.None);
 
         Assert.False(result.IsSuccess);
         Assert.NotNull(result.Error);

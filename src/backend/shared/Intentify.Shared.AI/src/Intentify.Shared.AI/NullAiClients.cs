@@ -4,7 +4,7 @@ namespace Intentify.Shared.AI;
 
 public sealed class NullChatCompletionClient(AiOptions options) : IChatCompletionClient
 {
-    public Task<Result<string>> CompleteAsync(string prompt, CancellationToken ct)
+    public Task<Result<string>> CompleteAsync(string systemPrompt, string userPrompt, CancellationToken ct)
         => Task.FromResult(Result<string>.Failure(CreateNotConfiguredError(options)));
 
     private static Error CreateNotConfiguredError(AiOptions options)

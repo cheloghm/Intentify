@@ -154,7 +154,7 @@ public sealed class IndexKnowledgeSourceHandler
         try
         {
             var prompt = BuildQuickFactsPrompt(source, chunks);
-            var completion = await _chatCompletionClient!.CompleteAsync(prompt, cancellationToken);
+            var completion = await _chatCompletionClient!.CompleteAsync(string.Empty, prompt, cancellationToken);
 
             if (!completion.IsSuccess || string.IsNullOrWhiteSpace(completion.Value))
             {

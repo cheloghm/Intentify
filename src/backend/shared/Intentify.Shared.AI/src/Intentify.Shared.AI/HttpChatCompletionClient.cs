@@ -9,7 +9,7 @@ public sealed class HttpChatCompletionClient(AiOptions options, HttpClient httpC
 {
     public const string ClientName = "intentify-ai-chat";
 
-    public async Task<Result<string>> CompleteAsync(string prompt, CancellationToken ct)
+    public async Task<Result<string>> CompleteAsync(string systemPrompt, string userPrompt, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(options.ApiBaseUrl) || string.IsNullOrWhiteSpace(options.ApiKey))
         {
@@ -18,6 +18,12 @@ public sealed class HttpChatCompletionClient(AiOptions options, HttpClient httpC
 
         try
         {
+            var isAnthropic = options.ApiBaseUrl.Contains("anthropic.com", StringComparison.OrdinalIgnoreCase);
+
+            object systemContent = isAnthropic
+                ? new object[] { new { type = "text", text = systemPrompt, cache_control = new { type = "ephemeral" } } }
+                : (object)systemPrompt;
+
             var client = httpClient;
             using var request = new HttpRequestMessage(HttpMethod.Post, "v1/chat/completions")
             {
@@ -25,13 +31,10 @@ public sealed class HttpChatCompletionClient(AiOptions options, HttpClient httpC
                 {
                     model = options.ChatModel,
                     temperature = 0,
-                    messages = new[]
+                    messages = new object[]
                     {
-                        new
-                        {
-                            role = "user",
-                            content = prompt
-                        }
+                        new { role = "system", content = systemContent },
+                        new { role = "user",   content = userPrompt }
                     }
                 })
             };

@@ -28,8 +28,8 @@ public static class AiDecisionValidator
         if (decision.CreateTicket && string.IsNullOrWhiteSpace(decision.TicketSummary))
             errors.Add("ticketSummary is required when createTicket is true.");
 
-        if (decision.TicketSummary is { Length: > 3000 })
-            errors.Add("ticketSummary exceeds maximum length of 3000 characters.");
+        if (decision.TicketSummary is { Length: > 5000 })
+            errors.Add("ticketSummary exceeds maximum length of 5000 characters.");
 
         if (decision.CapturedSlots?.DecisionStage is { } stage
             && !string.IsNullOrWhiteSpace(stage)

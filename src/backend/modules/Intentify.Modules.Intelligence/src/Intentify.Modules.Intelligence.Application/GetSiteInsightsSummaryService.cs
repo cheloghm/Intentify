@@ -50,7 +50,7 @@ public sealed class GetSiteInsightsSummaryService(
         }
 
         var prompt = BuildPrompt(dashboard, fallbackSummary);
-        var aiResult = await aiClient.CompleteAsync(prompt, ct);
+        var aiResult = await aiClient.CompleteAsync(string.Empty, prompt, ct);
         var aiSummary = aiResult.IsSuccess ? NormalizeSummary(aiResult.Value) : null;
 
         return OperationResult<SiteInsightsSummaryResponse>.Success(new SiteInsightsSummaryResponse(

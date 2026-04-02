@@ -29,8 +29,8 @@ public sealed class AiDecisionGenerationService
         ArgumentNullException.ThrowIfNull(bot);
         ArgumentNullException.ThrowIfNull(sessionMemory);
 
-        var prompt = BuildPrompt(contextBundle, bot, tenantVocabulary, sessionMemory, recentMessages);
-        var completion = await _chatCompletionClient.CompleteAsync(prompt, cancellationToken);
+        var (systemPrompt, userPrompt) = BuildPrompts(contextBundle, bot, tenantVocabulary, sessionMemory, recentMessages);
+        var completion = await _chatCompletionClient.CompleteAsync(systemPrompt, userPrompt, cancellationToken);
 
         if (!completion.IsSuccess || string.IsNullOrWhiteSpace(completion.Value))
             return CreateFallback("AiUnavailable", "AI is unavailable.");
@@ -48,16 +48,13 @@ public sealed class AiDecisionGenerationService
         return validated;
     }
 
-    private static string BuildPrompt(
+    private static (string System, string User) BuildPrompts(
         VisitorContextBundle contextBundle,
         EngageBot bot,
         IReadOnlyCollection<string> tenantVocabulary,
         EngageSessionMemorySnapshot sessionMemory,
         IReadOnlyCollection<EngageChatMessage> recentMessages)
     {
-        var sb = new StringBuilder();
-
-        // Assemble business briefing from bot configuration
         var briefing = new EngageBriefingContext(
             BusinessName: bot.Name ?? bot.DisplayName,
             Industry: bot.Industry,
@@ -66,11 +63,94 @@ public sealed class AiDecisionGenerationService
             Tone: bot.Tone,
             PersonalityDescriptor: bot.PersonalityDescriptor);
 
-        // Layers 1–6 briefing + current session state
-        sb.AppendLine(EngageSalesGuideline.Build(briefing, sessionMemory));
+        var system = BuildSystemPrompt(briefing);
+        var user   = BuildUserPrompt(contextBundle, sessionMemory, recentMessages);
+        return (system, user);
+    }
+
+    /// <summary>
+    /// Static system prompt — identical for every turn from the same bot configuration.
+    /// Sent with cache_control on Anthropic so Layers 1–6, signal examples, and the
+    /// output schema are cached across turns, cutting per-turn latency significantly.
+    /// </summary>
+    private static string BuildSystemPrompt(EngageBriefingContext briefing)
+    {
+        var sb = new StringBuilder();
+
+        // Layers 1–6: static briefing (no session state — that goes in the user prompt)
+        sb.AppendLine(EngageSalesGuideline.BuildStaticBriefing(briefing));
 
         // Signal pattern examples for AI intent recognition
         sb.AppendLine(EngageSignalExamples.BuildSection());
+
+        // JSON output schema and rules
+        sb.AppendLine("## Required Output");
+        sb.AppendLine();
+        sb.AppendLine("Respond with ONLY valid JSON. No markdown, no prose, no explanation before or after.");
+        sb.AppendLine("The JSON must follow this schema exactly:");
+        sb.AppendLine("""
+            {
+              "reply": "the response to send to the visitor — final, natural, customer-facing text",
+              "intent": "one sentence describing what the visitor is doing this turn",
+              "capturedSlots": {
+                "name": "string or null",
+                "email": "string or null",
+                "phone": "string or null",
+                "location": "string or null",
+                "goal": "string or null",
+                "type": "string or null",
+                "timeline": "string or null",
+                "budget": "string or null",
+                "constraints": "string or null",
+                "decisionStage": "exploring | evaluating | deciding | null"
+              },
+              "createLead": false,
+              "createTicket": false,
+              "ticketSubject": "string or null — required when createTicket is true. Concise, specific subject line capturing who the visitor is and what they need (e.g. \"Food truck website — online ordering + Uber Eats, Cardiff\")",
+              "ticketSummary": "string or null — required when createTicket is true. Must include all 7 labelled sections (see rules below).",
+              "suggestedFollowUp": "string or null — short internal note for the follow-up team",
+              "conversationComplete": false,
+              "confidence": 0.9
+            }
+            """);
+        sb.AppendLine();
+        sb.AppendLine("Rules:");
+        sb.AppendLine("- reply is mandatory. It is the only thing the visitor sees. Make it count.");
+        sb.AppendLine("- Only populate capturedSlots fields that were explicitly stated or clearly implied this turn.");
+        sb.AppendLine("  Do not invent or guess values. An empty string is not the same as null — use null.");
+        sb.AppendLine("- Set createLead = true when you have: name + a contact method + a meaningful goal.");
+        sb.AppendLine("- Set createTicket = true when the visitor needs human follow-up and you have enough context.");
+        sb.AppendLine("- When createTicket = true:");
+        sb.AppendLine("  ticketSubject must be a specific, scannable subject line (e.g. \"Plumber in Leeds — website + online booking, tight budget\").");
+        sb.AppendLine("  ticketSummary must contain all 7 sections, each on a clearly labelled line:");
+        sb.AppendLine("    1. Visitor overview: who they are and why they came");
+        sb.AppendLine("    2. What they need: your synthesised understanding — not a raw transcript");
+        sb.AppendLine("    3. Key details: timeline, budget, scale, location, specific requirements");
+        sb.AppendLine("    4. What they have not considered: gaps or blindspots surfaced during the conversation");
+        sb.AppendLine("    5. Their concerns: hesitations and open questions they expressed");
+        sb.AppendLine("    6. Recommended next step + a suggested short follow-up opening message (one sentence)");
+        sb.AppendLine("    7. Conversation tone: one line (e.g. \"warm and engaged, somewhat uncertain about budget\")");
+        sb.AppendLine("  Do not use generic placeholder text. Every section must reflect this specific conversation.");
+        sb.AppendLine("- Set conversationComplete = true when the visitor has what they need and is ready to close.");
+        sb.AppendLine("- confidence is your self-assessed reliability (0.0 to 1.0).");
+        sb.AppendLine("  Use 0.5 or below if you are uncertain, knowledge is sparse, or the query is out of scope.");
+
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Dynamic user prompt — changes every turn with session state, conversation history,
+    /// and knowledge retrieval results for this specific query.
+    /// </summary>
+    private static string BuildUserPrompt(
+        VisitorContextBundle contextBundle,
+        EngageSessionMemorySnapshot sessionMemory,
+        IReadOnlyCollection<EngageChatMessage> recentMessages)
+    {
+        var sb = new StringBuilder();
+
+        // Current session state (what has been captured so far — changes as slots are filled)
+        sb.AppendLine(EngageSalesGuideline.BuildSessionState(sessionMemory));
 
         // --- Turn context ---
         sb.AppendLine("## Turn Context");
@@ -163,47 +243,6 @@ public sealed class AiDecisionGenerationService
             }
         }
 
-        // JSON output schema
-        sb.AppendLine();
-        sb.AppendLine("## Required Output");
-        sb.AppendLine();
-        sb.AppendLine("Respond with ONLY valid JSON. No markdown, no prose, no explanation before or after.");
-        sb.AppendLine("The JSON must follow this schema exactly:");
-        sb.AppendLine("""
-            {
-              "reply": "the response to send to the visitor — final, natural, customer-facing text",
-              "intent": "one sentence describing what the visitor is doing this turn",
-              "capturedSlots": {
-                "name": "string or null",
-                "email": "string or null",
-                "phone": "string or null",
-                "location": "string or null",
-                "goal": "string or null",
-                "type": "string or null",
-                "timeline": "string or null",
-                "budget": "string or null",
-                "constraints": "string or null",
-                "decisionStage": "exploring | evaluating | deciding | null"
-              },
-              "createLead": false,
-              "createTicket": false,
-              "ticketSummary": "string or null — required when createTicket is true",
-              "suggestedFollowUp": "string or null — short internal note for the follow-up team",
-              "conversationComplete": false,
-              "confidence": 0.9
-            }
-            """);
-        sb.AppendLine();
-        sb.AppendLine("Rules:");
-        sb.AppendLine("- reply is mandatory. It is the only thing the visitor sees. Make it count.");
-        sb.AppendLine("- Only populate capturedSlots fields that were explicitly stated or clearly implied this turn.");
-        sb.AppendLine("  Do not invent or guess values. An empty string is not the same as null — use null.");
-        sb.AppendLine("- Set createLead = true when you have: name + a contact method + a meaningful goal.");
-        sb.AppendLine("- Set createTicket = true when the visitor needs human follow-up and you have enough context.");
-        sb.AppendLine("- Set conversationComplete = true when the visitor has what they need and is ready to close.");
-        sb.AppendLine("- confidence is your self-assessed reliability (0.0 to 1.0).");
-        sb.AppendLine("  Use 0.5 or below if you are uncertain, knowledge is sparse, or the query is out of scope.");
-
         return sb.ToString();
     }
 
@@ -232,6 +271,7 @@ public sealed class AiDecisionGenerationService
                 CapturedSlots: ReadSlots(root),
                 CreateLead: ReadBoolean(root, "createLead"),
                 CreateTicket: ReadBoolean(root, "createTicket"),
+                TicketSubject: ReadString(root, "ticketSubject"),
                 TicketSummary: ReadString(root, "ticketSummary"),
                 SuggestedFollowUp: ReadString(root, "suggestedFollowUp"),
                 ConversationComplete: ReadBoolean(root, "conversationComplete"),
@@ -274,6 +314,7 @@ public sealed class AiDecisionGenerationService
             CapturedSlots: new EngageTurnSlots(),
             CreateLead: false,
             CreateTicket: false,
+            TicketSubject: null,
             TicketSummary: null,
             SuggestedFollowUp: null,
             ConversationComplete: false,
