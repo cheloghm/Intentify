@@ -39,6 +39,8 @@ public sealed class HttpChatCompletionClient(AiOptions options, HttpClient httpC
                 })
             };
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", options.ApiKey);
+            if (isAnthropic)
+                request.Headers.TryAddWithoutValidation("anthropic-beta", "prompt-caching-2024-07-31");
 
             using var response = await client.SendAsync(request, ct);
             if (!response.IsSuccessStatusCode)

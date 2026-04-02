@@ -205,12 +205,24 @@ public static class EngageSalesGuideline
     {
         sb.AppendLine("## Current Session State");
         sb.AppendLine();
+
+        var isKnownVisitor = !string.IsNullOrWhiteSpace(memory.Name) && !string.IsNullOrWhiteSpace(memory.Email);
+        var isReturning    = memory.IsConversationComplete || isKnownVisitor;
+
+        if (isKnownVisitor)
+        {
+            sb.AppendLine($"This visitor is known: {memory.Name} ({memory.Email}).");
+            sb.AppendLine("Greet them by name and pick up where you left off.");
+            sb.AppendLine();
+        }
+
         sb.AppendLine("What has been captured so far in this conversation:");
 
         var anyCaptured = false;
         if (!string.IsNullOrWhiteSpace(memory.Name))        { sb.AppendLine($"  - Name: {memory.Name}");              anyCaptured = true; }
         if (!string.IsNullOrWhiteSpace(memory.Email))       { sb.AppendLine($"  - Email: {memory.Email}");             anyCaptured = true; }
         if (!string.IsNullOrWhiteSpace(memory.Phone))       { sb.AppendLine($"  - Phone: {memory.Phone}");             anyCaptured = true; }
+        if (!string.IsNullOrWhiteSpace(memory.PreferredContactMethod)) { sb.AppendLine($"  - Preferred contact: {memory.PreferredContactMethod}"); anyCaptured = true; }
         if (!string.IsNullOrWhiteSpace(memory.Location))    { sb.AppendLine($"  - Location: {memory.Location}");       anyCaptured = true; }
         if (!string.IsNullOrWhiteSpace(memory.Goal))        { sb.AppendLine($"  - Goal: {memory.Goal}");               anyCaptured = true; }
         if (!string.IsNullOrWhiteSpace(memory.Type))        { sb.AppendLine($"  - Project/business type: {memory.Type}"); anyCaptured = true; }
@@ -221,14 +233,13 @@ public static class EngageSalesGuideline
 
         sb.AppendLine();
 
-        var missing = new List<string>(7);
+        var missing = new List<string>(6);
         if (string.IsNullOrWhiteSpace(memory.Name))        missing.Add("name");
         if (string.IsNullOrWhiteSpace(memory.Email))       missing.Add("email");
         if (string.IsNullOrWhiteSpace(memory.Goal))        missing.Add("goal");
         if (string.IsNullOrWhiteSpace(memory.Type))        missing.Add("project/business type");
         if (string.IsNullOrWhiteSpace(memory.Location))    missing.Add("location");
         if (string.IsNullOrWhiteSpace(memory.Constraints)) missing.Add("constraints or timeline");
-        if (string.IsNullOrWhiteSpace(memory.Phone))       missing.Add("phone (optional)");
 
         sb.AppendLine("What is still missing:");
         if (missing.Count == 0)
@@ -239,6 +250,28 @@ public static class EngageSalesGuideline
         {
             sb.AppendLine($"  {string.Join(", ", missing)}");
             sb.AppendLine("  Remember: gather these naturally. Do not interrogate.");
+        }
+
+        if (isReturning)
+        {
+            var enrichmentGaps = new List<string>(4);
+            if (string.IsNullOrWhiteSpace(memory.Phone))
+                enrichmentGaps.Add("phone number");
+            if (string.IsNullOrWhiteSpace(memory.PreferredContactMethod))
+                enrichmentGaps.Add("preferred contact method (call or email?)");
+            if (string.IsNullOrWhiteSpace(memory.Constraints))
+                enrichmentGaps.Add("budget range, timeline, and where they are in the decision process");
+
+            if (enrichmentGaps.Count > 0)
+            {
+                sb.AppendLine();
+                sb.AppendLine("Profile gaps to fill naturally if opportunity arises:");
+                foreach (var gap in enrichmentGaps)
+                    sb.AppendLine($"  - {gap}");
+                sb.AppendLine("Do not interrupt the conversation to ask for these.");
+                sb.AppendLine("Only gather them if the conversation naturally creates an opportunity.");
+                sb.AppendLine("The visitor is returning — they already trust us. Be warm and build on what we know.");
+            }
         }
 
         if (memory.IsConversationComplete)
