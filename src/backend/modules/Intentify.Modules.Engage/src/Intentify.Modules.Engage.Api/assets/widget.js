@@ -707,8 +707,11 @@
         setSendingState(false);
         showTypingIndicator();
 
+        var cumulativeDelay = 0;
         for (var i = 1; i < chunks.length; i++) {
-          (function(chunk, idx) {
+          // Each chunk waits for the reading time of the chunk before it
+          cumulativeDelay += Math.min(5000, Math.max(2500, chunks[i - 1].length * 50));
+          (function(chunk, delay, idx) {
             var timer = setTimeout(function() {
               removeTypingIndicator();
               addMessage('bot', chunk);
@@ -717,9 +720,9 @@
               } else {
                 restoreInputFocus();
               }
-            }, idx * 1200);
+            }, delay);
             chunkDeliveryTimers.push(timer);
-          })(chunks[i], i);
+          })(chunks[i], cumulativeDelay, i);
         }
 
         // Return false so .finally() skips restoreInputFocus — last chunk timer handles it

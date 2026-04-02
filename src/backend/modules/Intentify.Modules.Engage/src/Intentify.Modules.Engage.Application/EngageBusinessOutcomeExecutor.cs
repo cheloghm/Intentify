@@ -121,7 +121,6 @@ public sealed class EngageBusinessOutcomeExecutor
             cancellationToken);
 
         return items
-            .Where(item => string.Equals(item.Subject, "Engage support escalation", StringComparison.Ordinal))
             .OrderByDescending(item => item.UpdatedAtUtc)
             .FirstOrDefault();
     }
