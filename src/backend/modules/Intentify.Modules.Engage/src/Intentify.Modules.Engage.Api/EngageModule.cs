@@ -53,7 +53,7 @@ public sealed class EngageModule : IAppModule
                 client.BaseAddress = uri;
         });
 
-        services.TryAddSingleton<IChatCompletionClient>(sp =>
+        services.AddSingleton<IChatCompletionClient>(sp =>
         {
             var options = sp.GetRequiredService<AiOptions>();
             if (!string.IsNullOrWhiteSpace(options.ApiBaseUrl) && !string.IsNullOrWhiteSpace(options.ApiKey))
