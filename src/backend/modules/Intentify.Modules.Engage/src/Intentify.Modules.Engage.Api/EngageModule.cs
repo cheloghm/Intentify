@@ -13,6 +13,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 
 namespace Intentify.Modules.Engage.Api;
 
@@ -61,6 +62,11 @@ public sealed class EngageModule : IAppModule
                 var client = factory.CreateClient(HttpChatCompletionClient.ClientName);
                 return new HttpChatCompletionClient(options, client);
             }
+
+            var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger("Intentify.Modules.Engage");
+            logger.LogWarning(
+                "AI client is not configured. Set Intentify:AI:ApiBaseUrl and Intentify:AI:ApiKey. " +
+                "All AI-dependent features (chat responses, knowledge grounding) will be unavailable.");
             return new NullChatCompletionClient(options);
         });
 

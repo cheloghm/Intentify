@@ -28,7 +28,12 @@ public sealed class GetEngageBotHandler
             bot.LauncherVisible,
             bot.Tone,
             bot.Verbosity,
-            bot.FallbackStyle));
+            bot.FallbackStyle,
+            bot.BusinessDescription,
+            bot.Industry,
+            bot.ServicesDescription,
+            bot.GeoFocus,
+            bot.PersonalityDescriptor));
     }
 }
 
@@ -63,6 +68,11 @@ public sealed class UpdateEngageBotHandler
             command.Tone,
             command.Verbosity,
             command.FallbackStyle,
+            command.BusinessDescription,
+            command.Industry,
+            command.ServicesDescription,
+            command.GeoFocus,
+            command.PersonalityDescriptor,
             cancellationToken);
 
         if (updated is null)
@@ -79,6 +89,11 @@ public sealed class UpdateEngageBotHandler
             updated.LauncherVisible,
             updated.Tone,
             updated.Verbosity,
-            updated.FallbackStyle));
+            updated.FallbackStyle,
+            updated.BusinessDescription,
+            updated.Industry,
+            updated.ServicesDescription,
+            updated.GeoFocus,
+            updated.PersonalityDescriptor));
     }
 }

@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 
 namespace Intentify.Modules.Knowledge.Api;
 
@@ -51,7 +52,15 @@ public sealed class KnowledgeModule : IAppModule
         // IChatCompletionClient is registered by EngageModule via TryAddSingleton.
         // Register a null fallback here so IndexKnowledgeSourceHandler resolves cleanly
         // even if the Engage module is not loaded (e.g. integration test environments).
-        services.TryAddSingleton<IChatCompletionClient>(new NullChatCompletionClient(new AiOptions()));
+        services.TryAddSingleton<IChatCompletionClient>(sp =>
+        {
+            var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger("Intentify.Modules.Knowledge");
+            logger.LogWarning(
+                "AI client is not configured (Knowledge module fallback active). " +
+                "Quick facts extraction during knowledge indexing will be skipped. " +
+                "Configure Intentify:AI:ApiBaseUrl and Intentify:AI:ApiKey via the Engage module to enable it.");
+            return new NullChatCompletionClient(new AiOptions());
+        });
         services.AddSingleton<IKnowledgeTextExtractor, KnowledgeTextExtractor>();
         services.AddSingleton<IKnowledgeChunker, KnowledgeChunker>();
         services.AddSingleton<CreateKnowledgeSourceHandler>();

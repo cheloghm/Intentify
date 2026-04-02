@@ -3,7 +3,6 @@ using System.Security.Claims;
 using Intentify.Modules.Auth.Application;
 using Intentify.Shared.Web;
 using Microsoft.AspNetCore.Http;
-using MongoDB.Driver;
 
 namespace Intentify.Modules.Auth.Api;
 
@@ -23,8 +22,7 @@ internal static class AuthEndpoints
         {
             Intentify.Shared.Validation.OperationStatus.ValidationFailed => Results.BadRequest(
                 ProblemDetailsHelpers.CreateValidationProblemDetails(result.Errors!.Errors)),
-            Intentify.Shared.Validation.OperationStatus.Error => Results.Problem(
-                statusCode: StatusCodes.Status500InternalServerError),
+            Intentify.Shared.Validation.OperationStatus.Error => Results.Problem(ProblemDetailsHelpers.CreateInternalErrorProblemDetails()),
             _ => Results.Ok(new LoginResponse(result.Value!.AccessToken))
         };
     }
@@ -40,8 +38,7 @@ internal static class AuthEndpoints
             Intentify.Shared.Validation.OperationStatus.ValidationFailed => Results.BadRequest(
                 ProblemDetailsHelpers.CreateValidationProblemDetails(result.Errors!.Errors)),
             Intentify.Shared.Validation.OperationStatus.Unauthorized => Results.Unauthorized(),
-            Intentify.Shared.Validation.OperationStatus.Error => Results.Problem(
-                statusCode: StatusCodes.Status500InternalServerError),
+            Intentify.Shared.Validation.OperationStatus.Error => Results.Problem(ProblemDetailsHelpers.CreateInternalErrorProblemDetails()),
             _ => Results.Ok(new LoginResponse(result.Value!.AccessToken))
         };
     }
@@ -72,8 +69,7 @@ internal static class AuthEndpoints
             Intentify.Shared.Validation.OperationStatus.ValidationFailed => Results.BadRequest(
                 ProblemDetailsHelpers.CreateValidationProblemDetails(result.Errors!.Errors)),
             Intentify.Shared.Validation.OperationStatus.Forbidden => Results.StatusCode(StatusCodes.Status403Forbidden),
-            Intentify.Shared.Validation.OperationStatus.Error => Results.Problem(
-                statusCode: StatusCodes.Status500InternalServerError),
+            Intentify.Shared.Validation.OperationStatus.Error => Results.Problem(ProblemDetailsHelpers.CreateInternalErrorProblemDetails()),
             _ => Results.Ok(new CreateInviteResponse(
                 result.Value!.Token,
                 result.Value.Email,
@@ -97,16 +93,23 @@ internal static class AuthEndpoints
             Intentify.Shared.Validation.OperationStatus.ValidationFailed => Results.BadRequest(
                 ProblemDetailsHelpers.CreateValidationProblemDetails(result.Errors!.Errors)),
             Intentify.Shared.Validation.OperationStatus.Unauthorized => Results.Unauthorized(),
-            Intentify.Shared.Validation.OperationStatus.Error => Results.Problem(
-                statusCode: StatusCodes.Status500InternalServerError),
+            Intentify.Shared.Validation.OperationStatus.Error => Results.Problem(ProblemDetailsHelpers.CreateInternalErrorProblemDetails()),
             _ => Results.Ok(new LoginResponse(result.Value!.AccessToken))
         };
     }
 
-    public static async Task<IResult> GetCurrentUser(HttpContext context, IMongoDatabase database)
+    public static async Task<IResult> GetCurrentUser(HttpContext context, GetCurrentUserHandler handler)
     {
-        var response = await CurrentUserResponseFactory.CreateAsync(context, database);
-        return Results.Ok(response);
+        var userId = TryGetUserId(context.User);
+        var tenantId = TryGetTenantId(context.User);
+        if (userId is null || tenantId is null)
+        {
+            return Results.Unauthorized();
+        }
+
+        var roles = context.User.FindAll(ClaimTypes.Role).Select(role => role.Value).ToArray();
+        var result = await handler.HandleAsync(new GetCurrentUserQuery(userId.Value, tenantId.Value, roles), context.RequestAborted);
+        return Results.Ok(new CurrentUserResponse(result.UserId, result.TenantId, result.Roles, result.DisplayName, result.Email, result.OrganizationName, result.IsAdmin));
     }
 
     public static async Task<IResult> UpdateCurrentUserProfileAsync(
@@ -136,8 +139,7 @@ internal static class AuthEndpoints
                 ProblemDetailsHelpers.CreateValidationProblemDetails(result.Errors!.Errors)),
             Intentify.Shared.Validation.OperationStatus.Unauthorized => Results.Unauthorized(),
             Intentify.Shared.Validation.OperationStatus.Forbidden => Results.StatusCode(StatusCodes.Status403Forbidden),
-            Intentify.Shared.Validation.OperationStatus.Error => Results.Problem(
-                statusCode: StatusCodes.Status500InternalServerError),
+            Intentify.Shared.Validation.OperationStatus.Error => Results.Problem(ProblemDetailsHelpers.CreateInternalErrorProblemDetails()),
             _ => Results.NoContent()
         };
     }
@@ -160,7 +162,7 @@ internal static class AuthEndpoints
         {
             Intentify.Shared.Validation.OperationStatus.Unauthorized => Results.Unauthorized(),
             Intentify.Shared.Validation.OperationStatus.Forbidden => Results.StatusCode(StatusCodes.Status403Forbidden),
-            Intentify.Shared.Validation.OperationStatus.Error => Results.Problem(statusCode: StatusCodes.Status500InternalServerError),
+            Intentify.Shared.Validation.OperationStatus.Error => Results.Problem(ProblemDetailsHelpers.CreateInternalErrorProblemDetails()),
             _ => Results.Ok(result.Value!.Select(user => new TenantUserResponse(
                 user.UserId.ToString("N"),
                 user.Email,
@@ -207,7 +209,7 @@ internal static class AuthEndpoints
                 ProblemDetailsHelpers.CreateValidationProblemDetails(result.Errors!.Errors)),
             Intentify.Shared.Validation.OperationStatus.Unauthorized => Results.Unauthorized(),
             Intentify.Shared.Validation.OperationStatus.Forbidden => Results.StatusCode(StatusCodes.Status403Forbidden),
-            Intentify.Shared.Validation.OperationStatus.Error => Results.Problem(statusCode: StatusCodes.Status500InternalServerError),
+            Intentify.Shared.Validation.OperationStatus.Error => Results.Problem(ProblemDetailsHelpers.CreateInternalErrorProblemDetails()),
             _ => Results.NoContent()
         };
     }
@@ -243,7 +245,7 @@ internal static class AuthEndpoints
         {
             Intentify.Shared.Validation.OperationStatus.Unauthorized => Results.Unauthorized(),
             Intentify.Shared.Validation.OperationStatus.Forbidden => Results.StatusCode(StatusCodes.Status403Forbidden),
-            Intentify.Shared.Validation.OperationStatus.Error => Results.Problem(statusCode: StatusCodes.Status500InternalServerError),
+            Intentify.Shared.Validation.OperationStatus.Error => Results.Problem(ProblemDetailsHelpers.CreateInternalErrorProblemDetails()),
             _ => Results.NoContent()
         };
     }
@@ -266,7 +268,7 @@ internal static class AuthEndpoints
         {
             Intentify.Shared.Validation.OperationStatus.Unauthorized => Results.Unauthorized(),
             Intentify.Shared.Validation.OperationStatus.Forbidden => Results.StatusCode(StatusCodes.Status403Forbidden),
-            Intentify.Shared.Validation.OperationStatus.Error => Results.Problem(statusCode: StatusCodes.Status500InternalServerError),
+            Intentify.Shared.Validation.OperationStatus.Error => Results.Problem(ProblemDetailsHelpers.CreateInternalErrorProblemDetails()),
             _ => Results.Ok(result.Value!.Select(invite => new TenantInviteResponse(
                 invite.InviteId.ToString("N"),
                 invite.Email,
@@ -306,7 +308,7 @@ internal static class AuthEndpoints
         {
             Intentify.Shared.Validation.OperationStatus.Unauthorized => Results.Unauthorized(),
             Intentify.Shared.Validation.OperationStatus.Forbidden => Results.StatusCode(StatusCodes.Status403Forbidden),
-            Intentify.Shared.Validation.OperationStatus.Error => Results.Problem(statusCode: StatusCodes.Status500InternalServerError),
+            Intentify.Shared.Validation.OperationStatus.Error => Results.Problem(ProblemDetailsHelpers.CreateInternalErrorProblemDetails()),
             _ => Results.NoContent()
         };
     }

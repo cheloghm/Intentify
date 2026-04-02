@@ -62,7 +62,7 @@ public sealed class EngageBotRepository : IEngageBotRepository
             .FirstOrDefaultAsync(cancellationToken);
     }
 
-    public async Task<EngageBot?> UpdateSettingsAsync(Guid tenantId, Guid siteId, string name, string? primaryColor, bool? launcherVisible, string? tone, string? verbosity, string? fallbackStyle, CancellationToken cancellationToken = default)
+    public async Task<EngageBot?> UpdateSettingsAsync(Guid tenantId, Guid siteId, string name, string? primaryColor, bool? launcherVisible, string? tone, string? verbosity, string? fallbackStyle, string? businessDescription, string? industry, string? servicesDescription, string? geoFocus, string? personalityDescriptor, CancellationToken cancellationToken = default)
     {
         await _ensureIndexes;
 
@@ -116,6 +116,51 @@ public sealed class EngageBotRepository : IEngageBotRepository
         else
         {
             updates.Add(Builders<EngageBot>.Update.Set(item => item.FallbackStyle, fallbackStyle.Trim().ToLowerInvariant()));
+        }
+
+        if (string.IsNullOrWhiteSpace(businessDescription))
+        {
+            updates.Add(Builders<EngageBot>.Update.Unset(item => item.BusinessDescription));
+        }
+        else
+        {
+            updates.Add(Builders<EngageBot>.Update.Set(item => item.BusinessDescription, businessDescription.Trim()));
+        }
+
+        if (string.IsNullOrWhiteSpace(industry))
+        {
+            updates.Add(Builders<EngageBot>.Update.Unset(item => item.Industry));
+        }
+        else
+        {
+            updates.Add(Builders<EngageBot>.Update.Set(item => item.Industry, industry.Trim()));
+        }
+
+        if (string.IsNullOrWhiteSpace(servicesDescription))
+        {
+            updates.Add(Builders<EngageBot>.Update.Unset(item => item.ServicesDescription));
+        }
+        else
+        {
+            updates.Add(Builders<EngageBot>.Update.Set(item => item.ServicesDescription, servicesDescription.Trim()));
+        }
+
+        if (string.IsNullOrWhiteSpace(geoFocus))
+        {
+            updates.Add(Builders<EngageBot>.Update.Unset(item => item.GeoFocus));
+        }
+        else
+        {
+            updates.Add(Builders<EngageBot>.Update.Set(item => item.GeoFocus, geoFocus.Trim()));
+        }
+
+        if (string.IsNullOrWhiteSpace(personalityDescriptor))
+        {
+            updates.Add(Builders<EngageBot>.Update.Unset(item => item.PersonalityDescriptor));
+        }
+        else
+        {
+            updates.Add(Builders<EngageBot>.Update.Set(item => item.PersonalityDescriptor, personalityDescriptor.Trim()));
         }
 
         var update = Builders<EngageBot>.Update.Combine(updates);

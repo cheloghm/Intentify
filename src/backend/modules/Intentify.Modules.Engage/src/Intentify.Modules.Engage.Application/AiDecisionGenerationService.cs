@@ -57,16 +57,14 @@ public sealed class AiDecisionGenerationService
     {
         var sb = new StringBuilder();
 
-        // Assemble business briefing from available runtime data
+        // Assemble business briefing from bot configuration
         var briefing = new EngageBriefingContext(
             BusinessName: bot.Name ?? bot.DisplayName,
-            Industry: contextBundle.IntelligenceSnapshot?.Category,
-            ServicesDescription: tenantVocabulary.Count > 0
-                ? string.Join(", ", tenantVocabulary.Take(12))
-                : null,
-            GeoFocus: contextBundle.IntelligenceSnapshot?.Location,
+            Industry: bot.Industry,
+            ServicesDescription: bot.ServicesDescription,
+            GeoFocus: bot.GeoFocus,
             Tone: bot.Tone,
-            PersonalityDescriptor: null);   // derived from tone inside EngageSalesGuideline
+            PersonalityDescriptor: bot.PersonalityDescriptor);
 
         // Layers 1–6 briefing + current session state
         sb.AppendLine(EngageSalesGuideline.Build(briefing, sessionMemory));

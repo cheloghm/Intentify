@@ -53,6 +53,31 @@ public sealed record ConversationMessageResult(Guid MessageId, string Role, stri
 
 public sealed record GetEngageBotQuery(Guid TenantId, Guid SiteId);
 
-public sealed record EngageBotResult(Guid BotId, string Name, string? PrimaryColor = null, bool? LauncherVisible = null, string? Tone = null, string? Verbosity = null, string? FallbackStyle = null);
+public sealed record EngageBotResult(
+    Guid BotId,
+    string Name,
+    string? PrimaryColor = null,
+    bool? LauncherVisible = null,
+    string? Tone = null,
+    string? Verbosity = null,
+    string? FallbackStyle = null,
+    string? BusinessDescription = null,
+    string? Industry = null,
+    string? ServicesDescription = null,
+    string? GeoFocus = null,
+    string? PersonalityDescriptor = null);
 
-public sealed record UpdateEngageBotCommand(Guid TenantId, Guid SiteId, string Name, string? PrimaryColor = null, bool? LauncherVisible = null, string? Tone = null, string? Verbosity = null, string? FallbackStyle = null);
+public sealed record UpdateEngageBotCommand(
+    Guid TenantId,
+    Guid SiteId,
+    string Name,
+    string? PrimaryColor = null,
+    bool? LauncherVisible = null,
+    string? Tone = null,
+    string? Verbosity = null,
+    string? FallbackStyle = null,
+    string? BusinessDescription = null,
+    string? Industry = null,
+    string? ServicesDescription = null,
+    string? GeoFocus = null,
+    string? PersonalityDescriptor = null);

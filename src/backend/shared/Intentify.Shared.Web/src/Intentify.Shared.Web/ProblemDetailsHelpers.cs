@@ -7,6 +7,16 @@ public static class ProblemDetailsHelpers
 {
     private const string ProductionMessage = "An unexpected error occurred.";
 
+    public static ProblemDetails CreateInternalErrorProblemDetails()
+    {
+        return new ProblemDetails
+        {
+            Title = "An unexpected error occurred.",
+            Status = StatusCodes.Status500InternalServerError,
+            Detail = ProductionMessage
+        };
+    }
+
     public static ProblemDetails CreateExceptionProblemDetails(Exception exception, bool isDevelopment)
     {
         return new ProblemDetails

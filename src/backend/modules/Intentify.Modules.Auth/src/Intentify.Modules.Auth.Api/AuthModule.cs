@@ -39,6 +39,7 @@ public sealed class AuthModule : IAppModule
         services.AddSingleton<IUserRepository, UserRepository>();
         services.AddSingleton<ITenantRepository, TenantRepository>();
         services.AddSingleton<IInvitationRepository, InvitationRepository>();
+        services.AddSingleton<GetCurrentUserHandler>();
         services.AddSingleton<RegisterUserHandler>();
         services.AddSingleton<LoginUserHandler>();
         services.AddSingleton<CreateInviteHandler>();
