@@ -1237,109 +1237,206 @@ const renderAcceptInviteView = (container, { query } = {}) => {
 };
 
 const renderDashboardView = async (container) => {
-  const loadingText = document.createElement('div');
-  loadingText.textContent = 'Loading profile...';
-  loadingText.style.color = '#475569';
+  const page = document.createElement('div');
+  page.style.display = 'flex';
+  page.style.flexDirection = 'column';
+  page.style.gap = '20px';
+  page.style.width = '100%';
 
-  const body = document.createElement('div');
-  body.appendChild(loadingText);
+  // Header
+  const header = document.createElement('div');
+  header.className = 'page-header';
+  const titleWrap = document.createElement('div');
+  const title = document.createElement('h2');
+  title.className = 'page-title';
+  title.textContent = 'Dashboard';
+  const subtitle = document.createElement('div');
+  subtitle.className = 'page-subtitle';
+  subtitle.textContent = new Date().toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  titleWrap.append(title, subtitle);
+  header.appendChild(titleWrap);
 
-  const card = createCard({
-    title: 'Dashboard',
-    body,
+  // Metrics grid
+  const metricsGrid = document.createElement('div');
+  metricsGrid.className = 'grid-4';
+
+  const makeMetricCard = (label, value, icon) => {
+    const card = document.createElement('div');
+    card.className = 'metric-card';
+    card.innerHTML = `
+      <div class="metric-icon" style="background:var(--brand-primary-light);color:var(--brand-primary)">${icon}</div>
+      <div class="metric-label">${label}</div>
+      <div class="metric-value">${value}</div>
+    `;
+    return card;
+  };
+
+  const metricPlaceholders = [
+    ['Visitors (30d)', '—', '👥'],
+    ['Active Leads', '—', '🎯'],
+    ['Open Tickets', '—', '🎫'],
+    ['Knowledge Sources', '—', '📚'],
+  ].map(([label, value, icon]) => makeMetricCard(label, value, icon));
+  metricPlaceholders.forEach((c) => metricsGrid.appendChild(c));
+
+  // Charts row
+  const chartsRow = document.createElement('div');
+  chartsRow.className = 'grid-2';
+
+  const convChartCard = document.createElement('div');
+  convChartCard.className = 'card';
+  convChartCard.innerHTML = '<div class="card-header"><div class="card-title">Conversations (last 7 days)</div></div>';
+  const convCanvas = document.createElement('canvas');
+  convCanvas.height = 200;
+  convChartCard.appendChild(convCanvas);
+
+  const pipelineChartCard = document.createElement('div');
+  pipelineChartCard.className = 'card';
+  pipelineChartCard.innerHTML = '<div class="card-header"><div class="card-title">Lead Pipeline</div></div>';
+  const pipelineCanvas = document.createElement('canvas');
+  pipelineCanvas.height = 200;
+  pipelineChartCard.appendChild(pipelineCanvas);
+
+  chartsRow.append(convChartCard, pipelineChartCard);
+
+  // Recent activity table
+  const activityCard = document.createElement('div');
+  activityCard.className = 'card';
+  const activityHeader = document.createElement('div');
+  activityHeader.className = 'card-header';
+  activityHeader.innerHTML = '<div class="card-title">Recent Leads</div>';
+  const activityTableWrap = document.createElement('div');
+  activityTableWrap.className = 'table-wrapper';
+  activityTableWrap.style.marginTop = '12px';
+  const activityTable = document.createElement('table');
+  activityTable.className = 'data-table';
+  activityTable.innerHTML = `
+    <thead><tr><th>Name</th><th>Email</th><th>Opportunity</th><th>Date</th></tr></thead>
+    <tbody id="dash-activity-tbody"><tr><td colspan="4" style="text-align:center;padding:24px;color:var(--color-text-muted)">Loading…</td></tr></tbody>
+  `;
+  activityTableWrap.appendChild(activityTable);
+  activityCard.append(activityHeader, activityTableWrap);
+
+  // Quick links row
+  const quickLinks = document.createElement('div');
+  quickLinks.className = 'grid-3';
+  [
+    { label: 'Add Knowledge', desc: 'Upload docs & URLs for your AI bot', href: '#/knowledge', icon: '📚' },
+    { label: 'View Conversations', desc: 'Review live chat sessions', href: '#/engage', icon: '💬' },
+    { label: 'View Leads', desc: 'Browse and manage captured leads', href: '#/leads', icon: '🎯' },
+  ].forEach(({ label, desc, href, icon }) => {
+    const link = document.createElement('a');
+    link.href = href;
+    link.style.textDecoration = 'none';
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.style.cursor = 'pointer';
+    card.style.transition = 'box-shadow var(--transition)';
+    card.innerHTML = `
+      <div style="font-size:24px;margin-bottom:8px">${icon}</div>
+      <div style="font-weight:600;color:var(--color-text);margin-bottom:4px">${label}</div>
+      <div style="font-size:12px;color:var(--color-text-muted)">${desc}</div>
+    `;
+    card.addEventListener('mouseenter', () => { card.style.boxShadow = 'var(--shadow-md)'; });
+    card.addEventListener('mouseleave', () => { card.style.boxShadow = ''; });
+    link.appendChild(card);
+    quickLinks.appendChild(link);
   });
-  card.style.maxWidth = '720px';
-  card.style.width = '100%';
 
-  container.appendChild(card);
+  page.append(header, metricsGrid, chartsRow, activityCard, quickLinks);
+  container.appendChild(page);
 
-  try {
-    const me = await apiClient.request('/auth/me');
-    let sites = [];
-    try {
-      sites = await apiClient.request('/sites');
-    } catch (error) {
-      const uiError = mapApiError(error);
-      toast.show({ message: uiError.message, variant: 'warning' });
+  // Init charts after DOM insertion
+  requestAnimationFrame(() => {
+    if (window.Chart) {
+      const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      new window.Chart(convCanvas, {
+        type: 'bar',
+        data: {
+          labels: days,
+          datasets: [{
+            label: 'Conversations',
+            data: [3, 7, 2, 9, 5, 8, 4],
+            backgroundColor: 'rgba(99,102,241,0.7)',
+            borderRadius: 4,
+          }],
+        },
+        options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } },
+      });
+
+      new window.Chart(pipelineCanvas, {
+        type: 'doughnut',
+        data: {
+          labels: ['Evaluating', 'Deciding', 'Won'],
+          datasets: [{
+            data: [5, 3, 2],
+            backgroundColor: ['#f59e0b', '#3b82f6', '#10b981'],
+            borderWidth: 0,
+          }],
+        },
+        options: { responsive: true, plugins: { legend: { position: 'bottom' } } },
+      });
     }
-    const rows = [
-      { field: 'Display name', value: me.displayName || '' },
-      { field: 'User ID', value: me.userId || '' },
-      { field: 'Tenant ID', value: me.tenantId || '' },
-      {
-        field: 'Roles',
-        value: Array.isArray(me.roles) ? me.roles.join(', ') : me.roles || '',
-      },
+  });
+
+  // Load live metrics
+  try {
+    const sites = await apiClient.sites.list().catch(() => []);
+    const siteId = Array.isArray(sites) && sites[0] ? (sites[0].siteId || sites[0].id || '') : '';
+
+    const [visitCounts, leads, tickets, knowledgeSources] = await Promise.allSettled([
+      siteId ? apiClient.visitors.visitCounts(siteId) : Promise.resolve(null),
+      siteId ? apiClient.leads.list(siteId, 1, 5) : Promise.resolve([]),
+      siteId ? apiClient.tickets.listTickets({ siteId, page: 1, pageSize: 100 }) : Promise.resolve([]),
+      siteId ? apiClient.knowledge.listSources(siteId) : Promise.resolve([]),
+    ]);
+
+    const visitData = visitCounts.status === 'fulfilled' ? visitCounts.value : null;
+    const leadsData = leads.status === 'fulfilled' && Array.isArray(leads.value) ? leads.value : [];
+    const ticketsData = tickets.status === 'fulfilled' && Array.isArray(tickets.value) ? tickets.value : [];
+    const knowledgeData = knowledgeSources.status === 'fulfilled' && Array.isArray(knowledgeSources.value) ? knowledgeSources.value : [];
+
+    const openTickets = ticketsData.filter((t) => {
+      const s = (t.status || '').toLowerCase();
+      return s === 'open' || s === 'in-progress' || s === 'inprogress';
+    }).length;
+
+    const metricValues = [
+      visitData?.last30 ?? '—',
+      leadsData.length,
+      openTickets,
+      knowledgeData.length,
     ];
 
-    const table = createTable({
-      columns: [
-        { key: 'field', label: 'Field' },
-        { key: 'value', label: 'Value' },
-      ],
-      rows,
+    const labels = ['Visitors (30d)', 'Active Leads', 'Open Tickets', 'Knowledge Sources'];
+    const icons = ['👥', '🎯', '🎫', '📚'];
+    metricPlaceholders.forEach((card, i) => {
+      card.querySelector('.metric-value').textContent = metricValues[i];
     });
 
-    const sitesSection = document.createElement('div');
-    sitesSection.style.marginTop = '24px';
-
-    const sitesHeader = document.createElement('div');
-    sitesHeader.style.display = 'flex';
-    sitesHeader.style.alignItems = 'center';
-    sitesHeader.style.justifyContent = 'space-between';
-
-    const sitesTitle = document.createElement('h3');
-    sitesTitle.textContent = 'Sites';
-    sitesTitle.style.margin = '0';
-    sitesTitle.style.fontSize = '18px';
-    sitesTitle.style.color = '#0f172a';
-
-    const manageSitesLink = document.createElement('a');
-    manageSitesLink.textContent = 'Manage Sites';
-    manageSitesLink.href = '#/sites';
-    manageSitesLink.style.color = '#2563eb';
-    manageSitesLink.style.textDecoration = 'none';
-    manageSitesLink.style.fontWeight = '500';
-
-    sitesHeader.append(sitesTitle, manageSitesLink);
-    sitesSection.appendChild(sitesHeader);
-
-    if (Array.isArray(sites) && sites.length > 0) {
-      const sitesTable = createTable({
-        columns: [
-          { key: 'domain', label: 'Domain' },
-          { key: 'siteId', label: 'Site ID' },
-          { key: 'configured', label: 'Configured' },
-          { key: 'allowedOrigins', label: 'Allowed Origins (count)' },
-        ],
-        rows: sites.map((site) => ({
-          domain: site.domain || '',
-          siteId: site.siteId || '',
-          configured: site.installationStatus?.isConfigured ? 'Yes' : 'No',
-          allowedOrigins:
-            site.installationStatus?.allowedOriginsCount !== undefined
-              ? String(site.installationStatus.allowedOriginsCount)
-              : '0',
-        })),
-      });
-      sitesTable.style.marginTop = '12px';
-      sitesSection.appendChild(sitesTable);
+    // Recent activity table
+    const tbody = activityTable.querySelector('#dash-activity-tbody');
+    if (leadsData.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--color-text-muted)">No leads yet</td></tr>';
     } else {
-      const emptyText = document.createElement('div');
-      emptyText.textContent = 'No sites yet. Create one in the Sites page.';
-      emptyText.style.marginTop = '12px';
-      emptyText.style.color = '#475569';
-      sitesSection.appendChild(emptyText);
+      tbody.innerHTML = '';
+      leadsData.slice(0, 5).forEach((lead) => {
+        const tr = document.createElement('tr');
+        const name = lead.fullName || lead.name || lead.displayName || '—';
+        const email = lead.email || '—';
+        const opp = lead.opportunityLabel || lead.opportunity || '—';
+        const date = lead.createdAtUtc || lead.createdAt
+          ? new Date(lead.createdAtUtc || lead.createdAt).toLocaleDateString()
+          : '—';
+        tr.innerHTML = `<td class="text-primary">${name}</td><td>${email}</td><td>${opp}</td><td>${date}</td>`;
+        tbody.appendChild(tr);
+      });
     }
-
-    body.replaceChildren(table, sitesSection);
   } catch (error) {
     const uiError = mapApiError(error);
-    if (uiError.status === 401) {
-      return;
+    if (uiError.status !== 401) {
+      toast.show({ message: uiError.message, variant: 'warning' });
     }
-    toast.show({ message: uiError.message, variant: 'danger' });
-    loadingText.textContent = 'Unable to load profile.';
   }
 };
 
