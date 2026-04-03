@@ -139,6 +139,11 @@ export const renderEngageView = (container, { apiClient, toast } = {}) => {
     tone: 'warm',
     verbosity: 'balanced',
     fallbackStyle: 'refine',
+    businessDescription: '',
+    industry: '',
+    servicesDescription: '',
+    geographicFocus: '',
+    personalityDescriptor: '',
   };
 
   const page = document.createElement('div');
@@ -303,6 +308,62 @@ export const renderEngageView = (container, { apiClient, toast } = {}) => {
   primaryColorField.append(primaryColorLabel, primaryColorInput, launcherVisibleWrap, saveAppearanceButton);
 
   configBody.append(siteField, widgetWrap, botNameField, primaryColorField, personalityField);
+
+  // Business context fields
+  const businessBody = document.createElement('div');
+  businessBody.style.display = 'grid';
+  businessBody.style.gridTemplateColumns = '1fr 1fr';
+  businessBody.style.gap = '10px';
+
+  const makeField = (labelText, el) => {
+    const wrap = document.createElement('label');
+    wrap.style.display = 'flex';
+    wrap.style.flexDirection = 'column';
+    wrap.style.gap = '6px';
+    const lbl = document.createElement('span');
+    lbl.textContent = labelText;
+    lbl.style.fontSize = '13px';
+    lbl.style.fontWeight = '500';
+    el.className = 'form-input';
+    wrap.append(lbl, el);
+    return wrap;
+  };
+
+  const businessDescriptionInput = document.createElement('textarea');
+  businessDescriptionInput.rows = 3;
+  businessDescriptionInput.placeholder = 'Describe your business…';
+
+  const industryInput = document.createElement('input');
+  industryInput.type = 'text';
+  industryInput.placeholder = 'e.g. SaaS, Real Estate, Healthcare';
+
+  const servicesDescriptionInput = document.createElement('textarea');
+  servicesDescriptionInput.rows = 2;
+  servicesDescriptionInput.placeholder = 'Key products or services offered…';
+
+  const geographicFocusInput = document.createElement('input');
+  geographicFocusInput.type = 'text';
+  geographicFocusInput.placeholder = 'e.g. United States, EMEA';
+
+  const personalityDescriptorInput = document.createElement('input');
+  personalityDescriptorInput.type = 'text';
+  personalityDescriptorInput.placeholder = 'e.g. friendly, concise, formal';
+
+  const saveBusinessButton = document.createElement('button');
+  saveBusinessButton.type = 'button';
+  saveBusinessButton.textContent = 'Save business context';
+  saveBusinessButton.className = 'btn btn-primary btn-sm';
+  saveBusinessButton.style.width = 'fit-content';
+  saveBusinessButton.style.gridColumn = '1 / -1';
+
+  businessBody.append(
+    makeField('Business Description', businessDescriptionInput),
+    makeField('Industry', industryInput),
+    makeField('Services Description', servicesDescriptionInput),
+    makeField('Geographic Focus', geographicFocusInput),
+    makeField('Personality Descriptor', personalityDescriptorInput),
+    saveBusinessButton,
+  );
 
   const installBody = document.createElement('div');
   installBody.style.display = 'flex';
@@ -553,25 +614,62 @@ const label = document.createElement('div');
     sessionsList.innerHTML = '';
     if (!state.conversations.length) {
       const empty = document.createElement('div');
-      empty.textContent = state.siteId ? 'No conversations yet.' : 'Select a site first.';
-      empty.style.color = '#64748b';
+      empty.className = 'empty-state';
+      empty.innerHTML = `<div class="empty-state-icon">💬</div><div class="empty-state-title">${state.siteId ? 'No conversations yet' : 'Select a site'}</div>`;
       sessionsList.appendChild(empty);
       return;
     }
 
-    state.conversations.forEach((conversation) => {
-      const button = createButton({ label: conversation.sessionId });
-      button.style.textAlign = 'left';
-      if (conversation.sessionId === state.selectedSessionId) {
-        button.style.background = '#eff6ff';
-        button.style.borderColor = '#bfdbfe';
+    const tableWrap = document.createElement('div');
+    tableWrap.className = 'table-wrapper';
+    const table = document.createElement('table');
+    table.className = 'data-table';
+
+    const thead = document.createElement('thead');
+    thead.innerHTML = '<tr><th>Session</th><th>Date</th><th>Confidence</th><th>Lead</th><th>Ticket</th></tr>';
+    table.appendChild(thead);
+
+    const tbody = document.createElement('tbody');
+    state.conversations.forEach((conv) => {
+      const tr = document.createElement('tr');
+      tr.style.cursor = 'pointer';
+      if (conv.sessionId === state.selectedSessionId) {
+        tr.style.background = 'var(--brand-primary-light)';
       }
-      button.addEventListener('click', async () => {
-        state.selectedSessionId = conversation.sessionId;
+
+      const shortId = conv.sessionId ? `${conv.sessionId.substring(0, 8)}\u2026` : '\u2014';
+      const ts = getConversationTimestamp(conv);
+      const dateStr = ts ? new Date(ts).toLocaleDateString() : '\u2014';
+      const conf = Number(conv.averageConfidence ?? conv.confidence);
+      const hasConf = Number.isFinite(conf) && conf > 0;
+      const confVariant = conf >= 0.8 ? 'success' : conf >= 0.5 ? 'warning' : 'danger';
+      const confHtml = hasConf
+        ? `<span class="badge badge-${confVariant}">${Math.round(conf * 100)}%</span>`
+        : '\u2014';
+      const leadHtml = conv.leadId || conv.leadCreated
+        ? '<span style="color:var(--color-success)">✓</span>'
+        : '<span style="color:var(--color-text-muted)">—</span>';
+      const ticketHtml = conv.ticketId || conv.ticketCreated
+        ? '<span style="color:var(--color-success)">✓</span>'
+        : '<span style="color:var(--color-text-muted)">—</span>';
+
+      tr.innerHTML = `
+        <td class="text-primary" style="font-family:monospace;font-size:12px;">${shortId}</td>
+        <td>${dateStr}</td>
+        <td>${confHtml}</td>
+        <td>${leadHtml}</td>
+        <td>${ticketHtml}</td>
+      `;
+      tr.addEventListener('click', async () => {
+        state.selectedSessionId = conv.sessionId;
         await loadConversationMessages({ openModal: true });
       });
-      sessionsList.appendChild(button);
+      tbody.appendChild(tr);
     });
+
+    table.appendChild(tbody);
+    tableWrap.appendChild(table);
+    sessionsList.appendChild(tableWrap);
   };
 
   const renderOpportunityAnalytics = () => {
@@ -595,27 +693,22 @@ const label = document.createElement('div');
 
     const analytics = state.opportunityAnalytics;
     const summary = document.createElement('div');
-    summary.style.display = 'grid';
-    summary.style.gridTemplateColumns = 'repeat(auto-fit, minmax(180px, 1fr))';
-    summary.style.gap = '8px';
+    summary.className = 'grid-4';
 
     [
-      ['Total commercial opportunities', analytics.totalCommercialOpportunities ?? 0],
+      ['Total Commercial', analytics.totalCommercialOpportunities ?? 0],
       ['Commercial', analytics.commercialCount ?? 0],
       ['Support', analytics.supportCount ?? 0],
       ['General', analytics.generalCount ?? 0],
-      ['High intent', analytics.highIntentCount ?? 0],
-      ['Email preference', analytics.preferredContactMethodDistribution?.email ?? 0],
-      ['Phone preference', analytics.preferredContactMethodDistribution?.phone ?? 0],
-      ['Unknown preference', analytics.preferredContactMethodDistribution?.unknown ?? 0],
+      ['High Intent', analytics.highIntentCount ?? 0],
+      ['Email Pref.', analytics.preferredContactMethodDistribution?.email ?? 0],
+      ['Phone Pref.', analytics.preferredContactMethodDistribution?.phone ?? 0],
+      ['Unknown Pref.', analytics.preferredContactMethodDistribution?.unknown ?? 0],
     ].forEach(([label, value]) => {
-      const block = document.createElement('div');
-      block.style.padding = '8px';
-      block.style.border = '1px solid #e2e8f0';
-      block.style.borderRadius = '6px';
-      block.style.background = '#f8fafc';
-      block.innerHTML = `<div style="font-size:12px;color:#64748b;">${label}</div><div style="font-weight:600;color:#0f172a;">${value}</div>`;
-      summary.appendChild(block);
+      const card = document.createElement('div');
+      card.className = 'metric-card';
+      card.innerHTML = `<div class="metric-label">${label}</div><div class="metric-value">${value}</div>`;
+      summary.appendChild(card);
     });
 
     analyticsBody.appendChild(summary);
@@ -841,12 +934,22 @@ const label = document.createElement('div');
       state.tone = 'warm';
       state.verbosity = 'balanced';
       state.fallbackStyle = 'refine';
+      state.businessDescription = '';
+      state.industry = '';
+      state.servicesDescription = '';
+      state.geographicFocus = '';
+      state.personalityDescriptor = '';
       botNameInput.value = '';
       primaryColorInput.value = state.primaryColor;
       launcherVisibleInput.checked = state.launcherVisible;
       toneInput.value = state.tone;
       verbosityInput.value = state.verbosity;
       fallbackStyleInput.value = state.fallbackStyle;
+      businessDescriptionInput.value = '';
+      industryInput.value = '';
+      servicesDescriptionInput.value = '';
+      geographicFocusInput.value = '';
+      personalityDescriptorInput.value = '';
       renderTranscript();
       return;
     }
@@ -859,12 +962,22 @@ const label = document.createElement('div');
       state.tone = bot?.tone || 'warm';
       state.verbosity = bot?.verbosity || 'balanced';
       state.fallbackStyle = bot?.fallbackStyle || 'refine';
+      state.businessDescription = bot?.businessDescription || '';
+      state.industry = bot?.industry || '';
+      state.servicesDescription = bot?.servicesDescription || '';
+      state.geographicFocus = bot?.geographicFocus || '';
+      state.personalityDescriptor = bot?.personalityDescriptor || '';
       botNameInput.value = state.botName;
       primaryColorInput.value = state.primaryColor;
       launcherVisibleInput.checked = state.launcherVisible;
       toneInput.value = state.tone;
       verbosityInput.value = state.verbosity;
       fallbackStyleInput.value = state.fallbackStyle;
+      businessDescriptionInput.value = state.businessDescription;
+      industryInput.value = state.industry;
+      servicesDescriptionInput.value = state.servicesDescription;
+      geographicFocusInput.value = state.geographicFocus;
+      personalityDescriptorInput.value = state.personalityDescriptor;
       renderTranscript();
     } catch (error) {
       state.botName = 'Assistant';
@@ -873,12 +986,22 @@ const label = document.createElement('div');
       state.tone = 'warm';
       state.verbosity = 'balanced';
       state.fallbackStyle = 'refine';
+      state.businessDescription = '';
+      state.industry = '';
+      state.servicesDescription = '';
+      state.geographicFocus = '';
+      state.personalityDescriptor = '';
       botNameInput.value = '';
       primaryColorInput.value = state.primaryColor;
       launcherVisibleInput.checked = state.launcherVisible;
       toneInput.value = state.tone;
       verbosityInput.value = state.verbosity;
       fallbackStyleInput.value = state.fallbackStyle;
+      businessDescriptionInput.value = '';
+      industryInput.value = '';
+      servicesDescriptionInput.value = '';
+      geographicFocusInput.value = '';
+      personalityDescriptorInput.value = '';
       notifier.show({ message: mapApiError(error).message, variant: 'danger' });
     }
   };
@@ -897,6 +1020,11 @@ const label = document.createElement('div');
         tone: toneInput.value,
         verbosity: verbosityInput.value,
         fallbackStyle: fallbackStyleInput.value,
+        businessDescription: businessDescriptionInput.value.trim(),
+        industry: industryInput.value.trim(),
+        servicesDescription: servicesDescriptionInput.value.trim(),
+        geographicFocus: geographicFocusInput.value.trim(),
+        personalityDescriptor: personalityDescriptorInput.value.trim(),
       });
       state.botName = updated?.name || botNameInput.value.trim() || state.botName || 'Assistant';
       state.primaryColor = updated?.primaryColor || primaryColorInput.value || '#2563eb';
@@ -939,6 +1067,11 @@ const label = document.createElement('div');
         tone: toneInput.value,
         verbosity: verbosityInput.value,
         fallbackStyle: fallbackStyleInput.value,
+        businessDescription: businessDescriptionInput.value.trim(),
+        industry: industryInput.value.trim(),
+        servicesDescription: servicesDescriptionInput.value.trim(),
+        geographicFocus: geographicFocusInput.value.trim(),
+        personalityDescriptor: personalityDescriptorInput.value.trim(),
       });
       state.botName = updated?.name || name;
       state.primaryColor = updated?.primaryColor || primaryColorInput.value || '#2563eb';
@@ -976,6 +1109,11 @@ const label = document.createElement('div');
         tone: toneInput.value,
         verbosity: verbosityInput.value,
         fallbackStyle: fallbackStyleInput.value,
+        businessDescription: businessDescriptionInput.value.trim(),
+        industry: industryInput.value.trim(),
+        servicesDescription: servicesDescriptionInput.value.trim(),
+        geographicFocus: geographicFocusInput.value.trim(),
+        personalityDescriptor: personalityDescriptorInput.value.trim(),
       });
       state.tone = updated?.tone || toneInput.value || 'warm';
       state.verbosity = updated?.verbosity || verbosityInput.value || 'balanced';
@@ -988,6 +1126,39 @@ const label = document.createElement('div');
       notifier.show({ message: mapApiError(error).message, variant: 'danger' });
     } finally {
       savePersonalityButton.disabled = false;
+    }
+  });
+
+  saveBusinessButton.addEventListener('click', async () => {
+    if (!state.siteId) {
+      notifier.show({ message: 'Select a site first.', variant: 'warning' });
+      return;
+    }
+
+    saveBusinessButton.disabled = true;
+    try {
+      await client.engage.updateBot(state.siteId, botNameInput.value.trim() || state.botName || 'Assistant', {
+        primaryColor: primaryColorInput.value,
+        launcherVisible: launcherVisibleInput.checked,
+        tone: toneInput.value,
+        verbosity: verbosityInput.value,
+        fallbackStyle: fallbackStyleInput.value,
+        businessDescription: businessDescriptionInput.value.trim(),
+        industry: industryInput.value.trim(),
+        servicesDescription: servicesDescriptionInput.value.trim(),
+        geographicFocus: geographicFocusInput.value.trim(),
+        personalityDescriptor: personalityDescriptorInput.value.trim(),
+      });
+      state.businessDescription = businessDescriptionInput.value.trim();
+      state.industry = industryInput.value.trim();
+      state.servicesDescription = servicesDescriptionInput.value.trim();
+      state.geographicFocus = geographicFocusInput.value.trim();
+      state.personalityDescriptor = personalityDescriptorInput.value.trim();
+      notifier.show({ message: 'Business context saved.', variant: 'success' });
+    } catch (error) {
+      notifier.show({ message: mapApiError(error).message, variant: 'danger' });
+    } finally {
+      saveBusinessButton.disabled = false;
     }
   });
 
@@ -1072,6 +1243,7 @@ const label = document.createElement('div');
   page.append(
     header,
     createCard({ title: 'Bot Config', body: configBody }),
+    createCard({ title: 'Business Context', body: businessBody }),
     createCard({ title: 'Install Engage', body: installBody }),
     createCard({ title: 'Test Chat', body: chatBody }),
     createCard({ title: 'Conversations', body: conversationsBody }),
