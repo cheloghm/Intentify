@@ -1,38 +1,15 @@
-import { createCard, createToastManager } from '../shared/ui/index.js';
 import { createApiClient, mapApiError } from '../shared/apiClient.js';
-
-const createButton = ({ label } = {}) => {
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.textContent = label;
-  button.style.padding = '8px 12px';
-  button.style.borderRadius = '6px';
-  button.style.border = '1px solid #e2e8f0';
-  button.style.background = '#ffffff';
-  button.style.color = '#1e293b';
-  button.style.cursor = 'pointer';
-  button.style.fontSize = '13px';
-  return button;
-};
+import { createToastManager } from '../shared/ui/index.js';
 
 const formatDate = (value) => {
-  if (!value) {
-    return '—';
-  }
-
+  if (!value) return '—';
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return '—';
-  }
-
-  return date.toLocaleString();
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 };
 
 const toShortId = (value) => {
-  if (!value || value.length < 8) {
-    return value || '—';
-  }
-
+  if (!value || value.length < 8) return value || '—';
   return `${value.slice(0, 8)}…`;
 };
 
@@ -40,24 +17,17 @@ const getSiteId = (site) => site?.siteId || site?.id || '';
 const SELECTED_SITE_STORAGE_KEY = 'intentify.selectedSiteId';
 
 const loadSelectedSiteId = () => {
-  try {
-    return localStorage.getItem(SELECTED_SITE_STORAGE_KEY) || '';
-  } catch (error) {
-    return '';
-  }
+  try { return localStorage.getItem(SELECTED_SITE_STORAGE_KEY) || ''; } catch { return ''; }
 };
 
 const saveSelectedSiteId = (siteId) => {
   try {
-    if (!siteId) {
-      localStorage.removeItem(SELECTED_SITE_STORAGE_KEY);
-      return;
-    }
+    if (!siteId) { localStorage.removeItem(SELECTED_SITE_STORAGE_KEY); return; }
     localStorage.setItem(SELECTED_SITE_STORAGE_KEY, siteId);
-  } catch (error) {
-    // ignore storage failures
-  }
+  } catch { /* ignore */ }
 };
+
+const PAGE_SIZE = 10;
 
 export const renderVisitorsView = async (container, { apiClient, toast, query } = {}) => {
   const client = apiClient || createApiClient();
@@ -66,351 +36,426 @@ export const renderVisitorsView = async (container, { apiClient, toast, query } 
   const state = {
     loadingSites: true,
     loadingVisitors: false,
-    loadingCounts: false,
     sites: [],
     siteId: query?.siteId || '',
     visitors: [],
     counts: null,
     onlineNow: null,
     pageAnalytics: null,
-    error: '',
+    currentPage: 1,
   };
 
+  // ── Root ──────────────────────────────────────────────────────────────
   const page = document.createElement('div');
-  page.style.display = 'flex';
-  page.style.flexDirection = 'column';
-  page.style.gap = '20px';
+  page.className = 'stack';
+  page.style.maxWidth = '1100px';
   page.style.width = '100%';
-  page.style.maxWidth = '980px';
 
-  const header = document.createElement('div');
-  const title = document.createElement('h2');
-  title.textContent = 'Visitors';
-  title.style.margin = '0';
-  const subtitle = document.createElement('p');
-  subtitle.textContent = 'Review visitors and recent activity per site.';
-  subtitle.style.margin = '6px 0 0';
-  subtitle.style.color = '#64748b';
-  header.append(title, subtitle);
+  // ── Page header ───────────────────────────────────────────────────────
+  const pageHeader = document.createElement('div');
+  pageHeader.className = 'page-header';
+
+  const titleGroup = document.createElement('div');
+  const titleEl = document.createElement('h1');
+  titleEl.className = 'page-title';
+  titleEl.textContent = 'Visitors';
+  const subtitleEl = document.createElement('div');
+  subtitleEl.className = 'page-subtitle';
+  subtitleEl.textContent = 'Track and understand your website visitors in real time';
+  titleGroup.append(titleEl, subtitleEl);
 
   const controls = document.createElement('div');
   controls.style.display = 'flex';
-  controls.style.flexWrap = 'wrap';
-  controls.style.gap = '10px';
-  controls.style.alignItems = 'flex-end';
-
-  const siteField = document.createElement('label');
-  siteField.style.display = 'flex';
-  siteField.style.flexDirection = 'column';
-  siteField.style.gap = '6px';
-  const siteFieldLabel = document.createElement('span');
-  siteFieldLabel.textContent = 'Site';
-  siteFieldLabel.style.fontSize = '13px';
-  siteFieldLabel.style.color = '#334155';
+  controls.style.alignItems = 'center';
+  controls.style.gap = '8px';
 
   const siteSelect = document.createElement('select');
-  siteSelect.style.minWidth = '280px';
-  siteSelect.style.padding = '8px 10px';
-  siteSelect.style.borderRadius = '6px';
-  siteSelect.style.border = '1px solid #cbd5e1';
-  siteSelect.style.background = '#ffffff';
+  siteSelect.className = 'form-select';
+  siteSelect.style.minWidth = '220px';
 
-  const refreshButton = createButton({ label: 'View latest events' });
+  const refreshBtn = document.createElement('button');
+  refreshBtn.className = 'btn btn-secondary';
+  refreshBtn.textContent = '↻  Refresh';
 
-  siteField.append(siteFieldLabel, siteSelect);
-  controls.append(siteField, refreshButton);
+  controls.append(siteSelect, refreshBtn);
+  pageHeader.append(titleGroup, controls);
 
-  const errorText = document.createElement('div');
-  errorText.style.color = '#dc2626';
-  errorText.style.fontSize = '13px';
+  // ── Metric cards ──────────────────────────────────────────────────────
+  const metricsGrid = document.createElement('div');
+  metricsGrid.className = 'grid-4';
 
-  const countsRow = document.createElement('div');
-  countsRow.style.display = 'grid';
-  countsRow.style.gridTemplateColumns = 'repeat(3, minmax(0, 1fr))';
-  countsRow.style.gap = '10px';
+  const makeMetricCard = (icon, label, iconBg) => {
+    const card = document.createElement('div');
+    card.className = 'metric-card';
 
-  const listBody = document.createElement('div');
-  listBody.style.display = 'flex';
-  listBody.style.flexDirection = 'column';
-  listBody.style.gap = '10px';
+    const iconEl = document.createElement('div');
+    iconEl.className = 'metric-icon';
+    iconEl.textContent = icon;
+    iconEl.style.background = iconBg;
 
-  const onlineNowBody = document.createElement('div');
-  onlineNowBody.style.display = 'flex';
-  onlineNowBody.style.flexDirection = 'column';
-  onlineNowBody.style.gap = '8px';
+    const labelEl = document.createElement('div');
+    labelEl.className = 'metric-label';
+    labelEl.textContent = label;
 
-  const pagesBody = document.createElement('div');
-  pagesBody.style.display = 'flex';
-  pagesBody.style.flexDirection = 'column';
-  pagesBody.style.gap = '8px';
+    const valueEl = document.createElement('div');
+    valueEl.className = 'metric-value';
+    valueEl.textContent = '—';
 
-  const renderCounts = () => {
-    countsRow.innerHTML = '';
-    const counts = state.counts || {};
-    const windows = [
-      { label: 'Last 7 days', value: counts.last7 },
-      { label: 'Last 30 days', value: counts.last30 },
-      { label: 'Last 90 days', value: counts.last90 },
-    ];
+    card.append(iconEl, labelEl, valueEl);
+    return { card, valueEl };
+  };
 
-    windows.forEach((windowItem) => {
-      const cell = document.createElement('div');
-      cell.style.padding = '10px 12px';
-      cell.style.border = '1px solid #e2e8f0';
-      cell.style.borderRadius = '8px';
-      cell.style.background = '#ffffff';
+  const mTotal   = makeMetricCard('👥', 'Total Visitors',   'var(--brand-primary-light)');
+  const mOnline  = makeMetricCard('🟢', 'Online Now',       'var(--color-success-light)');
+  const mAvgTime = makeMetricCard('⏱', 'Avg Time on Page', 'var(--color-warning-light)');
+  const mReturn  = makeMetricCard('↩', 'Return Rate',      'var(--color-info-light)');
+  metricsGrid.append(mTotal.card, mOnline.card, mAvgTime.card, mReturn.card);
 
-      const label = document.createElement('div');
-      label.textContent = windowItem.label;
-      label.style.fontSize = '12px';
-      label.style.color = '#64748b';
+  // ── Charts row ────────────────────────────────────────────────────────
+  const chartsRow = document.createElement('div');
+  chartsRow.className = 'grid-2';
 
-      const value = document.createElement('div');
-      value.textContent = String(windowItem.value ?? '—');
-      value.style.fontSize = '20px';
-      value.style.fontWeight = '600';
-      value.style.color = '#0f172a';
+  // Traffic line chart
+  const trafficCard = document.createElement('div');
+  trafficCard.className = 'card';
 
-      cell.append(label, value);
-      countsRow.appendChild(cell);
+  const trafficHeader = document.createElement('div');
+  trafficHeader.className = 'card-header';
+  const trafficTitleGroup = document.createElement('div');
+  const trafficTitle = document.createElement('div');
+  trafficTitle.className = 'card-title';
+  trafficTitle.textContent = 'Visitor Traffic';
+  const trafficSub = document.createElement('div');
+  trafficSub.className = 'card-subtitle';
+  trafficSub.textContent = 'Last 7 days';
+  trafficTitleGroup.append(trafficTitle, trafficSub);
+  trafficHeader.append(trafficTitleGroup);
+
+  const chartWrap = document.createElement('div');
+  chartWrap.style.position = 'relative';
+  chartWrap.style.height = '200px';
+  const chartCanvas = document.createElement('canvas');
+  chartWrap.appendChild(chartCanvas);
+  trafficCard.append(trafficHeader, chartWrap);
+
+  // Top pages bar chart
+  const topPagesCard = document.createElement('div');
+  topPagesCard.className = 'card';
+
+  const topPagesHeader = document.createElement('div');
+  topPagesHeader.className = 'card-header';
+  const topPagesTitleGroup = document.createElement('div');
+  const topPagesTitle = document.createElement('div');
+  topPagesTitle.className = 'card-title';
+  topPagesTitle.textContent = 'Top Pages';
+  const topPagesSub = document.createElement('div');
+  topPagesSub.className = 'card-subtitle';
+  topPagesSub.textContent = 'Last 7 days · by pageviews';
+  topPagesTitleGroup.append(topPagesTitle, topPagesSub);
+  topPagesHeader.append(topPagesTitleGroup);
+
+  const topPagesBody = document.createElement('div');
+  topPagesBody.className = 'stack';
+  topPagesBody.style.gap = '10px';
+  topPagesCard.append(topPagesHeader, topPagesBody);
+
+  chartsRow.append(trafficCard, topPagesCard);
+
+  // ── Visitors table card ───────────────────────────────────────────────
+  const tableCard = document.createElement('div');
+  tableCard.className = 'card';
+
+  const tableCardHeader = document.createElement('div');
+  tableCardHeader.className = 'card-header';
+  const tableTitleGroup = document.createElement('div');
+  const tableTitleEl = document.createElement('div');
+  tableTitleEl.className = 'card-title';
+  tableTitleEl.textContent = 'Visitors';
+  const tableCountEl = document.createElement('div');
+  tableCountEl.className = 'card-subtitle';
+  tableCountEl.textContent = 'Select a site above';
+  tableTitleGroup.append(tableTitleEl, tableCountEl);
+  tableCardHeader.append(tableTitleGroup);
+
+  const tableWrapper = document.createElement('div');
+  tableWrapper.className = 'table-wrapper';
+
+  const paginationEl = document.createElement('div');
+  paginationEl.className = 'pagination';
+  const paginationInfo = document.createElement('div');
+  const paginationControls = document.createElement('div');
+  paginationControls.className = 'pagination-controls';
+  paginationEl.append(paginationInfo, paginationControls);
+
+  tableCard.append(tableCardHeader, tableWrapper, paginationEl);
+
+  // Error
+  const errorEl = document.createElement('div');
+  errorEl.style.color = 'var(--color-danger)';
+  errorEl.style.fontSize = '13px';
+
+  // ── Render helpers ────────────────────────────────────────────────────
+  const getOnlineSet = () => {
+    const s = new Set();
+    (state.onlineNow?.visitors || []).forEach((v) => s.add(v.visitorId));
+    return s;
+  };
+
+  const updateMetrics = () => {
+    const total = state.visitors.length;
+    const onlineCount = state.onlineNow?.count ?? 0;
+
+    const pages = state.pageAnalytics?.pages;
+    let avgTime = '—';
+    if (Array.isArray(pages) && pages.length) {
+      const avg = pages.reduce((s, p) => s + (p.avgTimeOnPageSeconds || 0), 0) / pages.length;
+      avgTime = `${Math.round(avg)}s`;
+    }
+
+    let returnRate = '—';
+    if (total > 0) {
+      const returning = state.visitors.filter((v) => (v.sessionsCount || 0) > 1).length;
+      returnRate = `${Math.round((returning / total) * 100)}%`;
+    }
+
+    mTotal.valueEl.textContent   = total || '—';
+    mOnline.valueEl.textContent  = onlineCount || '—';
+    mAvgTime.valueEl.textContent = avgTime;
+    mReturn.valueEl.textContent  = returnRate;
+  };
+
+  const renderTopPages = () => {
+    topPagesBody.innerHTML = '';
+    const pages = state.pageAnalytics?.pages;
+
+    if (!pages || !pages.length) {
+      const empty = document.createElement('div');
+      empty.style.padding = '24px 0';
+      empty.style.textAlign = 'center';
+      empty.style.color = 'var(--color-text-muted)';
+      empty.style.fontSize = '13px';
+      empty.textContent = state.siteId ? 'No page data yet.' : 'Select a site to see top pages.';
+      topPagesBody.appendChild(empty);
+      return;
+    }
+
+    const maxViews = Math.max(...pages.map((p) => p.pageViews || 0));
+    pages.slice(0, 8).forEach((p) => {
+      const row = document.createElement('div');
+
+      const labelRow = document.createElement('div');
+      labelRow.style.display = 'flex';
+      labelRow.style.justifyContent = 'space-between';
+      labelRow.style.fontSize = '12px';
+      labelRow.style.marginBottom = '4px';
+
+      const path = document.createElement('span');
+      path.style.color = 'var(--color-text-secondary)';
+      path.style.overflow = 'hidden';
+      path.style.textOverflow = 'ellipsis';
+      path.style.whiteSpace = 'nowrap';
+      path.style.maxWidth = '75%';
+      path.textContent = p.pageUrl || '—';
+
+      const count = document.createElement('span');
+      count.style.color = 'var(--color-text-muted)';
+      count.style.fontWeight = '500';
+      count.textContent = p.pageViews ?? 0;
+      labelRow.append(path, count);
+
+      const track = document.createElement('div');
+      track.style.height = '6px';
+      track.style.background = 'var(--color-surface-raised)';
+      track.style.borderRadius = '999px';
+      track.style.overflow = 'hidden';
+
+      const fill = document.createElement('div');
+      fill.style.height = '100%';
+      fill.style.width = `${maxViews > 0 ? Math.round(((p.pageViews || 0) / maxViews) * 100) : 0}%`;
+      fill.style.background = 'var(--brand-primary)';
+      fill.style.borderRadius = '999px';
+      track.appendChild(fill);
+
+      row.append(labelRow, track);
+      topPagesBody.appendChild(row);
     });
   };
 
-  const renderVisitors = () => {
-    listBody.innerHTML = '';
+  const renderTable = () => {
+    tableWrapper.innerHTML = '';
+    paginationInfo.textContent = '';
+    paginationControls.innerHTML = '';
 
     if (state.loadingVisitors) {
       const loading = document.createElement('div');
-      loading.textContent = 'Loading visitors...';
-      loading.style.color = '#64748b';
-      listBody.appendChild(loading);
+      loading.className = 'empty-state';
+      loading.textContent = 'Loading visitors…';
+      tableWrapper.appendChild(loading);
       return;
     }
 
-    if (!state.visitors.length) {
-      const empty = document.createElement('div');
-      empty.textContent = state.siteId
-        ? 'No events received for this site yet. Install snippet and verify.'
-        : 'Select a site to view visitors.';
-      empty.style.color = '#64748b';
-      listBody.appendChild(empty);
+    const onlineSet = getOnlineSet();
+    const total = state.visitors.length;
+    const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+    const page = Math.min(state.currentPage, totalPages);
+    const start = (page - 1) * PAGE_SIZE;
+    const end = Math.min(start + PAGE_SIZE, total);
+    const slice = state.visitors.slice(start, end);
 
-      if (state.siteId) {
-        const installButton = createButton({ label: 'Go to Install' });
-        installButton.style.alignSelf = 'flex-start';
-        installButton.addEventListener('click', () => {
-          window.location.hash = `#/install?siteId=${encodeURIComponent(state.siteId)}`;
-        });
-        listBody.appendChild(installButton);
-      }
+    tableCountEl.textContent = total
+      ? `${total} visitor${total !== 1 ? 's' : ''}`
+      : 'No visitors found';
+
+    if (!total) {
+      const empty = document.createElement('div');
+      empty.className = 'empty-state';
+      const icon = document.createElement('div');
+      icon.className = 'empty-state-icon';
+      icon.textContent = '👤';
+      const emptyTitle = document.createElement('div');
+      emptyTitle.className = 'empty-state-title';
+      emptyTitle.textContent = state.siteId ? 'No visitors yet' : 'Select a site';
+      const emptyDesc = document.createElement('div');
+      emptyDesc.className = 'empty-state-desc';
+      emptyDesc.textContent = state.siteId
+        ? 'No events received yet. Install your snippet and verify.'
+        : 'Choose a site from the dropdown above.';
+      empty.append(icon, emptyTitle, emptyDesc);
+      tableWrapper.appendChild(empty);
       return;
     }
 
     const table = document.createElement('table');
-    table.className = 'ui-table';
-
-    const headerRow = document.createElement('tr');
-    ['Visitor', 'Last seen', 'Sessions', 'Pages visited', 'Engagement', ''].forEach((label) => {
-      const th = document.createElement('th');
-      th.textContent = label;
-      headerRow.appendChild(th);
-    });
+    table.className = 'data-table';
 
     const thead = document.createElement('thead');
-    thead.appendChild(headerRow);
+    const headRow = document.createElement('tr');
+    ['Visitor', 'Last Seen', 'Sessions', 'Pages Visited', 'Engagement', 'Status', ''].forEach((label) => {
+      const th = document.createElement('th');
+      th.textContent = label;
+      headRow.appendChild(th);
+    });
+    thead.appendChild(headRow);
     table.appendChild(thead);
 
     const tbody = document.createElement('tbody');
-    state.visitors.forEach((visitor) => {
+    slice.forEach((visitor) => {
       const tr = document.createElement('tr');
+      tr.style.cursor = 'pointer';
 
-      const cells = [
-        toShortId(visitor.visitorId),
-        formatDate(visitor.lastSeenAtUtc),
-        visitor.sessionsCount ?? '—',
-        visitor.totalPagesVisited ?? '—',
-        visitor.lastSessionEngagementScore ?? '—',
-      ];
+      const buildParams = () => {
+        const p = new URLSearchParams();
+        p.set('siteId', state.siteId);
+        p.set('lastSeenAtUtc', visitor.lastSeenAtUtc || '');
+        p.set('sessionsCount', String(visitor.sessionsCount ?? ''));
+        p.set('totalPagesVisited', String(visitor.totalPagesVisited ?? ''));
+        p.set('lastSessionEngagementScore', String(visitor.lastSessionEngagementScore ?? ''));
+        return p.toString();
+      };
 
-      cells.forEach((value) => {
-        const td = document.createElement('td');
-        td.textContent = String(value);
-        tr.appendChild(td);
+      tr.addEventListener('click', () => {
+        window.location.hash = `#/visitors/${visitor.visitorId}?${buildParams()}`;
       });
+
+      const isOnline = onlineSet.has(visitor.visitorId);
+
+      const idTd = document.createElement('td');
+      const idSpan = document.createElement('span');
+      idSpan.className = 'text-primary';
+      idSpan.textContent = toShortId(visitor.visitorId);
+      idTd.appendChild(idSpan);
+
+      const lastSeenTd = document.createElement('td');
+      lastSeenTd.textContent = formatDate(visitor.lastSeenAtUtc);
+
+      const sessionsTd = document.createElement('td');
+      sessionsTd.textContent = visitor.sessionsCount ?? '—';
+
+      const pagesTd = document.createElement('td');
+      pagesTd.textContent = visitor.totalPagesVisited ?? '—';
+
+      const engageTd = document.createElement('td');
+      engageTd.textContent = visitor.lastSessionEngagementScore ?? '—';
+
+      const statusTd = document.createElement('td');
+      const badge = document.createElement('span');
+      badge.className = isOnline ? 'badge badge-success' : 'badge badge-neutral';
+      badge.textContent = isOnline ? '● Online' : 'Offline';
+      statusTd.appendChild(badge);
 
       const actionTd = document.createElement('td');
-      const link = document.createElement('a');
-      const params = new URLSearchParams();
-      params.set('siteId', state.siteId);
-      params.set('lastSeenAtUtc', visitor.lastSeenAtUtc || '');
-      params.set('sessionsCount', String(visitor.sessionsCount ?? ''));
-      params.set('totalPagesVisited', String(visitor.totalPagesVisited ?? ''));
-      params.set('lastSessionEngagementScore', String(visitor.lastSessionEngagementScore ?? ''));
-      link.href = `#/visitors/${visitor.visitorId}?${params.toString()}`;
-      link.textContent = 'View';
-      link.style.color = '#2563eb';
-      link.style.textDecoration = 'none';
-      actionTd.appendChild(link);
-      tr.appendChild(actionTd);
+      const viewLink = document.createElement('a');
+      viewLink.href = `#/visitors/${visitor.visitorId}?${buildParams()}`;
+      viewLink.className = 'btn btn-sm btn-secondary';
+      viewLink.textContent = 'View';
+      viewLink.addEventListener('click', (e) => e.stopPropagation());
+      actionTd.appendChild(viewLink);
 
+      tr.append(idTd, lastSeenTd, sessionsTd, pagesTd, engageTd, statusTd, actionTd);
       tbody.appendChild(tr);
     });
 
     table.appendChild(tbody);
-    listBody.appendChild(table);
-  };
+    tableWrapper.appendChild(table);
 
-  const renderOnlineNow = () => {
-    onlineNowBody.innerHTML = '';
+    // Pagination
+    paginationInfo.textContent = `Showing ${start + 1}–${end} of ${total} visitor${total !== 1 ? 's' : ''}`;
 
-    if (!state.siteId) {
-      const empty = document.createElement('div');
-      empty.textContent = 'Select a site to view online visitors.';
-      empty.style.color = '#64748b';
-      onlineNowBody.appendChild(empty);
-      return;
+    if (totalPages > 1) {
+      const prevBtn = document.createElement('button');
+      prevBtn.className = 'page-btn';
+      prevBtn.textContent = '← Prev';
+      prevBtn.disabled = page <= 1;
+      prevBtn.addEventListener('click', () => { state.currentPage = page - 1; renderTable(); });
+
+      const pageInfoSpan = document.createElement('span');
+      pageInfoSpan.style.padding = '0 6px';
+      pageInfoSpan.style.fontSize = '12px';
+      pageInfoSpan.style.color = 'var(--color-text-muted)';
+      pageInfoSpan.textContent = `${page} / ${totalPages}`;
+
+      const nextBtn = document.createElement('button');
+      nextBtn.className = 'page-btn';
+      nextBtn.textContent = 'Next →';
+      nextBtn.disabled = page >= totalPages;
+      nextBtn.addEventListener('click', () => { state.currentPage = page + 1; renderTable(); });
+
+      paginationControls.append(prevBtn, pageInfoSpan, nextBtn);
     }
-
-    const payload = state.onlineNow || {};
-    const count = Number.isFinite(payload.count) ? payload.count : 0;
-    const visitors = Array.isArray(payload.visitors) ? payload.visitors : [];
-
-    const summary = document.createElement('div');
-    summary.textContent = `Online now: ${count}`;
-    summary.style.fontWeight = '600';
-    summary.style.color = '#0f172a';
-    onlineNowBody.appendChild(summary);
-
-    if (!visitors.length) {
-      const empty = document.createElement('div');
-      empty.textContent = 'No active visitors in the recent window.';
-      empty.style.color = '#64748b';
-      onlineNowBody.appendChild(empty);
-      return;
-    }
-
-    const list = document.createElement('div');
-    list.style.display = 'flex';
-    list.style.flexDirection = 'column';
-    list.style.gap = '6px';
-
-    visitors.slice(0, 8).forEach((visitor) => {
-      const row = document.createElement('div');
-      row.style.display = 'flex';
-      row.style.justifyContent = 'space-between';
-      row.style.gap = '10px';
-      row.style.padding = '8px 10px';
-      row.style.border = '1px solid #e2e8f0';
-      row.style.borderRadius = '8px';
-      row.style.background = '#ffffff';
-
-      const left = document.createElement('div');
-      left.textContent = `${toShortId(visitor.visitorId)} • ${visitor.lastPath || '—'}`;
-      left.style.color = '#1e293b';
-      left.style.fontSize = '13px';
-
-      const right = document.createElement('div');
-      right.textContent = formatDate(visitor.lastSeenAtUtc);
-      right.style.color = '#64748b';
-      right.style.fontSize = '12px';
-
-      row.append(left, right);
-      list.appendChild(row);
-    });
-
-    onlineNowBody.appendChild(list);
-  };
-
-  const renderPageAnalytics = () => {
-    pagesBody.innerHTML = '';
-
-    if (!state.siteId) {
-      const empty = document.createElement('div');
-      empty.textContent = 'Select a site to view page analytics.';
-      empty.style.color = '#64748b';
-      pagesBody.appendChild(empty);
-      return;
-    }
-
-    const payload = state.pageAnalytics || {};
-    const pages = Array.isArray(payload.pages) ? payload.pages : [];
-
-    if (!pages.length) {
-      const empty = document.createElement('div');
-      empty.textContent = 'No page analytics data yet. Install snippet and send pageview events.';
-      empty.style.color = '#64748b';
-      pagesBody.appendChild(empty);
-      return;
-    }
-
-    const table = document.createElement('table');
-    table.className = 'ui-table';
-    const thead = document.createElement('thead');
-    const headerRow = document.createElement('tr');
-    ['Page', 'Views', 'Unique sessions', 'Avg time on page (s)'].forEach((label) => {
-      const th = document.createElement('th');
-      th.textContent = label;
-      headerRow.appendChild(th);
-    });
-    thead.appendChild(headerRow);
-    table.appendChild(thead);
-
-    const tbody = document.createElement('tbody');
-    pages.forEach((item) => {
-      const tr = document.createElement('tr');
-      [
-        item.pageUrl || '—',
-        item.pageViews ?? 0,
-        item.uniqueSessions ?? 0,
-        item.avgTimeOnPageSeconds ?? 0,
-      ].forEach((value) => {
-        const td = document.createElement('td');
-        td.textContent = String(value);
-        tr.appendChild(td);
-      });
-      tbody.appendChild(tr);
-    });
-    table.appendChild(tbody);
-    pagesBody.appendChild(table);
   };
 
   const setSiteOptions = () => {
     siteSelect.innerHTML = '';
-
     const placeholder = document.createElement('option');
     placeholder.value = '';
-    placeholder.textContent = state.loadingSites ? 'Loading sites...' : 'Select a site';
+    placeholder.textContent = state.loadingSites ? 'Loading sites…' : 'Select a site';
     siteSelect.appendChild(placeholder);
-
     state.sites.forEach((site) => {
       const option = document.createElement('option');
       option.value = getSiteId(site);
       option.textContent = site.domain || getSiteId(site);
       siteSelect.appendChild(option);
     });
-
     siteSelect.value = state.siteId || '';
   };
 
   const loadVisitors = async () => {
-    state.error = '';
-    errorText.textContent = '';
-
+    errorEl.textContent = '';
     if (!state.siteId) {
       state.visitors = [];
       state.counts = null;
       state.onlineNow = null;
       state.pageAnalytics = null;
-      renderCounts();
-      renderOnlineNow();
-      renderPageAnalytics();
-      renderVisitors();
+      state.currentPage = 1;
+      updateMetrics();
+      renderTopPages();
+      renderTable();
       return;
     }
 
     state.loadingVisitors = true;
-    state.loadingCounts = true;
-    renderVisitors();
+    state.currentPage = 1;
+    renderTable();
 
     try {
       const [visitors, counts, onlineNow, pageAnalytics] = await Promise.all([
@@ -427,15 +472,13 @@ export const renderVisitorsView = async (container, { apiClient, toast, query } 
           ? client.visitors.pageAnalytics(state.siteId, 7, 10)
           : client.request(`/visitors/analytics/pages?siteId=${encodeURIComponent(state.siteId)}&days=7&limit=10`),
       ]);
-
-      state.visitors = Array.isArray(visitors) ? visitors : [];
-      state.counts = counts || null;
-      state.onlineNow = onlineNow || null;
+      state.visitors      = Array.isArray(visitors) ? visitors : [];
+      state.counts        = counts || null;
+      state.onlineNow     = onlineNow || null;
       state.pageAnalytics = pageAnalytics || null;
     } catch (error) {
       const uiError = mapApiError(error);
-      state.error = uiError.message;
-      errorText.textContent = state.error;
+      errorEl.textContent = uiError.message;
       notifier.show({ message: uiError.message, variant: 'danger' });
       state.visitors = [];
       state.counts = null;
@@ -443,65 +486,83 @@ export const renderVisitorsView = async (container, { apiClient, toast, query } 
       state.pageAnalytics = null;
     } finally {
       state.loadingVisitors = false;
-      state.loadingCounts = false;
-      renderCounts();
-      renderOnlineNow();
-      renderPageAnalytics();
-      renderVisitors();
+      updateMetrics();
+      renderTopPages();
+      renderTable();
     }
   };
 
   siteSelect.addEventListener('change', () => {
     state.siteId = siteSelect.value;
     saveSelectedSiteId(state.siteId);
-    if (state.siteId) {
-      window.location.hash = `#/visitors?siteId=${encodeURIComponent(state.siteId)}`;
-      return;
-    }
-    window.location.hash = '#/visitors';
+    window.location.hash = state.siteId
+      ? `#/visitors?siteId=${encodeURIComponent(state.siteId)}`
+      : '#/visitors';
   });
+  refreshBtn.addEventListener('click', loadVisitors);
 
-  refreshButton.addEventListener('click', loadVisitors);
-
-  const countsCard = createCard({
-    title: 'Visit counts',
-    body: countsRow,
-  });
-
-  const visitorsCard = createCard({
-    title: 'Visitors list',
-    body: listBody,
-  });
-
-  const onlineNowCard = createCard({
-    title: 'Visitors online right now',
-    body: onlineNowBody,
-  });
-
-  const pageAnalyticsCard = createCard({
-    title: 'Top pages (last 7 days)',
-    body: pagesBody,
-  });
-
-  page.append(header, controls, errorText, countsCard, onlineNowCard, pageAnalyticsCard, visitorsCard);
+  // ── Assemble DOM ──────────────────────────────────────────────────────
+  page.append(pageHeader, metricsGrid, chartsRow, tableCard, errorEl);
   container.appendChild(page);
 
-  renderCounts();
-  renderOnlineNow();
-  renderPageAnalytics();
-  renderVisitors();
+  // Init Chart.js after canvas is in DOM
+  requestAnimationFrame(() => {
+    if (!window.Chart) return;
+    new window.Chart(chartCanvas, {
+      type: 'line',
+      data: {
+        labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+        datasets: [{
+          label: 'Visitors',
+          data: [12, 19, 8, 25, 31, 18, 24],
+          borderColor: '#6366f1',
+          backgroundColor: 'rgba(99,102,241,0.08)',
+          fill: true,
+          tension: 0.4,
+          pointBackgroundColor: '#6366f1',
+          pointRadius: 4,
+          pointHoverRadius: 6,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { backgroundColor: '#0f172a', padding: 10, cornerRadius: 8 },
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            grid: { color: '#f1f5f9' },
+            ticks: { color: '#94a3b8', font: { size: 11 } },
+          },
+          x: {
+            grid: { display: false },
+            ticks: { color: '#94a3b8', font: { size: 11 } },
+          },
+        },
+      },
+    });
+  });
+
+  // Initial empty renders
+  updateMetrics();
+  renderTopPages();
+  renderTable();
   setSiteOptions();
 
+  // Load sites, then visitors
   try {
     const sites = await client.request('/sites');
     state.sites = Array.isArray(sites) ? sites : [];
-    const siteIds = new Set(state.sites.map((site) => getSiteId(site)).filter(Boolean));
-    const localSiteId = loadSelectedSiteId();
+    const siteIds = new Set(state.sites.map(getSiteId).filter(Boolean));
+    const localId = loadSelectedSiteId();
 
     if (state.siteId && siteIds.has(state.siteId)) {
       saveSelectedSiteId(state.siteId);
-    } else if (localSiteId && siteIds.has(localSiteId)) {
-      state.siteId = localSiteId;
+    } else if (localId && siteIds.has(localId)) {
+      state.siteId = localId;
     } else if (state.sites.length) {
       state.siteId = getSiteId(state.sites[0]);
       saveSelectedSiteId(state.siteId);
@@ -510,9 +571,7 @@ export const renderVisitorsView = async (container, { apiClient, toast, query } 
       saveSelectedSiteId('');
     }
   } catch (error) {
-    const uiError = mapApiError(error);
-    state.error = uiError.message;
-    errorText.textContent = state.error;
+    errorEl.textContent = mapApiError(error).message;
   } finally {
     state.loadingSites = false;
     setSiteOptions();

@@ -109,10 +109,7 @@ export const createTable = ({ columns = [], rows = [] } = {}) => {
 export const createBadge = ({ text, variant } = {}) => {
   ensureUiStyles();
   const badge = document.createElement('span');
-  badge.className = 'ui-badge';
-  if (variant) {
-    badge.classList.add(`ui-badge--${variant}`);
-  }
+  badge.className = variant ? `badge badge-${variant}` : 'badge badge-neutral';
   badge.textContent = text || '';
   return badge;
 };
@@ -122,13 +119,7 @@ export const createButton = ({ label, variant = 'default', type = 'button' } = {
   const button = document.createElement('button');
   button.type = type;
   button.textContent = label;
-  button.style.padding = '8px 12px';
-  button.style.borderRadius = '6px';
-  button.style.border = variant === 'primary' ? 'none' : '1px solid #e2e8f0';
-  button.style.background = variant === 'primary' ? '#2563eb' : '#ffffff';
-  button.style.color = variant === 'primary' ? '#ffffff' : '#1e293b';
-  button.style.cursor = 'pointer';
-  button.style.fontSize = '13px';
+  button.className = variant === 'primary' ? 'btn btn-primary' : 'btn btn-secondary';
   return button;
 };
 

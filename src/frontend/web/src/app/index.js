@@ -181,23 +181,28 @@ const createSidebarNavLink = ({ label, href, active }) => {
   const link = document.createElement('a');
   link.textContent = label;
   link.href = href;
+  link.style.display = 'block';
   link.style.textDecoration = 'none';
-  link.style.color = active ? '#0f172a' : '#334155';
-  link.style.fontWeight = active ? '600' : '500';
-  link.style.padding = '10px 12px';
-  link.style.borderRadius = '8px';
-  link.style.background = active ? '#e2e8f0' : 'transparent';
-  link.style.transition = 'background-color 120ms ease';
-  link.addEventListener('mouseover', () => {
-    if (!active) {
-      link.style.background = '#f1f5f9';
-    }
-  });
-  link.addEventListener('mouseout', () => {
-    if (!active) {
+  link.style.padding = '8px 12px 8px 14px';
+  link.style.borderRadius = '6px';
+  link.style.fontSize = '13px';
+  link.style.fontWeight = active ? '500' : '400';
+  link.style.color = active ? '#ffffff' : 'rgba(255,255,255,0.55)';
+  link.style.background = active ? 'rgba(99,102,241,0.18)' : 'transparent';
+  link.style.borderLeft = active ? '3px solid #6366f1' : '3px solid transparent';
+  link.style.transition = 'all 150ms ease';
+  link.style.marginBottom = '2px';
+
+  if (!active) {
+    link.addEventListener('mouseover', () => {
+      link.style.background = 'rgba(255,255,255,0.06)';
+      link.style.color = 'rgba(255,255,255,0.85)';
+    });
+    link.addEventListener('mouseout', () => {
       link.style.background = 'transparent';
-    }
-  });
+      link.style.color = 'rgba(255,255,255,0.55)';
+    });
+  }
   return link;
 };
 
@@ -616,45 +621,121 @@ const createAuthenticatedShell = ({ route, canAccessPlatformAdmin, canAccessTeam
   shell.style.width = '100%';
 
   const sidebar = document.createElement('aside');
-  sidebar.style.width = '250px';
-  sidebar.style.background = '#ffffff';
-  sidebar.style.borderRight = '1px solid #e2e8f0';
-  sidebar.style.padding = '16px 12px';
+  sidebar.style.width = '240px';
+  sidebar.style.background = '#0f172a';
   sidebar.style.boxSizing = 'border-box';
   sidebar.style.display = 'flex';
   sidebar.style.flexDirection = 'column';
-  sidebar.style.gap = '12px';
+  sidebar.style.flexShrink = '0';
 
   const brand = document.createElement('div');
-  brand.textContent = 'Intentify';
-  brand.style.fontWeight = '700';
-  brand.style.fontSize = '18px';
-  brand.style.color = '#0f172a';
-  brand.style.padding = '4px 8px 10px';
+  brand.style.padding = '20px 16px 16px';
+  brand.style.borderBottom = '1px solid rgba(255,255,255,0.06)';
+  const brandText = document.createElement('div');
+  brandText.textContent = 'Intentify';
+  brandText.style.fontWeight = '700';
+  brandText.style.fontSize = '18px';
+  brandText.style.color = '#6366f1';
+  brand.appendChild(brandText);
 
   const nav = document.createElement('nav');
+  nav.style.flex = '1';
+  nav.style.padding = '8px 12px';
+  nav.style.overflowY = 'auto';
   nav.style.display = 'flex';
   nav.style.flexDirection = 'column';
-  nav.style.gap = '4px';
 
-  AUTH_NAV_ITEMS.filter((item) => item.href !== '#/team' || canAccessTeam).forEach((item) => {
-    nav.appendChild(createSidebarNavLink({ ...item, active: route === item.href.replace('#', '') }));
-  });
+  const addNavSection = (sectionLabel, items) => {
+    const label = document.createElement('div');
+    label.className = 'sidebar-section-label';
+    label.textContent = sectionLabel;
+    nav.appendChild(label);
+    items.forEach((item) => {
+      const isActive = route === item.href.replace('#', '')
+        || (item.href === '#/platform-admin' && (route === '/platform-admin' || route === '/platform-admin/tenant/:tenantId'));
+      nav.appendChild(createSidebarNavLink({ ...item, active: isActive }));
+    });
+  };
 
-  if (canAccessPlatformAdmin) {
-    nav.appendChild(
-      createSidebarNavLink({
-        label: 'Platform Admin',
-        href: '#/platform-admin',
-        active: route === '/platform-admin' || route === '/platform-admin/tenant/:tenantId',
-      })
-    );
+  addNavSection('MAIN', [
+    { label: 'Dashboard', href: '#/dashboard' },
+    { label: 'Sites',     href: '#/sites' },
+    { label: 'Install',   href: '#/install' },
+  ]);
+
+  addNavSection('INTELLIGENCE', [
+    { label: 'Visitors',     href: '#/visitors' },
+    { label: 'Intelligence', href: '#/intelligence' },
+  ]);
+
+  addNavSection('ENGAGE', [
+    { label: 'Knowledge', href: '#/knowledge' },
+    { label: 'Engage',    href: '#/engage' },
+    { label: 'Leads',     href: '#/leads' },
+    { label: 'Tickets',   href: '#/tickets' },
+  ]);
+
+  addNavSection('MARKETING', [
+    { label: 'Ads',    href: '#/ads' },
+    { label: 'Promos', href: '#/promos' },
+  ]);
+
+  if (canAccessTeam || canAccessPlatformAdmin) {
+    const adminItems = [];
+    if (canAccessTeam)          adminItems.push({ label: 'Team',           href: '#/team' });
+    if (canAccessPlatformAdmin) adminItems.push({ label: 'Platform Admin', href: '#/platform-admin' });
+    addNavSection('ADMIN', adminItems);
   }
 
-  const spacer = document.createElement('div');
-  spacer.style.flex = '1';
+  const userArea = document.createElement('div');
+  userArea.style.padding = '12px 16px';
+  userArea.style.borderTop = '1px solid rgba(255,255,255,0.06)';
+  userArea.style.display = 'flex';
+  userArea.style.alignItems = 'center';
+  userArea.style.gap = '10px';
 
-  sidebar.append(brand, nav, spacer);
+  const avatar = document.createElement('div');
+  avatar.style.width = '32px';
+  avatar.style.height = '32px';
+  avatar.style.borderRadius = '50%';
+  avatar.style.background = '#6366f1';
+  avatar.style.color = '#ffffff';
+  avatar.style.display = 'flex';
+  avatar.style.alignItems = 'center';
+  avatar.style.justifyContent = 'center';
+  avatar.style.fontSize = '13px';
+  avatar.style.fontWeight = '600';
+  avatar.style.flexShrink = '0';
+  avatar.textContent = (firstName || '?')[0].toUpperCase();
+
+  const userInfo = document.createElement('div');
+  userInfo.style.flex = '1';
+  userInfo.style.minWidth = '0';
+
+  const userNameEl = document.createElement('div');
+  userNameEl.textContent = firstName;
+  userNameEl.style.fontSize = '13px';
+  userNameEl.style.fontWeight = '500';
+  userNameEl.style.color = 'rgba(255,255,255,0.85)';
+  userNameEl.style.overflow = 'hidden';
+  userNameEl.style.textOverflow = 'ellipsis';
+  userNameEl.style.whiteSpace = 'nowrap';
+
+  const logoutBtn = document.createElement('button');
+  logoutBtn.type = 'button';
+  logoutBtn.textContent = 'Logout';
+  logoutBtn.style.background = 'none';
+  logoutBtn.style.border = 'none';
+  logoutBtn.style.padding = '0';
+  logoutBtn.style.fontSize = '11px';
+  logoutBtn.style.color = 'rgba(255,255,255,0.35)';
+  logoutBtn.style.cursor = 'pointer';
+  logoutBtn.addEventListener('click', onLogout);
+
+  userInfo.append(userNameEl, logoutBtn);
+  userArea.append(avatar, userInfo);
+
+  sidebar.append(brand, nav, userArea);
 
   const contentWrap = document.createElement('div');
   contentWrap.style.display = 'flex';
