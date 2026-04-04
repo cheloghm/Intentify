@@ -16,7 +16,7 @@ public sealed record UpsertVisitorFromCollectorEvent(
     string? Language,
     string? Platform);
 
-public sealed record UpsertVisitorResult(Guid VisitorId, VisitorSession Session);
+public sealed record UpsertVisitorResult(Guid VisitorId, VisitorSession Session, int SessionsCount = 0);
 
 public sealed record ListVisitorsQuery(Guid TenantId, Guid SiteId, int Page, int PageSize);
 
@@ -114,18 +114,34 @@ public interface IVisitorAnalyticsReader
     Task<IReadOnlyCollection<PageAnalyticsItem>> GetTopPagesAsync(Guid tenantId, Guid siteId, DateTime sinceUtc, int limit, CancellationToken cancellationToken = default);
 }
 
+public sealed record VisitorPageViewNotification(
+    Guid TenantId,
+    Guid SiteId,
+    Guid VisitorId,
+    string? SessionId,
+    string? PageUrl,
+    int SessionsCount,
+    DateTime OccurredAtUtc);
+
+public interface IVisitorEventObserver
+{
+    Task OnPageViewAsync(VisitorPageViewNotification notification, CancellationToken ct = default);
+}
+
 public sealed class CollectorVisitorEventObserver : ICollectorEventObserver
 {
     private readonly UpsertVisitorFromCollectorEventHandler _handler;
+    private readonly IReadOnlyCollection<IVisitorEventObserver> _visitorObservers;
 
-    public CollectorVisitorEventObserver(UpsertVisitorFromCollectorEventHandler handler)
+    public CollectorVisitorEventObserver(UpsertVisitorFromCollectorEventHandler handler, IEnumerable<IVisitorEventObserver> visitorObservers)
     {
         _handler = handler;
+        _visitorObservers = visitorObservers.ToArray();
     }
 
-    public Task OnCollectorEventIngestedAsync(CollectorEventIngestedNotification notification, CancellationToken cancellationToken = default)
+    public async Task OnCollectorEventIngestedAsync(CollectorEventIngestedNotification notification, CancellationToken cancellationToken = default)
     {
-        return _handler.HandleAsync(new UpsertVisitorFromCollectorEvent(
+        var result = await _handler.HandleAsync(new UpsertVisitorFromCollectorEvent(
             notification.SiteId,
             notification.TenantId,
             notification.OccurredAtUtc,
@@ -137,5 +153,23 @@ public sealed class CollectorVisitorEventObserver : ICollectorEventObserver
             notification.UserAgent,
             notification.Language,
             notification.Platform), cancellationToken);
+
+        if (_visitorObservers.Count > 0
+            && string.Equals(notification.Type, "pageview", StringComparison.OrdinalIgnoreCase))
+        {
+            var pageViewNotification = new VisitorPageViewNotification(
+                notification.TenantId,
+                notification.SiteId,
+                result.VisitorId,
+                notification.SessionId,
+                notification.Url,
+                result.SessionsCount,
+                notification.OccurredAtUtc);
+
+            foreach (var observer in _visitorObservers)
+            {
+                await observer.OnPageViewAsync(pageViewNotification, cancellationToken);
+            }
+        }
     }
 }

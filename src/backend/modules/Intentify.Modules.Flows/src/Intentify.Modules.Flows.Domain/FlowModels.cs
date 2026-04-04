@@ -13,6 +13,8 @@ public sealed class FlowDefinition
     public Guid SiteId { get; init; }
     public string Name { get; init; } = string.Empty;
     public bool Enabled { get; init; } = true;
+    public int Priority { get; init; }
+    public int? MaxRunsPerHour { get; init; }
     public FlowTrigger Trigger { get; init; } = new();
     public IReadOnlyCollection<FlowCondition> Conditions { get; init; } = [];
     public IReadOnlyCollection<FlowAction> Actions { get; init; } = [];

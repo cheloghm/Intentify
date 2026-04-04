@@ -90,6 +90,17 @@ public sealed record UpdateEngageBotCommand(
 
 public sealed record GenerateDigestQuery(Guid TenantId, Guid SiteId);
 
+public sealed record ConversationCompletedNotification(
+    Guid TenantId,
+    Guid SiteId,
+    Guid SessionId,
+    DateTime CompletedAtUtc);
+
+public interface IEngageConversationObserver
+{
+    Task OnConversationCompletedAsync(ConversationCompletedNotification notification, CancellationToken ct = default);
+}
+
 public sealed record DigestLeadEntry(string? Name, string? Email, string? OpportunityLabel, int? IntentScore);
 
 public sealed record DigestTicketEntry(string Subject, string Status);

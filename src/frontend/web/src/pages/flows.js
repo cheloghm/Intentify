@@ -7,6 +7,11 @@ const toast = createToastManager();
 const TRIGGER_TYPES = [
   { value: 'CollectorPageView', label: 'Page View' },
   { value: 'IntelligenceTrendsUpdated', label: 'Intelligence Trends Updated' },
+  { value: 'engage_lead_captured', label: 'Lead Captured' },
+  { value: 'engage_ticket_created', label: 'Ticket Created' },
+  { value: 'engage_conversation_completed', label: 'Conversation Completed' },
+  { value: 'visitor_return', label: 'Return Visitor' },
+  { value: 'exit_intent', label: 'Exit Intent' },
 ];
 
 const OPERATOR_OPTIONS = [
@@ -15,10 +20,15 @@ const OPERATOR_OPTIONS = [
 ];
 
 const ACTION_TYPES = [
-  { value: 'LogRun',       label: 'Log Event' },
-  { value: 'SendWebhook',  label: 'Send Webhook' },
-  { value: 'CreateTicket', label: 'Create Ticket' },
-  { value: 'TagLead',      label: 'Tag Lead' },
+  { value: 'LogRun',                  label: 'Log Event' },
+  { value: 'SendWebhook',             label: 'Send Webhook' },
+  { value: 'SendSlackNotification',   label: 'Send Slack Notification' },
+  { value: 'SendEmail',               label: 'Send Email' },
+  { value: 'CreateTicket',            label: 'Create Ticket' },
+  { value: 'UpdateLeadStage',         label: 'Update Lead Stage' },
+  { value: 'TagLead',                 label: 'Tag Lead' },
+  { value: 'AddNote',                 label: 'Add Note to Ticket' },
+  { value: 'NotifyTeam',              label: 'Notify Team' },
 ];
 
 const TAG_LEAD_LABELS = [
@@ -174,28 +184,65 @@ function makeActionRow(action = null, onRemove) {
 
   // Build extra fields for the current type
   let webhookUrlInput = null;
+  let slackWebhookUrlInput = null;
+  let slackMessageTextarea = null;
+  let emailToInput = null;
+  let emailSubjectInput = null;
+  let emailBodyTextarea = null;
   let ticketSubjectInput = null;
   let ticketDescTextarea = null;
+  let updateLeadEmailInput = null;
+  let updateLeadLabelSelect = null;
   let leadIdInput = null;
   let leadLabelSelect = null;
+  let noteTicketIdInput = null;
+  let noteTextarea = null;
+  let notifyMessageTextarea = null;
+  let notifyRecipientsInput = null;
 
   const renderExtras = (type) => {
     extras.innerHTML = '';
-    webhookUrlInput = null;
-    ticketSubjectInput = null;
-    ticketDescTextarea = null;
-    leadIdInput = null;
-    leadLabelSelect = null;
+    webhookUrlInput = slackWebhookUrlInput = slackMessageTextarea = null;
+    emailToInput = emailSubjectInput = emailBodyTextarea = null;
+    ticketSubjectInput = ticketDescTextarea = null;
+    updateLeadEmailInput = updateLeadLabelSelect = null;
+    leadIdInput = leadLabelSelect = null;
+    noteTicketIdInput = noteTextarea = null;
+    notifyMessageTextarea = notifyRecipientsInput = null;
 
     if (type === 'SendWebhook') {
       webhookUrlInput = makeInput('Webhook URL (https://…)');
       if (action?.params?.url) webhookUrlInput.value = action.params.url;
       extras.appendChild(formGroup('URL', webhookUrlInput));
+    } else if (type === 'SendSlackNotification') {
+      slackWebhookUrlInput = makeInput('Slack Webhook URL (https://hooks.slack.com/…)');
+      if (action?.params?.webhookUrl) slackWebhookUrlInput.value = action.params.webhookUrl;
+      extras.appendChild(formGroup('Webhook URL', slackWebhookUrlInput));
+      slackMessageTextarea = document.createElement('textarea');
+      slackMessageTextarea.className = 'form-input';
+      slackMessageTextarea.placeholder = 'Message text';
+      slackMessageTextarea.rows = 2;
+      slackMessageTextarea.style.resize = 'vertical';
+      if (action?.params?.message) slackMessageTextarea.value = action.params.message;
+      extras.appendChild(formGroup('Message', slackMessageTextarea));
+    } else if (type === 'SendEmail') {
+      emailToInput = makeInput('To (email address)');
+      if (action?.params?.to) emailToInput.value = action.params.to;
+      extras.appendChild(formGroup('To', emailToInput));
+      emailSubjectInput = makeInput('Subject');
+      if (action?.params?.subject) emailSubjectInput.value = action.params.subject;
+      extras.appendChild(formGroup('Subject', emailSubjectInput));
+      emailBodyTextarea = document.createElement('textarea');
+      emailBodyTextarea.className = 'form-input';
+      emailBodyTextarea.placeholder = 'Email body (optional)';
+      emailBodyTextarea.rows = 3;
+      emailBodyTextarea.style.resize = 'vertical';
+      if (action?.params?.body) emailBodyTextarea.value = action.params.body;
+      extras.appendChild(formGroup('Body', emailBodyTextarea));
     } else if (type === 'CreateTicket') {
       ticketSubjectInput = makeInput('Ticket subject');
       if (action?.params?.subject) ticketSubjectInput.value = action.params.subject;
       extras.appendChild(formGroup('Subject', ticketSubjectInput));
-
       ticketDescTextarea = document.createElement('textarea');
       ticketDescTextarea.className = 'form-input';
       ticketDescTextarea.placeholder = 'Description (optional)';
@@ -203,14 +250,42 @@ function makeActionRow(action = null, onRemove) {
       ticketDescTextarea.style.resize = 'vertical';
       if (action?.params?.description) ticketDescTextarea.value = action.params.description;
       extras.appendChild(formGroup('Description', ticketDescTextarea));
+    } else if (type === 'UpdateLeadStage') {
+      updateLeadEmailInput = makeInput('Lead email address');
+      if (action?.params?.email) updateLeadEmailInput.value = action.params.email;
+      extras.appendChild(formGroup('Email', updateLeadEmailInput));
+      updateLeadLabelSelect = makeSelect(TAG_LEAD_LABELS);
+      if (action?.params?.label) updateLeadLabelSelect.value = action.params.label;
+      extras.appendChild(formGroup('Stage', updateLeadLabelSelect));
     } else if (type === 'TagLead') {
       leadIdInput = makeInput('Lead ID (GUID)');
       if (action?.params?.leadId) leadIdInput.value = action.params.leadId;
       extras.appendChild(formGroup('Lead ID', leadIdInput));
-
       leadLabelSelect = makeSelect(TAG_LEAD_LABELS);
       if (action?.params?.label) leadLabelSelect.value = action.params.label;
       extras.appendChild(formGroup('Label', leadLabelSelect));
+    } else if (type === 'AddNote') {
+      noteTicketIdInput = makeInput('Ticket ID (GUID)');
+      if (action?.params?.ticketId) noteTicketIdInput.value = action.params.ticketId;
+      extras.appendChild(formGroup('Ticket ID', noteTicketIdInput));
+      noteTextarea = document.createElement('textarea');
+      noteTextarea.className = 'form-input';
+      noteTextarea.placeholder = 'Note content';
+      noteTextarea.rows = 2;
+      noteTextarea.style.resize = 'vertical';
+      if (action?.params?.note) noteTextarea.value = action.params.note;
+      extras.appendChild(formGroup('Note', noteTextarea));
+    } else if (type === 'NotifyTeam') {
+      notifyMessageTextarea = document.createElement('textarea');
+      notifyMessageTextarea.className = 'form-input';
+      notifyMessageTextarea.placeholder = 'Message to send to team';
+      notifyMessageTextarea.rows = 2;
+      notifyMessageTextarea.style.resize = 'vertical';
+      if (action?.params?.message) notifyMessageTextarea.value = action.params.message;
+      extras.appendChild(formGroup('Message', notifyMessageTextarea));
+      notifyRecipientsInput = makeInput('Recipient emails (comma-separated, optional)');
+      if (action?.params?.recipientEmails) notifyRecipientsInput.value = action.params.recipientEmails;
+      extras.appendChild(formGroup('Recipients', notifyRecipientsInput));
     }
   };
 
@@ -221,6 +296,21 @@ function makeActionRow(action = null, onRemove) {
     const type = typeSelect.value;
     if (type === 'LogRun') return { actionType: 'LogRun', params: null };
     if (type === 'SendWebhook') return { actionType: 'SendWebhook', params: { url: webhookUrlInput?.value.trim() || '' } };
+    if (type === 'SendSlackNotification') return {
+      actionType: 'SendSlackNotification',
+      params: {
+        webhookUrl: slackWebhookUrlInput?.value.trim() || '',
+        message: slackMessageTextarea?.value.trim() || '',
+      },
+    };
+    if (type === 'SendEmail') return {
+      actionType: 'SendEmail',
+      params: {
+        to: emailToInput?.value.trim() || '',
+        subject: emailSubjectInput?.value.trim() || '',
+        body: emailBodyTextarea?.value.trim() || '',
+      },
+    };
     if (type === 'CreateTicket') return {
       actionType: 'CreateTicket',
       params: {
@@ -228,11 +318,32 @@ function makeActionRow(action = null, onRemove) {
         description: ticketDescTextarea?.value.trim() || '',
       },
     };
+    if (type === 'UpdateLeadStage') return {
+      actionType: 'UpdateLeadStage',
+      params: {
+        email: updateLeadEmailInput?.value.trim() || '',
+        label: updateLeadLabelSelect?.value || 'evaluating',
+      },
+    };
     if (type === 'TagLead') return {
       actionType: 'TagLead',
       params: {
         leadId: leadIdInput?.value.trim() || '',
         label: leadLabelSelect?.value || 'evaluating',
+      },
+    };
+    if (type === 'AddNote') return {
+      actionType: 'AddNote',
+      params: {
+        ticketId: noteTicketIdInput?.value.trim() || '',
+        note: noteTextarea?.value.trim() || '',
+      },
+    };
+    if (type === 'NotifyTeam') return {
+      actionType: 'NotifyTeam',
+      params: {
+        message: notifyMessageTextarea?.value.trim() || '',
+        recipientEmails: notifyRecipientsInput?.value.trim() || '',
       },
     };
     return { actionType: type, params: null };
@@ -280,7 +391,7 @@ function makeActionsSection(initial = []) {
 // ── Flow form modal ───────────────────────────────────────────────────────────
 
 async function openFlowModal(siteId, existing = null, onSaved) {
-  const isEdit = Boolean(existing);
+  const isEdit = Boolean(existing?.id);
   const { dialog, close } = createModal(isEdit ? 'Edit Flow' : 'Create Flow');
 
   const body = document.createElement('div');
@@ -312,6 +423,27 @@ async function openFlowModal(siteId, existing = null, onSaved) {
   const triggerSelect = makeSelect(TRIGGER_TYPES);
   if (existing?.trigger?.triggerType) triggerSelect.value = existing.trigger.triggerType;
   body.appendChild(formGroup('Trigger', triggerSelect));
+
+  // Priority
+  const priorityInput = document.createElement('input');
+  priorityInput.type = 'number';
+  priorityInput.className = 'form-input';
+  priorityInput.placeholder = '0';
+  priorityInput.min = '0';
+  priorityInput.max = '100';
+  priorityInput.value = existing?.priority ?? 0;
+  priorityInput.style.width = '120px';
+  body.appendChild(formGroup('Priority (0–100, higher runs first)', priorityInput));
+
+  // Max Runs Per Hour
+  const maxRunsInput = document.createElement('input');
+  maxRunsInput.type = 'number';
+  maxRunsInput.className = 'form-input';
+  maxRunsInput.placeholder = 'Unlimited';
+  maxRunsInput.min = '1';
+  maxRunsInput.value = existing?.maxRunsPerHour ?? '';
+  maxRunsInput.style.width = '120px';
+  body.appendChild(formGroup('Max runs per hour (blank = unlimited)', maxRunsInput));
 
   // Conditions
   const condSection = document.createElement('div');
@@ -354,6 +486,10 @@ async function openFlowModal(siteId, existing = null, onSaved) {
     const actions = getActions();
     if (!actions.length) { errEl.textContent = 'At least one action is required.'; errEl.style.display = ''; return; }
 
+    const priority = parseInt(priorityInput.value, 10) || 0;
+    const maxRunsRaw = parseInt(maxRunsInput.value, 10);
+    const maxRunsPerHour = maxRunsRaw > 0 ? maxRunsRaw : null;
+
     saveBtn.disabled = true;
     saveBtn.textContent = 'Saving…';
     errEl.style.display = 'none';
@@ -366,6 +502,8 @@ async function openFlowModal(siteId, existing = null, onSaved) {
           trigger: { triggerType: triggerSelect.value, filters: null },
           conditions,
           actions,
+          priority,
+          maxRunsPerHour,
         });
       } else {
         await client.flows.create({
@@ -374,6 +512,8 @@ async function openFlowModal(siteId, existing = null, onSaved) {
           trigger: { triggerType: triggerSelect.value, filters: null },
           conditions,
           actions,
+          priority,
+          maxRunsPerHour,
         });
       }
       close();
@@ -399,7 +539,7 @@ async function openRunHistoryModal(flowId, flowName) {
   dialog.appendChild(loading);
 
   try {
-    const runs = await client.flows.listRuns(flowId, 50);
+    const runs = await client.flows.listRuns(flowId, 100);
     loading.remove();
 
     if (!runs || runs.length === 0) {
@@ -410,27 +550,79 @@ async function openRunHistoryModal(flowId, flowName) {
       return;
     }
 
+    // Filter controls
+    const filterBar = document.createElement('div');
+    filterBar.style.cssText = 'display:flex;gap:12px;margin-bottom:12px;align-items:center;flex-wrap:wrap;';
+
+    const statusFilter = makeSelect([
+      { value: '', label: 'All statuses' },
+      { value: 'Succeeded', label: 'Succeeded' },
+      { value: 'Failed', label: 'Failed' },
+    ]);
+    statusFilter.style.maxWidth = '160px';
+
+    const dateFilter = makeSelect([
+      { value: '', label: 'All time' },
+      { value: '24h', label: 'Last 24 hours' },
+      { value: '7d', label: 'Last 7 days' },
+      { value: '30d', label: 'Last 30 days' },
+    ]);
+    dateFilter.style.maxWidth = '160px';
+
+    filterBar.append(statusFilter, dateFilter);
+    dialog.appendChild(filterBar);
+
     const wrap = document.createElement('div');
     wrap.className = 'table-wrapper';
-    const table = document.createElement('table');
-    table.className = 'data-table';
-    table.innerHTML = '<thead><tr><th>Executed</th><th>Trigger</th><th>Status</th><th>Summary</th></tr></thead>';
-    const tbody = document.createElement('tbody');
-    runs.forEach((run) => {
-      const tr = document.createElement('tr');
-      const statusClass = run.status === 'Succeeded' ? 'badge-success' : 'badge-danger';
-      const date = run.executedAtUtc ? new Date(run.executedAtUtc).toLocaleString() : '—';
-      tr.innerHTML = `
-        <td style="white-space:nowrap;">${date}</td>
-        <td><span class="badge badge-info">${run.triggerType || '—'}</span></td>
-        <td><span class="badge ${statusClass}">${run.status || '—'}</span></td>
-        <td style="font-size:12px;color:var(--color-text-muted);max-width:200px;word-break:break-word;">${run.triggerSummary || run.errorMessage || '—'}</td>
-      `;
-      tbody.appendChild(tr);
-    });
-    table.appendChild(tbody);
-    wrap.appendChild(table);
     dialog.appendChild(wrap);
+
+    const renderTable = () => {
+      const statusVal = statusFilter.value;
+      const dateVal = dateFilter.value;
+      const now = Date.now();
+      const cutoffMs = dateVal === '24h' ? 24 * 60 * 60 * 1000
+        : dateVal === '7d' ? 7 * 24 * 60 * 60 * 1000
+        : dateVal === '30d' ? 30 * 24 * 60 * 60 * 1000
+        : 0;
+
+      const filtered = runs.filter((run) => {
+        if (statusVal && run.status !== statusVal) return false;
+        if (cutoffMs > 0 && run.executedAtUtc) {
+          const runMs = new Date(run.executedAtUtc).getTime();
+          if (now - runMs > cutoffMs) return false;
+        }
+        return true;
+      });
+
+      wrap.innerHTML = '';
+      if (filtered.length === 0) {
+        wrap.innerHTML = '<div style="padding:16px;color:var(--color-text-muted);text-align:center;">No runs match the current filters.</div>';
+        return;
+      }
+
+      const table = document.createElement('table');
+      table.className = 'data-table';
+      table.innerHTML = '<thead><tr><th>Executed</th><th>Trigger</th><th>Status</th><th>Summary</th></tr></thead>';
+      const tbody = document.createElement('tbody');
+      filtered.forEach((run) => {
+        const tr = document.createElement('tr');
+        const statusClass = run.status === 'Succeeded' ? 'badge-success' : 'badge-danger';
+        const date = run.executedAtUtc ? new Date(run.executedAtUtc).toLocaleString() : '—';
+        tr.innerHTML = `
+          <td style="white-space:nowrap;">${date}</td>
+          <td><span class="badge badge-info">${run.triggerType || '—'}</span></td>
+          <td><span class="badge ${statusClass}">${run.status || '—'}</span></td>
+          <td style="font-size:12px;color:var(--color-text-muted);max-width:200px;word-break:break-word;">${run.triggerSummary || run.errorMessage || '—'}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+      table.appendChild(tbody);
+      wrap.appendChild(table);
+    };
+
+    statusFilter.addEventListener('change', renderTable);
+    dateFilter.addEventListener('change', renderTable);
+    renderTable();
   } catch (err) {
     loading.textContent = 'Failed to load run history.';
   }
@@ -504,11 +696,14 @@ function buildFlowCard(flow, siteId, onRefresh) {
 
   // Stats row
   const stats = document.createElement('div');
-  stats.style.cssText = 'display:flex;gap:16px;font-size:12px;color:var(--color-text-muted);';
+  stats.style.cssText = 'display:flex;gap:16px;font-size:12px;color:var(--color-text-muted);flex-wrap:wrap;align-items:center;';
+  const priorityBadge = flow.priority > 0 ? `<span class="badge badge-info">Priority: ${flow.priority}</span>` : '';
+  const rateBadge = flow.maxRunsPerHour ? `<span class="badge badge-neutral">Max ${flow.maxRunsPerHour}/hr</span>` : '';
   stats.innerHTML = `
     <span>${flow.conditionsCount ?? 0} condition${flow.conditionsCount === 1 ? '' : 's'}</span>
     <span>${flow.actionsCount ?? 0} action${flow.actionsCount === 1 ? '' : 's'}</span>
     <span class="badge ${flow.enabled ? 'badge-success' : 'badge-neutral'}">${flow.enabled ? 'Active' : 'Disabled'}</span>
+    ${priorityBadge}${rateBadge}
   `;
 
   card.append(hdr, stats);
@@ -535,11 +730,19 @@ export async function renderFlowsView(container, { client: _c, toast: _t } = {})
   subtitle.textContent = 'Automate actions triggered by visitor events and intelligence updates.';
   titleWrap.append(title, subtitle);
 
+  const headerBtns = document.createElement('div');
+  headerBtns.style.cssText = 'display:flex;gap:8px;';
+
+  const templateBtn = document.createElement('button');
+  templateBtn.className = 'btn btn-secondary';
+  templateBtn.textContent = '⚡ Use Template';
+
   const createBtn = document.createElement('button');
   createBtn.className = 'btn btn-primary';
   createBtn.textContent = '+ Create Flow';
 
-  pageHeader.append(titleWrap, createBtn);
+  headerBtns.append(templateBtn, createBtn);
+  pageHeader.append(titleWrap, headerBtns);
   page.appendChild(pageHeader);
 
   // Site selector
@@ -627,6 +830,19 @@ export async function renderFlowsView(container, { client: _c, toast: _t } = {})
     loadFlows();
   });
 
+  templateBtn.addEventListener('click', async () => {
+    if (!selectedSiteId) {
+      toast.show({ message: 'Select a site first.', variant: 'warning' });
+      return;
+    }
+    try {
+      const templates = await client.flows.getTemplates();
+      openTemplateModal(templates, selectedSiteId, loadFlows);
+    } catch (err) {
+      toast.show({ message: mapApiError(err).message, variant: 'error' });
+    }
+  });
+
   createBtn.addEventListener('click', () => {
     if (!selectedSiteId) {
       toast.show({ message: 'Select a site first.', variant: 'warning' });
@@ -634,4 +850,64 @@ export async function renderFlowsView(container, { client: _c, toast: _t } = {})
     }
     openFlowModal(selectedSiteId, null, loadFlows);
   });
+}
+
+function openTemplateModal(templates, siteId, onSaved) {
+  const { dialog, close } = createModal('Flow Templates');
+
+  if (!templates || templates.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'empty-state';
+    empty.textContent = 'No templates available.';
+    dialog.appendChild(empty);
+    return;
+  }
+
+  const list = document.createElement('div');
+  list.style.cssText = 'display:flex;flex-direction:column;gap:12px;';
+
+  templates.forEach((tmpl) => {
+    const card = document.createElement('div');
+    card.style.cssText = 'padding:14px;border:1px solid var(--color-border);border-radius:6px;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;';
+
+    const info = document.createElement('div');
+    info.style.flex = '1';
+
+    const tname = document.createElement('div');
+    tname.style.cssText = 'font-weight:600;font-size:13px;color:var(--color-text);margin-bottom:4px;';
+    tname.textContent = tmpl.name;
+
+    const tdesc = document.createElement('div');
+    tdesc.style.cssText = 'font-size:12px;color:var(--color-text-muted);';
+    tdesc.textContent = tmpl.description;
+
+    const triggerLabel = TRIGGER_TYPES.find((t) => t.value === tmpl.trigger?.triggerType)?.label || tmpl.trigger?.triggerType || '—';
+    const tmeta = document.createElement('div');
+    tmeta.style.cssText = 'margin-top:6px;font-size:11px;';
+    tmeta.innerHTML = `<span class="badge badge-info">${triggerLabel}</span>`;
+
+    info.append(tname, tdesc, tmeta);
+
+    const useBtn = document.createElement('button');
+    useBtn.className = 'btn btn-primary btn-sm';
+    useBtn.textContent = 'Use This';
+    useBtn.addEventListener('click', () => {
+      close();
+      // Pre-fill the create modal using template data
+      const prefilled = {
+        name: tmpl.name,
+        trigger: tmpl.trigger,
+        conditions: tmpl.conditions || [],
+        actions: tmpl.actions || [],
+        priority: 0,
+        maxRunsPerHour: null,
+      };
+      openFlowModal(siteId, prefilled, onSaved);
+    });
+
+    card.append(info, useBtn);
+    list.appendChild(card);
+  });
+
+  dialog.appendChild(list);
 }

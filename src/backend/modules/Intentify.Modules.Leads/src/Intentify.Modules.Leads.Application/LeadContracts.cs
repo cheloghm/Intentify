@@ -32,6 +32,20 @@ public interface ILeadRepository
     Task<IReadOnlyCollection<Lead>> ListAsync(ListLeadsQuery query, CancellationToken cancellationToken = default);
 }
 
+public sealed record LeadCapturedNotification(
+    Guid TenantId,
+    Guid SiteId,
+    Guid LeadId,
+    string? Email,
+    string? Name,
+    DateTime OccurredAtUtc,
+    bool IsNew);
+
+public interface ILeadEventObserver
+{
+    Task OnLeadCapturedAsync(LeadCapturedNotification notification, CancellationToken ct = default);
+}
+
 public interface ILeadVisitorLinker
 {
     Task<Guid?> ResolveVisitorIdAsync(Guid tenantId, Guid siteId, Guid? visitorId, string? firstPartyId, string? sessionId, CancellationToken cancellationToken = default);

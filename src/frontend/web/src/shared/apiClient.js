@@ -505,8 +505,10 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
   const disableFlow = async (flowId) =>
     request(`/flows/${encodeURIComponent(flowId)}/disable`, { method: 'POST' });
 
-  const listFlowRuns = async (flowId, limit = 50) =>
+  const listFlowRuns = async (flowId, limit = 100) =>
     request(`/flows/${encodeURIComponent(flowId)}/runs${buildQueryString({ limit })}`);
+
+  const getFlowTemplates = async () => request('/flows/templates');
 
   const getPlatformSummary = async () => request('/platform-admin/summary');
 
@@ -611,6 +613,7 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
       enable: enableFlow,
       disable: disableFlow,
       listRuns: listFlowRuns,
+      getTemplates: getFlowTemplates,
     },
     leads: {
       list: listLeads,

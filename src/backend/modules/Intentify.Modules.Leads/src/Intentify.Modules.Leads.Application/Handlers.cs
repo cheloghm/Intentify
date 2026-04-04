@@ -8,11 +8,13 @@ public sealed class UpsertLeadFromPromoEntryHandler
 {
     private readonly ILeadRepository _leadRepository;
     private readonly ILeadVisitorLinker _visitorLinker;
+    private readonly IReadOnlyCollection<ILeadEventObserver> _observers;
 
-    public UpsertLeadFromPromoEntryHandler(ILeadRepository leadRepository, ILeadVisitorLinker visitorLinker)
+    public UpsertLeadFromPromoEntryHandler(ILeadRepository leadRepository, ILeadVisitorLinker visitorLinker, IEnumerable<ILeadEventObserver> observers)
     {
         _leadRepository = leadRepository;
         _visitorLinker = visitorLinker;
+        _observers = observers.ToArray();
     }
 
     public async Task<OperationResult<Lead>> HandleAsync(UpsertLeadFromPromoEntryCommand command, CancellationToken cancellationToken = default)
@@ -39,8 +41,10 @@ public sealed class UpsertLeadFromPromoEntryHandler
         var linkedVisitorId = await _visitorLinker.ResolveVisitorIdAsync(command.TenantId, command.SiteId, command.VisitorId, normalizedFirstPartyId, command.SessionId, cancellationToken);
         var now = DateTime.UtcNow;
 
+        bool isNew;
         if (lead is null)
         {
+            isNew = true;
             lead = new Lead
             {
                 TenantId = command.TenantId,
@@ -63,6 +67,7 @@ public sealed class UpsertLeadFromPromoEntryHandler
         }
         else
         {
+            isNew = false;
             if (lead.PrimaryEmail is null && normalizedEmail is not null)
             {
                 lead.PrimaryEmail = normalizedEmail;
@@ -126,6 +131,20 @@ public sealed class UpsertLeadFromPromoEntryHandler
             normalizedName,
             normalizedPhone,
             cancellationToken);
+
+        var notification = new LeadCapturedNotification(
+            command.TenantId,
+            command.SiteId,
+            lead.Id,
+            lead.PrimaryEmail,
+            lead.DisplayName,
+            now,
+            isNew);
+
+        foreach (var observer in _observers)
+        {
+            await observer.OnLeadCapturedAsync(notification, cancellationToken);
+        }
 
         return OperationResult<Lead>.Success(lead);
     }

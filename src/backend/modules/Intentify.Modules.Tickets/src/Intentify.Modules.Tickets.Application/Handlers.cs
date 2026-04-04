@@ -6,7 +6,13 @@ namespace Intentify.Modules.Tickets.Application;
 public sealed class CreateTicketHandler
 {
     private readonly ITicketRepository _repository;
-    public CreateTicketHandler(ITicketRepository repository) => _repository = repository;
+    private readonly IReadOnlyCollection<ITicketEventObserver> _observers;
+
+    public CreateTicketHandler(ITicketRepository repository, IEnumerable<ITicketEventObserver> observers)
+    {
+        _repository = repository;
+        _observers = observers.ToArray();
+    }
 
     public async Task<OperationResult<Ticket>> HandleAsync(CreateTicketCommand command, CancellationToken cancellationToken = default)
     {
@@ -39,6 +45,19 @@ public sealed class CreateTicketHandler
         };
 
         await _repository.InsertAsync(ticket, cancellationToken);
+
+        var notification = new TicketCreatedNotification(
+            command.TenantId,
+            command.SiteId,
+            ticket.Id,
+            ticket.Subject,
+            ticket.CreatedAtUtc);
+
+        foreach (var observer in _observers)
+        {
+            await observer.OnTicketCreatedAsync(notification, cancellationToken);
+        }
+
         return OperationResult<Ticket>.Success(ticket);
     }
 
