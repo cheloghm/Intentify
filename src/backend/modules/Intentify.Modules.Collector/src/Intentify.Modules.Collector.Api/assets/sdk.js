@@ -49,9 +49,14 @@
         attributes: { 'data-site-key': siteKey },
       });
 
+      // Pass the persistent visitor ID if already stored (returning visitor).
+      // New visitors won't have it yet; widget.js reads localStorage at send-time.
+      let existingVisitorId = '';
+      try { existingVisitorId = localStorage.getItem('intentify_vid') || ''; } catch (e) {}
+
       loadScript({
         src: `${baseUrl}/engage/widget.js`,
-        attributes: { 'data-widget-key': widgetKey },
+        attributes: { 'data-widget-key': widgetKey, 'data-visitor-id': existingVisitorId },
       });
     })
     .catch((error) => {

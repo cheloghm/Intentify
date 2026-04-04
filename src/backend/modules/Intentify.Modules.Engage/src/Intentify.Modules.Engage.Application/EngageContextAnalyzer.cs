@@ -66,6 +66,7 @@ public sealed class EngageContextAnalyzer
                 CreateLead: false,
                 CreateTicket: false,
                 TicketSubject: null,
+                TicketType: null,
                 TicketSummary: null,
                 SuggestedFollowUp: null,
                 ConversationComplete: false,

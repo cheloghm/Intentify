@@ -39,10 +39,14 @@ public sealed class EngageBusinessOutcomeExecutor
         if (action == EngageNextAction.EscalateSupport)
         {
             var ticketUpdated = await EnsureEscalationTicketAsync(context, command, cancellationToken);
-            var leadUpdated = _policy.IsCommercialCaptureReady(context.Session, explicitContactRequest: false)
-                && HasLeadIdentity(context.Session, command)
+
+            var isCommercial = string.IsNullOrWhiteSpace(context.TurnDecision.TicketType)
+                || string.Equals(context.TurnDecision.TicketType, "commercial", StringComparison.OrdinalIgnoreCase);
+
+            var leadUpdated = isCommercial && HasLeadIdentity(context.Session, command)
                 ? await UpsertLeadAsync(context, command, cancellationToken)
                 : false;
+
             return new BusinessOutcomeResult(ticketUpdated, leadUpdated);
         }
 
@@ -140,7 +144,7 @@ public sealed class EngageBusinessOutcomeExecutor
                 context.Session.SiteId,
                 context.Session.Id,
                 null,
-                command.CollectorSessionId,
+                command.VisitorId ?? command.CollectorSessionId,
                 context.Session.Id.ToString("N"),
                 context.Session.CapturedEmail,
                 context.Session.CapturedName,
@@ -158,6 +162,7 @@ public sealed class EngageBusinessOutcomeExecutor
 
     private static bool HasLeadIdentity(EngageChatSession session, ChatSendCommand command)
         => !string.IsNullOrWhiteSpace(session.CapturedEmail)
+           || !string.IsNullOrWhiteSpace(command.VisitorId)
            || !string.IsNullOrWhiteSpace(command.CollectorSessionId);
 }
 

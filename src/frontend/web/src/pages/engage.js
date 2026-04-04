@@ -365,6 +365,77 @@ export const renderEngageView = (container, { apiClient, toast } = {}) => {
     saveBusinessButton,
   );
 
+  // ── Digest Email section ──────────────────────────────────────────────
+  const digestBody = document.createElement('div');
+  digestBody.style.display = 'flex';
+  digestBody.style.flexDirection = 'column';
+  digestBody.style.gap = '12px';
+
+  const digestEnabledRow = document.createElement('div');
+  digestEnabledRow.style.cssText = 'display:flex;align-items:center;gap:8px;';
+  const digestEnabledInput = document.createElement('input');
+  digestEnabledInput.type = 'checkbox';
+  digestEnabledInput.id = 'digest-enabled';
+  const digestEnabledLabel = document.createElement('label');
+  digestEnabledLabel.htmlFor = 'digest-enabled';
+  digestEnabledLabel.textContent = 'Enable digest email';
+  digestEnabledLabel.style.fontSize = '14px';
+  digestEnabledRow.append(digestEnabledInput, digestEnabledLabel);
+
+  const digestRecipientsWrap = document.createElement('label');
+  digestRecipientsWrap.style.display = 'flex';
+  digestRecipientsWrap.style.flexDirection = 'column';
+  digestRecipientsWrap.style.gap = '4px';
+  const digestRecipientsLabel = document.createElement('span');
+  digestRecipientsLabel.textContent = 'Recipients (comma-separated emails)';
+  digestRecipientsLabel.style.cssText = 'font-size:13px;font-weight:500;';
+  const digestRecipientsInput = document.createElement('input');
+  digestRecipientsInput.type = 'text';
+  digestRecipientsInput.className = 'form-input';
+  digestRecipientsInput.placeholder = 'e.g. alice@example.com, bob@example.com';
+  digestRecipientsWrap.append(digestRecipientsLabel, digestRecipientsInput);
+
+  const digestFrequencyWrap = document.createElement('label');
+  digestFrequencyWrap.style.display = 'flex';
+  digestFrequencyWrap.style.flexDirection = 'column';
+  digestFrequencyWrap.style.gap = '4px';
+  const digestFrequencyLabel = document.createElement('span');
+  digestFrequencyLabel.textContent = 'Frequency';
+  digestFrequencyLabel.style.cssText = 'font-size:13px;font-weight:500;';
+  const digestFrequencyInput = document.createElement('select');
+  digestFrequencyInput.className = 'form-select';
+  [['weekly', 'Weekly'], ['daily', 'Daily']].forEach(([val, lbl]) => {
+    const opt = document.createElement('option');
+    opt.value = val;
+    opt.textContent = lbl;
+    digestFrequencyInput.appendChild(opt);
+  });
+  digestFrequencyWrap.append(digestFrequencyLabel, digestFrequencyInput);
+
+  const toggleDigestFields = () => {
+    const show = digestEnabledInput.checked;
+    digestRecipientsWrap.style.display = show ? 'flex' : 'none';
+    digestFrequencyWrap.style.display = show ? 'flex' : 'none';
+  };
+  digestEnabledInput.addEventListener('change', toggleDigestFields);
+  toggleDigestFields();
+
+  const digestButtonRow = document.createElement('div');
+  digestButtonRow.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;';
+
+  const saveDigestButton = document.createElement('button');
+  saveDigestButton.type = 'button';
+  saveDigestButton.textContent = 'Save digest settings';
+  saveDigestButton.className = 'btn btn-primary btn-sm';
+
+  const sendTestDigestButton = document.createElement('button');
+  sendTestDigestButton.type = 'button';
+  sendTestDigestButton.textContent = 'Send Test Digest';
+  sendTestDigestButton.className = 'btn btn-secondary btn-sm';
+
+  digestButtonRow.append(saveDigestButton, sendTestDigestButton);
+  digestBody.append(digestEnabledRow, digestRecipientsWrap, digestFrequencyWrap, digestButtonRow);
+
   const installBody = document.createElement('div');
   installBody.style.display = 'flex';
   installBody.style.flexDirection = 'column';
@@ -646,11 +717,11 @@ const label = document.createElement('div');
       const confHtml = hasConf
         ? `<span class="badge badge-${confVariant}">${Math.round(conf * 100)}%</span>`
         : '\u2014';
-      const leadHtml = conv.leadId || conv.leadCreated
-        ? '<span style="color:var(--color-success)">✓</span>'
+      const leadHtml = conv.hasLead || conv.leadId || conv.leadCreated
+        ? '<span class="badge badge-success">✓</span>'
         : '<span style="color:var(--color-text-muted)">—</span>';
-      const ticketHtml = conv.ticketId || conv.ticketCreated
-        ? '<span style="color:var(--color-success)">✓</span>'
+      const ticketHtml = conv.hasTicket || conv.ticketId || conv.ticketCreated
+        ? '<span class="badge badge-success">✓</span>'
         : '<span style="color:var(--color-text-muted)">—</span>';
 
       tr.innerHTML = `
@@ -967,6 +1038,13 @@ const label = document.createElement('div');
       state.servicesDescription = bot?.servicesDescription || '';
       state.geographicFocus = bot?.geographicFocus || '';
       state.personalityDescriptor = bot?.personalityDescriptor || '';
+      state.digestEmailEnabled = bot?.digestEmailEnabled ?? false;
+      state.digestEmailRecipients = bot?.digestEmailRecipients || '';
+      state.digestEmailFrequency = bot?.digestEmailFrequency || 'weekly';
+      digestEnabledInput.checked = state.digestEmailEnabled;
+      digestRecipientsInput.value = state.digestEmailRecipients;
+      digestFrequencyInput.value = state.digestEmailFrequency;
+      toggleDigestFields();
       botNameInput.value = state.botName;
       primaryColorInput.value = state.primaryColor;
       launcherVisibleInput.checked = state.launcherVisible;
@@ -1162,6 +1240,79 @@ const label = document.createElement('div');
     }
   });
 
+  saveDigestButton.addEventListener('click', async () => {
+    if (!state.siteId) {
+      notifier.show({ message: 'Select a site first.', variant: 'warning' });
+      return;
+    }
+    saveDigestButton.disabled = true;
+    try {
+      await client.engage.updateBot(state.siteId, botNameInput.value.trim() || state.botName || 'Assistant', {
+        primaryColor: primaryColorInput.value,
+        launcherVisible: launcherVisibleInput.checked,
+        tone: toneInput.value,
+        verbosity: verbosityInput.value,
+        fallbackStyle: fallbackStyleInput.value,
+        businessDescription: businessDescriptionInput.value.trim(),
+        industry: industryInput.value.trim(),
+        servicesDescription: servicesDescriptionInput.value.trim(),
+        geographicFocus: geographicFocusInput.value.trim(),
+        personalityDescriptor: personalityDescriptorInput.value.trim(),
+        digestEmailEnabled: digestEnabledInput.checked,
+        digestEmailRecipients: digestRecipientsInput.value.trim(),
+        digestEmailFrequency: digestFrequencyInput.value,
+      });
+      state.digestEmailEnabled = digestEnabledInput.checked;
+      state.digestEmailRecipients = digestRecipientsInput.value.trim();
+      state.digestEmailFrequency = digestFrequencyInput.value;
+      notifier.show({ message: 'Digest settings saved.', variant: 'success' });
+    } catch (error) {
+      notifier.show({ message: mapApiError(error).message, variant: 'danger' });
+    } finally {
+      saveDigestButton.disabled = false;
+    }
+  });
+
+  sendTestDigestButton.addEventListener('click', async () => {
+    if (!state.siteId) {
+      notifier.show({ message: 'Select a site first.', variant: 'warning' });
+      return;
+    }
+    sendTestDigestButton.disabled = true;
+    sendTestDigestButton.textContent = 'Generating…';
+    try {
+      const result = await client.engage.sendDigest(state.siteId);
+      // Show result in a simple modal
+      const overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:1000;display:flex;align-items:center;justify-content:center;padding:24px;';
+      const dialog = document.createElement('div');
+      dialog.className = 'card';
+      dialog.style.cssText = 'width:100%;max-width:680px;max-height:85vh;overflow-y:auto;padding:24px;';
+      const hdr = document.createElement('div');
+      hdr.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;';
+      const hTitle = document.createElement('h3');
+      hTitle.style.cssText = 'margin:0;font-size:15px;font-weight:600;';
+      hTitle.textContent = 'Digest Preview';
+      const closeBtn = document.createElement('button');
+      closeBtn.className = 'btn btn-secondary btn-sm';
+      closeBtn.textContent = '✕';
+      closeBtn.addEventListener('click', () => overlay.remove());
+      overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+      hdr.append(hTitle, closeBtn);
+      const pre = document.createElement('pre');
+      pre.style.cssText = 'background:var(--color-surface);border:1px solid var(--color-border);border-radius:6px;padding:16px;font-size:12px;overflow-x:auto;white-space:pre-wrap;word-break:break-word;';
+      pre.textContent = JSON.stringify(result, null, 2);
+      dialog.append(hdr, pre);
+      overlay.appendChild(dialog);
+      document.body.appendChild(overlay);
+    } catch (error) {
+      notifier.show({ message: mapApiError(error).message, variant: 'danger' });
+    } finally {
+      sendTestDigestButton.disabled = false;
+      sendTestDigestButton.textContent = 'Send Test Digest';
+    }
+  });
+
   siteSelect.addEventListener('change', async () => {
     state.siteId = siteSelect.value;
     state.selectedSessionId = '';
@@ -1244,6 +1395,7 @@ const label = document.createElement('div');
     header,
     createCard({ title: 'Bot Config', body: configBody }),
     createCard({ title: 'Business Context', body: businessBody }),
+    createCard({ title: 'Digest Email', body: digestBody }),
     createCard({ title: 'Opportunity Analytics', body: analyticsBody }),
     createCard({ title: 'Conversations', body: conversationsBody }),
     createCard({ title: 'Test Chat', body: chatBody }),

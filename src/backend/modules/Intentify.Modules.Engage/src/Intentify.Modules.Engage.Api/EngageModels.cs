@@ -2,7 +2,7 @@ namespace Intentify.Modules.Engage.Api;
 
 public sealed record WidgetBootstrapResponse(string SiteId, string Domain, string DisplayName, string BotName, string? PrimaryColor = null, bool? LauncherVisible = null);
 
-public sealed record EngageChatSendRequest(string WidgetKey, string? SessionId, string Message, string? CollectorSessionId = null);
+public sealed record EngageChatSendRequest(string WidgetKey, string? SessionId, string Message, string? CollectorSessionId = null, string? VisitorId = null);
 
 public sealed record EngageCitationResponse(string SourceId, string ChunkId, int ChunkIndex);
 
@@ -97,7 +97,10 @@ public sealed record EngageBotResponse(
     string? Industry = null,
     string? ServicesDescription = null,
     string? GeoFocus = null,
-    string? PersonalityDescriptor = null);
+    string? PersonalityDescriptor = null,
+    bool DigestEmailEnabled = false,
+    string? DigestEmailRecipients = null,
+    string? DigestEmailFrequency = null);
 
 public sealed record UpdateEngageBotRequest(
     string Name,
@@ -110,4 +113,9 @@ public sealed record UpdateEngageBotRequest(
     string? Industry = null,
     string? ServicesDescription = null,
     string? GeoFocus = null,
-    string? PersonalityDescriptor = null);
+    string? PersonalityDescriptor = null,
+    bool DigestEmailEnabled = false,
+    string? DigestEmailRecipients = null,
+    string? DigestEmailFrequency = null);
+
+public sealed record DigestSendRequest(string SiteId);

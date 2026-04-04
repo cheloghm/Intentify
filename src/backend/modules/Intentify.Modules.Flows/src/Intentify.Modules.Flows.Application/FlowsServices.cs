@@ -1,5 +1,9 @@
+using System.Net.Http.Json;
 using Intentify.Modules.Flows.Domain;
+using Intentify.Modules.Leads.Application;
+using Intentify.Modules.Tickets.Application;
 using Intentify.Shared.Validation;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Intentify.Modules.Flows.Application;
 
@@ -122,7 +126,11 @@ public sealed class ListFlowRunsService(IFlowRunsRepository repository)
     }
 }
 
-public sealed class ExecuteFlowsForTriggerService(IFlowsRepository flowsRepository, IFlowRunsRepository runsRepository)
+public sealed class ExecuteFlowsForTriggerService(
+    IFlowsRepository flowsRepository,
+    IFlowRunsRepository runsRepository,
+    IHttpClientFactory httpClientFactory,
+    IServiceProvider serviceProvider)
 {
     public async Task<OperationResult<ExecuteFlowsResult>> HandleAsync(ExecuteFlowsTriggerCommand command, CancellationToken ct = default)
     {
@@ -175,23 +183,7 @@ public sealed class ExecuteFlowsForTriggerService(IFlowsRepository flowsReposito
 
             foreach (var action in flow.Actions)
             {
-                if (!string.Equals(action.ActionType, "LogRun", StringComparison.OrdinalIgnoreCase))
-                {
-                    await runsRepository.InsertAsync(new FlowRun
-                    {
-                        FlowId = flow.Id,
-                        TenantId = flow.TenantId,
-                        SiteId = flow.SiteId,
-                        TriggerType = command.TriggerType.Trim(),
-                        TriggerSummary = BuildSummary(payload),
-                        ExecutedAtUtc = DateTime.UtcNow,
-                        Status = FlowRunStatus.Failed,
-                        ErrorMessage = $"Unsupported action type '{action.ActionType}'."
-                    }, ct);
-                    executed++;
-                    continue;
-                }
-
+                var (status, errorMessage) = await ExecuteActionAsync(action, flow, command, payload, ct);
                 await runsRepository.InsertAsync(new FlowRun
                 {
                     FlowId = flow.Id,
@@ -200,14 +192,120 @@ public sealed class ExecuteFlowsForTriggerService(IFlowsRepository flowsReposito
                     TriggerType = command.TriggerType.Trim(),
                     TriggerSummary = BuildSummary(payload),
                     ExecutedAtUtc = DateTime.UtcNow,
-                    Status = FlowRunStatus.Succeeded,
-                    ErrorMessage = null
+                    Status = status,
+                    ErrorMessage = errorMessage
                 }, ct);
                 executed++;
             }
         }
 
         return OperationResult<ExecuteFlowsResult>.Success(new ExecuteFlowsResult(matched, executed));
+    }
+
+    private async Task<(FlowRunStatus Status, string? ErrorMessage)> ExecuteActionAsync(
+        FlowAction action,
+        FlowDefinition flow,
+        ExecuteFlowsTriggerCommand command,
+        IReadOnlyDictionary<string, string> payload,
+        CancellationToken ct)
+    {
+        if (string.Equals(action.ActionType, "LogRun", StringComparison.OrdinalIgnoreCase))
+        {
+            return (FlowRunStatus.Succeeded, null);
+        }
+
+        if (string.Equals(action.ActionType, "SendWebhook", StringComparison.OrdinalIgnoreCase))
+        {
+            var url = action.Params is not null && action.Params.TryGetValue("url", out var u) ? u : null;
+            if (string.IsNullOrWhiteSpace(url))
+            {
+                return (FlowRunStatus.Failed, "SendWebhook action requires a 'url' parameter.");
+            }
+
+            try
+            {
+                using var client = httpClientFactory.CreateClient();
+                var body = new
+                {
+                    triggerType = command.TriggerType,
+                    triggerSummary = BuildSummary(payload),
+                    siteId = command.SiteId,
+                    executedAt = DateTime.UtcNow
+                };
+                var response = await client.PostAsJsonAsync(url, body, ct);
+                if (!response.IsSuccessStatusCode)
+                {
+                    return (FlowRunStatus.Failed, $"Webhook returned {(int)response.StatusCode} {response.ReasonPhrase}.");
+                }
+
+                return (FlowRunStatus.Succeeded, null);
+            }
+            catch (Exception ex)
+            {
+                return (FlowRunStatus.Failed, $"Webhook failed: {ex.Message}");
+            }
+        }
+
+        if (string.Equals(action.ActionType, "CreateTicket", StringComparison.OrdinalIgnoreCase))
+        {
+            var subject = action.Params is not null && action.Params.TryGetValue("subject", out var s) ? s : "Flow-triggered ticket";
+            var description = action.Params is not null && action.Params.TryGetValue("description", out var d) ? d : BuildSummary(payload);
+
+            var handler = serviceProvider.GetService<CreateTicketHandler>();
+            if (handler is null)
+            {
+                return (FlowRunStatus.Failed, "CreateTicketHandler is not registered.");
+            }
+
+            var ticketCommand = new CreateTicketCommand(
+                flow.TenantId,
+                flow.SiteId,
+                null,
+                null,
+                subject,
+                description,
+                null);
+
+            var result = await handler.HandleAsync(ticketCommand, ct);
+            return result.IsSuccess
+                ? (FlowRunStatus.Succeeded, null)
+                : (FlowRunStatus.Failed, string.Join("; ", result.Errors?.Errors.SelectMany(e => e.Value) ?? []));
+        }
+
+        if (string.Equals(action.ActionType, "TagLead", StringComparison.OrdinalIgnoreCase))
+        {
+            var leadIdRaw = action.Params is not null && action.Params.TryGetValue("leadId", out var l) ? l : null;
+            var label = action.Params is not null && action.Params.TryGetValue("label", out var lb) ? lb : null;
+
+            if (!Guid.TryParse(leadIdRaw, out var leadId))
+            {
+                return (FlowRunStatus.Failed, "TagLead action requires a valid 'leadId' parameter.");
+            }
+
+            if (string.IsNullOrWhiteSpace(label))
+            {
+                return (FlowRunStatus.Failed, "TagLead action requires a 'label' parameter.");
+            }
+
+            var leadRepo = serviceProvider.GetService<ILeadRepository>();
+            if (leadRepo is null)
+            {
+                return (FlowRunStatus.Failed, "ILeadRepository is not registered.");
+            }
+
+            var lead = await leadRepo.GetByIdAsync(flow.TenantId, leadId, ct);
+            if (lead is null)
+            {
+                return (FlowRunStatus.Failed, $"Lead '{leadId}' not found.");
+            }
+
+            lead.OpportunityLabel = label.Trim();
+            lead.UpdatedAtUtc = DateTime.UtcNow;
+            await leadRepo.ReplaceAsync(lead, ct);
+            return (FlowRunStatus.Succeeded, null);
+        }
+
+        return (FlowRunStatus.Failed, $"Unsupported action type '{action.ActionType}'.");
     }
 
     private static bool TriggerMatches(IReadOnlyDictionary<string, string> expected, IReadOnlyDictionary<string, string> actual)
@@ -372,17 +470,18 @@ internal static class FlowValidation
         }
 
         var actions = new List<FlowAction>();
+        var supportedTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "LogRun", "SendWebhook", "CreateTicket", "TagLead" };
         foreach (var action in inputs)
         {
-            if (!string.Equals(action.ActionType, "LogRun", StringComparison.OrdinalIgnoreCase))
+            if (!supportedTypes.Contains(action.ActionType))
             {
-                errors.Add("actions", "Only LogRun action is supported in MVP.");
+                errors.Add("actions", $"Unsupported action type '{action.ActionType}'. Supported: {string.Join(", ", supportedTypes)}.");
                 continue;
             }
 
             actions.Add(new FlowAction
             {
-                ActionType = "LogRun",
+                ActionType = action.ActionType.Trim(),
                 Params = action.Params?.ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.OrdinalIgnoreCase)
             });
         }

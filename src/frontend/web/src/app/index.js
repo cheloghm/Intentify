@@ -6,6 +6,7 @@ import { renderInstallView } from '../pages/install.js';
 import { renderVisitorsView } from '../pages/visitors.js';
 import { renderVisitorProfileView } from '../pages/visitorProfile.js';
 import { renderKnowledgeView } from '../pages/knowledge.js';
+import { renderFlowsView } from '../pages/flows.js';
 import { renderEngageView } from '../pages/engage.js';
 import { renderPromosView } from '../pages/promos.js';
 import { renderLeadsView } from '../pages/leads.js';
@@ -79,6 +80,7 @@ const AUTH_NAV_ITEMS = [
   { label: 'Team', href: '#/team' },
   { label: 'Visitors', href: '#/visitors' },
   { label: 'Knowledge', href: '#/knowledge' },
+  { label: 'Flows', href: '#/flows' },
   { label: 'Engage', href: '#/engage' },
   { label: 'Promos', href: '#/promos' },
   { label: 'Intelligence', href: '#/intelligence' },
@@ -670,6 +672,7 @@ const createAuthenticatedShell = ({ route, canAccessPlatformAdmin, canAccessTeam
 
   addNavSection('ENGAGE', [
     { label: 'Knowledge', href: '#/knowledge' },
+    { label: 'Flows',     href: '#/flows' },
     { label: 'Engage',    href: '#/engage' },
     { label: 'Leads',     href: '#/leads' },
     { label: 'Tickets',   href: '#/tickets' },
@@ -1436,7 +1439,7 @@ const renderDashboardView = async (container) => {
         if (pipelineLabels.length === 0) {
           const empty = document.createElement('div');
           empty.style.cssText = 'text-align:center;padding:32px;color:var(--color-text-muted);font-size:13px;';
-          empty.textContent = 'No lead pipeline data yet';
+          empty.textContent = 'No leads yet';
           pipelineChartCard.appendChild(empty);
         } else {
           new window.Chart(pipelineCanvas, {
@@ -1466,6 +1469,7 @@ const routes = {
   '/install': renderInstallView,
   '/visitors': renderVisitorsView,
   '/knowledge': renderKnowledgeView,
+  '/flows': renderFlowsView,
   '/engage': renderEngageView,
   '/promos': renderPromosView,
   '/intelligence': renderIntelligenceView,

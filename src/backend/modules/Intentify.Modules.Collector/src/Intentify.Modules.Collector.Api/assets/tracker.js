@@ -25,6 +25,8 @@
 
     const baseUrl = new URL(src, window.location.href).origin;
     const sessionId = ensureSessionId();
+    const visitorId = getOrCreateVisitorId();
+    const fingerprint = getBrowserFingerprint();
     const pageLoadedAtMs = Date.now();
     let didSendTimeOnPage = false;
     let maxScrollDepth = 0;
@@ -65,6 +67,8 @@
           referrer: document.referrer || null,
           tsUtc: new Date().toISOString(),
           sessionId,
+          visitorId,
+          fingerprint,
           data: data || null
         };
 
@@ -288,6 +292,63 @@
       }
 
       return output;
+    }
+
+    function setCookie(name, value, days) {
+      const ms = days * 24 * 60 * 60 * 1000;
+      const expires = new Date(Date.now() + ms).toUTCString();
+      const secureFlag = window.location.protocol === 'https:' ? '; Secure' : '';
+      document.cookie = `${name}=${encodeURIComponent(value)}; Expires=${expires}; Max-Age=${days * 24 * 60 * 60}; Path=/; SameSite=Lax${secureFlag}`;
+    }
+
+    function generateUuid() {
+      if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+        return window.crypto.randomUUID();
+      }
+      if (window.crypto && window.crypto.getRandomValues) {
+        const bytes = new Uint8Array(16);
+        window.crypto.getRandomValues(bytes);
+        bytes[6] = (bytes[6] & 0x0f) | 0x40;
+        bytes[8] = (bytes[8] & 0x3f) | 0x80;
+        const hex = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+        return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+      }
+      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+        const r = Math.random() * 16 | 0;
+        return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+      });
+    }
+
+    function getOrCreateVisitorId() {
+      let stored = null;
+      try { stored = localStorage.getItem('intentify_vid'); } catch (e) {}
+      if (!stored) {
+        stored = readCookie('intentify_vid');
+      }
+      if (!stored) {
+        stored = generateUuid();
+        try { localStorage.setItem('intentify_vid', stored); } catch (e) {}
+        setCookie('intentify_vid', stored, 365);
+      }
+      return stored;
+    }
+
+    function getBrowserFingerprint() {
+      const signals = [
+        navigator.userAgent,
+        navigator.language,
+        `${screen.width}x${screen.height}`,
+        screen.colorDepth,
+        new Date().getTimezoneOffset(),
+        navigator.hardwareConcurrency || 0,
+        navigator.platform || '',
+      ].join('|');
+      let hash = 0;
+      for (let i = 0; i < signals.length; i += 1) {
+        hash = ((hash << 5) - hash) + signals.charCodeAt(i);
+        hash |= 0;
+      }
+      return Math.abs(hash).toString(36);
     }
   } catch {
     // swallow

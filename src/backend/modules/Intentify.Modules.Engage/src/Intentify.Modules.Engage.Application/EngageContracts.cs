@@ -4,7 +4,7 @@ public sealed record WidgetBootstrapQuery(string WidgetKey);
 
 public sealed record WidgetBootstrapResult(Guid SiteId, string Domain);
 
-public sealed record ChatSendCommand(string WidgetKey, Guid? SessionId, string Message, string? CollectorSessionId);
+public sealed record ChatSendCommand(string WidgetKey, Guid? SessionId, string Message, string? CollectorSessionId, string? VisitorId = null);
 
 public sealed record EngageCitationResult(Guid SourceId, Guid ChunkId, int ChunkIndex);
 
@@ -30,7 +30,7 @@ public sealed record ChatSendResult(
 
 public sealed record ListConversationsQuery(Guid TenantId, Guid SiteId, string? CollectorSessionId);
 
-public sealed record ConversationSummaryResult(Guid SessionId, DateTime CreatedAtUtc, DateTime UpdatedAtUtc);
+public sealed record ConversationSummaryResult(Guid SessionId, DateTime CreatedAtUtc, DateTime UpdatedAtUtc, bool HasLead = false, bool HasTicket = false);
 
 public sealed record OpportunityContactMethodBreakdownResult(int Email, int Phone, int Unknown);
 
@@ -65,7 +65,10 @@ public sealed record EngageBotResult(
     string? Industry = null,
     string? ServicesDescription = null,
     string? GeoFocus = null,
-    string? PersonalityDescriptor = null);
+    string? PersonalityDescriptor = null,
+    bool DigestEmailEnabled = false,
+    string? DigestEmailRecipients = null,
+    string? DigestEmailFrequency = null);
 
 public sealed record UpdateEngageBotCommand(
     Guid TenantId,
@@ -80,4 +83,23 @@ public sealed record UpdateEngageBotCommand(
     string? Industry = null,
     string? ServicesDescription = null,
     string? GeoFocus = null,
-    string? PersonalityDescriptor = null);
+    string? PersonalityDescriptor = null,
+    bool DigestEmailEnabled = false,
+    string? DigestEmailRecipients = null,
+    string? DigestEmailFrequency = null);
+
+public sealed record GenerateDigestQuery(Guid TenantId, Guid SiteId);
+
+public sealed record DigestLeadEntry(string? Name, string? Email, string? OpportunityLabel, int? IntentScore);
+
+public sealed record DigestTicketEntry(string Subject, string Status);
+
+public sealed record DigestResult(
+    Guid SiteId,
+    DateTime GeneratedAtUtc,
+    int NewLeadsCount,
+    IReadOnlyCollection<DigestLeadEntry> NewLeads,
+    int NewTicketsCount,
+    IReadOnlyCollection<DigestTicketEntry> NewTickets,
+    int ConversationsCount,
+    DigestLeadEntry? TopOpportunity);

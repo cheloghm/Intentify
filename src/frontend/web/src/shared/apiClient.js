@@ -390,7 +390,22 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
         tone: settings.tone,
         verbosity: settings.verbosity,
         fallbackStyle: settings.fallbackStyle,
+        businessDescription: settings.businessDescription,
+        industry: settings.industry,
+        servicesDescription: settings.servicesDescription,
+        geoFocus: settings.geoFocus || settings.geographicFocus,
+        personalityDescriptor: settings.personalityDescriptor,
+        digestEmailEnabled: settings.digestEmailEnabled ?? false,
+        digestEmailRecipients: settings.digestEmailRecipients,
+        digestEmailFrequency: settings.digestEmailFrequency,
       }),
+    });
+
+  const sendEngageDigest = async (siteId) =>
+    request('/engage/digest/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ siteId }),
     });
 
   const listAdsCampaigns = async (siteId) =>
@@ -463,6 +478,35 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
       body: JSON.stringify({ content }),
     });
 
+
+  const listFlows = async (siteId) =>
+    request(`/flows${buildQueryString({ siteId })}`);
+
+  const getFlow = async (flowId) =>
+    request(`/flows/${encodeURIComponent(flowId)}`);
+
+  const createFlow = async (payload) =>
+    request('/flows', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+  const updateFlow = async (flowId, payload) =>
+    request(`/flows/${encodeURIComponent(flowId)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+  const enableFlow = async (flowId) =>
+    request(`/flows/${encodeURIComponent(flowId)}/enable`, { method: 'POST' });
+
+  const disableFlow = async (flowId) =>
+    request(`/flows/${encodeURIComponent(flowId)}/disable`, { method: 'POST' });
+
+  const listFlowRuns = async (flowId, limit = 50) =>
+    request(`/flows/${encodeURIComponent(flowId)}/runs${buildQueryString({ limit })}`);
 
   const getPlatformSummary = async () => request('/platform-admin/summary');
 
@@ -550,6 +594,7 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
       getConversationMessages: getEngageConversationMessages,
       getBot: getEngageBot,
       updateBot: updateEngageBot,
+      sendDigest: sendEngageDigest,
     },
     tickets: {
       listTickets,
@@ -557,6 +602,15 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
       getTicketNotes,
       addTicketNote,
       transitionTicketStatus,
+    },
+    flows: {
+      list: listFlows,
+      get: getFlow,
+      create: createFlow,
+      update: updateFlow,
+      enable: enableFlow,
+      disable: disableFlow,
+      listRuns: listFlowRuns,
     },
     leads: {
       list: listLeads,

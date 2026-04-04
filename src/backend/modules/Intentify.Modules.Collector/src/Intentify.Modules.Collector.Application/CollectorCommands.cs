@@ -10,6 +10,8 @@ public sealed record CollectEventCommand(
     DateTime? TsUtc,
     string? Origin,
     string? SessionId,
+    string? VisitorId,
+    string? Fingerprint,
     JsonElement? Data);
 
 public sealed record CollectorEventIngestedNotification(
@@ -21,6 +23,8 @@ public sealed record CollectorEventIngestedNotification(
     string? Referrer,
     string? SessionId,
     string? FirstPartyId,
+    string? VisitorId,
+    string? Fingerprint,
     string? UserAgent,
     string? Language,
     string? Platform);

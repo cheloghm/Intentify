@@ -1,4 +1,4 @@
-import { createBadge, createCard, createInput, createToastManager } from '../shared/ui/index.js';
+import { createBadge, createToastManager, ensureUiStyles } from '../shared/ui/index.js';
 import { createApiClient, mapApiError } from '../shared/apiClient.js';
 
 const ORIGIN_HELPER_TEXT = 'Paste the website origin (scheme + host + port). No paths.';
@@ -41,16 +41,10 @@ const normalizeOrigins = (origins) => {
   origins.forEach((origin) => {
     const normalizedResult = normalizeOrigin(origin);
     const normalized = normalizedResult.value;
-    if (!normalized) {
-      return;
-    }
-
+    if (!normalized) return;
     const key = normalized.toLowerCase();
-    if (!unique.has(key)) {
-      unique.set(key, normalized);
-    }
+    if (!unique.has(key)) unique.set(key, normalized);
   });
-
   return Array.from(unique.values());
 };
 
@@ -59,7 +53,6 @@ const copyToClipboard = async (value) => {
     await navigator.clipboard.writeText(value);
     return;
   }
-
   const textarea = document.createElement('textarea');
   textarea.value = value;
   textarea.style.position = 'fixed';
@@ -71,68 +64,79 @@ const copyToClipboard = async (value) => {
   textarea.remove();
 };
 
-const createButton = ({ label, variant = 'default', type = 'button' } = {}) => {
-  const button = document.createElement('button');
-  button.type = type;
-  button.textContent = label;
-  button.style.padding = '8px 12px';
-  button.style.borderRadius = '6px';
-  button.style.border = variant === 'primary' ? 'none' : '1px solid #e2e8f0';
-  button.style.background = variant === 'primary' ? '#2563eb' : '#ffffff';
-  button.style.color = variant === 'primary' ? '#ffffff' : '#1e293b';
-  button.style.cursor = 'pointer';
-  button.style.fontSize = '13px';
-  return button;
-};
-
-const createField = ({ label, placeholder }) => {
-  const { wrapper, input } = createInput({ label, placeholder });
-  const error = document.createElement('div');
-  error.className = 'ui-field-error';
-  wrapper.appendChild(error);
-  return { wrapper, input, error };
-};
-
 const getSiteId = (site) => site.siteId || site.id;
 
-const loadCachedKeys = (siteId) => {
-  if (!siteId) {
-    return null;
-  }
-
-  try {
-    const raw = localStorage.getItem(`intentify.siteKeys.${siteId}`);
-    if (!raw) {
-      return null;
-    }
-
-    const parsed = JSON.parse(raw);
-    if (
-      parsed &&
-      typeof parsed.siteKey === 'string' &&
-      parsed.siteKey
-    ) {
-      return parsed;
-    }
-  } catch (error) {
-    return null;
-  }
-
-  return null;
-};
-
 const saveCachedKeys = (siteId, { siteKey }) => {
-  if (!siteId || !siteKey) {
-    return;
-  }
-
+  if (!siteId || !siteKey) return;
   localStorage.setItem(
     `intentify.siteKeys.${siteId}`,
-    JSON.stringify({
-      siteKey,
-      cachedAtUtc: new Date().toISOString(),
-    })
+    JSON.stringify({ siteKey, cachedAtUtc: new Date().toISOString() })
   );
+};
+
+const createModal = (title) => {
+  ensureUiStyles();
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.5);z-index:200;display:flex;align-items:center;justify-content:center;padding:16px;';
+
+  const dialog = document.createElement('div');
+  dialog.className = 'card';
+  dialog.style.cssText = 'width:100%;max-width:540px;max-height:90vh;overflow-y:auto;';
+
+  const header = document.createElement('div');
+  header.className = 'card-header';
+  const heading = document.createElement('h3');
+  heading.className = 'card-title';
+  heading.textContent = title;
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'btn btn-secondary btn-sm';
+  closeBtn.textContent = '✕';
+  header.append(heading, closeBtn);
+
+  const body = document.createElement('div');
+
+  dialog.append(header, body);
+  overlay.appendChild(dialog);
+
+  const hide = () => overlay.remove();
+  const show = () => document.body.appendChild(overlay);
+
+  closeBtn.addEventListener('click', hide);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) hide(); });
+
+  return { overlay, body, show, hide, setTitle: (t) => { heading.textContent = t; } };
+};
+
+const makeFormGroup = (labelText, inputEl) => {
+  const group = document.createElement('div');
+  group.className = 'form-group';
+  const label = document.createElement('label');
+  label.className = 'form-label';
+  label.textContent = labelText;
+  group.append(label, inputEl);
+  return group;
+};
+
+const makeInput = (placeholder = '', type = 'text') => {
+  const input = document.createElement('input');
+  input.type = type;
+  input.className = 'form-input';
+  input.placeholder = placeholder;
+  return input;
+};
+
+const makeTextarea = (placeholder = '', rows = 4) => {
+  const ta = document.createElement('textarea');
+  ta.className = 'form-textarea';
+  ta.placeholder = placeholder;
+  ta.rows = rows;
+  return ta;
+};
+
+const makeErrorEl = () => {
+  const el = document.createElement('div');
+  el.className = 'ui-field-error';
+  return el;
 };
 
 export const renderSitesView = (container, { apiClient, toast } = {}) => {
@@ -143,172 +147,348 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
     sites: [],
     loading: true,
     error: null,
-    keys: null,
-    expandedSiteId: null,
-    originsDraftBySiteId: {},
-    originInputBySiteId: {},
-    originInputErrorBySiteId: {},
-    savingBySiteId: {},
-    errorBySiteId: {},
-    originEditingIndexBySiteId: {},
-    originEditingValueBySiteId: {},
-    profileDraftBySiteId: {},
-    profileSavingBySiteId: {},
-    profileErrorBySiteId: {},
   };
 
   const page = document.createElement('div');
-  page.style.display = 'flex';
-  page.style.flexDirection = 'column';
-  page.style.gap = '20px';
-  page.style.width = '100%';
-  page.style.maxWidth = '960px';
+  page.style.cssText = 'display:flex;flex-direction:column;gap:20px;width:100%;max-width:960px;';
 
-  const header = document.createElement('div');
-  const title = document.createElement('h2');
-  title.textContent = 'Sites';
-  title.style.margin = '0';
-  const subtitle = document.createElement('p');
-  subtitle.textContent = 'Manage domains, keys, and installation status for your sites.';
-  subtitle.style.margin = '6px 0 0';
-  subtitle.style.color = '#64748b';
-  header.append(title, subtitle);
+  // ── Page Header ──────────────────────────────────────────────────────────
+  const pageHeader = document.createElement('div');
+  pageHeader.className = 'page-header';
 
-  const keysSection = document.createElement('div');
+  const headerLeft = document.createElement('div');
+  const pageTitle = document.createElement('h2');
+  pageTitle.className = 'page-title';
+  pageTitle.textContent = 'Sites';
+  const pageSubtitle = document.createElement('p');
+  pageSubtitle.className = 'page-subtitle';
+  pageSubtitle.textContent = 'Manage your tracked websites and widget configurations';
+  headerLeft.append(pageTitle, pageSubtitle);
 
-  const renderKeys = () => {
-    keysSection.innerHTML = '';
-    if (!state.keys) {
-      return;
+  const addSiteBtn = document.createElement('button');
+  addSiteBtn.className = 'btn btn-primary';
+  addSiteBtn.textContent = '+ Add Site';
+
+  pageHeader.append(headerLeft, addSiteBtn);
+
+  // ── Sites List ───────────────────────────────────────────────────────────
+  const sitesListEl = document.createElement('div');
+  sitesListEl.className = 'stack';
+
+  // ── Fetch installation status ────────────────────────────────────────────
+  const fetchInstallationStatus = async (siteId) => {
+    if (!siteId) return null;
+    try {
+      return await client.request(`/sites/${siteId}/installation-status`);
+    } catch {
+      return null;
     }
+  };
 
-    const { domain, siteId, siteKey } = state.keys;
+  // ── Manage Keys Modal ────────────────────────────────────────────────────
+  const keysModal = createModal('Site Keys');
 
-    const body = document.createElement('div');
-    body.style.display = 'flex';
-    body.style.flexDirection = 'column';
-    body.style.gap = '12px';
+  const openKeysModal = async (site) => {
+    const siteId = getSiteId(site);
+    keysModal.setTitle(`Keys — ${site.domain || site.name || 'Site'}`);
+    keysModal.body.innerHTML = '<div style="color:var(--color-text-muted);padding:16px 0;">Loading keys…</div>';
+    keysModal.show();
 
-    const warning = document.createElement('div');
-    warning.textContent = 'Keys are shown once. Save them now.';
-    warning.style.color = '#b45309';
-    warning.style.fontSize = '13px';
-    body.appendChild(warning);
+    try {
+      const keys = await client.sites.getKeys(siteId);
+      keysModal.body.innerHTML = '';
 
-    const createKeyRow = ({ label, value }) => {
-      const row = document.createElement('div');
-      row.style.display = 'flex';
-      row.style.justifyContent = 'space-between';
-      row.style.alignItems = 'center';
-      row.style.gap = '12px';
-      row.style.padding = '10px 12px';
-      row.style.border = '1px solid #e2e8f0';
-      row.style.borderRadius = '8px';
+      const warning = document.createElement('p');
+      warning.style.cssText = 'font-size:12px;color:var(--color-warning);margin-bottom:16px;';
+      warning.textContent = 'Keep these keys safe. Regenerating keys will invalidate the old ones.';
+      keysModal.body.appendChild(warning);
 
-      const text = document.createElement('div');
-      const textLabel = document.createElement('div');
-      textLabel.textContent = label;
-      textLabel.style.fontSize = '12px';
-      textLabel.style.color = '#64748b';
-      const textValue = document.createElement('div');
-      textValue.textContent = value;
-      textValue.style.fontWeight = '600';
-      textValue.style.fontSize = '13px';
-      text.append(textLabel, textValue);
+      const makeKeyRow = (label, value) => {
+        const row = document.createElement('div');
+        row.className = 'form-group';
+        const lbl = document.createElement('label');
+        lbl.className = 'form-label';
+        lbl.textContent = label;
+        const inputRow = document.createElement('div');
+        inputRow.style.cssText = 'display:flex;gap:8px;align-items:center;';
+        const inp = document.createElement('input');
+        inp.className = 'form-input';
+        inp.value = value || '(not available)';
+        inp.readOnly = true;
+        inp.style.fontFamily = 'monospace';
+        const copyBtn = document.createElement('button');
+        copyBtn.className = 'btn btn-secondary btn-sm';
+        copyBtn.textContent = 'Copy';
+        copyBtn.style.flexShrink = '0';
+        copyBtn.addEventListener('click', async () => {
+          try {
+            await copyToClipboard(value);
+            notifier.show({ message: `${label} copied.`, variant: 'success' });
+          } catch {
+            notifier.show({ message: 'Unable to copy.', variant: 'danger' });
+          }
+        });
+        inputRow.append(inp, copyBtn);
+        row.append(lbl, inputRow);
+        return row;
+      };
 
-      const copyButton = createButton({ label: 'Copy' });
-      copyButton.addEventListener('click', async () => {
+      keysModal.body.append(
+        makeKeyRow('Site Key (tracker / sdk)', keys.siteKey),
+        makeKeyRow('Widget Key (engage widget)', keys.widgetKey),
+      );
+
+      const footer = document.createElement('div');
+      footer.style.cssText = 'display:flex;gap:8px;margin-top:8px;';
+
+      const installBtn = document.createElement('button');
+      installBtn.className = 'btn btn-secondary btn-sm';
+      installBtn.textContent = 'Open Install Guide';
+      installBtn.addEventListener('click', () => {
+        const params = new URLSearchParams({ siteId });
+        if (site.domain) params.set('domain', site.domain);
+        if (keys.siteKey) params.set('siteKey', keys.siteKey);
+        window.location.hash = `#/install?${params.toString()}`;
+        keysModal.hide();
+      });
+
+      const regenBtn = document.createElement('button');
+      regenBtn.className = 'btn btn-danger btn-sm';
+      regenBtn.textContent = 'Regenerate Keys';
+      regenBtn.addEventListener('click', async () => {
+        const confirmed = window.confirm('Regenerating keys will invalidate existing ones. Your installed tracker and widget will need updating. Continue?');
+        if (!confirmed) return;
+        regenBtn.disabled = true;
+        regenBtn.textContent = 'Regenerating…';
         try {
-          await copyToClipboard(value);
-          notifier.show({ message: 'Key copied to clipboard.', variant: 'success' });
+          const response = await client.sites.regenerateKeys(siteId);
+          saveCachedKeys(siteId, { siteKey: response.siteKey });
+          notifier.show({ message: 'Keys regenerated.', variant: 'success' });
+          keysModal.hide();
+          // Re-open with fresh keys
+          openKeysModal(site);
         } catch (error) {
-          notifier.show({ message: 'Unable to copy key.', variant: 'danger' });
+          notifier.show({ message: mapApiError(error).message, variant: 'danger' });
+          regenBtn.disabled = false;
+          regenBtn.textContent = 'Regenerate Keys';
         }
       });
 
-      row.append(text, copyButton);
-      return row;
-    };
-
-    body.append(
-      createKeyRow({ label: 'Install key', value: siteKey })
-    );
-
-    const openInstallButton = createButton({ label: 'Open Install' });
-    openInstallButton.style.alignSelf = 'flex-start';
-    openInstallButton.addEventListener('click', () => {
-      if (!siteId) {
-        window.location.hash = '#/install';
-        return;
-      }
-
-      const params = new URLSearchParams();
-      params.set('siteId', siteId);
-      if (domain) {
-        params.set('domain', domain);
-      }
-      if (siteKey) {
-        params.set('siteKey', siteKey);
-      }
-      window.location.hash = `#/install?${params.toString()}`;
-    });
-    body.appendChild(openInstallButton);
-
-    const card = createCard({
-      title: domain ? `Keys for ${domain}` : 'Keys',
-      body,
-    });
-    keysSection.appendChild(card);
+      footer.append(installBtn, regenBtn);
+      keysModal.body.appendChild(footer);
+    } catch (error) {
+      keysModal.body.innerHTML = `<p style="color:var(--color-danger);">Failed to load keys: ${mapApiError(error).message}</p>`;
+    }
   };
 
-  const createSiteFormCard = () => {
-    const nameField = createField({
-      label: 'Name',
-      placeholder: 'My Site',
-    });
-    const domainField = createField({
-      label: 'Domain',
-      placeholder: 'example.com',
-    });
-    const descriptionField = createField({ label: 'Description', placeholder: 'What this site is about' });
-    const categoryField = createField({ label: 'Category', placeholder: 'e.g. Ecommerce' });
-    const tagsField = createField({ label: 'Tags', placeholder: 'comma,separated,tags' });
+  // ── Edit Origins Modal ───────────────────────────────────────────────────
+  const originsModal = createModal('Edit Origins');
 
-    const submitButton = createButton({ label: 'Create site', variant: 'primary', type: 'submit' });
+  const openOriginsModal = (site) => {
+    const siteId = getSiteId(site);
+    originsModal.setTitle(`Origins — ${site.domain || site.name || 'Site'}`);
+    originsModal.body.innerHTML = '';
 
-    const form = document.createElement('form');
-    form.style.display = 'flex';
-    form.style.flexDirection = 'column';
-    form.style.gap = '12px';
-    form.append(nameField.wrapper, domainField.wrapper, descriptionField.wrapper, categoryField.wrapper, tagsField.wrapper, submitButton);
+    const originList = [...(site.allowedOrigins || [])];
+    let originInput = '';
+    let originInputError = '';
+    let saving = false;
 
-    form.addEventListener('submit', async (event) => {
-      event.preventDefault();
-      nameField.error.textContent = '';
-      domainField.error.textContent = '';
-      const name = nameField.input.value.trim();
-      const domain = domainField.input.value.trim();
-      if (!name) {
-        nameField.error.textContent = 'Name is required.';
-        return;
+    const renderOriginsEditor = () => {
+      originsModal.body.innerHTML = '';
+
+      // Origins list
+      const listHeader = document.createElement('p');
+      listHeader.style.cssText = 'font-size:13px;font-weight:600;color:var(--color-text-secondary);margin-bottom:8px;';
+      listHeader.textContent = 'Allowed Origins';
+      originsModal.body.appendChild(listHeader);
+
+      if (!originList.length) {
+        const empty = document.createElement('div');
+        empty.style.cssText = 'font-size:13px;color:var(--color-text-muted);margin-bottom:12px;';
+        empty.textContent = 'No origins configured yet.';
+        originsModal.body.appendChild(empty);
+      } else {
+        const listEl = document.createElement('div');
+        listEl.style.cssText = 'display:flex;flex-direction:column;gap:6px;margin-bottom:12px;';
+        originList.forEach((origin, idx) => {
+          const row = document.createElement('div');
+          row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;border:1px solid var(--color-border);border-radius:var(--radius-sm);';
+          const text = document.createElement('span');
+          text.style.cssText = 'font-size:13px;word-break:break-all;';
+          text.textContent = origin;
+          const removeBtn = document.createElement('button');
+          removeBtn.className = 'btn btn-danger btn-sm';
+          removeBtn.textContent = 'Remove';
+          removeBtn.style.flexShrink = '0';
+          removeBtn.addEventListener('click', () => {
+            originList.splice(idx, 1);
+            renderOriginsEditor();
+          });
+          row.append(text, removeBtn);
+          listEl.appendChild(row);
+        });
+        originsModal.body.appendChild(listEl);
       }
-      if (!domain) {
-        domainField.error.textContent = 'Domain is required.';
-        return;
-      }
 
-      submitButton.disabled = true;
-      submitButton.textContent = 'Creating...';
+      // Add origin input
+      const addGroup = document.createElement('div');
+      addGroup.className = 'form-group';
+      const addLabel = document.createElement('label');
+      addLabel.className = 'form-label';
+      addLabel.textContent = 'Add Origin';
+      const addRow = document.createElement('div');
+      addRow.style.cssText = 'display:flex;gap:8px;';
+      const addInput = makeInput('https://app.example.com');
+      addInput.value = originInput;
+      addInput.addEventListener('input', () => {
+        originInput = addInput.value;
+        originInputError = '';
+      });
 
+      const addBtn = document.createElement('button');
+      addBtn.className = 'btn btn-secondary btn-sm';
+      addBtn.textContent = 'Add';
+      addBtn.style.flexShrink = '0';
+
+      const addLocalhostBtn = document.createElement('button');
+      addLocalhostBtn.className = 'btn btn-secondary btn-sm';
+      addLocalhostBtn.textContent = 'Add localhost';
+      addLocalhostBtn.style.flexShrink = '0';
+
+      const errEl = makeErrorEl();
+      errEl.textContent = originInputError;
+
+      const addOriginToList = (raw) => {
+        const result = normalizeOrigin(raw);
+        if (!result.value) {
+          originInputError = result.error;
+          errEl.textContent = result.error;
+          return;
+        }
+        if (originList.find((o) => o.toLowerCase() === result.value.toLowerCase())) {
+          notifier.show({ message: 'Origin already listed.', variant: 'warning' });
+          return;
+        }
+        originInput = '';
+        originInputError = '';
+        originList.push(result.value);
+        renderOriginsEditor();
+      };
+
+      addBtn.addEventListener('click', () => addOriginToList(originInput));
+      addLocalhostBtn.addEventListener('click', () => {
+        if (window.location.hostname !== 'localhost') {
+          errEl.textContent = 'Not running on localhost.';
+          return;
+        }
+        addOriginToList(`http://localhost:${window.location.port || 80}`);
+      });
+
+      addRow.append(addInput, addBtn, addLocalhostBtn);
+      addGroup.append(addLabel, addRow, errEl);
+      originsModal.body.appendChild(addGroup);
+
+      // Save button
+      const footer = document.createElement('div');
+      footer.style.cssText = 'display:flex;gap:8px;margin-top:8px;';
+      const saveBtn = document.createElement('button');
+      saveBtn.className = 'btn btn-primary';
+      saveBtn.textContent = saving ? 'Saving…' : 'Save Origins';
+      saveBtn.disabled = saving;
+      saveBtn.addEventListener('click', async () => {
+        saving = true;
+        renderOriginsEditor();
+        try {
+          const normalized = normalizeOrigins(originList);
+          const response = await client.request(`/sites/${siteId}/origins`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ allowedOrigins: normalized }),
+          });
+          const updatedSite = {
+            ...site,
+            ...response,
+            allowedOrigins: response.allowedOrigins || normalized,
+          };
+          state.sites = state.sites.map((item) =>
+            getSiteId(item) === siteId ? updatedSite : item
+          );
+          notifier.show({ message: 'Allowed origins updated.', variant: 'success' });
+          originsModal.hide();
+          renderSites();
+        } catch (error) {
+          notifier.show({ message: mapApiError(error).message, variant: 'danger' });
+        } finally {
+          saving = false;
+          renderOriginsEditor();
+        }
+      });
+      footer.appendChild(saveBtn);
+      originsModal.body.appendChild(footer);
+    };
+
+    renderOriginsEditor();
+    originsModal.show();
+  };
+
+  // ── Add Site Modal ───────────────────────────────────────────────────────
+  const addSiteModal = createModal('Add Site');
+
+  const buildAddSiteForm = () => {
+    addSiteModal.body.innerHTML = '';
+
+    const nameInput = makeInput('My Site');
+    const domainInput = makeInput('example.com');
+    const descInput = makeInput('What this site is about');
+    const categoryInput = makeInput('e.g. Ecommerce');
+    const tagsInput = makeInput('comma,separated,tags');
+
+    const nameErr = makeErrorEl();
+    const domainErr = makeErrorEl();
+
+    const nameGroup = makeFormGroup('Name *', nameInput);
+    nameGroup.appendChild(nameErr);
+    const domainGroup = makeFormGroup('Domain *', domainInput);
+    domainGroup.appendChild(domainErr);
+
+    addSiteModal.body.append(
+      nameGroup,
+      domainGroup,
+      makeFormGroup('Description', descInput),
+      makeFormGroup('Category', categoryInput),
+      makeFormGroup('Tags', tagsInput),
+    );
+
+    const footer = document.createElement('div');
+    footer.style.cssText = 'display:flex;gap:8px;margin-top:8px;';
+    const submitBtn = document.createElement('button');
+    submitBtn.className = 'btn btn-primary';
+    submitBtn.textContent = 'Create Site';
+
+    if (state.sites.length > 0) {
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Site limit reached';
+    }
+
+    submitBtn.addEventListener('click', async () => {
+      nameErr.textContent = '';
+      domainErr.textContent = '';
+      const name = nameInput.value.trim();
+      const domain = domainInput.value.trim();
+      if (!name) { nameErr.textContent = 'Name is required.'; return; }
+      if (!domain) { domainErr.textContent = 'Domain is required.'; return; }
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Creating…';
       try {
         const response = await client.sites.create({
           name,
           domain,
-          description: descriptionField.input.value.trim(),
-          category: categoryField.input.value.trim(),
-          tags: tagsField.input.value.split(',').map((tag) => tag.trim()).filter(Boolean),
+          description: descInput.value.trim(),
+          category: categoryInput.value.trim(),
+          tags: tagsInput.value.split(',').map((t) => t.trim()).filter(Boolean),
         });
-
         const siteId = response.siteId || response.id;
         const status = await fetchInstallationStatus(siteId);
         state.sites = [{
@@ -316,626 +496,187 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
           siteId,
           installationStatus: status || response.installationStatus,
         }, ...state.sites];
-        state.keys = {
-          domain: response.domain,
-          siteId,
-          siteKey: response.siteKey,
-        };
-        saveCachedKeys(siteId, {
-          siteKey: response.siteKey,
-        });
-
+        if (response.siteKey) {
+          saveCachedKeys(siteId, { siteKey: response.siteKey });
+        }
         notifier.show({ message: 'Site created.', variant: 'success' });
-        domainField.input.value = '';
-        nameField.input.value = '';
-        descriptionField.input.value = '';
-        categoryField.input.value = '';
-        tagsField.input.value = '';
-        renderKeys();
+        addSiteModal.hide();
         renderSites();
       } catch (error) {
         const uiError = mapApiError(error);
-        const message = uiError.details?.errors?.domain?.[0];
-        if (message) {
-          domainField.error.textContent = message;
-        }
+        const domainMsg = uiError.details?.errors?.domain?.[0];
+        if (domainMsg) domainErr.textContent = domainMsg;
         notifier.show({ message: uiError.message, variant: 'danger' });
-      } finally {
-        submitButton.disabled = false;
-        submitButton.textContent = 'Create site';
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Create Site';
       }
     });
 
-    const card = createCard({
-      title: 'Create a new site',
-      body: form,
-    });
-    card.dataset.role = 'site-create-card';
-
-    if (state.sites.length > 0) {
-      submitButton.disabled = true;
-      submitButton.textContent = 'Site limit reached';
-    }
-    return card;
+    footer.appendChild(submitBtn);
+    addSiteModal.body.appendChild(footer);
   };
 
-  const sitesSection = document.createElement('div');
-  sitesSection.style.display = 'flex';
-  sitesSection.style.flexDirection = 'column';
-  sitesSection.style.gap = '16px';
+  addSiteBtn.addEventListener('click', () => {
+    buildAddSiteForm();
+    addSiteModal.show();
+  });
 
-  const fetchInstallationStatus = async (siteId) => {
-    if (!siteId) {
-      return null;
-    }
-
-    try {
-      return await client.request(`/sites/${siteId}/installation-status`);
-    } catch (error) {
-      return null;
-    }
-  };
-
+  // ── Render Sites ─────────────────────────────────────────────────────────
   const renderSites = () => {
-    sitesSection.innerHTML = '';
+    sitesListEl.innerHTML = '';
 
     if (state.loading) {
       const loading = document.createElement('div');
-      loading.textContent = 'Loading sites...';
-      loading.style.color = '#64748b';
-      sitesSection.appendChild(loading);
+      loading.style.cssText = 'color:var(--color-text-muted);padding:24px 0;';
+      loading.textContent = 'Loading sites…';
+      sitesListEl.appendChild(loading);
       return;
     }
 
     if (state.error) {
-      const errorMessage = document.createElement('div');
-      errorMessage.textContent = state.error;
-      errorMessage.style.color = '#dc2626';
-      sitesSection.appendChild(errorMessage);
+      const err = document.createElement('div');
+      err.style.cssText = 'color:var(--color-danger);padding:16px 0;';
+      err.textContent = state.error;
+      sitesListEl.appendChild(err);
       return;
     }
 
     if (!state.sites.length) {
       const empty = document.createElement('div');
-      empty.textContent = 'No sites yet. Create one to get started.';
-      empty.style.color = '#64748b';
-      sitesSection.appendChild(empty);
+      empty.className = 'card';
+      const emptyBody = document.createElement('div');
+      emptyBody.className = 'empty-state';
+      emptyBody.innerHTML = '<div class="empty-state-icon">🌐</div><div class="empty-state-title">No sites yet</div><div class="empty-state-desc">Add your first site to start tracking visitors and deploying the chat widget.</div>';
+      const emptyBtn = document.createElement('button');
+      emptyBtn.className = 'btn btn-primary';
+      emptyBtn.textContent = '+ Add Your First Site';
+      emptyBtn.style.marginTop = '16px';
+      emptyBtn.addEventListener('click', () => {
+        buildAddSiteForm();
+        addSiteModal.show();
+      });
+      emptyBody.appendChild(emptyBtn);
+      empty.appendChild(emptyBody);
+      sitesListEl.appendChild(empty);
       return;
     }
 
     state.sites.forEach((site) => {
       const siteId = getSiteId(site);
-      const siteCardBody = document.createElement('div');
-      siteCardBody.style.display = 'flex';
-      siteCardBody.style.flexDirection = 'column';
-      siteCardBody.style.gap = '16px';
+      const card = document.createElement('div');
+      card.className = 'card';
 
-      const summaryRow = document.createElement('div');
-      summaryRow.style.display = 'flex';
-      summaryRow.style.justifyContent = 'space-between';
-      summaryRow.style.alignItems = 'center';
-      summaryRow.style.flexWrap = 'wrap';
-      summaryRow.style.gap = '12px';
+      // ── Card header row ──
+      const cardHeader = document.createElement('div');
+      cardHeader.className = 'card-header';
 
-      const summaryLeft = document.createElement('div');
-      const nameLabel = document.createElement('div');
-      nameLabel.textContent = site.name || 'Unnamed site';
-      nameLabel.style.fontWeight = '600';
-      nameLabel.style.fontSize = '15px';
-      const domainLabel = document.createElement('div');
-      domainLabel.textContent = site.domain || 'Unknown domain';
-      domainLabel.style.fontSize = '13px';
-      domainLabel.style.color = '#64748b';
-      const originsCount = document.createElement('div');
-      originsCount.textContent = `Allowed origins: ${(site.allowedOrigins || []).length}`;
-      originsCount.style.fontSize = '13px';
-      originsCount.style.color = '#64748b';
-      summaryLeft.append(nameLabel, domainLabel, originsCount);
+      const headerLeft = document.createElement('div');
+      const domainTitle = document.createElement('h3');
+      domainTitle.className = 'card-title';
+      domainTitle.textContent = site.domain || site.name || 'Unnamed site';
+      const nameSubtitle = document.createElement('div');
+      nameSubtitle.className = 'card-subtitle';
+      nameSubtitle.textContent = site.name || '';
+      headerLeft.append(domainTitle, nameSubtitle);
 
-      const status = site.installationStatus;
-      const isConfigured = status?.isConfigured ?? ((site.allowedOrigins || []).length > 0);
+      const installStatus = site.installationStatus;
+      const isConfigured = installStatus?.isConfigured ?? ((site.allowedOrigins || []).length > 0);
       const statusBadge = createBadge({
-        text: `Configured: ${isConfigured ? 'Yes' : 'No'}`,
+        text: isConfigured ? 'Configured' : 'Not configured',
         variant: isConfigured ? 'success' : 'warning',
       });
 
-      const summaryActions = document.createElement('div');
-      summaryActions.style.display = 'flex';
-      summaryActions.style.gap = '8px';
-      summaryActions.style.flexWrap = 'wrap';
+      cardHeader.append(headerLeft, statusBadge);
 
-      const installButton = createButton({ label: 'Install' });
-      installButton.addEventListener('click', () => {
-        if (!siteId) {
-          window.location.hash = '#/install';
-          return;
-        }
-
-        const params = new URLSearchParams();
-        params.set('siteId', siteId);
-        if (site.domain) {
-          params.set('domain', site.domain);
-        }
-        const cachedKeys = loadCachedKeys(siteId);
-        if (cachedKeys?.siteKey) {
-          params.set('siteKey', cachedKeys.siteKey);
-        }
-        window.location.hash = `#/install?${params.toString()}`;
-      });
-
-      const configureButton = createButton({
-        label: state.expandedSiteId === siteId ? 'Hide' : 'Configure',
-      });
-      configureButton.addEventListener('click', () => {
-        if (state.expandedSiteId === siteId) {
-          state.expandedSiteId = null;
-          renderSites();
-          return;
-        }
-
-        state.expandedSiteId = siteId;
-        state.originsDraftBySiteId[siteId] = [...(site.allowedOrigins || [])];
-        if (typeof state.originInputBySiteId[siteId] !== 'string') {
-          state.originInputBySiteId[siteId] = '';
-        }
-        if (typeof state.originInputErrorBySiteId[siteId] !== 'string') {
-          state.originInputErrorBySiteId[siteId] = '';
-        }
-        if (typeof state.savingBySiteId[siteId] !== 'boolean') {
-          state.savingBySiteId[siteId] = false;
-        }
-        if (typeof state.errorBySiteId[siteId] === 'undefined') {
-          state.errorBySiteId[siteId] = null;
-        }
-        if (!state.profileDraftBySiteId[siteId]) {
-          state.profileDraftBySiteId[siteId] = {
-            name: site.name || '',
-            domain: site.domain || '',
-            description: site.description || '',
-            category: site.category || '',
-            tags: (site.tags || []).join(','),
-          };
-        }
-        if (typeof state.profileSavingBySiteId[siteId] !== 'boolean') {
-          state.profileSavingBySiteId[siteId] = false;
-        }
-        if (typeof state.profileErrorBySiteId[siteId] === 'undefined') {
-          state.profileErrorBySiteId[siteId] = '';
-        }
-        renderSites();
-      });
-
-      const regenButton = createButton({ label: 'Regenerate keys' });
-      regenButton.addEventListener('click', async () => {
-        regenButton.disabled = true;
-        regenButton.textContent = 'Regenerating...';
+      // ── Site ID row ──
+      const idRow = document.createElement('div');
+      idRow.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:12px;';
+      const idLabel = document.createElement('span');
+      idLabel.style.cssText = 'font-size:11px;color:var(--color-text-muted);font-weight:500;';
+      idLabel.textContent = 'Site ID:';
+      const idValue = document.createElement('span');
+      idValue.style.cssText = 'font-family:monospace;font-size:12px;color:var(--color-text-secondary);';
+      idValue.textContent = siteId || '—';
+      const copyIdBtn = document.createElement('button');
+      copyIdBtn.className = 'btn btn-secondary btn-sm';
+      copyIdBtn.textContent = 'Copy';
+      copyIdBtn.addEventListener('click', async () => {
         try {
-          const response = await client.request(`/sites/${siteId}/keys/regenerate`, {
-            method: 'POST',
-          });
-          state.keys = {
-            domain: site.domain,
-            siteId,
-            siteKey: response.siteKey,
-          };
-          saveCachedKeys(siteId, {
-            siteKey: response.siteKey,
-          });
-          renderKeys();
-          notifier.show({ message: 'Keys regenerated.', variant: 'success' });
-        } catch (error) {
-          const uiError = mapApiError(error);
-          notifier.show({ message: uiError.message, variant: 'danger' });
-        } finally {
-          regenButton.disabled = false;
-          regenButton.textContent = 'Regenerate keys';
+          await copyToClipboard(siteId);
+          notifier.show({ message: 'Site ID copied.', variant: 'success' });
+        } catch {
+          notifier.show({ message: 'Unable to copy.', variant: 'danger' });
         }
       });
-      summaryActions.append(installButton, configureButton, regenButton);
+      idRow.append(idLabel, idValue, copyIdBtn);
 
-      summaryRow.append(summaryLeft, statusBadge, summaryActions);
-
-      const originsEditor = document.createElement('div');
-      originsEditor.style.display = 'flex';
-      originsEditor.style.flexDirection = 'column';
-      originsEditor.style.gap = '10px';
-
-      const originsHeader = document.createElement('div');
-      originsHeader.textContent = 'Allowed origins';
-      originsHeader.style.fontWeight = '600';
-      originsHeader.style.fontSize = '13px';
-      originsHeader.style.color = '#475569';
-
-      const originList = state.originsDraftBySiteId[siteId] || [...(site.allowedOrigins || [])];
-      state.originsDraftBySiteId[siteId] = originList;
-
-      const originListContainer = document.createElement('div');
-      originListContainer.style.display = 'flex';
-      originListContainer.style.flexDirection = 'column';
-      originListContainer.style.gap = '8px';
-
-      const renderOriginList = () => {
-        originListContainer.innerHTML = '';
-
-        if (!originList.length) {
-          const emptyOrigin = document.createElement('div');
-          emptyOrigin.textContent = 'No origins configured yet.';
-          emptyOrigin.style.color = '#94a3b8';
-          emptyOrigin.style.fontSize = '13px';
-          originListContainer.appendChild(emptyOrigin);
-          return;
-        }
-
-        originList.forEach((origin, index) => {
-          const editingIndex = state.originEditingIndexBySiteId[siteId];
-          const isEditing = editingIndex === index;
-
-          const row = document.createElement('div');
-          row.style.display = 'flex';
-          row.style.alignItems = 'center';
-          row.style.justifyContent = 'space-between';
-          row.style.gap = '12px';
-          row.style.padding = '8px 10px';
-          row.style.border = '1px solid #e2e8f0';
-          row.style.borderRadius = '6px';
-
-          const text = document.createElement('span');
-          text.style.fontSize = '13px';
-
-          if (isEditing) {
-            const editInput = document.createElement('input');
-            editInput.type = 'text';
-            editInput.value = state.originEditingValueBySiteId[siteId] || origin;
-            editInput.style.flex = '1';
-            editInput.style.padding = '6px 8px';
-            editInput.style.border = '1px solid #cbd5e1';
-            editInput.style.borderRadius = '6px';
-            editInput.addEventListener('input', () => {
-              state.originEditingValueBySiteId[siteId] = editInput.value;
-            });
-            text.appendChild(editInput);
-          } else {
-            text.textContent = origin;
-          }
-
-          const actions = document.createElement('div');
-          actions.style.display = 'flex';
-          actions.style.gap = '8px';
-
-          const editButton = createButton({ label: isEditing ? 'Save edit' : 'Edit' });
-          editButton.addEventListener('click', () => {
-            if (!isEditing) {
-              state.originEditingIndexBySiteId[siteId] = index;
-              state.originEditingValueBySiteId[siteId] = origin;
-              renderSites();
-              return;
-            }
-
-            const normalizedResult = normalizeOrigin(state.originEditingValueBySiteId[siteId]);
-            if (!normalizedResult.value) {
-              state.originInputErrorBySiteId[siteId] = normalizedResult.error;
-              renderSites();
-              return;
-            }
-
-            originList[index] = normalizedResult.value;
-            state.originsDraftBySiteId[siteId] = [...originList];
-            state.originEditingIndexBySiteId[siteId] = null;
-            state.originEditingValueBySiteId[siteId] = '';
-            state.originInputErrorBySiteId[siteId] = '';
-            renderSites();
-          });
-
-          if (isEditing) {
-            const cancelEditButton = createButton({ label: 'Cancel' });
-            cancelEditButton.addEventListener('click', () => {
-              state.originEditingIndexBySiteId[siteId] = null;
-              state.originEditingValueBySiteId[siteId] = '';
-              renderSites();
-            });
-            actions.appendChild(cancelEditButton);
-          }
-
-          const removeButton = createButton({ label: 'Remove' });
-          removeButton.addEventListener('click', () => {
-            originList.splice(index, 1);
-            state.originsDraftBySiteId[siteId] = [...originList];
-            renderOriginList();
-          });
-
-          actions.append(editButton, removeButton);
-          row.append(text, actions);
-          originListContainer.appendChild(row);
-        });
+      // ── Stats row ──
+      const statsRow = document.createElement('div');
+      statsRow.style.cssText = 'display:flex;gap:24px;margin-bottom:16px;';
+      const makeStatItem = (label, value) => {
+        const item = document.createElement('div');
+        const itemLabel = document.createElement('div');
+        itemLabel.style.cssText = 'font-size:11px;color:var(--color-text-muted);font-weight:500;text-transform:uppercase;letter-spacing:0.05em;';
+        itemLabel.textContent = label;
+        const itemValue = document.createElement('div');
+        itemValue.style.cssText = 'font-size:13px;color:var(--color-text-secondary);margin-top:2px;';
+        itemValue.textContent = value;
+        item.append(itemLabel, itemValue);
+        return item;
       };
+      const originsCount = (site.allowedOrigins || []).length;
+      const createdDate = site.createdAtUtc
+        ? new Date(site.createdAtUtc).toLocaleDateString()
+        : '—';
+      statsRow.append(
+        makeStatItem('Allowed Origins', originsCount),
+        makeStatItem('Created', createdDate),
+      );
 
-      renderOriginList();
+      // ── Action buttons ──
+      const actions = document.createElement('div');
+      actions.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;';
 
-      const { wrapper: originInputWrapper, input: originInput } = createInput({
-        label: 'Add origin',
-        placeholder: 'https://app.example.com',
-      });
-      const helperText = document.createElement('div');
-      helperText.style.fontSize = '12px';
-      helperText.style.color = '#64748b';
-      helperText.textContent = ORIGIN_HELPER_TEXT;
-      originInputWrapper.appendChild(helperText);
+      const manageKeysBtn = document.createElement('button');
+      manageKeysBtn.className = 'btn btn-secondary btn-sm';
+      manageKeysBtn.textContent = 'Manage Keys';
+      manageKeysBtn.addEventListener('click', () => openKeysModal(site));
 
-      const originInputError = document.createElement('div');
-      originInputError.className = 'ui-field-error';
-      originInputError.textContent = state.originInputErrorBySiteId[siteId] || '';
-      originInputWrapper.appendChild(originInputError);
+      const editOriginsBtn = document.createElement('button');
+      editOriginsBtn.className = 'btn btn-secondary btn-sm';
+      editOriginsBtn.textContent = 'Edit Origins';
+      editOriginsBtn.addEventListener('click', () => openOriginsModal(site));
 
-      const addButton = createButton({ label: 'Add' });
-      addButton.style.alignSelf = 'flex-start';
-
-      const addLocalhostButton = createButton({ label: 'Add localhost current port' });
-      addLocalhostButton.style.alignSelf = 'flex-start';
-
-      const addRow = document.createElement('div');
-      addRow.style.display = 'flex';
-      addRow.style.flexDirection = 'column';
-      addRow.style.gap = '8px';
-      addRow.append(originInputWrapper, addButton, addLocalhostButton);
-
-      const addOriginToList = (rawOrigin) => {
-        const normalizedResult = normalizeOrigin(rawOrigin);
-        if (!normalizedResult.value) {
-          state.originInputErrorBySiteId[siteId] = normalizedResult.error;
-          renderSites();
-          return;
-        }
-
-        const normalized = normalizedResult.value;
-        const existing = originList.find(
-          (origin) => origin.toLowerCase() === normalized.toLowerCase()
+      const deleteBtn = document.createElement('button');
+      deleteBtn.className = 'btn btn-danger btn-sm';
+      deleteBtn.textContent = 'Delete';
+      deleteBtn.addEventListener('click', async () => {
+        const confirmed = window.confirm(
+          'Deleting this site will permanently delete all knowledge sources and their indexed content. This cannot be undone.'
         );
-        if (existing) {
-          notifier.show({ message: 'Origin already listed.', variant: 'warning' });
-          return;
-        }
-
-        state.originInputErrorBySiteId[siteId] = '';
-        originList.push(normalized);
-        state.originsDraftBySiteId[siteId] = [...originList];
-        state.originInputBySiteId[siteId] = '';
-        renderSites();
-      };
-
-      addButton.addEventListener('click', () => {
-        addOriginToList(originInput.value);
-      });
-
-      addLocalhostButton.addEventListener('click', () => {
-        if (window.location.hostname !== 'localhost') {
-          state.originInputErrorBySiteId[siteId] = ORIGIN_HELPER_TEXT;
-          renderSites();
-          return;
-        }
-
-        const localhostOrigin = `http://localhost:${window.location.port || 80}`;
-        addOriginToList(localhostOrigin);
-      });
-
-      originInput.value = state.originInputBySiteId[siteId] || '';
-      originInput.addEventListener('input', () => {
-        state.originInputBySiteId[siteId] = originInput.value;
-        state.originInputErrorBySiteId[siteId] = '';
-      });
-
-      const saveButton = createButton({ label: 'Save origins', variant: 'primary' });
-      saveButton.style.alignSelf = 'flex-start';
-      const saveError = document.createElement('div');
-      saveError.style.fontSize = '13px';
-      saveError.style.color = '#dc2626';
-      saveError.textContent = state.errorBySiteId[siteId] || '';
-      saveButton.disabled = Boolean(state.savingBySiteId[siteId]);
-      if (state.savingBySiteId[siteId]) {
-        saveButton.textContent = 'Saving...';
-      }
-      saveButton.addEventListener('click', async () => {
-        state.savingBySiteId[siteId] = true;
-        state.errorBySiteId[siteId] = null;
-        renderSites();
-
-        try {
-          const normalized = normalizeOrigins(originList);
-          const response = await client.request(`/sites/${siteId}/origins`, {
-            method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ allowedOrigins: normalized }),
-          });
-
-          const updatedSite = {
-            ...site,
-            ...response,
-            allowedOrigins: response.allowedOrigins || normalized,
-            installationStatus: response.installationStatus || site.installationStatus,
-          };
-
-          state.sites = state.sites.map((item) =>
-            getSiteId(item) === siteId ? updatedSite : item
-          );
-          state.originsDraftBySiteId[siteId] = [...(updatedSite.allowedOrigins || normalized)];
-          notifier.show({ message: 'Allowed origins updated.', variant: 'success' });
-          renderSites();
-        } catch (error) {
-          const uiError = mapApiError(error);
-          state.errorBySiteId[siteId] = uiError.message;
-          notifier.show({ message: uiError.message, variant: 'danger' });
-        } finally {
-          state.savingBySiteId[siteId] = false;
-          renderSites();
-        }
-      });
-
-      const profileEditor = document.createElement('div');
-      profileEditor.style.display = 'flex';
-      profileEditor.style.flexDirection = 'column';
-      profileEditor.style.gap = '10px';
-
-      const profileHeader = document.createElement('div');
-      profileHeader.textContent = 'Site profile';
-      profileHeader.style.fontWeight = '600';
-      profileHeader.style.fontSize = '13px';
-      profileHeader.style.color = '#475569';
-
-      const profileDraft = state.profileDraftBySiteId[siteId] || {
-        name: site.name || '',
-        domain: site.domain || '',
-        description: site.description || '',
-        category: site.category || '',
-        tags: (site.tags || []).join(','),
-      };
-      state.profileDraftBySiteId[siteId] = profileDraft;
-
-      const nameField = createField({ label: 'Name', placeholder: 'My Site' });
-      nameField.input.value = profileDraft.name;
-      nameField.input.addEventListener('input', () => {
-        profileDraft.name = nameField.input.value;
-      });
-
-      const domainField = createField({ label: 'Domain', placeholder: 'example.com' });
-      domainField.input.value = profileDraft.domain;
-      domainField.input.addEventListener('input', () => {
-        profileDraft.domain = domainField.input.value;
-      });
-
-      const descriptionField = createField({ label: 'Description', placeholder: 'What this site is about' });
-      descriptionField.input.value = profileDraft.description;
-      descriptionField.input.addEventListener('input', () => {
-        profileDraft.description = descriptionField.input.value;
-      });
-
-      const categoryField = createField({ label: 'Category', placeholder: 'e.g. Ecommerce' });
-      categoryField.input.value = profileDraft.category;
-      categoryField.input.addEventListener('input', () => {
-        profileDraft.category = categoryField.input.value;
-      });
-
-      const tagsField = createField({ label: 'Tags', placeholder: 'comma,separated,tags' });
-      tagsField.input.value = profileDraft.tags;
-      tagsField.input.addEventListener('input', () => {
-        profileDraft.tags = tagsField.input.value;
-      });
-
-      const profileActions = document.createElement('div');
-      profileActions.style.display = 'flex';
-      profileActions.style.gap = '8px';
-      profileActions.style.flexWrap = 'wrap';
-
-      const profileSaveButton = createButton({ label: 'Save profile', variant: 'primary' });
-      profileSaveButton.disabled = Boolean(state.profileSavingBySiteId[siteId]);
-      if (state.profileSavingBySiteId[siteId]) {
-        profileSaveButton.textContent = 'Saving...';
-      }
-
-      const profileError = document.createElement('div');
-      profileError.style.fontSize = '13px';
-      profileError.style.color = '#dc2626';
-      profileError.textContent = state.profileErrorBySiteId[siteId] || '';
-
-      profileSaveButton.addEventListener('click', async () => {
-        state.profileSavingBySiteId[siteId] = true;
-        state.profileErrorBySiteId[siteId] = '';
-        renderSites();
-
-        try {
-          const response = await client.sites.updateProfile(siteId, {
-            name: profileDraft.name,
-            domain: profileDraft.domain,
-            description: profileDraft.description,
-            category: profileDraft.category,
-            tags: profileDraft.tags.split(',').map((tag) => tag.trim()).filter(Boolean),
-          });
-
-          const updatedSite = {
-            ...site,
-            ...response,
-            installationStatus: response.installationStatus || site.installationStatus,
-          };
-
-          state.sites = state.sites.map((item) =>
-            getSiteId(item) === siteId ? updatedSite : item
-          );
-          state.profileDraftBySiteId[siteId] = {
-            name: updatedSite.name || '',
-            domain: updatedSite.domain || '',
-            description: updatedSite.description || '',
-            category: updatedSite.category || '',
-            tags: (updatedSite.tags || []).join(','),
-          };
-          notifier.show({ message: 'Site profile updated.', variant: 'success' });
-          renderSites();
-        } catch (error) {
-          const uiError = mapApiError(error);
-          state.profileErrorBySiteId[siteId] = uiError.message;
-          notifier.show({ message: uiError.message, variant: 'danger' });
-        } finally {
-          state.profileSavingBySiteId[siteId] = false;
-          renderSites();
-        }
-      });
-
-      const deleteButton = createButton({ label: 'Delete site' });
-      deleteButton.style.border = '1px solid #dc2626';
-      deleteButton.style.color = '#dc2626';
-      deleteButton.addEventListener('click', async () => {
-        const shouldDelete = window.confirm('Deleting this site will also permanently delete all knowledge sources and their indexed/searchable content. This action cannot be undone.');
-        if (!shouldDelete) {
-          return;
-        }
-
-        deleteButton.disabled = true;
-        deleteButton.textContent = 'Deleting...';
-
+        if (!confirmed) return;
+        deleteBtn.disabled = true;
+        deleteBtn.textContent = 'Deleting…';
         try {
           await client.sites.delete(siteId);
           state.sites = state.sites.filter((item) => getSiteId(item) !== siteId);
-          state.expandedSiteId = null;
-          if (!state.sites.length) {
-            page.querySelector('[data-role="site-create-card"]')?.remove();
-            page.insertBefore(createSiteFormCard(), keysSection);
-          }
           notifier.show({ message: 'Site deleted.', variant: 'success' });
           renderSites();
         } catch (error) {
-          const uiError = mapApiError(error);
-          notifier.show({ message: uiError.message, variant: 'danger' });
-          deleteButton.disabled = false;
-          deleteButton.textContent = 'Delete site';
+          notifier.show({ message: mapApiError(error).message, variant: 'danger' });
+          deleteBtn.disabled = false;
+          deleteBtn.textContent = 'Delete';
         }
       });
 
-      profileActions.append(profileSaveButton, deleteButton);
-      profileEditor.append(
-        profileHeader,
-        nameField.wrapper,
-        domainField.wrapper,
-        descriptionField.wrapper,
-        categoryField.wrapper,
-        tagsField.wrapper,
-        profileActions,
-        profileError);
+      actions.append(manageKeysBtn, editOriginsBtn, deleteBtn);
 
-      originsEditor.append(originsHeader, originListContainer, addRow, saveButton, saveError);
-
-      siteCardBody.append(summaryRow);
-      if (state.expandedSiteId === siteId) {
-        siteCardBody.append(profileEditor, originsEditor);
-      }
-
-      const card = createCard({
-        title: 'Site details',
-        body: siteCardBody,
-      });
-
-      sitesSection.appendChild(card);
+      card.append(cardHeader, idRow, statsRow, actions);
+      sitesListEl.appendChild(card);
     });
   };
 
+  // ── Load Sites ───────────────────────────────────────────────────────────
   const loadSites = async () => {
     state.loading = true;
     state.error = null;
@@ -945,10 +686,6 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
       const sites = await client.sites.list();
       state.sites = Array.isArray(sites) ? sites : [];
       state.loading = false;
-      page.querySelector('[data-role="site-create-card"]')?.remove();
-      if (!state.sites.length) {
-        page.insertBefore(createSiteFormCard(), keysSection);
-      }
       renderSites();
 
       await Promise.all(
@@ -964,16 +701,13 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
       );
       renderSites();
     } catch (error) {
-      const uiError = mapApiError(error);
       state.loading = false;
-      state.error = uiError.message;
-      page.querySelector('[data-role="site-create-card"]')?.remove();
-      page.insertBefore(createSiteFormCard(), keysSection);
+      state.error = mapApiError(error).message;
       renderSites();
     }
   };
 
-  page.append(header, keysSection, sitesSection);
+  page.append(pageHeader, sitesListEl);
   container.appendChild(page);
 
   loadSites();

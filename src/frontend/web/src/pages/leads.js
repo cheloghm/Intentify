@@ -35,6 +35,13 @@ export const renderLeadsView = (container, { apiClient, toast } = {}) => {
   const client = apiClient || createApiClient();
   const notifier = toast || createToastManager();
 
+  const KANBAN_COLUMNS = [
+    { key: 'evaluating', label: 'Evaluating', color: '#f59e0b' },
+    { key: 'deciding',   label: 'Deciding',   color: '#3b82f6' },
+    { key: 'won',        label: 'Won',         color: '#10b981' },
+    { key: 'lost',       label: 'Lost',        color: '#ef4444' },
+  ];
+
   const state = {
     sites: [],
     siteId: '',
@@ -43,6 +50,7 @@ export const renderLeadsView = (container, { apiClient, toast } = {}) => {
     selected: null,
     currentPage: 1,
     search: '',
+    view: 'table',
   };
 
   // ── Root ──────────────────────────────────────────────────────────────
@@ -62,7 +70,28 @@ export const renderLeadsView = (container, { apiClient, toast } = {}) => {
   subtitleEl.className = 'page-subtitle';
   subtitleEl.textContent = 'Captured leads from your website conversations';
   titleGroup.append(titleEl, subtitleEl);
-  pageHeader.append(titleGroup);
+  const viewToggleWrap = document.createElement('div');
+  viewToggleWrap.style.cssText = 'display:flex;gap:4px;';
+  const tableViewBtn = document.createElement('button');
+  tableViewBtn.className = 'btn btn-primary btn-sm';
+  tableViewBtn.textContent = '≡ Table';
+  const kanbanViewBtn = document.createElement('button');
+  kanbanViewBtn.className = 'btn btn-secondary btn-sm';
+  kanbanViewBtn.textContent = '⊞ Kanban';
+  tableViewBtn.addEventListener('click', () => {
+    state.view = 'table';
+    tableViewBtn.className = 'btn btn-primary btn-sm';
+    kanbanViewBtn.className = 'btn btn-secondary btn-sm';
+    renderView();
+  });
+  kanbanViewBtn.addEventListener('click', () => {
+    state.view = 'kanban';
+    tableViewBtn.className = 'btn btn-secondary btn-sm';
+    kanbanViewBtn.className = 'btn btn-primary btn-sm';
+    renderView();
+  });
+  viewToggleWrap.append(tableViewBtn, kanbanViewBtn);
+  pageHeader.append(titleGroup, viewToggleWrap);
 
   // ── Filters row ───────────────────────────────────────────────────────
   const filtersRow = document.createElement('div');
@@ -137,6 +166,10 @@ export const renderLeadsView = (container, { apiClient, toast } = {}) => {
 
   tableCard.append(tableCardHeader, tableWrapper, paginationEl);
 
+  // ── Kanban board ──────────────────────────────────────────────────────
+  const kanbanBoard = document.createElement('div');
+  kanbanBoard.style.cssText = 'display:none;gap:12px;overflow-x:auto;align-items:flex-start;';
+
   // ── Lead detail modal ─────────────────────────────────────────────────
   const modalOverlay = document.createElement('div');
   modalOverlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.5);display:none;align-items:center;justify-content:center;z-index:1000;padding:20px;';
@@ -183,7 +216,7 @@ export const renderLeadsView = (container, { apiClient, toast } = {}) => {
     });
     state.currentPage = 1;
     updateMetrics();
-    renderTable();
+    renderView();
   };
 
   const updateMetrics = () => {
@@ -472,6 +505,88 @@ export const renderLeadsView = (container, { apiClient, toast } = {}) => {
     }
   };
 
+  const renderKanban = () => {
+    kanbanBoard.innerHTML = '';
+
+    const grouped = { evaluating: [], deciding: [], won: [], lost: [] };
+    state.filtered.forEach((lead) => {
+      const key = (lead.opportunityLabel || '').toLowerCase().replace(/[^a-z]/g, '');
+      if (Object.prototype.hasOwnProperty.call(grouped, key)) {
+        grouped[key].push(lead);
+      } else {
+        grouped.evaluating.push(lead);
+      }
+    });
+
+    KANBAN_COLUMNS.forEach(({ key, label, color }) => {
+      const col = document.createElement('div');
+      col.style.cssText = 'min-width:240px;flex:1;display:flex;flex-direction:column;gap:8px;';
+
+      const colHeader = document.createElement('div');
+      colHeader.style.cssText = `padding:10px 12px;border-left:3px solid ${color};background:var(--color-surface);border-radius:4px;display:flex;align-items:center;gap:8px;margin-bottom:4px;`;
+      const colLabel = document.createElement('span');
+      colLabel.style.cssText = 'font-weight:600;font-size:13px;color:var(--color-text);';
+      colLabel.textContent = label;
+      const colCount = document.createElement('span');
+      colCount.className = 'badge badge-neutral';
+      colCount.textContent = grouped[key].length;
+      colHeader.append(colLabel, colCount);
+      col.appendChild(colHeader);
+
+      if (grouped[key].length === 0) {
+        const emptyCol = document.createElement('div');
+        emptyCol.style.cssText = 'text-align:center;padding:24px 12px;color:var(--color-text-muted);font-size:12px;border:1px dashed var(--color-border);border-radius:var(--radius);';
+        emptyCol.textContent = 'No leads';
+        col.appendChild(emptyCol);
+      } else {
+        grouped[key].forEach((lead) => {
+          const kanbanCard = document.createElement('div');
+          kanbanCard.className = 'card';
+          kanbanCard.style.cssText = 'cursor:pointer;padding:12px;display:flex;flex-direction:column;gap:4px;';
+          kanbanCard.addEventListener('click', () => openDetail(lead));
+
+          const cardName = document.createElement('div');
+          cardName.style.cssText = 'font-weight:600;font-size:13px;color:var(--color-text);';
+          cardName.textContent = lead.displayName || '(no name)';
+
+          const cardEmail = document.createElement('div');
+          cardEmail.style.cssText = 'font-size:12px;color:var(--color-text-muted);';
+          cardEmail.textContent = lead.primaryEmail || '(no email)';
+
+          kanbanCard.append(cardName, cardEmail);
+
+          if (lead.location) {
+            const cardLoc = document.createElement('div');
+            cardLoc.style.cssText = 'font-size:12px;color:var(--color-text-muted);';
+            cardLoc.textContent = `📍 ${lead.location}`;
+            kanbanCard.appendChild(cardLoc);
+          }
+
+          const cardDate = document.createElement('div');
+          cardDate.style.cssText = 'font-size:11px;color:var(--color-text-muted);margin-top:4px;';
+          cardDate.textContent = formatDate(lead.createdAtUtc);
+          kanbanCard.appendChild(cardDate);
+
+          col.appendChild(kanbanCard);
+        });
+      }
+
+      kanbanBoard.appendChild(col);
+    });
+  };
+
+  const renderView = () => {
+    if (state.view === 'kanban') {
+      tableCard.style.display = 'none';
+      kanbanBoard.style.display = 'flex';
+      renderKanban();
+    } else {
+      tableCard.style.display = '';
+      kanbanBoard.style.display = 'none';
+      renderTable();
+    }
+  };
+
   const setSiteOptions = () => {
     siteSelect.innerHTML = '';
     const allOpt = document.createElement('option');
@@ -509,11 +624,11 @@ export const renderLeadsView = (container, { apiClient, toast } = {}) => {
   });
 
   // ── Assemble ──────────────────────────────────────────────────────────
-  page.append(pageHeader, filtersRow, metricsGrid, tableCard);
+  page.append(pageHeader, filtersRow, metricsGrid, tableCard, kanbanBoard);
   container.appendChild(page);
 
   updateMetrics();
-  renderTable();
+  renderView();
 
   const init = async () => {
     try {

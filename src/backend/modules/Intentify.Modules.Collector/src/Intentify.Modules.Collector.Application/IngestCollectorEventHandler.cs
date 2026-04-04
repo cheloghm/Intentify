@@ -79,7 +79,9 @@ public sealed class IngestCollectorEventHandler
             collectorEvent.Url,
             collectorEvent.Referrer,
             collectorEvent.SessionId,
-            TryGetString(command.Data, "firstPartyId") ?? TryGetString(command.Data, "fpid"),
+            command.VisitorId ?? TryGetString(command.Data, "firstPartyId") ?? TryGetString(command.Data, "fpid"),
+            command.VisitorId,
+            command.Fingerprint,
             TryGetString(command.Data, "userAgent"),
             TryGetString(command.Data, "language"),
             TryGetString(command.Data, "platform"));

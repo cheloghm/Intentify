@@ -58,6 +58,10 @@
   }
 
 
+  function getVisitorId() {
+    try { return localStorage.getItem('intentify_vid') || ''; } catch (e) { return ''; }
+  }
+
   function clearStoredSession() {
     sessionId = '';
     try {
@@ -647,7 +651,7 @@
         return fetch(endpoint('/engage/chat/send?widgetKey=' + encodeURIComponent(widgetKey)), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ widgetKey: widgetKey, sessionId: sessionId, message: message, collectorSessionId: collectorSessionId })
+          body: JSON.stringify({ widgetKey: widgetKey, sessionId: sessionId, message: message, collectorSessionId: collectorSessionId, visitorId: getVisitorId() || null })
         });
       })
       .then(function(response) {

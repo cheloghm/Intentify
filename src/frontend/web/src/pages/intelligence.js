@@ -16,13 +16,13 @@ const AUDIENCE_OPTIONS = ['', 'B2B', 'B2C'];
 
 const createSelectField = ({ label, value, options }) => {
   const wrapper = document.createElement('label');
-  wrapper.className = 'ui-input';
+  wrapper.style.cssText = 'display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:500;color:var(--color-text-muted);';
 
   const labelText = document.createElement('span');
   labelText.textContent = label;
 
   const select = document.createElement('select');
-  select.className = 'ui-input__field';
+  select.className = 'form-select';
 
   options.forEach((option) => {
     const optionNode = document.createElement('option');
@@ -54,46 +54,38 @@ const formatTimestamp = (value) => {
   return Number.isNaN(parsed.getTime()) ? '—' : parsed.toLocaleString();
 };
 
+const createMetricCard = (label, value, icon = '') => {
+  const card = document.createElement('div');
+  card.className = 'metric-card';
+  if (icon) {
+    const iconEl = document.createElement('div');
+    iconEl.className = 'metric-icon';
+    iconEl.style.background = 'var(--brand-primary-light)';
+    iconEl.textContent = icon;
+    card.appendChild(iconEl);
+  }
+  const labelEl = document.createElement('div');
+  labelEl.className = 'metric-label';
+  labelEl.textContent = label;
+  const valueEl = document.createElement('div');
+  valueEl.className = 'metric-value';
+  valueEl.textContent = String(value ?? '—');
+  card.append(labelEl, valueEl);
+  return card;
+};
+
 const createSummaryRows = (dashboard) => {
-  const list = document.createElement('div');
-  list.style.display = 'grid';
-  list.style.gridTemplateColumns = 'repeat(auto-fit, minmax(180px, 1fr))';
-  list.style.gap = '12px';
+  const grid = document.createElement('div');
+  grid.className = 'grid-4';
 
-  const items = [
-    { label: 'Site', value: dashboard.siteId || '—' },
-    { label: 'Provider', value: dashboard.provider || '—' },
-    { label: 'Audience', value: dashboard.audienceType || 'Any' },
-    { label: 'Total Items', value: dashboard.totalItems ?? 0 },
-    { label: 'Average Score', value: dashboard.summary?.averageScore ?? 0 },
-    { label: 'Max Score', value: dashboard.summary?.maxScore ?? 0 },
-    { label: 'Ranked Items', value: dashboard.summary?.rankedItemsCount ?? 0 },
-    { label: 'Top Query', value: dashboard.summary?.topQueryOrTopic || '—' },
-    { label: 'Refreshed At', value: formatTimestamp(dashboard.refreshedAtUtc) },
-  ];
+  grid.append(
+    createMetricCard('Total Trend Items', dashboard.totalItems ?? 0, '📊'),
+    createMetricCard('Average Score', dashboard.summary?.averageScore ?? 0, '⭐'),
+    createMetricCard('Top Ranked Items', dashboard.summary?.rankedItemsCount ?? 0, '🏆'),
+    createMetricCard('Date Range', dashboard.timeWindow || '—', '📅'),
+  );
 
-  items.forEach(({ label, value }) => {
-    const item = document.createElement('div');
-    item.style.background = '#f8fafc';
-    item.style.border = '1px solid #e2e8f0';
-    item.style.borderRadius = '8px';
-    item.style.padding = '10px 12px';
-
-    const labelNode = document.createElement('div');
-    labelNode.style.fontSize = '12px';
-    labelNode.style.color = '#64748b';
-    labelNode.textContent = label;
-
-    const valueNode = document.createElement('div');
-    valueNode.style.fontWeight = '600';
-    valueNode.style.color = '#0f172a';
-    valueNode.textContent = String(value);
-
-    item.append(labelNode, valueNode);
-    list.appendChild(item);
-  });
-
-  return list;
+  return grid;
 };
 
 const parseCsv = (value) =>
@@ -121,6 +113,18 @@ export const renderIntelligenceView = (container, { apiClient, toast } = {}) => 
   page.style.gap = '16px';
   page.style.width = '100%';
   page.style.maxWidth = '1100px';
+
+  const pageHeader = document.createElement('div');
+  pageHeader.className = 'page-header';
+  const headerLeft = document.createElement('div');
+  const pageTitle = document.createElement('h2');
+  pageTitle.className = 'page-title';
+  pageTitle.textContent = 'Market Intelligence';
+  const pageSubtitle = document.createElement('p');
+  pageSubtitle.className = 'page-subtitle';
+  pageSubtitle.textContent = 'Search trends and keyword insights for your market';
+  headerLeft.append(pageTitle, pageSubtitle);
+  pageHeader.appendChild(headerLeft);
 
   const profileStatusText = document.createElement('div');
   profileStatusText.style.color = '#475569';
@@ -185,29 +189,44 @@ export const renderIntelligenceView = (container, { apiClient, toast } = {}) => 
   statusText.style.color = '#334155';
 
   const filterGrid = document.createElement('div');
-  filterGrid.style.display = 'grid';
-  filterGrid.style.gridTemplateColumns = 'repeat(auto-fit, minmax(180px, 1fr))';
-  filterGrid.style.gap = '12px';
+  filterGrid.style.cssText = 'display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;';
 
-  const keywordField = createInput({ label: 'Keyword', value: state.filters.keyword, placeholder: 'e.g. lead generation' });
-  const categoryField = createInput({ label: 'Category', value: state.filters.category, placeholder: 'Uses profile default when blank' });
-  const locationField = createInput({ label: 'Location', value: state.filters.location, placeholder: 'Uses profile default when blank' });
-  const providerField = createInput({ label: 'Provider', value: state.filters.provider, placeholder: 'Google' });
+  const makeFilterInput = (label, placeholder, initialValue = '') => {
+    const wrapper = document.createElement('label');
+    wrapper.style.cssText = 'display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:500;color:var(--color-text-muted);flex:1;min-width:140px;';
+    const labelEl = document.createElement('span');
+    labelEl.textContent = label;
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'form-input';
+    input.placeholder = placeholder;
+    input.value = initialValue;
+    wrapper.append(labelEl, input);
+    return { wrapper, input };
+  };
+
+  const keywordField = makeFilterInput('Keyword', 'e.g. lead generation', state.filters.keyword);
+  const categoryField = makeFilterInput('Category', 'Profile default', state.filters.category);
+  const locationField = makeFilterInput('Location', 'Profile default', state.filters.location);
+  const providerField = makeFilterInput('Provider', 'Google', state.filters.provider);
   const timeWindowField = createSelectField({
     label: 'Time Window',
     value: state.filters.timeWindow,
     options: TIME_WINDOW_OPTIONS,
   });
+  timeWindowField.wrapper.style.flex = '0 0 auto';
   const audienceTypeField = createSelectField({
     label: 'Audience Type',
     value: state.filters.audienceType,
     options: AUDIENCE_OPTIONS,
   });
+  audienceTypeField.wrapper.style.flex = '0 0 auto';
   const siteField = createSelectField({
     label: 'Site',
     value: state.filters.siteId,
     options: [{ value: '', label: 'Loading sites...' }],
   });
+  siteField.wrapper.style.flex = '0 0 160px';
 
   const actions = document.createElement('div');
   actions.style.display = 'flex';
@@ -403,28 +422,78 @@ export const renderIntelligenceView = (container, { apiClient, toast } = {}) => 
     const items = Array.isArray(dashboard.topItems) ? dashboard.topItems : [];
     if (!items.length) {
       const empty = document.createElement('div');
-      empty.style.color = '#475569';
-      empty.textContent = 'No trends found for the selected filters.';
+      empty.className = 'empty-state';
+      const emptyDesc = document.createElement('div');
+      emptyDesc.className = 'empty-state-desc';
+      emptyDesc.textContent = 'No trends found for the selected filters.';
+      empty.appendChild(emptyDesc);
       trendsBody.replaceChildren(empty);
       return;
     }
 
-    const table = createTable({
-      columns: [
-        { key: 'queryOrTopic', label: 'Query / Topic' },
-        { key: 'score', label: 'Score' },
-        { key: 'rank', label: 'Rank' },
-        { key: 'provider', label: 'Provider' },
-      ],
-      rows: items.map((item) => ({
-        queryOrTopic: item.queryOrTopic,
-        score: item.score,
-        rank: item.rank ?? '—',
-        provider: item.provider || dashboard.provider || '—',
-      })),
+    const tableWrap = document.createElement('div');
+    tableWrap.className = 'table-wrapper';
+    const table = document.createElement('table');
+    table.className = 'data-table';
+
+    const thead = document.createElement('thead');
+    const headRow = document.createElement('tr');
+    ['Keyword / Topic', 'Score', 'Rank', 'Provider', 'Category'].forEach((col) => {
+      const th = document.createElement('th');
+      th.textContent = col;
+      headRow.appendChild(th);
+    });
+    thead.appendChild(headRow);
+
+    const tbody = document.createElement('tbody');
+    items.forEach((item) => {
+      const tr = document.createElement('tr');
+
+      const topicCell = document.createElement('td');
+      topicCell.className = 'text-primary';
+      topicCell.textContent = item.queryOrTopic || '—';
+
+      const scoreCell = document.createElement('td');
+      const scoreVal = Number(item.score) || 0;
+      const scoreWrap = document.createElement('div');
+      scoreWrap.style.cssText = 'display:flex;align-items:center;gap:8px;min-width:80px;';
+      const scoreNum = document.createElement('span');
+      scoreNum.style.cssText = 'font-size:12px;font-weight:500;min-width:28px;';
+      scoreNum.textContent = scoreVal;
+      const barTrack = document.createElement('div');
+      barTrack.style.cssText = 'flex:1;background:var(--color-border);border-radius:4px;height:4px;';
+      const barFill = document.createElement('div');
+      const pct = Math.min(100, Math.max(0, scoreVal));
+      barFill.style.cssText = `width:${pct}%;background:var(--brand-primary);height:4px;border-radius:4px;`;
+      barTrack.appendChild(barFill);
+      scoreWrap.append(scoreNum, barTrack);
+      scoreCell.appendChild(scoreWrap);
+
+      const rankCell = document.createElement('td');
+      rankCell.textContent = item.rank != null ? String(item.rank) : '—';
+
+      const providerCell = document.createElement('td');
+      const providerVal = item.provider || dashboard.provider || '—';
+      if (providerVal !== '—') {
+        const badge = document.createElement('span');
+        badge.className = 'badge badge-info';
+        badge.textContent = providerVal;
+        providerCell.appendChild(badge);
+      } else {
+        providerCell.textContent = '—';
+      }
+
+      const categoryCell = document.createElement('td');
+      categoryCell.style.color = 'var(--color-text-muted)';
+      categoryCell.textContent = item.category || dashboard.category || '—';
+
+      tr.append(topicCell, scoreCell, rankCell, providerCell, categoryCell);
+      tbody.appendChild(tr);
     });
 
-    trendsBody.replaceChildren(table);
+    table.append(thead, tbody);
+    tableWrap.appendChild(table);
+    trendsBody.replaceChildren(tableWrap);
   };
 
   const loadDashboard = async () => {
@@ -515,15 +584,16 @@ export const renderIntelligenceView = (container, { apiClient, toast } = {}) => 
 
   filterGrid.append(
     siteField.wrapper,
+    keywordField.wrapper,
     categoryField.wrapper,
     locationField.wrapper,
     timeWindowField.wrapper,
     audienceTypeField.wrapper,
     providerField.wrapper,
-    keywordField.wrapper,
   );
 
   page.append(
+    pageHeader,
     createCard({
       title: 'Intelligence Profile',
       body: (() => {

@@ -9,4 +9,6 @@ public sealed record CollectorEventRequest(
     string? Referrer,
     DateTime? TsUtc,
     string? SessionId = null,
+    string? VisitorId = null,
+    string? Fingerprint = null,
     JsonElement? Data = null);

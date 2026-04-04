@@ -12,6 +12,8 @@ internal static class CollectorEndpoints
 {
     private const int MaxContentLengthBytes = 32 * 1024;
     private const int MaxSessionIdLength = 128;
+    private const int MaxVisitorIdLength = 128;
+    private const int MaxFingerprintLength = 64;
     private const int MaxSiteKeyLength = 256;
     private const int MaxTypeLength = 64;
     private const int MaxUrlLength = 2048;
@@ -129,6 +131,8 @@ internal static class CollectorEndpoints
             request.TsUtc,
             TryResolveOrigin(context.Request),
             resolvedSessionId,
+            NormalizeOptional(request.VisitorId),
+            NormalizeOptional(request.Fingerprint),
             request.Data),
             context.RequestAborted);
 
@@ -223,6 +227,16 @@ internal static class CollectorEndpoints
         if (!string.IsNullOrWhiteSpace(request.SessionId) && request.SessionId.Trim().Length > MaxSessionIdLength)
         {
             errors["sessionId"] = ["Session id is too long."];
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.VisitorId) && request.VisitorId.Trim().Length > MaxVisitorIdLength)
+        {
+            errors["visitorId"] = ["Visitor id is too long."];
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Fingerprint) && request.Fingerprint.Trim().Length > MaxFingerprintLength)
+        {
+            errors["fingerprint"] = ["Fingerprint is too long."];
         }
 
         if (request.Data is { } data && data.ValueKind != JsonValueKind.Null && data.ValueKind != JsonValueKind.Undefined)

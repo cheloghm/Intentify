@@ -116,6 +116,7 @@ public sealed class EngageModule : IAppModule
         services.AddSingleton<CreateTicketHandler>();
         services.AddSingleton<ListTicketsHandler>();
         services.AddSingleton<UpdateTicketHandler>();
+        services.AddSingleton<GenerateDigestHandler>();
     }
 
     public void MapEndpoints(IEndpointRouteBuilder endpoints)
@@ -132,5 +133,6 @@ public sealed class EngageModule : IAppModule
         adminGroup.MapGet("/conversations", EngageEndpoints.ListConversationsAsync);
         adminGroup.MapGet("/opportunities/analytics", EngageEndpoints.GetOpportunityAnalyticsAsync);
         adminGroup.MapGet("/conversations/{sessionId}/messages", EngageEndpoints.GetConversationMessagesAsync);
+        adminGroup.MapPost("/digest/send", EngageEndpoints.DigestSendAsync);
     }
 }

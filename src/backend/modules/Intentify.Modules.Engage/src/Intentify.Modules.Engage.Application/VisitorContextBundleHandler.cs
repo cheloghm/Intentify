@@ -22,6 +22,7 @@ public sealed class VisitorContextBundleHandler
     private readonly ILeadVisitorLinker _leadVisitorLinker;
     private readonly RetrieveTopChunksHandler _retrieveTopChunksHandler;
     private readonly IKnowledgeQuickFactsRepository _quickFactsRepository;
+    private readonly ISiteQuickFactRepository _siteQuickFactRepository;
     private readonly GetVisitorDetailHandler _getVisitorDetailHandler;
     private readonly GetVisitorTimelineHandler _getVisitorTimelineHandler;
     private readonly ListTicketsHandler _listTicketsHandler;
@@ -34,6 +35,7 @@ public sealed class VisitorContextBundleHandler
         ILeadVisitorLinker leadVisitorLinker,
         RetrieveTopChunksHandler retrieveTopChunksHandler,
         IKnowledgeQuickFactsRepository quickFactsRepository,
+        ISiteQuickFactRepository siteQuickFactRepository,
         GetVisitorDetailHandler getVisitorDetailHandler,
         GetVisitorTimelineHandler getVisitorTimelineHandler,
         ListTicketsHandler listTicketsHandler,
@@ -45,6 +47,7 @@ public sealed class VisitorContextBundleHandler
         _leadVisitorLinker = leadVisitorLinker;
         _retrieveTopChunksHandler = retrieveTopChunksHandler;
         _quickFactsRepository = quickFactsRepository;
+        _siteQuickFactRepository = siteQuickFactRepository;
         _getVisitorDetailHandler = getVisitorDetailHandler;
         _getVisitorTimelineHandler = getVisitorTimelineHandler;
         _listTicketsHandler = listTicketsHandler;
@@ -146,6 +149,24 @@ public sealed class VisitorContextBundleHandler
                             f.ExtractedAtUtc))
                         .ToArray();
                 }
+            }
+        }
+        catch
+        {
+            // Optional source: fail-soft.
+        }
+
+        // Load manually-entered site quick facts
+        IReadOnlyCollection<string>? manualFacts = null;
+        try
+        {
+            var siteFactRecords = await _siteQuickFactRepository.ListAsync(query.TenantId, query.SiteId, cancellationToken);
+            if (siteFactRecords.Count > 0)
+            {
+                manualFacts = siteFactRecords
+                    .Where(f => !string.IsNullOrWhiteSpace(f.Fact))
+                    .Select(f => f.Fact.Trim())
+                    .ToArray();
             }
         }
         catch
@@ -344,7 +365,8 @@ public sealed class VisitorContextBundleHandler
             ticketsSummary,
             promoSummary,
             intelligenceSnapshot,
-            quickFacts);
+            quickFacts,
+            manualFacts);
 
         return OperationResult<VisitorContextBundle>.Success(bundle);
     }

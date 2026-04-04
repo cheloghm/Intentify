@@ -127,7 +127,9 @@ internal static class EngageEndpoints
         var resolvedCollectorSessionId = NormalizeOptional(request.CollectorSessionId)
             ?? NormalizeOptional(context.Request.Cookies["intentify_sid"]);
 
-        var result = await handler.HandleAsync(new ChatSendCommand(resolvedWidgetKey, sessionId, request.Message, resolvedCollectorSessionId), context.RequestAborted);
+        var resolvedVisitorId = NormalizeOptional(request.VisitorId);
+
+        var result = await handler.HandleAsync(new ChatSendCommand(resolvedWidgetKey, sessionId, request.Message, resolvedCollectorSessionId, resolvedVisitorId), context.RequestAborted);
         return result.Status switch
         {
             OperationStatus.ValidationFailed => Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(result.Errors!.Errors)),
@@ -183,7 +185,7 @@ internal static class EngageEndpoints
         return result.Status switch
         {
             OperationStatus.NotFound => Results.NotFound(),
-            _ => Results.Ok(new EngageBotResponse(result.Value!.BotId.ToString("N"), result.Value.Name, result.Value.PrimaryColor, result.Value.LauncherVisible, result.Value.Tone, result.Value.Verbosity, result.Value.FallbackStyle, result.Value.BusinessDescription, result.Value.Industry, result.Value.ServicesDescription, result.Value.GeoFocus, result.Value.PersonalityDescriptor))
+            _ => Results.Ok(new EngageBotResponse(result.Value!.BotId.ToString("N"), result.Value.Name, result.Value.PrimaryColor, result.Value.LauncherVisible, result.Value.Tone, result.Value.Verbosity, result.Value.FallbackStyle, result.Value.BusinessDescription, result.Value.Industry, result.Value.ServicesDescription, result.Value.GeoFocus, result.Value.PersonalityDescriptor, result.Value.DigestEmailEnabled, result.Value.DigestEmailRecipients, result.Value.DigestEmailFrequency))
         };
     }
 
@@ -211,12 +213,12 @@ internal static class EngageEndpoints
             return Results.Unauthorized();
         }
 
-        var result = await handler.HandleAsync(new UpdateEngageBotCommand(tenantId.Value, parsedSiteId, request.Name, request.PrimaryColor, request.LauncherVisible, request.Tone, request.Verbosity, request.FallbackStyle, request.BusinessDescription, request.Industry, request.ServicesDescription, request.GeoFocus, request.PersonalityDescriptor), context.RequestAborted);
+        var result = await handler.HandleAsync(new UpdateEngageBotCommand(tenantId.Value, parsedSiteId, request.Name, request.PrimaryColor, request.LauncherVisible, request.Tone, request.Verbosity, request.FallbackStyle, request.BusinessDescription, request.Industry, request.ServicesDescription, request.GeoFocus, request.PersonalityDescriptor, request.DigestEmailEnabled, request.DigestEmailRecipients, request.DigestEmailFrequency), context.RequestAborted);
         return result.Status switch
         {
             OperationStatus.ValidationFailed => Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(result.Errors!.Errors)),
             OperationStatus.NotFound => Results.NotFound(),
-            _ => Results.Ok(new EngageBotResponse(result.Value!.BotId.ToString("N"), result.Value.Name, result.Value.PrimaryColor, result.Value.LauncherVisible, result.Value.Tone, result.Value.Verbosity, result.Value.FallbackStyle, result.Value.BusinessDescription, result.Value.Industry, result.Value.ServicesDescription, result.Value.GeoFocus, result.Value.PersonalityDescriptor))
+            _ => Results.Ok(new EngageBotResponse(result.Value!.BotId.ToString("N"), result.Value.Name, result.Value.PrimaryColor, result.Value.LauncherVisible, result.Value.Tone, result.Value.Verbosity, result.Value.FallbackStyle, result.Value.BusinessDescription, result.Value.Industry, result.Value.ServicesDescription, result.Value.GeoFocus, result.Value.PersonalityDescriptor, result.Value.DigestEmailEnabled, result.Value.DigestEmailRecipients, result.Value.DigestEmailFrequency))
         };
     }
 
@@ -365,6 +367,26 @@ internal static class EngageEndpoints
     }
 
 
+
+    public static async Task<IResult> DigestSendAsync(DigestSendRequest request, HttpContext context, GenerateDigestHandler handler)
+    {
+        if (string.IsNullOrWhiteSpace(request.SiteId) || !Guid.TryParse(request.SiteId, out var parsedSiteId))
+        {
+            return Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(new Dictionary<string, string[]>
+            {
+                ["siteId"] = ["Site id is required and must be a valid GUID."]
+            }));
+        }
+
+        var tenantId = TryGetTenantId(context.User);
+        if (tenantId is null)
+        {
+            return Results.Unauthorized();
+        }
+
+        var result = await handler.HandleAsync(new GenerateDigestQuery(tenantId.Value, parsedSiteId), context.RequestAborted);
+        return Results.Ok(result);
+    }
 
     private static IResult? EnsurePublicOriginAllowed(
         Intentify.Modules.Sites.Domain.Site? site,

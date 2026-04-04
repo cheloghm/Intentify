@@ -174,6 +174,11 @@ public static class EngageSalesGuideline
         sb.AppendLine("  name, email, phone (if given), location, goal (what they want to achieve),");
         sb.AppendLine("  type (project or business type), timeline, budget, constraints, decisionStage.");
         sb.AppendLine();
+        sb.AppendLine("When createTicket = true, also set ticketType:");
+        sb.AppendLine("  \"commercial\" — visitor has a business need (service, quote, consultation, sales opportunity).");
+        sb.AppendLine("  \"support\" — visitor has a problem with something that already exists (bug, broken feature, complaint).");
+        sb.AppendLine("  Default to \"commercial\" when there is any sales potential.");
+        sb.AppendLine();
         sb.AppendLine("When createTicket = true, ticketSummary must contain all of the following:");
         sb.AppendLine("  - Visitor overview: who they are and why they came");
         sb.AppendLine("  - What they need: your synthesised understanding, not a raw transcript");

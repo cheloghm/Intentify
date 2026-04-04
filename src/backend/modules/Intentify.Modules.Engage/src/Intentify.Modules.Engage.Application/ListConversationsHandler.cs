@@ -3,18 +3,31 @@ namespace Intentify.Modules.Engage.Application;
 public sealed class ListConversationsHandler
 {
     private readonly IEngageChatSessionRepository _sessionRepository;
+    private readonly IEngageHandoffTicketRepository _handoffTicketRepository;
 
-    public ListConversationsHandler(IEngageChatSessionRepository sessionRepository)
+    public ListConversationsHandler(
+        IEngageChatSessionRepository sessionRepository,
+        IEngageHandoffTicketRepository handoffTicketRepository)
     {
         _sessionRepository = sessionRepository;
+        _handoffTicketRepository = handoffTicketRepository;
     }
 
     public async Task<IReadOnlyCollection<ConversationSummaryResult>> HandleAsync(ListConversationsQuery query, CancellationToken cancellationToken = default)
     {
         var sessions = await _sessionRepository.ListBySiteAsync(query.TenantId, query.SiteId, query.CollectorSessionId, cancellationToken);
+        var handoffs = await _handoffTicketRepository.ListBySiteAsync(query.TenantId, query.SiteId, cancellationToken);
+
+        var ticketSessionIds = handoffs.Select(h => h.SessionId).ToHashSet();
+
         return sessions
             .OrderByDescending(item => item.UpdatedAtUtc)
-            .Select(item => new ConversationSummaryResult(item.Id, item.CreatedAtUtc, item.UpdatedAtUtc))
+            .Select(item => new ConversationSummaryResult(
+                item.Id,
+                item.CreatedAtUtc,
+                item.UpdatedAtUtc,
+                HasLead: !string.IsNullOrWhiteSpace(item.CapturedEmail) || !string.IsNullOrWhiteSpace(item.CollectorSessionId),
+                HasTicket: ticketSessionIds.Contains(item.Id)))
             .ToArray();
     }
 }
@@ -63,7 +76,7 @@ public sealed class GetOpportunityAnalyticsHandler
         var phoneCount = commercialSessions.Count(item => string.Equals(item.CapturedPreferredContactMethod, "Phone", StringComparison.Ordinal));
         var unknownCount = Math.Max(0, commercialSessions.Length - emailCount - phoneCount);
 
-        var overTime = commercialSessions
+        var overTime = sessions
             .GroupBy(item => item.CreatedAtUtc.Date)
             .OrderBy(item => item.Key)
             .Select(item => new OpportunityDailyPointResult(item.Key, item.Count()))

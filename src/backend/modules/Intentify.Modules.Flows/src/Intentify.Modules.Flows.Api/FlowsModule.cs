@@ -21,6 +21,7 @@ public sealed class FlowsModule : IAppModule
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configuration);
 
+        services.AddHttpClient();
         services.AddSingleton<IFlowsRepository, FlowsRepository>();
         services.AddSingleton<IFlowRunsRepository, FlowRunsRepository>();
 

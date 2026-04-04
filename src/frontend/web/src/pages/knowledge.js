@@ -77,14 +77,22 @@ export const renderKnowledgeView = (container, { apiClient, toast } = {}) => {
   page.style.maxWidth = '980px';
 
   const header = document.createElement('div');
+  header.className = 'page-header';
+  const headerLeft = document.createElement('div');
   const title = document.createElement('h2');
-  title.textContent = 'Knowledge';
-  title.style.margin = '0';
+  title.className = 'page-title';
+  title.textContent = 'Knowledge Base';
   const subtitle = document.createElement('p');
-  subtitle.textContent = 'Add sources, index content, and test retrieval.';
-  subtitle.style.margin = '6px 0 0';
-  subtitle.style.color = '#64748b';
-  header.append(title, subtitle);
+  subtitle.className = 'page-subtitle';
+  subtitle.textContent = 'Manage knowledge sources, quick facts, and test AI retrieval.';
+  headerLeft.append(title, subtitle);
+  const addSourceHeaderBtn = document.createElement('button');
+  addSourceHeaderBtn.className = 'btn btn-primary';
+  addSourceHeaderBtn.textContent = '+ Add Source';
+  addSourceHeaderBtn.addEventListener('click', () => {
+    addSourceBody.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
+  header.append(headerLeft, addSourceHeaderBtn);
 
   const siteRow = document.createElement('div');
   siteRow.style.display = 'flex';
@@ -173,7 +181,7 @@ export const renderKnowledgeView = (container, { apiClient, toast } = {}) => {
       factText.textContent = item.fact || item.text || item.content || String(item);
 
       const deleteBtn = document.createElement('button');
-      deleteBtn.className = 'btn btn-secondary btn-sm';
+      deleteBtn.className = 'btn btn-danger btn-sm';
       deleteBtn.textContent = '×';
       deleteBtn.setAttribute('aria-label', 'Delete fact');
       deleteBtn.addEventListener('click', async () => {
@@ -496,85 +504,87 @@ export const renderKnowledgeView = (container, { apiClient, toast } = {}) => {
       return;
     }
 
+    const tableWrap = document.createElement('div');
+    tableWrap.className = 'table-wrapper';
     const table = document.createElement('table');
-    table.className = 'ui-table';
+    table.className = 'data-table';
     const thead = document.createElement('thead');
     const headerRow = document.createElement('tr');
-    ['Name', 'Type', 'Status', 'Error', 'Chunks', 'Freshness', 'Last Indexed', 'Updated', ''].forEach((label) => {
+    ['Source', 'Type', 'Status', 'Indexed', 'Actions'].forEach((label) => {
       const th = document.createElement('th');
       th.textContent = label;
       headerRow.appendChild(th);
     });
     thead.appendChild(headerRow);
 
+    const getTypeVariant = (type) => {
+      const t = String(type || '').toUpperCase();
+      if (t === 'URL') return 'info';
+      if (t === 'PDF') return 'neutral';
+      return 'neutral';
+    };
+
     const tbody = document.createElement('tbody');
     state.sources.forEach((source) => {
       const tr = document.createElement('tr');
+
       const nameCell = document.createElement('td');
-      nameCell.textContent = source.name || source.url || source.sourceId;
+      nameCell.className = 'text-primary';
+      const rawName = source.name || source.url || source.sourceId || '—';
+      nameCell.textContent = rawName.length > 60 ? `${rawName.slice(0, 57)}…` : rawName;
+      if (rawName.length > 60) nameCell.title = rawName;
+
       const typeCell = document.createElement('td');
-      typeCell.textContent = source.type || '—';
+      typeCell.appendChild(
+        createBadge({ text: (source.type || 'Unknown').toUpperCase(), variant: getTypeVariant(source.type) })
+      );
+
       const statusCell = document.createElement('td');
       statusCell.appendChild(
         createBadge({ text: source.status || 'Unknown', variant: getStatusVariant(source.status) })
       );
-      const freshness = getFreshness(source);
-      const errorCell = document.createElement('td');
-      errorCell.textContent = source.failureReason || '—';
-      const chunkCountCell = document.createElement('td');
-      chunkCountCell.textContent = Number.isFinite(source.chunkCount) ? String(source.chunkCount) : '0';
-      const freshnessCell = document.createElement('td');
-      freshnessCell.appendChild(createBadge({ text: freshness.label, variant: freshness.variant }));
+      if (source.failureReason) statusCell.title = source.failureReason;
 
       const indexedCell = document.createElement('td');
       indexedCell.textContent = source.indexedAtUtc
-        ? new Date(source.indexedAtUtc).toLocaleString()
-        : '—';
+        ? new Date(source.indexedAtUtc).toLocaleDateString()
+        : 'Never';
 
-      const updatedCell = document.createElement('td');
-      updatedCell.textContent = source.updatedAtUtc
-        ? new Date(source.updatedAtUtc).toLocaleString()
-        : '—';
       const actionCell = document.createElement('td');
-      actionCell.style.display = 'flex';
-      actionCell.style.gap = '8px';
-      const indexButton = createButton({ label: 'Index' });
+      const actionsWrap = document.createElement('div');
+      actionsWrap.style.cssText = 'display:flex;gap:6px;';
+
+      const indexButton = document.createElement('button');
+      indexButton.className = 'btn btn-secondary btn-sm';
+      indexButton.textContent = 'Re-index';
       indexButton.addEventListener('click', async () => {
         indexButton.disabled = true;
-        indexButton.textContent = 'Indexing...';
+        indexButton.textContent = 'Indexing…';
         try {
           const response = await client.knowledge.indexSource(source.sourceId);
           const normalizedStatus = String(response.status || '').toUpperCase();
-
           if (normalizedStatus === 'FAILED') {
             notifier.show({
-              message: response.failureReason
-                ? `Index failed: ${response.failureReason}`
-                : 'Index failed.',
+              message: response.failureReason ? `Index failed: ${response.failureReason}` : 'Index failed.',
               variant: 'danger',
             });
           } else if (normalizedStatus === 'PROCESSING') {
-            notifier.show({
-              message: 'Indexing is already in progress for this source.',
-              variant: 'warning',
-            });
+            notifier.show({ message: 'Indexing is already in progress.', variant: 'warning' });
           } else {
-            notifier.show({
-              message: `Indexed (${response.chunkCount ?? 0} chunks).`,
-              variant: 'success',
-            });
+            notifier.show({ message: `Indexed (${response.chunkCount ?? 0} chunks).`, variant: 'success' });
           }
-
           await loadSources();
         } catch (error) {
           notifier.show({ message: mapApiError(error).message, variant: 'danger' });
         } finally {
           indexButton.disabled = false;
-          indexButton.textContent = 'Index';
+          indexButton.textContent = 'Re-index';
         }
       });
-      actionCell.appendChild(indexButton);
-      const deleteButton = createButton({ label: 'Delete' });
+
+      const deleteButton = document.createElement('button');
+      deleteButton.className = 'btn btn-danger btn-sm';
+      deleteButton.textContent = 'Delete';
       deleteButton.addEventListener('click', async () => {
         deleteButton.disabled = true;
         try {
@@ -586,16 +596,17 @@ export const renderKnowledgeView = (container, { apiClient, toast } = {}) => {
           deleteButton.disabled = false;
         }
       });
-      actionCell.appendChild(deleteButton);
-      if (source.failureReason) {
-        statusCell.title = source.failureReason;
-      }
-      tr.append(nameCell, typeCell, statusCell, errorCell, chunkCountCell, freshnessCell, indexedCell, updatedCell, actionCell);
+
+      actionsWrap.append(indexButton, deleteButton);
+      actionCell.appendChild(actionsWrap);
+
+      tr.append(nameCell, typeCell, statusCell, indexedCell, actionCell);
       tbody.appendChild(tr);
     });
 
     table.append(thead, tbody);
-    sourcesBody.appendChild(table);
+    tableWrap.appendChild(table);
+    sourcesBody.appendChild(tableWrap);
   };
 
   const renderRetrieveResults = () => {

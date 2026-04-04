@@ -519,32 +519,33 @@ export const renderVisitorProfileView = async (
     linkedBody.innerHTML = '';
     let hasContent = false;
 
-    // Linked lead
-    const linkedLeadId = detail?.linkedLeadId || detail?.LeadId;
-    if (linkedLeadId) {
-      hasContent = true;
-      const leadSection = document.createElement('div');
-      const leadTitle = document.createElement('div');
-      leadTitle.style.cssText = 'font-weight:600;font-size:13px;margin-bottom:8px;color:var(--color-text);';
-      leadTitle.textContent = 'Linked Lead';
-      leadSection.appendChild(leadTitle);
-
-      try {
-        const allLeads = siteId ? await client.leads.list(siteId, 1, 100) : [];
-        const linkedLead = Array.isArray(allLeads)
-          ? allLeads.find((l) => (l.id || l.leadId) === linkedLeadId)
-          : null;
+    // Linked lead — VisitorDetailResult has no linkedLeadId field, so find by linkedVisitorId
+    try {
+      const allLeads = siteId ? await client.leads.list(siteId, 1, 200) : [];
+      if (Array.isArray(allLeads) && visitorId) {
+        const normVisitorId = String(visitorId).toLowerCase().replace(/-/g, '');
+        const linkedLead = allLeads.find((l) => {
+          const lv = String(l.linkedVisitorId || l.LinkedVisitorId || '').toLowerCase().replace(/-/g, '');
+          return lv && lv === normVisitorId;
+        }) || null;
 
         if (linkedLead) {
+          hasContent = true;
+          const leadSection = document.createElement('div');
+          const leadTitle = document.createElement('div');
+          leadTitle.style.cssText = 'font-weight:600;font-size:13px;margin-bottom:8px;color:var(--color-text);';
+          leadTitle.textContent = 'Linked Lead';
+          leadSection.appendChild(leadTitle);
+
           const leadRow = document.createElement('div');
           leadRow.style.cssText = 'border:1px solid var(--color-border);border-radius:var(--radius-md);padding:12px 16px;display:flex;justify-content:space-between;align-items:center;';
           const nameEmail = document.createElement('div');
           const nameEl = document.createElement('div');
           nameEl.style.cssText = 'font-weight:600;font-size:13px;color:var(--color-text);';
-          nameEl.textContent = linkedLead.fullName || linkedLead.name || '—';
+          nameEl.textContent = linkedLead.displayName || linkedLead.fullName || linkedLead.name || '—';
           const emailEl = document.createElement('div');
           emailEl.style.cssText = 'font-size:12px;color:var(--color-text-muted);';
-          emailEl.textContent = linkedLead.email || '—';
+          emailEl.textContent = linkedLead.primaryEmail || linkedLead.email || '—';
           nameEmail.append(nameEl, emailEl);
           const rightSide = document.createElement('div');
           rightSide.style.cssText = 'display:flex;align-items:center;gap:8px;';
@@ -561,20 +562,11 @@ export const renderVisitorProfileView = async (
           rightSide.appendChild(viewLink);
           leadRow.append(nameEmail, rightSide);
           leadSection.appendChild(leadRow);
-        } else {
-          const idEl = document.createElement('div');
-          idEl.style.cssText = 'font-size:13px;color:var(--color-text-muted);';
-          idEl.textContent = `Lead ID: ${toShortId(linkedLeadId)}`;
-          leadSection.appendChild(idEl);
+          linkedBody.appendChild(leadSection);
         }
-      } catch {
-        const idEl = document.createElement('div');
-        idEl.style.cssText = 'font-size:13px;color:var(--color-text-muted);';
-        idEl.textContent = `Lead ID: ${toShortId(linkedLeadId)}`;
-        leadSection.appendChild(idEl);
       }
-
-      linkedBody.appendChild(leadSection);
+    } catch {
+      // fail-soft: lead section skipped on error
     }
 
     // Linked tickets

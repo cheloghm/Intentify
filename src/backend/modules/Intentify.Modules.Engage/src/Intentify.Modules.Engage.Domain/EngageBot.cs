@@ -38,4 +38,13 @@ public sealed class EngageBot
 
     /// <summary>Personality descriptor, e.g. "friendly local experts", "premium and precise".</summary>
     public string? PersonalityDescriptor { get; set; }
+
+    /// <summary>Whether the weekly digest email is enabled for this bot.</summary>
+    public bool DigestEmailEnabled { get; set; }
+
+    /// <summary>Comma-separated list of recipient email addresses for the digest.</summary>
+    public string? DigestEmailRecipients { get; set; }
+
+    /// <summary>Digest frequency: "weekly" or "daily". Defaults to "weekly".</summary>
+    public string? DigestEmailFrequency { get; set; }
 }

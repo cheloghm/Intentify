@@ -44,7 +44,8 @@ public sealed record VisitorContextBundle(
     IReadOnlyCollection<TicketSummary>? LinkedTicketsSummary,
     IReadOnlyCollection<PromoInteractionSummary>? PromoInteractionSummary,
     IntelligenceSnapshot? IntelligenceSnapshot,
-    IReadOnlyCollection<KnowledgeQuickFactsSummary>? QuickFacts = null);
+    IReadOnlyCollection<KnowledgeQuickFactsSummary>? QuickFacts = null,
+    IReadOnlyCollection<string>? ManualFacts = null);
 
 public sealed record VisitorProfileSummary(
     Guid VisitorId,

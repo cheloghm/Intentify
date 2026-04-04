@@ -33,7 +33,10 @@ public sealed class GetEngageBotHandler
             bot.Industry,
             bot.ServicesDescription,
             bot.GeoFocus,
-            bot.PersonalityDescriptor));
+            bot.PersonalityDescriptor,
+            bot.DigestEmailEnabled,
+            bot.DigestEmailRecipients,
+            bot.DigestEmailFrequency));
     }
 }
 
@@ -73,6 +76,9 @@ public sealed class UpdateEngageBotHandler
             command.ServicesDescription,
             command.GeoFocus,
             command.PersonalityDescriptor,
+            command.DigestEmailEnabled,
+            command.DigestEmailRecipients,
+            command.DigestEmailFrequency,
             cancellationToken);
 
         if (updated is null)
@@ -94,6 +100,9 @@ public sealed class UpdateEngageBotHandler
             updated.Industry,
             updated.ServicesDescription,
             updated.GeoFocus,
-            updated.PersonalityDescriptor));
+            updated.PersonalityDescriptor,
+            updated.DigestEmailEnabled,
+            updated.DigestEmailRecipients,
+            updated.DigestEmailFrequency));
     }
 }

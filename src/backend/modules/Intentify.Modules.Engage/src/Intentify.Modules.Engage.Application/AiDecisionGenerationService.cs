@@ -107,6 +107,7 @@ public sealed class AiDecisionGenerationService
               "createLead": false,
               "createTicket": false,
               "ticketSubject": "string or null — required when createTicket is true. Concise, specific subject line capturing who the visitor is and what they need (e.g. \"Food truck website — online ordering + Uber Eats, Cardiff\")",
+              "ticketType": "commercial | support | null — required when createTicket is true",
               "ticketSummary": "string or null — required when createTicket is true. Must include all 7 labelled sections (see rules below).",
               "suggestedFollowUp": "string or null — short internal note for the follow-up team",
               "conversationComplete": false,
@@ -120,6 +121,15 @@ public sealed class AiDecisionGenerationService
         sb.AppendLine("  Do not invent or guess values. An empty string is not the same as null — use null.");
         sb.AppendLine("- Set createLead = true when you have: name + a contact method + a meaningful goal.");
         sb.AppendLine("- Set createTicket = true when the visitor needs human follow-up and you have enough context.");
+        sb.AppendLine("- When createTicket = true, set ticketType:");
+        sb.AppendLine("  \"commercial\" — visitor has a business need, wants a service, product, quote, consultation,");
+        sb.AppendLine("    or is a qualified sales opportunity. Examples: wants a website built, needs cybersecurity");
+        sb.AppendLine("    services, asking about pricing, wants to book a call.");
+        sb.AppendLine("  \"support\" — visitor has a problem with something that already exists. Examples: website");
+        sb.AppendLine("    broken, checkout not working, can't log in, reporting a bug, complaining about a service,");
+        sb.AppendLine("    delivery issue, technical problem.");
+        sb.AppendLine("  Use \"commercial\" when in doubt if there is any sales potential.");
+        sb.AppendLine("  Use \"support\" only when the conversation is clearly about fixing something broken with no sales component.");
         sb.AppendLine("- When createTicket = true:");
         sb.AppendLine("  ticketSubject must be a specific, scannable subject line (e.g. \"Plumber in Leeds — website + online booking, tight budget\").");
         sb.AppendLine("  ticketSummary must contain all 7 sections, each on a clearly labelled line:");
@@ -203,6 +213,16 @@ public sealed class AiDecisionGenerationService
             sb.AppendLine();
         }
 
+        if (contextBundle.ManualFacts is { Count: > 0 } manualFacts)
+        {
+            sb.AppendLine("#### Business Quick Facts");
+            foreach (var fact in manualFacts)
+            {
+                sb.AppendLine($"- {fact}");
+            }
+            sb.AppendLine();
+        }
+
         if (contextBundle.KnowledgeRetrievalSnapshot.TopChunks.Count > 0)
         {
             sb.AppendLine($"#### Relevant chunks for query: \"{contextBundle.KnowledgeRetrievalSnapshot.Query}\"");
@@ -272,6 +292,7 @@ public sealed class AiDecisionGenerationService
                 CreateLead: ReadBoolean(root, "createLead"),
                 CreateTicket: ReadBoolean(root, "createTicket"),
                 TicketSubject: ReadString(root, "ticketSubject"),
+                TicketType: ReadString(root, "ticketType"),
                 TicketSummary: ReadString(root, "ticketSummary"),
                 SuggestedFollowUp: ReadString(root, "suggestedFollowUp"),
                 ConversationComplete: ReadBoolean(root, "conversationComplete"),
@@ -315,6 +336,7 @@ public sealed class AiDecisionGenerationService
             CreateLead: false,
             CreateTicket: false,
             TicketSubject: null,
+            TicketType: null,
             TicketSummary: null,
             SuggestedFollowUp: null,
             ConversationComplete: false,

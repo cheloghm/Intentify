@@ -62,7 +62,7 @@ public sealed class EngageBotRepository : IEngageBotRepository
             .FirstOrDefaultAsync(cancellationToken);
     }
 
-    public async Task<EngageBot?> UpdateSettingsAsync(Guid tenantId, Guid siteId, string name, string? primaryColor, bool? launcherVisible, string? tone, string? verbosity, string? fallbackStyle, string? businessDescription, string? industry, string? servicesDescription, string? geoFocus, string? personalityDescriptor, CancellationToken cancellationToken = default)
+    public async Task<EngageBot?> UpdateSettingsAsync(Guid tenantId, Guid siteId, string name, string? primaryColor, bool? launcherVisible, string? tone, string? verbosity, string? fallbackStyle, string? businessDescription, string? industry, string? servicesDescription, string? geoFocus, string? personalityDescriptor, bool digestEmailEnabled, string? digestEmailRecipients, string? digestEmailFrequency, CancellationToken cancellationToken = default)
     {
         await _ensureIndexes;
 
@@ -161,6 +161,26 @@ public sealed class EngageBotRepository : IEngageBotRepository
         else
         {
             updates.Add(Builders<EngageBot>.Update.Set(item => item.PersonalityDescriptor, personalityDescriptor.Trim()));
+        }
+
+        updates.Add(Builders<EngageBot>.Update.Set(item => item.DigestEmailEnabled, digestEmailEnabled));
+
+        if (string.IsNullOrWhiteSpace(digestEmailRecipients))
+        {
+            updates.Add(Builders<EngageBot>.Update.Unset(item => item.DigestEmailRecipients));
+        }
+        else
+        {
+            updates.Add(Builders<EngageBot>.Update.Set(item => item.DigestEmailRecipients, digestEmailRecipients.Trim()));
+        }
+
+        if (string.IsNullOrWhiteSpace(digestEmailFrequency))
+        {
+            updates.Add(Builders<EngageBot>.Update.Unset(item => item.DigestEmailFrequency));
+        }
+        else
+        {
+            updates.Add(Builders<EngageBot>.Update.Set(item => item.DigestEmailFrequency, digestEmailFrequency.Trim().ToLowerInvariant()));
         }
 
         var update = Builders<EngageBot>.Update.Combine(updates);
