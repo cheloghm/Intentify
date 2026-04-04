@@ -27,6 +27,8 @@
     const sessionId = ensureSessionId();
     const pageLoadedAtMs = Date.now();
     let didSendTimeOnPage = false;
+    let maxScrollDepth = 0;
+    let exitIntentFired = false;
 
     function trimValue(value, max) {
       if (typeof value !== 'string') {
@@ -129,6 +131,8 @@
       const denominator = Math.max(scrollHeight - viewportHeight, 1);
       const percent = Math.min(100, Math.round((scrollTop / denominator) * 100));
 
+      maxScrollDepth = Math.max(maxScrollDepth, percent);
+
       for (let i = 0; i < scrollThresholds.length; i += 1) {
         const threshold = scrollThresholds[i];
         if (percent >= threshold && !sentThresholds[threshold]) {
@@ -151,24 +155,76 @@
       }
     }, { passive: true });
 
-    function sendTimeOnPage(reason) {
+    function sendTimeOnPage(reason, useBeacon) {
       if (didSendTimeOnPage) {
         return;
       }
 
       didSendTimeOnPage = true;
       const seconds = Math.max(0, Math.round((Date.now() - pageLoadedAtMs) / 1000));
-      sendEvent('time_on_page', { seconds, reason });
+      const eventData = { seconds, reason, pageUrl: window.location.href, maxScrollDepth };
+
+      if (useBeacon && navigator.sendBeacon) {
+        try {
+          const payload = {
+            siteKey,
+            type: 'time_on_page',
+            url: window.location.href,
+            referrer: document.referrer || null,
+            tsUtc: new Date().toISOString(),
+            sessionId,
+            data: eventData,
+          };
+          navigator.sendBeacon(
+            `${baseUrl}/collector/events?siteKey=${encodeURIComponent(siteKey)}`,
+            new Blob([JSON.stringify(payload)], { type: 'application/json' })
+          );
+          return;
+        } catch {
+          // fall through to sendEvent
+        }
+      }
+
+      sendEvent('time_on_page', eventData);
     }
 
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'hidden') {
-        sendTimeOnPage('hidden');
+        sendTimeOnPage('hidden', false);
       }
     });
 
-    window.addEventListener('pagehide', () => sendTimeOnPage('unload'));
-    window.addEventListener('beforeunload', () => sendTimeOnPage('unload'));
+    window.addEventListener('pagehide', () => sendTimeOnPage('unload', true));
+    window.addEventListener('beforeunload', () => sendTimeOnPage('unload', true));
+
+    // ── Exit intent ────────────────────────────────────────────────────
+    document.addEventListener('mousemove', (event) => {
+      if (exitIntentFired) {
+        return;
+      }
+
+      if (event.clientY < 50 && event.movementY < -5) {
+        exitIntentFired = true;
+        sendEvent('exit_intent', { pageUrl: window.location.href });
+      }
+    });
+
+    // ── Referral source (once per session) ─────────────────────────────
+    try {
+      const referralKey = 'intentify_referral_sent';
+      if (!window.sessionStorage.getItem(referralKey)) {
+        window.sessionStorage.setItem(referralKey, '1');
+        const urlParams = new URLSearchParams(window.location.search);
+        sendEvent('referral_source', {
+          referrer: document.referrer || 'direct',
+          utmSource: urlParams.get('utm_source') || null,
+          utmMedium: urlParams.get('utm_medium') || null,
+          utmCampaign: urlParams.get('utm_campaign') || null,
+        });
+      }
+    } catch {
+      // ignore sessionStorage errors
+    }
 
     document.addEventListener('submit', (event) => {
       const form = event.target;

@@ -110,6 +110,131 @@ export const renderKnowledgeView = (container, { apiClient, toast } = {}) => {
   siteField.append(siteLabel, siteSelect);
   siteRow.appendChild(siteField);
 
+  // ── Quick Facts ────────────────────────────────────────────────────────
+  const quickFactsBody = document.createElement('div');
+  quickFactsBody.className = 'stack';
+
+  const quickFactsSubtitle = document.createElement('div');
+  quickFactsSubtitle.className = 'card-subtitle';
+  quickFactsSubtitle.textContent = 'Key facts your AI assistant knows about your business';
+
+  const quickFactsList = document.createElement('div');
+  quickFactsList.className = 'stack';
+
+  const addFactRow = document.createElement('div');
+  addFactRow.style.display = 'flex';
+  addFactRow.style.gap = '8px';
+  addFactRow.style.marginTop = '4px';
+
+  const factInput = document.createElement('input');
+  factInput.type = 'text';
+  factInput.className = 'form-input';
+  factInput.placeholder = 'e.g. We are open Mon–Sat 9am–6pm';
+  factInput.style.flex = '1';
+
+  const addFactBtn = document.createElement('button');
+  addFactBtn.className = 'btn btn-primary btn-sm';
+  addFactBtn.textContent = '+ Add';
+  addFactBtn.style.whiteSpace = 'nowrap';
+
+  addFactRow.append(factInput, addFactBtn);
+  quickFactsBody.append(quickFactsSubtitle, quickFactsList, addFactRow);
+
+  const renderQuickFacts = (facts) => {
+    quickFactsList.innerHTML = '';
+    const list = Array.isArray(facts) ? facts : [];
+    if (!list.length) {
+      const empty = document.createElement('div');
+      empty.className = 'empty-state';
+      empty.style.padding = '24px 0';
+      const emptyDesc = document.createElement('div');
+      emptyDesc.className = 'empty-state-desc';
+      emptyDesc.textContent = 'No quick facts yet. Add facts to help your AI assistant answer common questions accurately.';
+      empty.appendChild(emptyDesc);
+      quickFactsList.appendChild(empty);
+      return;
+    }
+
+    list.forEach((item) => {
+      const row = document.createElement('div');
+      row.style.display = 'flex';
+      row.style.alignItems = 'flex-start';
+      row.style.gap = '10px';
+      row.style.padding = '10px 12px';
+      row.style.borderRadius = 'var(--radius-sm)';
+      row.style.border = '1px solid var(--color-border)';
+      row.style.background = 'var(--color-surface)';
+
+      const factText = document.createElement('div');
+      factText.style.flex = '1';
+      factText.style.fontSize = '13px';
+      factText.style.color = 'var(--color-text-secondary)';
+      factText.style.lineHeight = '1.5';
+      factText.textContent = item.fact || item.text || item.content || String(item);
+
+      const deleteBtn = document.createElement('button');
+      deleteBtn.className = 'btn btn-secondary btn-sm';
+      deleteBtn.textContent = '×';
+      deleteBtn.setAttribute('aria-label', 'Delete fact');
+      deleteBtn.addEventListener('click', async () => {
+        deleteBtn.disabled = true;
+        try {
+          await client.knowledge.deleteQuickFact(state.siteId, item.id || item.factId || item._id);
+          await loadQuickFacts();
+        } catch (error) {
+          notifier.show({ message: mapApiError(error).message, variant: 'danger' });
+          deleteBtn.disabled = false;
+        }
+      });
+
+      row.append(factText, deleteBtn);
+      quickFactsList.appendChild(row);
+    });
+  };
+
+  const loadQuickFacts = async () => {
+    if (!state.siteId) {
+      renderQuickFacts([]);
+      return;
+    }
+    try {
+      const facts = await client.knowledge.listQuickFacts(state.siteId);
+      renderQuickFacts(Array.isArray(facts) ? facts : []);
+    } catch (error) {
+      // Gracefully handle missing endpoint (404) — show empty state
+      renderQuickFacts([]);
+    }
+  };
+
+  addFactBtn.addEventListener('click', async () => {
+    if (!state.siteId) {
+      notifier.show({ message: 'Select a site first.', variant: 'warning' });
+      return;
+    }
+    const fact = factInput.value.trim();
+    if (!fact) {
+      notifier.show({ message: 'Enter a fact to add.', variant: 'warning' });
+      return;
+    }
+    addFactBtn.disabled = true;
+    addFactBtn.textContent = 'Adding…';
+    try {
+      await client.knowledge.addQuickFact(state.siteId, fact);
+      factInput.value = '';
+      notifier.show({ message: 'Fact added.', variant: 'success' });
+      await loadQuickFacts();
+    } catch (error) {
+      notifier.show({ message: mapApiError(error).message, variant: 'danger' });
+    } finally {
+      addFactBtn.disabled = false;
+      addFactBtn.textContent = '+ Add';
+    }
+  });
+
+  factInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); addFactBtn.click(); }
+  });
+
   const workspace = document.createElement('div');
   workspace.style.display = 'grid';
   workspace.style.gridTemplateColumns = '1fr 1fr';
@@ -554,7 +679,7 @@ export const renderKnowledgeView = (container, { apiClient, toast } = {}) => {
 
   siteSelect.addEventListener('change', async () => {
     state.siteId = siteSelect.value;
-    await loadSources();
+    await Promise.all([loadSources(), loadQuickFacts()]);
   });
 
   retrieveForm.addEventListener('submit', async (event) => {
@@ -594,7 +719,7 @@ export const renderKnowledgeView = (container, { apiClient, toast } = {}) => {
         state.siteId = getSiteId(state.sites[0]);
       }
       setSiteOptions();
-      await loadSources();
+      await Promise.all([loadSources(), loadQuickFacts()]);
     } catch (error) {
       notifier.show({ message: mapApiError(error).message, variant: 'danger' });
     }
@@ -609,6 +734,7 @@ export const renderKnowledgeView = (container, { apiClient, toast } = {}) => {
   page.append(
     header,
     siteRow,
+    createCard({ title: 'Quick Facts', body: quickFactsBody }),
     workspace,
     createCard({ title: 'Retrieve', body: retrieveBody })
   );
@@ -618,5 +744,6 @@ export const renderKnowledgeView = (container, { apiClient, toast } = {}) => {
   renderForm();
   renderSources();
   renderRetrieveResults();
+  renderQuickFacts([]);
   void loadSites();
 };

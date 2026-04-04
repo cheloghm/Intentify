@@ -1346,72 +1346,33 @@ const renderDashboardView = async (container) => {
   page.append(header, metricsGrid, chartsRow, activityCard, quickLinks);
   container.appendChild(page);
 
-  // Init charts after DOM insertion
-  requestAnimationFrame(() => {
-    if (window.Chart) {
-      const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-      new window.Chart(convCanvas, {
-        type: 'bar',
-        data: {
-          labels: days,
-          datasets: [{
-            label: 'Conversations',
-            data: [3, 7, 2, 9, 5, 8, 4],
-            backgroundColor: 'rgba(99,102,241,0.7)',
-            borderRadius: 4,
-          }],
-        },
-        options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } },
-      });
-
-      new window.Chart(pipelineCanvas, {
-        type: 'doughnut',
-        data: {
-          labels: ['Evaluating', 'Deciding', 'Won'],
-          datasets: [{
-            data: [5, 3, 2],
-            backgroundColor: ['#f59e0b', '#3b82f6', '#10b981'],
-            borderWidth: 0,
-          }],
-        },
-        options: { responsive: true, plugins: { legend: { position: 'bottom' } } },
-      });
-    }
-  });
-
-  // Load live metrics
+  // Load live metrics and draw charts with real data
   try {
     const sites = await apiClient.sites.list().catch(() => []);
     const siteId = Array.isArray(sites) && sites[0] ? (sites[0].siteId || sites[0].id || '') : '';
 
-    const [visitCounts, leads, tickets, knowledgeSources] = await Promise.allSettled([
+    const [visitCounts, leads, tickets, knowledgeSources, engageAnalytics] = await Promise.allSettled([
       siteId ? apiClient.visitors.visitCounts(siteId) : Promise.resolve(null),
-      siteId ? apiClient.leads.list(siteId, 1, 5) : Promise.resolve([]),
+      siteId ? apiClient.leads.list(siteId, 1, 100) : Promise.resolve([]),
       siteId ? apiClient.tickets.listTickets({ siteId, page: 1, pageSize: 100 }) : Promise.resolve([]),
       siteId ? apiClient.knowledge.listSources(siteId) : Promise.resolve([]),
+      siteId ? apiClient.engage.getOpportunityAnalytics(siteId) : Promise.resolve(null),
     ]);
 
     const visitData = visitCounts.status === 'fulfilled' ? visitCounts.value : null;
     const leadsData = leads.status === 'fulfilled' && Array.isArray(leads.value) ? leads.value : [];
     const ticketsData = tickets.status === 'fulfilled' && Array.isArray(tickets.value) ? tickets.value : [];
     const knowledgeData = knowledgeSources.status === 'fulfilled' && Array.isArray(knowledgeSources.value) ? knowledgeSources.value : [];
+    const analyticsData = engageAnalytics.status === 'fulfilled' ? engageAnalytics.value : null;
 
     const openTickets = ticketsData.filter((t) => {
       const s = (t.status || '').toLowerCase();
       return s === 'open' || s === 'in-progress' || s === 'inprogress';
     }).length;
 
-    const metricValues = [
-      visitData?.last30 ?? '—',
-      leadsData.length,
-      openTickets,
-      knowledgeData.length,
-    ];
-
-    const labels = ['Visitors (30d)', 'Active Leads', 'Open Tickets', 'Knowledge Sources'];
-    const icons = ['👥', '🎯', '🎫', '📚'];
     metricPlaceholders.forEach((card, i) => {
-      card.querySelector('.metric-value').textContent = metricValues[i];
+      const values = [visitData?.last30 ?? '—', leadsData.length, openTickets, knowledgeData.length];
+      card.querySelector('.metric-value').textContent = values[i];
     });
 
     // Recent activity table
@@ -1430,6 +1391,60 @@ const renderDashboardView = async (container) => {
           : '—';
         tr.innerHTML = `<td class="text-primary">${name}</td><td>${email}</td><td>${opp}</td><td>${date}</td>`;
         tbody.appendChild(tr);
+      });
+    }
+
+    // Chart 1 — Conversations (last 7 days) from opportunitiesOverTime
+    const dailyPoints = Array.isArray(analyticsData?.opportunitiesOverTime) ? analyticsData.opportunitiesOverTime : [];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const last7 = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(today);
+      d.setDate(d.getDate() - (6 - i));
+      return d;
+    });
+    const convLabels = last7.map((d) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
+    const convData = last7.map((d) => {
+      const iso = d.toISOString().slice(0, 10);
+      const match = dailyPoints.find((p) => p.dateUtc && String(p.dateUtc).slice(0, 10) === iso);
+      return match ? match.count : 0;
+    });
+
+    // Chart 2 — Lead Pipeline grouped by opportunityLabel
+    const PIPELINE_COLORS = { evaluating: '#f59e0b', deciding: '#3b82f6', won: '#10b981', lost: '#ef4444' };
+    const pipeline = {};
+    leadsData.forEach((lead) => {
+      const label = lead.opportunityLabel || lead.opportunity || 'Unknown';
+      pipeline[label] = (pipeline[label] || 0) + 1;
+    });
+    const pipelineEntries = Object.entries(pipeline);
+    const pipelineLabels = pipelineEntries.map(([l]) => l);
+    const pipelineData = pipelineEntries.map(([, c]) => c);
+    const pipelineBg = pipelineLabels.map((l) => PIPELINE_COLORS[l.toLowerCase().replace(/[^a-z]/g, '')] || '#94a3b8');
+
+    if (window.Chart) {
+      requestAnimationFrame(() => {
+        new window.Chart(convCanvas, {
+          type: 'bar',
+          data: {
+            labels: convLabels,
+            datasets: [{ label: 'Conversations', data: convData, backgroundColor: 'rgba(99,102,241,0.7)', borderRadius: 4 }],
+          },
+          options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } },
+        });
+
+        if (pipelineLabels.length === 0) {
+          const empty = document.createElement('div');
+          empty.style.cssText = 'text-align:center;padding:32px;color:var(--color-text-muted);font-size:13px;';
+          empty.textContent = 'No lead pipeline data yet';
+          pipelineChartCard.appendChild(empty);
+        } else {
+          new window.Chart(pipelineCanvas, {
+            type: 'doughnut',
+            data: { labels: pipelineLabels, datasets: [{ data: pipelineData, backgroundColor: pipelineBg, borderWidth: 0 }] },
+            options: { responsive: true, plugins: { legend: { position: 'bottom' } } },
+          });
+        }
       });
     }
   } catch (error) {

@@ -3,7 +3,12 @@
     "allow": [
       "Bash(dotnet build:*)",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(node --check \"C:\\\\Users\\\\chelo\\\\source\\\\repos\\\\Intentify\\\\src\\\\frontend\\\\web\\\\src\\\\pages\\\\leads.js\")",
+      "Bash(node --check \"C:\\\\Users\\\\chelo\\\\source\\\\repos\\\\Intentify\\\\src\\\\frontend\\\\web\\\\src\\\\pages\\\\engage.js\")",
+      "Bash(node --check \"C:\\\\Users\\\\chelo\\\\source\\\\repos\\\\Intentify\\\\src\\\\frontend\\\\web\\\\src\\\\pages\\\\tickets.js\")",
+      "Bash(node --check \"C:\\\\Users\\\\chelo\\\\source\\\\repos\\\\Intentify\\\\src\\\\frontend\\\\web\\\\src\\\\pages\\\\knowledge.js\")",
+      "Bash(node --check \"C:\\\\Users\\\\chelo\\\\source\\\\repos\\\\Intentify\\\\src\\\\backend\\\\modules\\\\Intentify.Modules.Collector\\\\src\\\\Intentify.Modules.Collector.Api\\\\assets\\\\tracker.js\")"
     ]
   }
 }

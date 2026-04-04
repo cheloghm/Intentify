@@ -20,3 +20,5 @@ public sealed record KnowledgeSourceSummaryResponse(
     DateTime? IndexedAtUtc);
 
 public sealed record RetrieveChunkResponse(string ChunkId, string SourceId, int ChunkIndex, string Content, int Score);
+
+public sealed record AddQuickFactRequest(string SiteId, string Fact);

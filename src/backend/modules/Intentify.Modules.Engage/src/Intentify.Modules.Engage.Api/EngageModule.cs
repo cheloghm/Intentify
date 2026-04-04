@@ -60,7 +60,8 @@ public sealed class EngageModule : IAppModule
             {
                 var factory = sp.GetRequiredService<IHttpClientFactory>();
                 var client = factory.CreateClient(HttpChatCompletionClient.ClientName);
-                return new HttpChatCompletionClient(options, client);
+                var aiLogger = sp.GetRequiredService<ILoggerFactory>().CreateLogger<HttpChatCompletionClient>();
+                return new HttpChatCompletionClient(options, client, aiLogger);
             }
 
             var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger("Intentify.Modules.Engage");

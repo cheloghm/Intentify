@@ -1244,10 +1244,10 @@ const label = document.createElement('div');
     header,
     createCard({ title: 'Bot Config', body: configBody }),
     createCard({ title: 'Business Context', body: businessBody }),
-    createCard({ title: 'Install Engage', body: installBody }),
-    createCard({ title: 'Test Chat', body: chatBody }),
+    createCard({ title: 'Opportunity Analytics', body: analyticsBody }),
     createCard({ title: 'Conversations', body: conversationsBody }),
-    createCard({ title: 'Opportunity analytics', body: analyticsBody })
+    createCard({ title: 'Test Chat', body: chatBody }),
+    createCard({ title: 'Install Engage', body: installBody })
   );
 
   container.appendChild(page);

@@ -225,6 +225,21 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
   const retrieveKnowledgeChunks = async ({ siteId, query, top = 5 }) =>
     request(`/knowledge/retrieve${buildQueryString({ siteId, query, top })}`);
 
+  const listQuickFacts = async (siteId) =>
+    request(`/knowledge/quick-facts${buildQueryString({ siteId })}`);
+
+  const addQuickFact = async (siteId, fact) =>
+    request('/knowledge/quick-facts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ siteId, fact }),
+    });
+
+  const deleteQuickFact = async (siteId, factId) =>
+    request(`/knowledge/quick-facts/${encodeURIComponent(factId)}${buildQueryString({ siteId })}`, {
+      method: 'DELETE',
+    });
+
   const getIntelligenceStatus = async (params) =>
     request(`/intelligence/status${buildQueryString(params)}`);
 
@@ -492,6 +507,9 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
       listSources: listKnowledgeSources,
       deleteSource: deleteKnowledgeSource,
       retrieve: retrieveKnowledgeChunks,
+      listQuickFacts,
+      addQuickFact,
+      deleteQuickFact,
     },
 
     intelligence: {

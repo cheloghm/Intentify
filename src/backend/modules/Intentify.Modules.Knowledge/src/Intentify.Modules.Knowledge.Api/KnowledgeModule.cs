@@ -47,6 +47,7 @@ public sealed class KnowledgeModule : IAppModule
         services.AddSingleton<IKnowledgeSourceRepository, KnowledgeSourceRepository>();
         services.AddSingleton<IKnowledgeChunkRepository, KnowledgeChunkRepository>();
         services.AddSingleton<IKnowledgeQuickFactsRepository, KnowledgeQuickFactsRepository>();
+        services.AddSingleton<ISiteQuickFactRepository, SiteQuickFactRepository>();
         services.AddSingleton<IEngageBotResolver, EngageBotResolver>();
 
         // IChatCompletionClient is registered by EngageModule via TryAddSingleton.
@@ -81,5 +82,9 @@ public sealed class KnowledgeModule : IAppModule
         group.MapDelete("/sources/{sourceId}", KnowledgeEndpoints.DeleteSourceAsync);
         group.MapGet("/sources", KnowledgeEndpoints.ListSourcesAsync);
         group.MapGet("/retrieve", KnowledgeEndpoints.RetrieveAsync);
+
+        group.MapGet("/quick-facts", KnowledgeEndpoints.ListQuickFactsAsync);
+        group.MapPost("/quick-facts", KnowledgeEndpoints.AddQuickFactAsync);
+        group.MapDelete("/quick-facts/{factId}", KnowledgeEndpoints.DeleteQuickFactAsync);
     }
 }

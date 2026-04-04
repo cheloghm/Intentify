@@ -39,7 +39,11 @@ public sealed class EngageBusinessOutcomeExecutor
         if (action == EngageNextAction.EscalateSupport)
         {
             var ticketUpdated = await EnsureEscalationTicketAsync(context, command, cancellationToken);
-            return new BusinessOutcomeResult(ticketUpdated, false);
+            var leadUpdated = _policy.IsCommercialCaptureReady(context.Session, explicitContactRequest: false)
+                && HasLeadIdentity(context.Session, command)
+                ? await UpsertLeadAsync(context, command, cancellationToken)
+                : false;
+            return new BusinessOutcomeResult(ticketUpdated, leadUpdated);
         }
 
         if (action == EngageNextAction.AskCaptureQuestion

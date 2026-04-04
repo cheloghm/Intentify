@@ -190,6 +190,90 @@ internal static class KnowledgeEndpoints
             source.IndexedAtUtc);
     }
 
+    public static async Task<IResult> ListQuickFactsAsync(string siteId, HttpContext context, ISiteQuickFactRepository repository)
+    {
+        if (!Guid.TryParse(siteId, out var parsedSiteId))
+        {
+            return Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(new Dictionary<string, string[]>
+            {
+                ["siteId"] = ["Site id is invalid."]
+            }));
+        }
+
+        var tenantId = TryGetTenantId(context.User);
+        if (tenantId is null)
+        {
+            return Results.Unauthorized();
+        }
+
+        var facts = await repository.ListAsync(tenantId.Value, parsedSiteId, context.RequestAborted);
+        return Results.Ok(facts.Select(f => new { id = f.Id.ToString("N"), fact = f.Fact }).ToArray());
+    }
+
+    public static async Task<IResult> AddQuickFactAsync(AddQuickFactRequest request, HttpContext context, ISiteQuickFactRepository repository)
+    {
+        var errors = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
+        if (!Guid.TryParse(request.SiteId, out var siteId))
+        {
+            errors["siteId"] = ["Site id is invalid."];
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Fact))
+        {
+            errors["fact"] = ["Fact text is required."];
+        }
+
+        if (errors.Count > 0)
+        {
+            return Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(errors));
+        }
+
+        var tenantId = TryGetTenantId(context.User);
+        if (tenantId is null)
+        {
+            return Results.Unauthorized();
+        }
+
+        var fact = new SiteQuickFact
+        {
+            TenantId = tenantId.Value,
+            SiteId = siteId,
+            Fact = request.Fact.Trim(),
+            CreatedAtUtc = DateTime.UtcNow
+        };
+
+        await repository.InsertAsync(fact, context.RequestAborted);
+        return Results.Ok(new { id = fact.Id.ToString("N"), fact = fact.Fact });
+    }
+
+    public static async Task<IResult> DeleteQuickFactAsync(string factId, string siteId, HttpContext context, ISiteQuickFactRepository repository)
+    {
+        var errors = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
+        if (!Guid.TryParse(factId, out var parsedFactId))
+        {
+            errors["factId"] = ["Fact id is invalid."];
+        }
+
+        if (!Guid.TryParse(siteId, out var parsedSiteId))
+        {
+            errors["siteId"] = ["Site id is invalid."];
+        }
+
+        if (errors.Count > 0)
+        {
+            return Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(errors));
+        }
+
+        var tenantId = TryGetTenantId(context.User);
+        if (tenantId is null)
+        {
+            return Results.Unauthorized();
+        }
+
+        var deleted = await repository.DeleteAsync(tenantId.Value, parsedSiteId, parsedFactId, context.RequestAborted);
+        return deleted ? Results.NoContent() : Results.NotFound();
+    }
+
     private static Guid? TryGetTenantId(ClaimsPrincipal user)
     {
         var tenantIdValue = user.FindFirstValue("tenantId");

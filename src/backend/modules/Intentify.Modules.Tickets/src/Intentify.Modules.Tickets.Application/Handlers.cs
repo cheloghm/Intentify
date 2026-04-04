@@ -192,11 +192,12 @@ public sealed class ListTicketNotesHandler
 
 public sealed class TransitionTicketStatusHandler
 {
-    private static readonly IReadOnlyDictionary<string, string> AllowedTransitions = new Dictionary<string, string>(StringComparer.Ordinal)
+    private static readonly IReadOnlyDictionary<string, HashSet<string>> AllowedTransitions = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal)
     {
-        [TicketStatuses.Open] = TicketStatuses.InProgress,
-        [TicketStatuses.InProgress] = TicketStatuses.Resolved,
-        [TicketStatuses.Resolved] = TicketStatuses.Closed
+        [TicketStatuses.Open] = new HashSet<string>(StringComparer.Ordinal) { TicketStatuses.InProgress },
+        [TicketStatuses.InProgress] = new HashSet<string>(StringComparer.Ordinal) { TicketStatuses.Resolved },
+        [TicketStatuses.Resolved] = new HashSet<string>(StringComparer.Ordinal) { TicketStatuses.Closed, TicketStatuses.Open },
+        [TicketStatuses.Closed] = new HashSet<string>(StringComparer.Ordinal) { TicketStatuses.Open }
     };
 
     private readonly ITicketRepository _repository;
@@ -218,7 +219,7 @@ public sealed class TransitionTicketStatusHandler
         }
 
         if (!AllowedTransitions.TryGetValue(ticket.Status, out var allowedNext)
-            || !string.Equals(allowedNext, command.ToStatus, StringComparison.Ordinal))
+            || !allowedNext.Contains(command.ToStatus))
         {
             var errors = new ValidationErrors();
             errors.Add("status", $"Invalid status transition from '{ticket.Status}' to '{command.ToStatus}'.");

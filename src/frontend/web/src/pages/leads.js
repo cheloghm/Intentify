@@ -137,10 +137,16 @@ export const renderLeadsView = (container, { apiClient, toast } = {}) => {
 
   tableCard.append(tableCardHeader, tableWrapper, paginationEl);
 
-  // ── Detail panel ──────────────────────────────────────────────────────
-  const detailPanel = document.createElement('div');
-  detailPanel.className = 'card';
-  detailPanel.style.display = 'none';
+  // ── Lead detail modal ─────────────────────────────────────────────────
+  const modalOverlay = document.createElement('div');
+  modalOverlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.5);display:none;align-items:center;justify-content:center;z-index:1000;padding:20px;';
+
+  const modalCard = document.createElement('div');
+  modalCard.className = 'card';
+  modalCard.style.cssText = 'width:100%;max-width:580px;max-height:85vh;overflow-y:auto;position:relative;';
+
+  modalOverlay.appendChild(modalCard);
+  document.body.appendChild(modalOverlay);
 
   // ── Helpers ───────────────────────────────────────────────────────────
   const makeOpportunityBadge = (label) => {
@@ -190,13 +196,20 @@ export const renderLeadsView = (container, { apiClient, toast } = {}) => {
 
   const closeDetail = () => {
     state.selected = null;
-    detailPanel.style.display = 'none';
+    modalOverlay.style.display = 'none';
+    document.removeEventListener('keydown', handleModalKeydown);
   };
 
-  const renderDetail = () => {
-    detailPanel.innerHTML = '';
-    const lead = state.selected;
-    if (!lead) return;
+  const handleModalKeydown = (e) => {
+    if (e.key === 'Escape') closeDetail();
+  };
+
+  modalOverlay.addEventListener('click', (e) => {
+    if (e.target === modalOverlay) closeDetail();
+  });
+
+  const renderDetail = (lead) => {
+    modalCard.innerHTML = '';
 
     // Header
     const detailHeader = document.createElement('div');
@@ -214,7 +227,8 @@ export const renderLeadsView = (container, { apiClient, toast } = {}) => {
 
     const closeBtn = document.createElement('button');
     closeBtn.className = 'btn btn-secondary btn-sm';
-    closeBtn.textContent = '× Close';
+    closeBtn.textContent = '×';
+    closeBtn.setAttribute('aria-label', 'Close');
     closeBtn.addEventListener('click', closeDetail);
 
     detailHeader.append(detailTitleGroup, closeBtn);
@@ -278,7 +292,7 @@ export const renderLeadsView = (container, { apiClient, toast } = {}) => {
     );
 
     detailBody.append(leftCol, rightCol);
-    detailPanel.append(detailHeader, detailBody);
+    modalCard.append(detailHeader, detailBody);
 
     // Suggested follow-up (full-width, bottom)
     if (lead.suggestedFollowUp) {
@@ -304,7 +318,7 @@ export const renderLeadsView = (container, { apiClient, toast } = {}) => {
       followUpBox.textContent = lead.suggestedFollowUp;
 
       followUpSection.append(followUpLabel, followUpBox);
-      detailPanel.appendChild(followUpSection);
+      modalCard.appendChild(followUpSection);
     }
 
     // Linked visitor
@@ -318,15 +332,17 @@ export const renderLeadsView = (container, { apiClient, toast } = {}) => {
       vLink.style.textDecoration = 'none';
       vLink.textContent = '→ Open visitor profile';
       visitorLinkRow.appendChild(vLink);
-      detailPanel.appendChild(visitorLinkRow);
+      modalCard.appendChild(visitorLinkRow);
     }
   };
 
   const openDetail = (lead) => {
     state.selected = lead;
-    renderDetail();
-    detailPanel.style.display = 'block';
-    detailPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    // Show loading state
+    modalCard.innerHTML = '<div style="padding:32px;text-align:center;color:var(--color-text-muted)">Loading…</div>';
+    modalOverlay.style.display = 'flex';
+    document.addEventListener('keydown', handleModalKeydown);
+    renderDetail(lead);
   };
 
   const renderTable = () => {
@@ -493,7 +509,7 @@ export const renderLeadsView = (container, { apiClient, toast } = {}) => {
   });
 
   // ── Assemble ──────────────────────────────────────────────────────────
-  page.append(pageHeader, filtersRow, metricsGrid, tableCard, detailPanel);
+  page.append(pageHeader, filtersRow, metricsGrid, tableCard);
   container.appendChild(page);
 
   updateMetrics();

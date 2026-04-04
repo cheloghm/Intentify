@@ -232,3 +232,9 @@ Test runs are slow (~141s for Collector, ~354s for Intelligence).
 3. **Consent before identity** — Leads must have consent logged before being used for outreach.
 4. **Site key validation** — the Collector must always validate site key + origin before accepting events.
 5. **Intelligence is V1 Google-only** — do not add non-Google data providers without explicit instruction.
+
+## Development Workflow
+- Never run git add, git commit, or git push unless explicitly 
+  instructed to do so by the user
+- Never suggest committing as part of completing a task
+- The user handles all version control
