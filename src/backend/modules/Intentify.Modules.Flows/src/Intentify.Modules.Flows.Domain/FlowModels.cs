@@ -29,7 +29,8 @@ public sealed class FlowTrigger
 public enum FlowConditionOperator
 {
     Equals = 1,
-    Contains = 2
+    Contains = 2,
+    GreaterThan = 3
 }
 
 public sealed record FlowCondition(string Field, FlowConditionOperator Operator, string Value);

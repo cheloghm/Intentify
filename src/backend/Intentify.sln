@@ -42,8 +42,6 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Shared.Messaging"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Shared.AI", "shared/Intentify.Shared.AI/src/Intentify.Shared.AI/Intentify.Shared.AI.csproj", "{CD91608F-B537-41E2-8EB5-50A561D3325F}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Shared.Testing", "shared/Intentify.Shared.Testing/src/Intentify.Shared.Testing/Intentify.Shared.Testing.csproj", "{894CEBB0-E04B-44BB-8B65-0BA613CA6FCA}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Shared.KeyManagement", "shared/Intentify.Shared.KeyManagement/src/Intentify.Shared.KeyManagement/Intentify.Shared.KeyManagement.csproj", "{34DF723B-C801-44BD-83A0-D923A44EFD74}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Shared.Validation", "shared/Intentify.Shared.Validation/src/Intentify.Shared.Validation/Intentify.Shared.Validation.csproj", "{4FFE4D26-41CE-4763-9BE6-A58C60606D81}"
@@ -71,6 +69,12 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Intelligence.Infrastructure", "modules/Intentify.Modules.Intelligence/src/Intentify.Modules.Intelligence.Infrastructure/Intentify.Modules.Intelligence.Infrastructure.csproj", "{775EA4DA-F60A-41A6-BA98-11F3782B2C1A}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Intelligence.Api", "modules/Intentify.Modules.Intelligence/src/Intentify.Modules.Intelligence.Api/Intentify.Modules.Intelligence.Api.csproj", "{FDC36910-C9BA-4A37-825F-C133D88DF2A0}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Sites.Tests", "modules/Intentify.Modules.Sites/tests/Intentify.Modules.Sites.Tests/Intentify.Modules.Sites.Tests.csproj", "{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Flows.Tests", "modules/Intentify.Modules.Flows/tests/Intentify.Modules.Flows.Tests/Intentify.Modules.Flows.Tests.csproj", "{B2C3D4E5-F6A7-8901-BCDE-F12345678901}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Engage.Tests", "modules/Intentify.Modules.Engage/tests/Intentify.Modules.Engage.Tests/Intentify.Modules.Engage.Tests.csproj", "{C3D4E5F6-A7B8-9012-CDEF-123456789012}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -202,10 +206,6 @@ Global
 		{5F4CA691-B28B-4B14-8F17-A28A97B5EF15}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{5F4CA691-B28B-4B14-8F17-A28A97B5EF15}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{5F4CA691-B28B-4B14-8F17-A28A97B5EF15}.Release|Any CPU.Build.0 = Release|Any CPU
-		{894CEBB0-E04B-44BB-8B65-0BA613CA6FCA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{894CEBB0-E04B-44BB-8B65-0BA613CA6FCA}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{894CEBB0-E04B-44BB-8B65-0BA613CA6FCA}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{894CEBB0-E04B-44BB-8B65-0BA613CA6FCA}.Release|Any CPU.Build.0 = Release|Any CPU
 		{CBB14B9D-95EE-4EF5-8B9F-7887DFA3567F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{CBB14B9D-95EE-4EF5-8B9F-7887DFA3567F}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{CBB14B9D-95EE-4EF5-8B9F-7887DFA3567F}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -286,6 +286,18 @@ Global
 		{F61D9EB5-665F-4488-A5F6-E174467AE555}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F61D9EB5-665F-4488-A5F6-E174467AE555}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F61D9EB5-665F-4488-A5F6-E174467AE555}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B2C3D4E5-F6A7-8901-BCDE-F12345678901}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B2C3D4E5-F6A7-8901-BCDE-F12345678901}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B2C3D4E5-F6A7-8901-BCDE-F12345678901}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B2C3D4E5-F6A7-8901-BCDE-F12345678901}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C3D4E5F6-A7B8-9012-CDEF-123456789012}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C3D4E5F6-A7B8-9012-CDEF-123456789012}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C3D4E5F6-A7B8-9012-CDEF-123456789012}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C3D4E5F6-A7B8-9012-CDEF-123456789012}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
