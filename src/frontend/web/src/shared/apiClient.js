@@ -83,6 +83,21 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
 
   const getSiteKeys = async (siteId) => request(`/sites/${siteId}/keys`);
 
+  const generateApiKey = async (siteId, label) =>
+    request(`/sites/${encodeURIComponent(siteId)}/api-keys`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label }),
+    });
+
+  const listApiKeys = async (siteId) =>
+    request(`/sites/${encodeURIComponent(siteId)}/api-keys`);
+
+  const revokeApiKey = async (siteId, keyId) =>
+    request(`/sites/${encodeURIComponent(siteId)}/api-keys/${encodeURIComponent(keyId)}`, {
+      method: 'DELETE',
+    });
+
   const buildQueryString = (params = {}) => {
     const search = new URLSearchParams();
     Object.entries(params).forEach(([key, value]) => {
@@ -584,6 +599,9 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
       create: createSite,
       updateProfile: updateSiteProfile,
       delete: deleteSite,
+      generateApiKey,
+      listApiKeys,
+      revokeApiKey,
     },
     visitors: {
       list: listVisitors,

@@ -31,4 +31,37 @@ public sealed class Site
     public DateTime UpdatedAtUtc { get; init; } = DateTime.UtcNow;
 
     public DateTime? FirstEventReceivedAtUtc { get; init; }
+
+    // ── Phase 7.2: REST API Keys ──────────────────────────────────────────────
+    /// <summary>
+    /// Named REST API keys allowing enterprise clients to pull data programmatically.
+    /// Raw secrets are never stored — only the SHA-256 hash.
+    /// </summary>
+    public List<SiteApiKey> ApiKeys { get; set; } = [];
+}
+
+/// <summary>
+/// One named REST API key attached to a site.
+/// The raw secret is returned once at creation and never again.
+/// </summary>
+public sealed class SiteApiKey
+{
+    /// <summary>Opaque stable identifier for this key (used to revoke).</summary>
+    public string KeyId { get; init; } = Guid.NewGuid().ToString("N");
+
+    /// <summary>Human-readable label so tenants can identify the key.</summary>
+    public string Label { get; set; } = string.Empty;
+
+    /// <summary>SHA-256 hex digest of the raw secret. Never return this over the API.</summary>
+    public string SecretHash { get; init; } = string.Empty;
+
+    /// <summary>First 8 chars of the raw secret shown as a hint (e.g. "itfy_abc…").</summary>
+    public string Hint { get; init; } = string.Empty;
+
+    public DateTime CreatedAtUtc { get; init; } = DateTime.UtcNow;
+
+    /// <summary>Null until the key is revoked.</summary>
+    public DateTime? RevokedAtUtc { get; set; }
+
+    public bool IsActive => RevokedAtUtc is null;
 }

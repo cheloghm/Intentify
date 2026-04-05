@@ -68,15 +68,12 @@ internal static class GdprConsentEndpoint
 
         var result = await consentWriter.RecordConsentAsync(new RecordVisitorConsentCommand(
             TenantId:     site.TenantId,
-            SiteId:       site.SiteId,
+            SiteId:       site.Id,
             VisitorId:    visitorId,
             ConsentGiven: request.ConsentGiven,
             Version:      request.Version ?? "1.0"),
             context.RequestAborted);
 
-        // Return 200 even when the visitor isn't found yet — the banner fires before
-        // the first tracker event lands and creates the visitor record. The client
-        // should re-send consent on the next page load once a visitor ID is confirmed.
         return Results.Ok(new { recorded = result.Recorded });
     }
 }
@@ -86,3 +83,4 @@ public sealed record GdprConsentRequest(
     string VisitorId,
     bool ConsentGiven,
     string? Version = null);
+    

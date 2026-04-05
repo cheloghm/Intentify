@@ -391,4 +391,25 @@ internal static class SitesEndpoints
             result.FirstEventSeen,
             result.Site.FirstEventReceivedAtUtc);
     }
+
+     public static Task<IResult> GenerateApiKeyAsync(
+        string siteId,
+        GenerateApiKeyRequest request,
+        HttpContext context,
+        GenerateApiKeyHandler handler)
+        => ApiKeyEndpoints.GenerateApiKeyAsync(siteId, request, context, handler);
+ 
+    public static Task<IResult> ListApiKeysAsync(
+        string siteId,
+        HttpContext context,
+        ListApiKeysHandler handler)
+        => ApiKeyEndpoints.ListApiKeysAsync(siteId, context, handler);
+ 
+    public static Task<IResult> RevokeApiKeyAsync(
+        string siteId,
+        string keyId,
+        HttpContext context,
+        RevokeApiKeyHandler handler)
+        => ApiKeyEndpoints.RevokeApiKeyAsync(siteId, keyId, context, handler);
+        
 }

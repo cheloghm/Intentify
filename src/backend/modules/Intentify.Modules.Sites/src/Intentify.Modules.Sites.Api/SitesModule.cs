@@ -33,6 +33,11 @@ public sealed class SitesModule : IAppModule
         services.AddSingleton<GetInstallationStatusHandler>();
         services.AddSingleton<GetPublicInstallationStatusHandler>();
         services.AddSingleton<GetInstallationDiagnosticsHandler>();
+
+        // Phase 7.2 — REST API Key Management
+        services.AddSingleton<GenerateApiKeyHandler>();
+        services.AddSingleton<ListApiKeysHandler>();
+        services.AddSingleton<RevokeApiKeyHandler>();
     }
 
     public void MapEndpoints(IEndpointRouteBuilder endpoints)
@@ -43,16 +48,21 @@ public sealed class SitesModule : IAppModule
         var protectedGroup = group.MapGroup(string.Empty)
             .AddEndpointFilter<RequireAuthFilter>();
 
-        protectedGroup.MapPost(string.Empty, SitesEndpoints.CreateSiteAsync);
-        protectedGroup.MapGet(string.Empty, SitesEndpoints.ListSitesAsync);
-        protectedGroup.MapPut("/{siteId}/profile", SitesEndpoints.UpdateSiteProfileAsync);
-        protectedGroup.MapDelete("/{siteId}", SitesEndpoints.DeleteSiteAsync);
-        protectedGroup.MapPut("/{siteId}/origins", SitesEndpoints.UpdateAllowedOriginsAsync);
-        protectedGroup.MapPost("/{siteId}/keys/regenerate", SitesEndpoints.RegenerateKeysAsync);
-        protectedGroup.MapGet("/{siteId}/keys", SitesEndpoints.GetSiteKeysAsync);
-        protectedGroup.MapGet("/{siteId}/installation-status", SitesEndpoints.GetInstallationStatusAsync);
-        protectedGroup.MapGet("/{siteId}/installation-diagnostics", SitesEndpoints.GetInstallationDiagnosticsAsync);
+        protectedGroup.MapPost(string.Empty,                       SitesEndpoints.CreateSiteAsync);
+        protectedGroup.MapGet(string.Empty,                        SitesEndpoints.ListSitesAsync);
+        protectedGroup.MapPut("/{siteId}/profile",                 SitesEndpoints.UpdateSiteProfileAsync);
+        protectedGroup.MapDelete("/{siteId}",                      SitesEndpoints.DeleteSiteAsync);
+        protectedGroup.MapPut("/{siteId}/origins",                 SitesEndpoints.UpdateAllowedOriginsAsync);
+        protectedGroup.MapPost("/{siteId}/keys/regenerate",        SitesEndpoints.RegenerateKeysAsync);
+        protectedGroup.MapGet("/{siteId}/keys",                    SitesEndpoints.GetSiteKeysAsync);
+        protectedGroup.MapGet("/{siteId}/installation-status",     SitesEndpoints.GetInstallationStatusAsync);
+        protectedGroup.MapGet("/{siteId}/installation-diagnostics",SitesEndpoints.GetInstallationDiagnosticsAsync);
 
-        group.MapGet("/installation/status", SitesEndpoints.GetPublicInstallationStatusAsync);
+        // Phase 7.2 — REST API Keys
+        protectedGroup.MapPost("/{siteId}/api-keys",               SitesEndpoints.GenerateApiKeyAsync);
+        protectedGroup.MapGet("/{siteId}/api-keys",                SitesEndpoints.ListApiKeysAsync);
+        protectedGroup.MapDelete("/{siteId}/api-keys/{keyId}",     SitesEndpoints.RevokeApiKeyAsync);
+
+        group.MapGet("/installation/status",                       SitesEndpoints.GetPublicInstallationStatusAsync);
     }
 }

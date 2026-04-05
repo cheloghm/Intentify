@@ -16,4 +16,8 @@ public interface ISiteRepository
     Task<Site?> RotateKeysAsync(Guid tenantId, Guid siteId, string siteKey, string widgetKey, CancellationToken cancellationToken = default);
     Task<Site?> UpdateFirstEventReceivedAsync(Guid siteId, DateTime timestampUtc, CancellationToken cancellationToken = default);
     Task<bool> DeleteAsync(Guid tenantId, Guid siteId, CancellationToken cancellationToken = default);
+
+    // ── Phase 7.2: REST API Key Management ────────────────────────────────────
+    Task AddApiKeyAsync(Guid tenantId, Guid siteId, SiteApiKey apiKey, CancellationToken cancellationToken = default);
+    Task RevokeApiKeyAsync(Guid tenantId, Guid siteId, string keyId, DateTime revokedAtUtc, CancellationToken cancellationToken = default);
 }

@@ -1,14 +1,9 @@
 /**
- * sites.js — Intentify Sites
- * Revamped to match visitors.js design language exactly.
- * All original functionality preserved: keys modal, origins modal, add/delete site,
- * installation status check, copy to clipboard, key regeneration.
+ * sites.js — Intentify Sites  (Phase 7.2: REST API Key Management added)
  */
 
 import { createToastManager } from '../shared/ui/index.js';
 import { createApiClient, mapApiError } from '../shared/apiClient.js';
-
-// ─── Helpers (identical to original) ─────────────────────────────────────────
 
 const ORIGIN_HELPER_TEXT = 'Paste the website origin (scheme + host + port). No paths.';
 
@@ -56,8 +51,6 @@ const saveCachedKeys = (siteId, { siteKey }) => {
   try { localStorage.setItem(`intentify.siteKeys.${siteId}`, JSON.stringify({ siteKey, cachedAtUtc: new Date().toISOString() })); } catch {}
 };
 
-// ─── el() helper ──────────────────────────────────────────────────────────────
-
 const el = (tag, attrs = {}, ...kids) => {
   const e = document.createElement(tag);
   Object.entries(attrs).forEach(([k, v]) => {
@@ -70,8 +63,6 @@ const el = (tag, attrs = {}, ...kids) => {
   return e;
 };
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
-
 const injectStyles = () => {
   if (document.getElementById('_sites2_css')) return;
   const s = document.createElement('style');
@@ -80,8 +71,6 @@ const injectStyles = () => {
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
 .si-root{font-family:'Plus Jakarta Sans',system-ui,sans-serif;display:flex;flex-direction:column;gap:20px;width:100%;max-width:960px;padding-bottom:60px}
-
-/* Hero — identical pattern to .v-hero */
 .si-hero{background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%);border-radius:16px;padding:28px 36px;position:relative;overflow:hidden}
 .si-hero::before{content:'';position:absolute;top:-30px;right:-30px;width:180px;height:180px;background:radial-gradient(circle,rgba(99,102,241,.18) 0%,transparent 70%);pointer-events:none}
 .si-hero-top{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap}
@@ -91,8 +80,6 @@ const injectStyles = () => {
 .si-stat{display:flex;flex-direction:column;gap:2px}
 .si-stat-val{font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:700;color:#f1f5f9;letter-spacing:-.02em}
 .si-stat-lbl{font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.07em}
-
-/* Buttons — same as .v-btn */
 .si-btn{font-family:'Plus Jakarta Sans',system-ui,sans-serif;font-size:13px;font-weight:600;padding:7px 16px;border-radius:8px;border:none;cursor:pointer;transition:all .14s;display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
 .si-btn-primary{background:#6366f1;color:#fff}
 .si-btn-primary:hover:not(:disabled){background:#4f46e5;transform:translateY(-1px);box-shadow:0 4px 12px rgba(99,102,241,.25)}
@@ -102,8 +89,6 @@ const injectStyles = () => {
 .si-btn-danger{background:#fee2e2;color:#dc2626;border:none}
 .si-btn-danger:hover{background:#fecaca}
 .si-btn-sm{padding:5px 12px;font-size:12px}
-
-/* Panel — same as .v-panel */
 .si-panel{background:#fff;border:1px solid #e2e8f0;border-radius:14px;overflow:hidden;transition:box-shadow .16s}
 .si-panel:hover{box-shadow:0 4px 16px rgba(0,0,0,.06)}
 .si-panel-hd{display:flex;align-items:flex-start;justify-content:space-between;padding:18px 22px;border-bottom:1px solid #f1f5f9;gap:12px}
@@ -111,8 +96,6 @@ const injectStyles = () => {
 .si-panel-sub{font-size:11px;color:#94a3b8;font-family:'JetBrains Mono',monospace}
 .si-panel-body{padding:18px 22px;display:flex;flex-direction:column;gap:12px}
 .si-panel-actions{display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap}
-
-/* Health dot */
 .si-health{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:999px;margin-top:4px}
 .si-health-ok{background:#d1fae5;color:#065f46}
 .si-health-warn{background:#fef3c7;color:#92400e}
@@ -123,34 +106,22 @@ const injectStyles = () => {
 .si-dot-gray{background:#94a3b8}
 .si-live-dot{animation:_ldp 2s infinite}
 @keyframes _ldp{0%{box-shadow:0 0 0 0 rgba(16,185,129,.5)}70%{box-shadow:0 0 0 6px rgba(16,185,129,0)}100%{box-shadow:0 0 0 0 rgba(16,185,129,0)}}
-
-/* Key row */
 .si-key-row{display:flex;align-items:center;gap:8px}
 .si-key-lbl{font-size:11.5px;color:#64748b;min-width:110px;flex-shrink:0;font-weight:500}
 .si-key-val{font-family:'JetBrains Mono',monospace;font-size:11px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:5px 10px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#334155}
-
-/* Origin rows */
 .si-origin-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid #f8fafc}
 .si-origin-row:last-child{border-bottom:none}
 .si-origin-text{font-family:'JetBrains Mono',monospace;font-size:11.5px;color:#334155;flex:1;word-break:break-all}
 .si-add-row{display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap}
-
-/* Input */
 .si-input{font-family:'Plus Jakarta Sans',system-ui,sans-serif;font-size:13px;color:#1e293b;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 11px;outline:none;width:100%;box-sizing:border-box;transition:border .14s}
 .si-input:focus{border-color:#6366f1;background:#fff;box-shadow:0 0 0 3px rgba(99,102,241,.1)}
 .si-err{font-size:11.5px;color:#dc2626;background:#fee2e2;border-radius:6px;padding:6px 10px;margin-top:4px}
-
-/* Stats row inside card */
 .si-meta{display:flex;gap:20px;flex-wrap:wrap}
 .si-meta-item-lbl{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#94a3b8;font-weight:600;margin-bottom:2px}
 .si-meta-item-val{font-size:12.5px;color:#334155;font-family:'JetBrains Mono',monospace}
-
-/* Pill */
 .si-pill{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700}
 .si-pill-green{background:#d1fae5;color:#065f46}
 .si-pill-amber{background:#fef3c7;color:#92400e}
-
-/* Overlay / modal */
 .si-overlay{position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:200;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(3px)}
 .si-modal{background:#fff;border-radius:16px;width:100%;max-width:560px;max-height:90vh;overflow-y:auto;box-shadow:0 24px 64px rgba(0,0,0,.2)}
 .si-modal-hd{display:flex;align-items:center;justify-content:space-between;padding:20px 24px;border-bottom:1px solid #f1f5f9;position:sticky;top:0;background:#fff;z-index:1}
@@ -160,21 +131,24 @@ const injectStyles = () => {
 .si-form-lbl{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#94a3b8}
 .si-form-hint{font-size:11px;color:#94a3b8}
 .si-warning{background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:10px 12px;font-size:12px;color:#92400e;line-height:1.5}
-
-/* Empty state */
 .si-empty{background:#fff;border:1px solid #e2e8f0;border-radius:14px;text-align:center;padding:56px 24px}
 .si-empty-icon{font-size:42px;opacity:.3;margin-bottom:14px}
 .si-empty-title{font-size:16px;font-weight:700;color:#334155;margin-bottom:6px}
 .si-empty-desc{font-size:13px;color:#94a3b8;max-width:300px;margin:0 auto 20px;line-height:1.65}
-
-/* Skeleton */
 .si-skel{background:linear-gradient(90deg,#f1f5f9 25%,#e2e8f0 50%,#f1f5f9 75%);background-size:200% 100%;animation:_sh 1.4s infinite;border-radius:14px;height:140px}
 @keyframes _sh{0%{background-position:200% 0}100%{background-position:-200% 0}}
+/* Phase 7.2: API key rows */
+.si-apikey-row{display:flex;align-items:center;gap:8px;padding:8px 10px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px}
+.si-apikey-info{flex:1;min-width:0}
+.si-apikey-label{font-size:12.5px;font-weight:600;color:#1e293b;margin-bottom:1px}
+.si-apikey-hint{font-family:'JetBrains Mono',monospace;font-size:11px;color:#64748b}
+.si-secret-box{background:#0f172a;border-radius:8px;padding:14px}
+.si-secret-notice{font-size:11px;color:#94a3b8;margin-bottom:6px;font-weight:600}
+.si-secret-val{font-family:'JetBrains Mono',monospace;font-size:11.5px;color:#a5f3fc;word-break:break-all;cursor:pointer;line-height:1.5}
+.si-secret-val:hover{color:#67e8f9}
   `;
   document.head.appendChild(s);
 };
-
-// ─── Modal factory ────────────────────────────────────────────────────────────
 
 const makeModal = (title) => {
   const overlay = el('div', { class: 'si-overlay' });
@@ -186,16 +160,12 @@ const makeModal = (title) => {
   const body = el('div', { class: 'si-modal-body' });
   modal.append(mhd, body);
   overlay.appendChild(modal);
-
   const show = () => { document.body.appendChild(overlay); };
   const hide = () => overlay.remove();
   closeBtn.addEventListener('click', hide);
   overlay.addEventListener('click', (e) => { if (e.target === overlay) hide(); });
-
   return { body, show, hide, setTitle: (t) => { titleEl.textContent = t; } };
 };
-
-// ─── Main export ──────────────────────────────────────────────────────────────
 
 export const renderSitesView = (container, { apiClient, toast } = {}) => {
   injectStyles();
@@ -212,7 +182,6 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
   const heroLeft = el('div', {});
   heroLeft.appendChild(el('div', { class: 'si-hero-title' }, '🌐 Sites'));
   heroLeft.appendChild(el('div', { class: 'si-hero-sub' }, 'Manage tracked websites, API keys, and allowed origins'));
-
   const heroStats = el('div', { class: 'si-hero-stats' });
   const mkStat = (lbl) => {
     const w = el('div', { class: 'si-stat' });
@@ -224,17 +193,15 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
   const hTotal = mkStat('Sites');
   const hConfigured = mkStat('Configured');
   heroLeft.appendChild(heroStats);
-
   const addSiteBtn = el('button', { class: 'si-btn si-btn-primary', style: 'align-self:flex-start;margin-top:4px' }, '+ Add Site');
   heroTop.append(heroLeft);
   hero.append(heroTop, addSiteBtn);
   root.appendChild(hero);
 
-  // ── List ───────────────────────────────────────────────────────────────────
   const listEl = el('div', { style: 'display:flex;flex-direction:column;gap:14px' });
   root.appendChild(listEl);
 
-  // ── Keys modal ─────────────────────────────────────────────────────────────
+  // ── Keys modal (with Phase 7.2 API key management) ────────────────────────
   const keysModal = makeModal('Site Keys');
 
   const openKeysModal = async (site) => {
@@ -256,8 +223,12 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
         const val = el('div', { class: 'si-key-val', title: value || '' }, value || '(not available)');
         const copyBtn = el('button', { class: 'si-btn si-btn-outline si-btn-sm' }, '📋 Copy');
         copyBtn.addEventListener('click', async () => {
-          try { await copyToClipboard(value); notifier.show({ message: `${label} copied.`, variant: 'success' }); copyBtn.textContent = '✓ Copied'; setTimeout(() => { copyBtn.textContent = '📋 Copy'; }, 1500); }
-          catch { notifier.show({ message: 'Unable to copy.', variant: 'danger' }); }
+          try {
+            await copyToClipboard(value);
+            notifier.show({ message: `${label} copied.`, variant: 'success' });
+            copyBtn.textContent = '✓ Copied';
+            setTimeout(() => { copyBtn.textContent = '📋 Copy'; }, 1500);
+          } catch { notifier.show({ message: 'Unable to copy.', variant: 'danger' }); }
         });
         row.append(lbl, val, copyBtn);
         return row;
@@ -268,8 +239,100 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
         mkKeyRow('Widget Key (engage)', keys.widgetKey),
       );
 
-      const footerRow = el('div', { style: 'display:flex;gap:8px;margin-top:4px;flex-wrap:wrap' });
+      // ── Phase 7.2: REST API Keys section ──────────────────────────────────
+      const apiKeySection = el('div', { style: 'margin-top:18px;border-top:1px solid #e2e8f0;padding-top:16px;display:flex;flex-direction:column;gap:10px' });
+      apiKeySection.appendChild(el('div', { style: 'font-size:13px;font-weight:700;color:#0f172a' }, '🔐 REST API Keys'));
+      apiKeySection.appendChild(el('div', { style: 'font-size:12px;color:#64748b;line-height:1.6' },
+        'Generate named keys for enterprise integrations. Each secret is shown once — copy it immediately.'));
 
+      const apiKeyList = el('div', { style: 'display:flex;flex-direction:column;gap:6px' });
+      apiKeySection.appendChild(apiKeyList);
+
+      const renderApiKeys = async () => {
+        apiKeyList.replaceChildren(el('div', { style: 'color:#94a3b8;font-size:12px' }, '⏳ Loading…'));
+        try {
+          const existingKeys = await client.sites.listApiKeys(siteId);
+          apiKeyList.replaceChildren();
+          if (!existingKeys.length) {
+            apiKeyList.appendChild(el('div', { style: 'font-size:12px;color:#94a3b8;font-style:italic;padding:4px 0' }, 'No API keys yet.'));
+          } else {
+            existingKeys.forEach(k => {
+              const row = el('div', { class: 'si-apikey-row' });
+              const info = el('div', { class: 'si-apikey-info' });
+              info.appendChild(el('div', { class: 'si-apikey-label' }, k.label || '(unnamed)'));
+              info.appendChild(el('div', { class: 'si-apikey-hint' }, k.hint));
+              const statusPill = el('span', {
+                style: `font-size:10px;font-weight:700;padding:2px 7px;border-radius:999px;white-space:nowrap;background:${k.isActive ? '#d1fae5' : '#fee2e2'};color:${k.isActive ? '#065f46' : '#dc2626'}`
+              }, k.isActive ? 'Active' : 'Revoked');
+
+              if (k.isActive) {
+                const revokeBtn = el('button', { class: 'si-btn si-btn-danger si-btn-sm' }, '🗑 Revoke');
+                revokeBtn.addEventListener('click', async () => {
+                  if (!confirm(`Revoke key "${k.label}"? This cannot be undone.`)) return;
+                  revokeBtn.disabled = true;
+                  try {
+                    await client.sites.revokeApiKey(siteId, k.keyId);
+                    notifier.show({ message: 'API key revoked.', variant: 'success' });
+                    await renderApiKeys();
+                  } catch (err) {
+                    notifier.show({ message: mapApiError(err).message, variant: 'danger' });
+                    revokeBtn.disabled = false;
+                  }
+                });
+                row.append(info, statusPill, revokeBtn);
+              } else {
+                row.append(info, statusPill);
+              }
+              apiKeyList.appendChild(row);
+            });
+          }
+        } catch (err) {
+          apiKeyList.replaceChildren(el('div', { style: 'color:#dc2626;font-size:12px' }, mapApiError(err).message));
+        }
+      };
+
+      await renderApiKeys();
+
+      // Generate form
+      const genRow = el('div', { style: 'display:flex;gap:8px;align-items:center' });
+      const labelInput = el('input', { class: 'si-input', placeholder: 'Key label (e.g. "Zapier Integration")', style: 'flex:1;font-size:12.5px;padding:7px 10px' });
+      const genBtn = el('button', { class: 'si-btn si-btn-primary si-btn-sm' }, '+ Generate Key');
+
+      genBtn.addEventListener('click', async () => {
+        const label = labelInput.value.trim();
+        if (!label) { notifier.show({ message: 'Enter a label for the key.', variant: 'warning' }); return; }
+        genBtn.disabled = true; genBtn.textContent = '⏳…';
+        try {
+          const result = await client.sites.generateApiKey(siteId, label);
+          labelInput.value = '';
+
+          // One-time reveal box — insert before genRow
+          const secretBox = el('div', { class: 'si-secret-box' });
+          secretBox.appendChild(el('div', { class: 'si-secret-notice' }, '✅ Key generated — copy it now. It will not be shown again.'));
+          const secretVal = el('div', { class: 'si-secret-val', title: 'Click to copy' }, result.rawSecret);
+          secretVal.addEventListener('click', async () => {
+            try {
+              await copyToClipboard(result.rawSecret);
+              notifier.show({ message: 'Secret copied!', variant: 'success' });
+            } catch {}
+          });
+          secretBox.appendChild(secretVal);
+          apiKeySection.insertBefore(secretBox, genRow);
+
+          await renderApiKeys();
+        } catch (err) {
+          notifier.show({ message: mapApiError(err).message, variant: 'danger' });
+        } finally {
+          genBtn.disabled = false; genBtn.textContent = '+ Generate Key';
+        }
+      });
+
+      genRow.append(labelInput, genBtn);
+      apiKeySection.appendChild(genRow);
+      keysModal.body.appendChild(apiKeySection);
+      // ── End Phase 7.2 section ──────────────────────────────────────────────
+
+      const footerRow = el('div', { style: 'display:flex;gap:8px;margin-top:4px;flex-wrap:wrap;border-top:1px solid #f1f5f9;padding-top:14px' });
       const installBtn = el('button', { class: 'si-btn si-btn-outline si-btn-sm' }, '📦 Install Guide');
       installBtn.addEventListener('click', () => {
         const p = new URLSearchParams({ siteId });
@@ -278,7 +341,6 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
         window.location.hash = `#/install?${p.toString()}`;
         keysModal.hide();
       });
-
       const regenBtn = el('button', { class: 'si-btn si-btn-danger si-btn-sm' }, '🔄 Regenerate Keys');
       regenBtn.addEventListener('click', async () => {
         if (!confirm('Regenerating keys will invalidate existing ones. Continue?')) return;
@@ -294,7 +356,6 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
           regenBtn.disabled = false; regenBtn.textContent = '🔄 Regenerate Keys';
         }
       });
-
       footerRow.append(installBtn, regenBtn);
       keysModal.body.appendChild(footerRow);
     } catch (err) {
@@ -309,16 +370,13 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
     const siteId = getSiteId(site);
     originsModal.setTitle(`🛡 Origins — ${site.domain || site.name || 'Site'}`);
     originsModal.body.replaceChildren();
-
     const originList = [...(site.allowedOrigins || [])];
     let originInputVal = '';
     let saving = false;
 
     const renderEditor = () => {
       originsModal.body.replaceChildren();
-
       originsModal.body.appendChild(el('div', { style: 'font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#94a3b8;margin-bottom:8px' }, 'Allowed Origins'));
-
       if (!originList.length) {
         originsModal.body.appendChild(el('div', { style: 'font-size:13px;color:#94a3b8;margin-bottom:12px' }, 'No origins configured yet.'));
       } else {
@@ -333,15 +391,12 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
         });
         originsModal.body.appendChild(listWrap);
       }
-
-      // Add input
       const addLbl = el('div', { style: 'font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#94a3b8;margin-bottom:5px' }, 'Add Origin');
       const addInput = el('input', { class: 'si-input', style: 'flex:1', placeholder: 'https://app.example.com', value: originInputVal });
       addInput.addEventListener('input', () => { originInputVal = addInput.value; });
-      const addBtn  = el('button', { class: 'si-btn si-btn-outline si-btn-sm' }, '+ Add');
+      const addBtn   = el('button', { class: 'si-btn si-btn-outline si-btn-sm' }, '+ Add');
       const localBtn = el('button', { class: 'si-btn si-btn-outline si-btn-sm' }, '+ localhost');
-      const errEl   = el('div', { class: 'si-err', style: 'display:none' });
-
+      const errEl    = el('div', { class: 'si-err', style: 'display:none' });
       const doAdd = (raw) => {
         const result = normalizeOrigin(raw);
         if (!result.value) { errEl.textContent = result.error; errEl.style.display = ''; return; }
@@ -350,16 +405,12 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
         }
         originInputVal = ''; originList.push(result.value); renderEditor();
       };
-
       addBtn.addEventListener('click', () => doAdd(originInputVal));
       localBtn.addEventListener('click', () => doAdd(`http://localhost:${window.location.port || 80}`));
       addInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') doAdd(originInputVal); });
-
       const addRow = el('div', { class: 'si-add-row' });
       addRow.append(addInput, addBtn, localBtn);
       originsModal.body.append(addLbl, addRow, errEl);
-
-      // Save
       const saveBtn = el('button', { class: 'si-btn si-btn-primary', style: 'align-self:flex-start;margin-top:8px' }, saving ? '⏳ Saving…' : '💾 Save Origins');
       saveBtn.disabled = saving;
       saveBtn.addEventListener('click', async () => {
@@ -380,7 +431,6 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
       });
       originsModal.body.appendChild(saveBtn);
     };
-
     renderEditor();
     originsModal.show();
   };
@@ -390,34 +440,28 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
 
   const openAddSiteModal = () => {
     addSiteModal.body.replaceChildren();
-
     const nameField = el('div', { class: 'si-form-field' });
     nameField.append(el('div',{class:'si-form-lbl'},'Site Name'), el('div',{class:'si-form-hint'},'A friendly label for this site'));
     const nameInput = el('input', { class: 'si-input', placeholder: 'My Website' });
     const nameErr   = el('div', { class: 'si-err', style: 'display:none' });
     nameField.append(nameInput, nameErr);
-
     const domainField = el('div', { class: 'si-form-field' });
     domainField.append(el('div',{class:'si-form-lbl'},'Domain'), el('div',{class:'si-form-hint'},'e.g. example.com'));
     const domainInput = el('input', { class: 'si-input', placeholder: 'example.com' });
     const domainErr   = el('div', { class: 'si-err', style: 'display:none' });
     domainField.append(domainInput, domainErr);
-
     const descField = el('div', { class: 'si-form-field' });
     descField.append(el('div',{class:'si-form-lbl'},'Description (optional)'));
     const descInput = el('input', { class: 'si-input', placeholder: 'What this site is about' });
     descField.appendChild(descInput);
-
     const saveBtn = el('button', { class: 'si-btn si-btn-primary', style: 'align-self:flex-start' }, '🌐 Create Site');
     if (state.sites.length > 0) { saveBtn.disabled = true; saveBtn.textContent = 'Site limit reached'; }
-
     saveBtn.addEventListener('click', async () => {
       nameErr.style.display = 'none'; domainErr.style.display = 'none';
       const name   = nameInput.value.trim();
       const domain = domainInput.value.trim();
-      if (!name)   { nameErr.textContent = 'Name is required.';   nameErr.style.display = '';   return; }
+      if (!name)   { nameErr.textContent = 'Name is required.';    nameErr.style.display = '';   return; }
       if (!domain) { domainErr.textContent = 'Domain is required.'; domainErr.style.display = ''; return; }
-
       saveBtn.disabled = true; saveBtn.textContent = '⏳ Creating…';
       try {
         const resp = await client.sites.create({ name, domain, description: descInput.value.trim() });
@@ -434,7 +478,6 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
         saveBtn.disabled = false; saveBtn.textContent = '🌐 Create Site';
       }
     });
-
     addSiteModal.body.append(nameField, domainField, descField, saveBtn);
     addSiteModal.show();
     nameInput.focus();
@@ -445,15 +488,8 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
   // ── Render sites list ──────────────────────────────────────────────────────
   const renderSites = () => {
     listEl.replaceChildren();
-
-    if (state.loading) {
-      listEl.append(el('div',{class:'si-skel'}), el('div',{class:'si-skel'}));
-      return;
-    }
-    if (state.error) {
-      listEl.appendChild(el('div', { style: 'color:#dc2626;font-size:13px;padding:12px 0' }, state.error));
-      return;
-    }
+    if (state.loading) { listEl.append(el('div',{class:'si-skel'}), el('div',{class:'si-skel'})); return; }
+    if (state.error)   { listEl.appendChild(el('div', { style: 'color:#dc2626;font-size:13px;padding:12px 0' }, state.error)); return; }
     if (!state.sites.length) {
       const empty = el('div', { class: 'si-empty' });
       empty.append(
@@ -469,22 +505,16 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
     state.sites.forEach(site => {
       const siteId = getSiteId(site);
       const card   = el('div', { class: 'si-panel' });
-
-      // Header
       const hd = el('div', { class: 'si-panel-hd' });
       const hdLeft = el('div', { style: 'flex:1;min-width:0' });
       hdLeft.appendChild(el('div', { class: 'si-panel-title' }, site.domain || site.name || 'Unnamed'));
       hdLeft.appendChild(el('div', { class: 'si-panel-sub' }, `ID: ${siteId}`));
-
-      // Installation health dot — updated async
       const health = el('div', { class: 'si-health si-health-unknown' }, el('div',{class:'si-dot si-dot-gray'}), '⏳ Checking…');
       hdLeft.appendChild(health);
-
       const hdActions = el('div', { class: 'si-panel-actions' });
       const keysBtn    = el('button', { class: 'si-btn si-btn-outline si-btn-sm' }, '🔑 Keys');
       const originsBtn = el('button', { class: 'si-btn si-btn-outline si-btn-sm' }, '🛡 Origins');
       const deleteBtn  = el('button', { class: 'si-btn si-btn-danger si-btn-sm' }, '🗑 Delete');
-
       keysBtn.addEventListener('click', () => openKeysModal(site));
       originsBtn.addEventListener('click', () => openOriginsModal(site));
       deleteBtn.addEventListener('click', async () => {
@@ -494,8 +524,7 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
           await client.sites.delete(siteId);
           state.sites = state.sites.filter(s => getSiteId(s) !== siteId);
           notifier.show({ message: 'Site deleted.', variant: 'success' });
-          renderSites();
-          updateHeroStats();
+          renderSites(); updateHeroStats();
         } catch (err) {
           notifier.show({ message: mapApiError(err).message, variant: 'danger' });
           deleteBtn.disabled = false; deleteBtn.textContent = '🗑 Delete';
@@ -505,7 +534,6 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
       hd.append(hdLeft, hdActions);
       card.appendChild(hd);
 
-      // Body — meta row
       const body = el('div', { class: 'si-panel-body' });
       const metaRow = el('div', { class: 'si-meta' });
       const mkMeta = (lbl, val) => {
@@ -514,14 +542,13 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
         metaRow.appendChild(w);
       };
       mkMeta('Allowed Origins', String((site.allowedOrigins || []).length));
-      mkMeta('Created',         fmtDate(site.createdAtUtc));
+      mkMeta('Created', fmtDate(site.createdAtUtc));
       const configured = site.installationStatus?.isConfigured ?? ((site.allowedOrigins || []).length > 0);
       metaRow.appendChild(el('span', { class: `si-pill ${configured ? 'si-pill-green' : 'si-pill-amber'}` }, configured ? '✓ Configured' : '⚠ Not configured'));
       body.appendChild(metaRow);
       card.appendChild(body);
       listEl.appendChild(card);
 
-      // Fetch installation status async
       client.request(`/sites/${siteId}/installation-status`).then(status => {
         const active = status?.isInstalled || (status?.eventsReceived ?? 0) > 0;
         health.className = `si-health ${active ? 'si-health-ok' : 'si-health-warn'}`;
@@ -529,7 +556,6 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
           el('div', { class: `si-dot ${active ? 'si-dot-green si-live-dot' : 'si-dot-amber'}` }),
           document.createTextNode(active ? ' Tracker active' : ' Not detected yet')
         );
-        // update configured pill
         state.sites = state.sites.map(s => getSiteId(s) === siteId ? { ...s, installationStatus: status } : s);
       }).catch(() => {
         health.className = 'si-health si-health-unknown';
@@ -539,13 +565,12 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
   };
 
   const updateHeroStats = () => {
-    hTotal.textContent = String(state.sites.length);
+    hTotal.textContent     = String(state.sites.length);
     hConfigured.textContent = String(state.sites.filter(s =>
       s.installationStatus?.isConfigured ?? ((s.allowedOrigins || []).length > 0)
     ).length);
   };
 
-  // ── Load ───────────────────────────────────────────────────────────────────
   const loadSites = async () => {
     state.loading = true; state.error = null;
     renderSites();

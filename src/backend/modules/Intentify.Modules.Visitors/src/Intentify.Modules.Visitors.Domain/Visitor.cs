@@ -35,14 +35,14 @@ public sealed class Visitor
 
     public List<VisitorSession> Sessions { get; set; } = [];
 
-    // ── GDPR Consent (Phase 6) ─────────────────────────────────────────
+    // ── GDPR Consent (Phase 6) ─────────────────────────────────────────────
     public List<VisitorConsentDecision> ConsentDecisions { get; set; } = [];
     public bool? LatestConsentGiven { get; set; }
     public DateTime? LatestConsentAtUtc { get; set; }
     public bool IsAnonymised { get; set; }
 }
 
-public sealed record VisitorConsentDecision
+public sealed class VisitorConsentDecision
 {
     public DateTime DecidedAtUtc { get; init; }
     public bool ConsentGiven     { get; init; }

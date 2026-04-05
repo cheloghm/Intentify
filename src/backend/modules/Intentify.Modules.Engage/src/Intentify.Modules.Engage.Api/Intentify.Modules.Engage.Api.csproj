@@ -5,9 +5,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
-
   <ItemGroup>
     <EmbeddedResource Include="assets/widget.js" />
+    <EmbeddedResource Include="assets/gdpr-consent-banner.js" />
   </ItemGroup>
 
   <ItemGroup>
@@ -16,6 +16,7 @@
     <ProjectReference Include="../Intentify.Modules.Engage.Infrastructure/Intentify.Modules.Engage.Infrastructure.csproj" />
     <ProjectReference Include="../../../../modules/Intentify.Modules.Leads/src/Intentify.Modules.Leads.Application/Intentify.Modules.Leads.Application.csproj" />
     <ProjectReference Include="../../../../modules/Intentify.Modules.Auth/src/Intentify.Modules.Auth.Api/Intentify.Modules.Auth.Api.csproj" />
+    <ProjectReference Include="../../../../modules/Intentify.Modules.Flows/src/Intentify.Modules.Flows.Application/Intentify.Modules.Flows.Application.csproj" />
     <ProjectReference Include="../../../../shared/Intentify.Shared.Web/src/Intentify.Shared.Web/Intentify.Shared.Web.csproj" />
     <ProjectReference Include="../../../../shared/Intentify.Shared.Validation/src/Intentify.Shared.Validation/Intentify.Shared.Validation.csproj" />
   </ItemGroup>

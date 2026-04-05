@@ -26,6 +26,16 @@ public sealed class FlowsModule : IAppModule
         ArgumentNullException.ThrowIfNull(configuration);
 
         services.AddHttpClient();
+
+        // ── Email (Resend) ─────────────────────────────────────────────────────
+        // Registered here so both Flows actions (SendEmail) and the Engage
+        // DigestSchedulerService can resolve ResendEmailService from DI.
+        var resendOptions = new ResendEmailOptions();
+        configuration.GetSection(ResendEmailOptions.ConfigurationSection).Bind(resendOptions);
+        services.AddSingleton(resendOptions);
+        services.AddSingleton<ResendEmailService>();
+        // ──────────────────────────────────────────────────────────────────────
+
         services.AddSingleton<IFlowsRepository, FlowsRepository>();
         services.AddSingleton<IFlowRunsRepository, FlowRunsRepository>();
 
