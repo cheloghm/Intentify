@@ -10,7 +10,13 @@
       "Bash(node --check \"C:\\\\Users\\\\chelo\\\\source\\\\repos\\\\Intentify\\\\src\\\\frontend\\\\web\\\\src\\\\pages\\\\knowledge.js\")",
       "Bash(node --check \"C:\\\\Users\\\\chelo\\\\source\\\\repos\\\\Intentify\\\\src\\\\backend\\\\modules\\\\Intentify.Modules.Collector\\\\src\\\\Intentify.Modules.Collector.Api\\\\assets\\\\tracker.js\")",
       "Bash(python3:*)",
-      "Bash(git:*)"
+      "Bash(git:*)",
+      "Bash(dotnet test:*)",
+      "Bash(rm:*)",
+      "Bash(find backend/shared/Intentify.Shared.Data.Mongo/tests backend/shared/Intentify.Shared.Observability/tests -type f ! -name \"*.dll\" ! -name \"*.pdb\" ! -name \"*.exe\" -delete)",
+      "Bash(cmd.exe /c \"rd /s /q C:\\\\Users\\\\chelo\\\\source\\\\repos\\\\Intentify\\\\src\\\\backend\\\\shared\\\\Intentify.Shared.Data.Mongo\\\\tests\")",
+      "Bash(cmd.exe /c \"rd /s /q C:\\\\Users\\\\chelo\\\\source\\\\repos\\\\Intentify\\\\src\\\\backend\\\\shared\\\\Intentify.Shared.Observability\\\\tests\")",
+      "Bash(node:*)"
     ]
   }
 }

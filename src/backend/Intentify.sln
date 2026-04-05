@@ -4,8 +4,6 @@ VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.AppHost", "app/Intentify.AppHost/Intentify.AppHost.csproj", "{D0DB8DCA-1A2F-4929-B52A-98B3654D734E}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.AppHost.Tests", "app/Intentify.AppHost/tests/Intentify.AppHost.Tests/Intentify.AppHost.Tests.csproj", "{C1BA297D-685A-4F55-AE7F-1D84392A11D3}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Auth.Domain", "modules/Intentify.Modules.Auth/src/Intentify.Modules.Auth.Domain/Intentify.Modules.Auth.Domain.csproj", "{A9E124B5-1CEA-483B-9F3D-0871E0E4B151}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Auth.Application", "modules/Intentify.Modules.Auth/src/Intentify.Modules.Auth.Application/Intentify.Modules.Auth.Application.csproj", "{54380C1F-C770-489F-80A9-4D87DD8AAA55}"
@@ -13,10 +11,6 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Auth.Infrastructure", "modules/Intentify.Modules.Auth/src/Intentify.Modules.Auth.Infrastructure/Intentify.Modules.Auth.Infrastructure.csproj", "{217C4B37-D4F1-4BC7-B6D7-B211D54921DC}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Auth.Api", "modules/Intentify.Modules.Auth/src/Intentify.Modules.Auth.Api/Intentify.Modules.Auth.Api.csproj", "{87A01776-9230-4489-9896-612539C0B021}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Auth.Tests", "modules/Intentify.Modules.Auth/tests/Intentify.Modules.Auth.Tests/Intentify.Modules.Auth.Tests.csproj", "{35942561-016E-4422-940B-1DE1BDB8D3B0}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Sites.Tests", "modules/Intentify.Modules.Sites/tests/Intentify.Modules.Sites.Tests/Intentify.Modules.Sites.Tests.csproj", "{EF38EE61-F842-4C33-8563-74A56AE136C0}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Sites.Domain", "modules/Intentify.Modules.Sites/src/Intentify.Modules.Sites.Domain/Intentify.Modules.Sites.Domain.csproj", "{BBBDF6D7-889C-4B50-996D-3CD430ADE004}"
 EndProject
@@ -34,47 +28,25 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Collector
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Collector.Api", "modules/Intentify.Modules.Collector/src/Intentify.Modules.Collector.Api/Intentify.Modules.Collector.Api.csproj", "{C5E54192-58FA-4DB5-B4F2-7138CD9F27AA}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Collector.Tests", "modules/Intentify.Modules.Collector/tests/Intentify.Modules.Collector.Tests/Intentify.Modules.Collector.Tests.csproj", "{4EB87682-E29D-4821-B328-5640E6984520}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Shared.Abstractions", "shared/Intentify.Shared.Abstractions/src/Intentify.Shared.Abstractions/Intentify.Shared.Abstractions.csproj", "{2E7B5E1A-27BD-4ED9-8F0D-58AA1D80FA4B}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Shared.Abstractions.Tests", "shared/Intentify.Shared.Abstractions/tests/Intentify.Shared.Abstractions.Tests/Intentify.Shared.Abstractions.Tests.csproj", "{8A8FB1A4-B240-47F8-B8B2-4A7C019255E2}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Shared.Web", "shared/Intentify.Shared.Web/src/Intentify.Shared.Web/Intentify.Shared.Web.csproj", "{3CEC9B96-1969-4326-8CEE-A11A1E869C2A}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Shared.Web.Tests", "shared/Intentify.Shared.Web/tests/Intentify.Shared.Web.Tests/Intentify.Shared.Web.Tests.csproj", "{8F939E60-4BB8-494E-9B94-921728BA2E58}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Shared.Security", "shared/Intentify.Shared.Security/src/Intentify.Shared.Security/Intentify.Shared.Security.csproj", "{745AA3B8-0A1D-4D3E-8BD1-7BD06F0CA3D5}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Shared.Security.Tests", "shared/Intentify.Shared.Security/tests/Intentify.Shared.Security.Tests/Intentify.Shared.Security.Tests.csproj", "{88ADDF8C-07C7-4B0D-A947-D891B7EFF1CB}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Shared.Data.Mongo", "shared/Intentify.Shared.Data.Mongo/src/Intentify.Shared.Data.Mongo/Intentify.Shared.Data.Mongo.csproj", "{B0EF4081-E2BA-4B9C-9B84-ABEEC50F86B8}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Shared.Data.Mongo.Tests", "shared/Intentify.Shared.Data.Mongo/tests/Intentify.Shared.Data.Mongo.Tests/Intentify.Shared.Data.Mongo.Tests.csproj", "{3C317476-2240-49D4-8F4C-A48FB65459CD}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Shared.Observability", "shared/Intentify.Shared.Observability/src/Intentify.Shared.Observability/Intentify.Shared.Observability.csproj", "{4B2647D0-5C75-4DFD-865A-A6DC9AFAABAB}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Shared.Observability.Tests", "shared/Intentify.Shared.Observability/tests/Intentify.Shared.Observability.Tests/Intentify.Shared.Observability.Tests.csproj", "{06E0E692-20A8-4C5B-8791-FD8A30293830}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Shared.Messaging", "shared/Intentify.Shared.Messaging/src/Intentify.Shared.Messaging/Intentify.Shared.Messaging.csproj", "{B1B67B0A-464A-433F-A276-8392FE3A6C48}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Shared.Messaging.Tests", "shared/Intentify.Shared.Messaging/tests/Intentify.Shared.Messaging.Tests/Intentify.Shared.Messaging.Tests.csproj", "{6BBA3D44-E183-4D4C-A49F-1E752F509283}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Shared.AI", "shared/Intentify.Shared.AI/src/Intentify.Shared.AI/Intentify.Shared.AI.csproj", "{CD91608F-B537-41E2-8EB5-50A561D3325F}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Shared.AI.Tests", "shared/Intentify.Shared.AI/tests/Intentify.Shared.AI.Tests/Intentify.Shared.AI.Tests.csproj", "{5F4CA691-B28B-4B14-8F17-A28A97B5EF15}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Shared.Testing", "shared/Intentify.Shared.Testing/src/Intentify.Shared.Testing/Intentify.Shared.Testing.csproj", "{894CEBB0-E04B-44BB-8B65-0BA613CA6FCA}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Shared.Testing.Tests", "shared/Intentify.Shared.Testing/tests/Intentify.Shared.Testing.Tests/Intentify.Shared.Testing.Tests.csproj", "{CBB14B9D-95EE-4EF5-8B9F-7887DFA3567F}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Shared.KeyManagement", "shared/Intentify.Shared.KeyManagement/src/Intentify.Shared.KeyManagement/Intentify.Shared.KeyManagement.csproj", "{34DF723B-C801-44BD-83A0-D923A44EFD74}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Shared.KeyManagement.Tests", "shared/Intentify.Shared.KeyManagement/tests/Intentify.Shared.KeyManagement.Tests/Intentify.Shared.KeyManagement.Tests.csproj", "{86A8E0C9-041F-4FBB-B089-D71C0DD5CB21}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Shared.Validation", "shared/Intentify.Shared.Validation/src/Intentify.Shared.Validation/Intentify.Shared.Validation.csproj", "{4FFE4D26-41CE-4763-9BE6-A58C60606D81}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Shared.Validation.Tests", "shared/Intentify.Shared.Validation/tests/Intentify.Shared.Validation.Tests/Intentify.Shared.Validation.Tests.csproj", "{7290DDF2-FF42-4984-A7EE-272C8610CD59}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Visitors.Domain", "modules/Intentify.Modules.Visitors/src/Intentify.Modules.Visitors.Domain/Intentify.Modules.Visitors.Domain.csproj", "{BCA8F65C-5410-49F3-B9BE-F8706B9CB55C}"
 EndProject
@@ -84,8 +56,6 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Visitors.
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Visitors.Api", "modules/Intentify.Modules.Visitors/src/Intentify.Modules.Visitors.Api/Intentify.Modules.Visitors.Api.csproj", "{9A4C554E-B4DB-4B0C-8CFE-F1D23AD3D594}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Visitors.Tests", "modules/Intentify.Modules.Visitors/tests/Intentify.Modules.Visitors.Tests/Intentify.Modules.Visitors.Tests.csproj", "{83413FF4-818F-4361-A37D-97CCC5A7597B}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Tickets.Domain", "modules/Intentify.Modules.Tickets/src/Intentify.Modules.Tickets.Domain/Intentify.Modules.Tickets.Domain.csproj", "{AD6AEAD8-BB21-45C4-B70B-A26186EA705F}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Tickets.Application", "modules/Intentify.Modules.Tickets/src/Intentify.Modules.Tickets.Application/Intentify.Modules.Tickets.Application.csproj", "{A485B9F6-BD5A-454B-982E-5C9F0CF8C258}"
@@ -94,8 +64,6 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Tickets.I
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Tickets.Api", "modules/Intentify.Modules.Tickets/src/Intentify.Modules.Tickets.Api/Intentify.Modules.Tickets.Api.csproj", "{9E3C3268-0E02-4123-BEC5-5E255D942BD0}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Tickets.Tests", "modules/Intentify.Modules.Tickets/tests/Intentify.Modules.Tickets.Tests/Intentify.Modules.Tickets.Tests.csproj", "{73F2BCEA-D6D1-4388-A201-9AAAAAB05B35}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Intelligence.Domain", "modules/Intentify.Modules.Intelligence/src/Intentify.Modules.Intelligence.Domain/Intentify.Modules.Intelligence.Domain.csproj", "{B3975E67-727E-4569-BFE8-5A1B5D6E82A0}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Intelligence.Application", "modules/Intentify.Modules.Intelligence/src/Intentify.Modules.Intelligence.Application/Intentify.Modules.Intelligence.Application.csproj", "{D50CFA2A-0494-45D8-9D52-D7F8181543AD}"
@@ -103,8 +71,6 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Intelligence.Infrastructure", "modules/Intentify.Modules.Intelligence/src/Intentify.Modules.Intelligence.Infrastructure/Intentify.Modules.Intelligence.Infrastructure.csproj", "{775EA4DA-F60A-41A6-BA98-11F3782B2C1A}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Intelligence.Api", "modules/Intentify.Modules.Intelligence/src/Intentify.Modules.Intelligence.Api/Intentify.Modules.Intelligence.Api.csproj", "{FDC36910-C9BA-4A37-825F-C133D88DF2A0}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Intelligence.Tests", "modules/Intentify.Modules.Intelligence/tests/Intentify.Modules.Intelligence.Tests/Intentify.Modules.Intelligence.Tests.csproj", "{F61D9EB5-665F-4488-A5F6-E174467AE555}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
