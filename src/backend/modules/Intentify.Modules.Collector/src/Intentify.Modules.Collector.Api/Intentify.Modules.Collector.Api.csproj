@@ -16,6 +16,8 @@
     <ProjectReference Include="../Intentify.Modules.Collector.Infrastructure/Intentify.Modules.Collector.Infrastructure.csproj" />
 
     <ProjectReference Include="../../../Intentify.Modules.Sites/src/Intentify.Modules.Sites.Api/Intentify.Modules.Sites.Api.csproj" />
+    <ProjectReference Include="../../../Intentify.Modules.Visitors/src/Intentify.Modules.Visitors.Application/Intentify.Modules.Visitors.Application.csproj" />
+    <ProjectReference Include="../../../Intentify.Modules.Visitors/src/Intentify.Modules.Visitors.Infrastructure/Intentify.Modules.Visitors.Infrastructure.csproj" />
     <ProjectReference Include="../../../Intentify.Modules.Sites/src/Intentify.Modules.Sites.Domain/Intentify.Modules.Sites.Domain.csproj" />
     <ProjectReference Include="../../../../shared/Intentify.Shared.Web/src/Intentify.Shared.Web/Intentify.Shared.Web.csproj" />
     <ProjectReference Include="../../../../shared/Intentify.Shared.Validation/src/Intentify.Shared.Validation/Intentify.Shared.Validation.csproj" />

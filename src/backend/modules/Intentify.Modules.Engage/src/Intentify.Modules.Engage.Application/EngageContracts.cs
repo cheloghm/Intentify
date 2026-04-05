@@ -113,6 +113,13 @@ public sealed record DigestLeadEntry(string? Name, string? Email, string? Opport
 
 public sealed record DigestTicketEntry(string Subject, string Status);
 
+public sealed record EngageBotDigestInfo(
+    Guid TenantId,
+    Guid SiteId,
+    string? Name,
+    string? DisplayName,
+    string? DigestEmailRecipients);
+
 public sealed record DigestResult(
     Guid SiteId,
     DateTime GeneratedAtUtc,

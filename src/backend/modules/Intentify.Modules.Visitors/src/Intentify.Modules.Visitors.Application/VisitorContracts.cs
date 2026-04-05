@@ -124,6 +124,17 @@ public sealed record CountryBreakdownQuery(Guid TenantId, Guid SiteId, int Days,
 
 public sealed record CountryBreakdownItem(string Country, int VisitorCount, double Percentage);
 
+// ── Consent ───────────────────────────────────────────────────────────────────
+
+public sealed record RecordVisitorConsentCommand(
+    Guid TenantId,
+    Guid SiteId,
+    Guid VisitorId,
+    bool ConsentGiven,
+    string Version = "1.0");
+
+public sealed record RecordVisitorConsentResult(bool Recorded);
+
 // ── Interfaces ────────────────────────────────────────────────────────────────
 
 public interface IVisitorRepository
@@ -137,6 +148,11 @@ public interface IVisitorRepository
 public interface IVisitorTimelineReader
 {
     Task<IReadOnlyCollection<VisitorTimelineItem>> GetTimelineAsync(VisitorTimelineQuery query, IReadOnlyCollection<string> sessionIds, DateTime? retentionFloorUtc, CancellationToken cancellationToken = default);
+}
+
+public interface IVisitorConsentWriter
+{
+    Task<RecordVisitorConsentResult> RecordConsentAsync(RecordVisitorConsentCommand command, CancellationToken cancellationToken = default);
 }
 
 public interface IVisitorAnalyticsReader
