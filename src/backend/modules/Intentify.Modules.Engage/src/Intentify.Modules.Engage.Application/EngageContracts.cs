@@ -68,7 +68,11 @@ public sealed record EngageBotResult(
     string? PersonalityDescriptor = null,
     bool DigestEmailEnabled = false,
     string? DigestEmailRecipients = null,
-    string? DigestEmailFrequency = null);
+    string? DigestEmailFrequency = null,
+    string? WidgetPosition = null,
+    string? GreetingMessage = null,
+    string? LauncherIcon = null,
+    string? AutoTriggerRulesJson = null);
 
 public sealed record UpdateEngageBotCommand(
     Guid TenantId,
@@ -86,7 +90,11 @@ public sealed record UpdateEngageBotCommand(
     string? PersonalityDescriptor = null,
     bool DigestEmailEnabled = false,
     string? DigestEmailRecipients = null,
-    string? DigestEmailFrequency = null);
+    string? DigestEmailFrequency = null,
+    string? WidgetPosition = null,
+    string? GreetingMessage = null,
+    string? LauncherIcon = null,
+    string? AutoTriggerRulesJson = null);
 
 public sealed record GenerateDigestQuery(Guid TenantId, Guid SiteId);
 

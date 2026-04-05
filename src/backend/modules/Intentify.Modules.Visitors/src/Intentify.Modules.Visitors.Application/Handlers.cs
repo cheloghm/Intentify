@@ -1,217 +1,138 @@
 namespace Intentify.Modules.Visitors.Application;
 
-public sealed class UpsertVisitorFromCollectorEventHandler
+public sealed class UpsertVisitorFromCollectorEventHandler(IVisitorRepository repository)
 {
-    private readonly IVisitorRepository _repository;
-
-    public UpsertVisitorFromCollectorEventHandler(IVisitorRepository repository)
-    {
-        _repository = repository;
-    }
-
     public Task<UpsertVisitorResult> HandleAsync(UpsertVisitorFromCollectorEvent command, CancellationToken cancellationToken = default)
-    {
-        return _repository.UpsertFromCollectorEventAsync(command, cancellationToken);
-    }
+        => repository.UpsertFromCollectorEventAsync(command, cancellationToken);
 }
 
-public sealed class ListVisitorsHandler
+public sealed class ListVisitorsHandler(IVisitorRepository repository)
 {
-    private readonly IVisitorRepository _repository;
-
-    public ListVisitorsHandler(IVisitorRepository repository)
-    {
-        _repository = repository;
-    }
-
     public Task<IReadOnlyCollection<VisitorListItem>> HandleAsync(ListVisitorsQuery query, CancellationToken cancellationToken = default)
-    {
-        return _repository.ListAsync(query, cancellationToken);
-    }
+        => repository.ListAsync(query, cancellationToken);
 }
 
-public sealed class GetVisitorTimelineHandler
+public sealed class GetVisitorTimelineHandler(
+    IVisitorRepository repository,
+    IVisitorTimelineReader timelineReader,
+    VisitorsRetentionOptions retentionOptions)
 {
-    private readonly IVisitorRepository _repository;
-    private readonly IVisitorTimelineReader _timelineReader;
-    private readonly VisitorsRetentionOptions _retentionOptions;
-
-    public GetVisitorTimelineHandler(IVisitorRepository repository, IVisitorTimelineReader timelineReader, VisitorsRetentionOptions retentionOptions)
-    {
-        _repository = repository;
-        _timelineReader = timelineReader;
-        _retentionOptions = retentionOptions;
-    }
-
     public async Task<IReadOnlyCollection<VisitorTimelineItem>> HandleAsync(VisitorTimelineQuery query, CancellationToken cancellationToken = default)
     {
-        var visitor = await _repository.GetByIdAsync(query.TenantId, query.SiteId, query.VisitorId, cancellationToken);
-        if (visitor is null)
-        {
-            return Array.Empty<VisitorTimelineItem>();
-        }
+        var visitor = await repository.GetByIdAsync(query.TenantId, query.SiteId, query.VisitorId, cancellationToken);
+        if (visitor is null) return [];
 
-        DateTime? retentionFloorUtc = _retentionOptions.RetentionDays is > 0
-            ? DateTime.UtcNow.AddDays(-_retentionOptions.RetentionDays.Value)
+        DateTime? floor = retentionOptions.RetentionDays is > 0
+            ? DateTime.UtcNow.AddDays(-retentionOptions.RetentionDays.Value)
             : null;
 
-        var sessionIds = visitor.Sessions.Select(session => session.SessionId).Distinct(StringComparer.Ordinal).ToArray();
-        return await _timelineReader.GetTimelineAsync(query, sessionIds, retentionFloorUtc, cancellationToken);
+        var sessionIds = visitor.Sessions.Select(s => s.SessionId).Distinct(StringComparer.Ordinal).ToArray();
+        return await timelineReader.GetTimelineAsync(query, sessionIds, floor, cancellationToken);
     }
 }
 
-public sealed class GetVisitCountWindowsHandler
+public sealed class GetVisitCountWindowsHandler(
+    IVisitorRepository repository,
+    VisitorsRetentionOptions retentionOptions)
 {
-    private readonly IVisitorRepository _repository;
-    private readonly VisitorsRetentionOptions _retentionOptions;
-
-    public GetVisitCountWindowsHandler(IVisitorRepository repository, VisitorsRetentionOptions retentionOptions)
-    {
-        _repository = repository;
-        _retentionOptions = retentionOptions;
-    }
-
     public async Task<VisitCountWindows> HandleAsync(Guid tenantId, Guid siteId, CancellationToken cancellationToken = default)
     {
         var now = DateTime.UtcNow;
-        DateTime? retentionFloorUtc = _retentionOptions.RetentionDays is > 0
-            ? now.AddDays(-_retentionOptions.RetentionDays.Value)
-            : null;
+        DateTime? floor = retentionOptions.RetentionDays is > 0 ? now.AddDays(-retentionOptions.RetentionDays.Value) : null;
 
-        var last7SinceUtc = now.AddDays(-7);
-        var last30SinceUtc = now.AddDays(-30);
-        var last90SinceUtc = now.AddDays(-90);
+        var s7  = Max(now.AddDays(-7),  floor);
+        var s30 = Max(now.AddDays(-30), floor);
+        var s90 = Max(now.AddDays(-90), floor);
 
-        if (retentionFloorUtc is { } floor)
-        {
-            last7SinceUtc = Max(last7SinceUtc, floor);
-            last30SinceUtc = Max(last30SinceUtc, floor);
-            last90SinceUtc = Max(last90SinceUtc, floor);
-        }
-
-        var last7 = await _repository.CountSessionsSinceAsync(tenantId, siteId, last7SinceUtc, retentionFloorUtc, cancellationToken);
-        var last30 = await _repository.CountSessionsSinceAsync(tenantId, siteId, last30SinceUtc, retentionFloorUtc, cancellationToken);
-        var last90 = await _repository.CountSessionsSinceAsync(tenantId, siteId, last90SinceUtc, retentionFloorUtc, cancellationToken);
+        var last7  = await repository.CountSessionsSinceAsync(tenantId, siteId, s7,  floor, cancellationToken);
+        var last30 = await repository.CountSessionsSinceAsync(tenantId, siteId, s30, floor, cancellationToken);
+        var last90 = await repository.CountSessionsSinceAsync(tenantId, siteId, s90, floor, cancellationToken);
 
         return new VisitCountWindows(last7, last30, last90);
     }
 
-    private static DateTime Max(DateTime left, DateTime right) => left > right ? left : right;
+    private static DateTime Max(DateTime a, DateTime? b) => b.HasValue && b.Value > a ? b.Value : a;
 }
 
-public sealed class GetVisitorDetailHandler
+public sealed class GetVisitorDetailHandler(IVisitorRepository repository)
 {
     private const int DefaultRecentSessionCount = 5;
-    private readonly IVisitorRepository _repository;
-
-    public GetVisitorDetailHandler(IVisitorRepository repository)
-    {
-        _repository = repository;
-    }
 
     public async Task<VisitorDetailResult?> HandleAsync(GetVisitorDetailQuery query, CancellationToken cancellationToken = default)
     {
-        var visitor = await _repository.GetByIdAsync(query.TenantId, query.SiteId, query.VisitorId, cancellationToken);
-        if (visitor is null)
-        {
-            return null;
-        }
+        var visitor = await repository.GetByIdAsync(query.TenantId, query.SiteId, query.VisitorId, cancellationToken);
+        if (visitor is null) return null;
 
-        var firstSeenAtUtc = visitor.Sessions.Count > 0
-            ? visitor.Sessions.Min(session => session.FirstSeenAtUtc)
+        var firstSeen = visitor.Sessions.Count > 0
+            ? visitor.Sessions.Min(s => s.FirstSeenAtUtc)
             : visitor.CreatedAtUtc;
 
         var recentSessions = visitor.Sessions
-            .OrderByDescending(session => session.LastSeenAtUtc)
+            .OrderByDescending(s => s.LastSeenAtUtc)
             .Take(DefaultRecentSessionCount)
-            .Select(session => new VisitorRecentSessionItem(
-                session.SessionId,
-                session.FirstSeenAtUtc,
-                session.LastSeenAtUtc,
-                session.PagesVisited,
-                session.TimeOnSiteSeconds,
-                session.EngagementScore,
-                session.LastPath,
-                session.LastReferrer,
-                new Dictionary<string, int>(session.TopActions, StringComparer.OrdinalIgnoreCase)))
+            .Select(s => new VisitorRecentSessionItem(
+                s.SessionId, s.FirstSeenAtUtc, s.LastSeenAtUtc,
+                s.PagesVisited, s.TimeOnSiteSeconds, s.EngagementScore,
+                s.LastPath, s.LastReferrer,
+                new Dictionary<string, int>(s.TopActions, StringComparer.OrdinalIgnoreCase)))
             .ToArray();
 
         return new VisitorDetailResult(
-            visitor.Id,
-            visitor.SiteId,
-            firstSeenAtUtc,
-            visitor.LastSeenAtUtc,
-            visitor.Sessions.Count,
-            visitor.Sessions.Sum(session => session.PagesVisited),
-            visitor.PrimaryEmail,
-            visitor.DisplayName,
-            visitor.Phone,
-            visitor.UserAgentHint,
-            visitor.Language,
-            visitor.Platform,
-            BuildIdentificationSummary(visitor),
+            visitor.Id, visitor.SiteId, firstSeen, visitor.LastSeenAtUtc,
+            visitor.Sessions.Count, visitor.Sessions.Sum(s => s.PagesVisited),
+            visitor.PrimaryEmail, visitor.DisplayName, visitor.Phone,
+            visitor.UserAgentHint, visitor.Language, visitor.Platform,
+            visitor.Country,
+            BuildIdentification(visitor),
             recentSessions);
     }
 
-    private static VisitorIdentificationSummary BuildIdentificationSummary(Domain.Visitor visitor)
+    private static VisitorIdentificationSummary BuildIdentification(Domain.Visitor visitor)
     {
-        var knownTraits = new List<string>(3);
-        if (!string.IsNullOrWhiteSpace(visitor.PrimaryEmail)) knownTraits.Add("email");
-        if (!string.IsNullOrWhiteSpace(visitor.DisplayName)) knownTraits.Add("name");
-        if (!string.IsNullOrWhiteSpace(visitor.Phone)) knownTraits.Add("phone");
-
-        var isIdentified = knownTraits.Count > 0;
-        var source = visitor.LastIdentifiedAtUtc.HasValue
-            ? "lead_capture"
-            : "unknown";
-
-        var confidence = knownTraits.Count / 3m;
-        var context = isIdentified
-            ? "Identity traits were enriched through existing consented lead-linking flow."
-            : null;
+        var traits = new List<string>(3);
+        if (!string.IsNullOrWhiteSpace(visitor.PrimaryEmail)) traits.Add("email");
+        if (!string.IsNullOrWhiteSpace(visitor.DisplayName))  traits.Add("name");
+        if (!string.IsNullOrWhiteSpace(visitor.Phone))        traits.Add("phone");
 
         return new VisitorIdentificationSummary(
-            isIdentified,
+            traits.Count > 0,
             visitor.LastIdentifiedAtUtc,
-            source,
-            confidence,
-            knownTraits,
-            context);
+            visitor.LastIdentifiedAtUtc.HasValue ? "lead_capture" : "unknown",
+            traits.Count / 3m,
+            traits,
+            traits.Count > 0 ? "Identity enriched through consented lead-linking." : null);
     }
 }
 
-public sealed class GetOnlineNowHandler
+public sealed class GetOnlineNowHandler(IVisitorAnalyticsReader analyticsReader)
 {
-    private readonly IVisitorAnalyticsReader _analyticsReader;
-
-    public GetOnlineNowHandler(IVisitorAnalyticsReader analyticsReader)
-    {
-        _analyticsReader = analyticsReader;
-    }
-
     public Task<IReadOnlyCollection<OnlineVisitorItem>> HandleAsync(OnlineNowQuery query, CancellationToken cancellationToken = default)
     {
-        var windowMinutes = query.WindowMinutes is <= 0 or > 120 ? 5 : query.WindowMinutes;
-        var limit = query.Limit is <= 0 or > 200 ? 20 : query.Limit;
-        var cutoffUtc = DateTime.UtcNow.AddMinutes(-windowMinutes);
-        return _analyticsReader.GetOnlineNowAsync(query.TenantId, query.SiteId, cutoffUtc, limit, cancellationToken);
+        var window = query.WindowMinutes is <= 0 or > 120 ? 5 : query.WindowMinutes;
+        var limit  = query.Limit is <= 0 or > 200 ? 20 : query.Limit;
+        var cutoff = DateTime.UtcNow.AddMinutes(-window);
+        return analyticsReader.GetOnlineNowAsync(query.TenantId, query.SiteId, cutoff, limit, cancellationToken);
     }
 }
 
-public sealed class GetPageAnalyticsHandler
+public sealed class GetPageAnalyticsHandler(IVisitorAnalyticsReader analyticsReader)
 {
-    private readonly IVisitorAnalyticsReader _analyticsReader;
-
-    public GetPageAnalyticsHandler(IVisitorAnalyticsReader analyticsReader)
-    {
-        _analyticsReader = analyticsReader;
-    }
-
     public Task<IReadOnlyCollection<PageAnalyticsItem>> HandleAsync(PageAnalyticsQuery query, CancellationToken cancellationToken = default)
     {
-        var days = query.Days is <= 0 or > 90 ? 7 : query.Days;
+        var days  = query.Days is <= 0 or > 90 ? 7 : query.Days;
         var limit = query.Limit is <= 0 or > 100 ? 10 : query.Limit;
-        var sinceUtc = DateTime.UtcNow.AddDays(-days);
-        return _analyticsReader.GetTopPagesAsync(query.TenantId, query.SiteId, sinceUtc, limit, cancellationToken);
+        return analyticsReader.GetTopPagesAsync(query.TenantId, query.SiteId, DateTime.UtcNow.AddDays(-days), limit, cancellationToken);
+    }
+}
+
+// ── Phase 2: Country breakdown handler ───────────────────────────────────────
+
+public sealed class GetCountryBreakdownHandler(IVisitorAnalyticsReader analyticsReader)
+{
+    public Task<IReadOnlyCollection<CountryBreakdownItem>> HandleAsync(CountryBreakdownQuery query, CancellationToken cancellationToken = default)
+    {
+        var days  = query.Days is <= 0 or > 90 ? 7 : query.Days;
+        var limit = query.Limit is <= 0 or > 100 ? 20 : query.Limit;
+        return analyticsReader.GetCountryBreakdownAsync(query.TenantId, query.SiteId, DateTime.UtcNow.AddDays(-days), limit, cancellationToken);
     }
 }

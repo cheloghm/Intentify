@@ -1,4 +1,3 @@
-
 namespace Intentify.Modules.Visitors.Domain;
 
 public sealed class Visitor
@@ -20,6 +19,11 @@ public sealed class Visitor
     public string? Language { get; set; }
 
     public string? Platform { get; set; }
+
+    // Phase 2: country inferred from IP or collector event geo data
+    public string? Country { get; set; }
+
+    public string? City { get; set; }
 
     public string? PrimaryEmail { get; set; }
 

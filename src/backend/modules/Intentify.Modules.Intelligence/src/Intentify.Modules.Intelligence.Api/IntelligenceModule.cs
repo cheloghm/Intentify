@@ -18,67 +18,56 @@ public sealed class IntelligenceModule : IAppModule
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configuration);
 
-        var googleSearchOptions = new GoogleSearchOptions();
-        configuration.GetSection(GoogleSearchOptions.ConfigurationSection).Bind(googleSearchOptions);
-        services.AddSingleton(googleSearchOptions);
+        // ── SerpApi provider (primary, used for initial release) ──────────────
+        var serpApiOptions = new SerpApiTrendsOptions();
+        configuration.GetSection(SerpApiTrendsOptions.ConfigurationSection).Bind(serpApiOptions);
+        services.AddSingleton(serpApiOptions);
 
-        var googleTrendsOptions = new GoogleTrendsOptions();
-        configuration.GetSection(GoogleTrendsOptions.ConfigurationSection).Bind(googleTrendsOptions);
-        services.AddSingleton(googleTrendsOptions);
-
-        var googleAdsOptions = new GoogleAdsOptions();
-        configuration.GetSection(GoogleAdsOptions.ConfigurationSection).Bind(googleAdsOptions);
-        services.AddSingleton(googleAdsOptions);
-
+        // ── Provider selection ────────────────────────────────────────────────
         var searchOptions = new IntelligenceSearchOptions();
         configuration.GetSection(IntelligenceSearchOptions.ConfigurationSection).Bind(searchOptions);
         services.AddSingleton(searchOptions);
 
+        // ── Recurring refresh options ─────────────────────────────────────────
         var recurringRefreshOptions = new RecurringIntelligenceRefreshOptions();
         configuration.GetSection(RecurringIntelligenceRefreshOptions.ConfigurationSection).Bind(recurringRefreshOptions);
         services.AddSingleton(Microsoft.Extensions.Options.Options.Create(recurringRefreshOptions));
 
-        RegisterHttpClient(services, GoogleSearchProvider.ClientName, googleSearchOptions.BaseUrl, googleSearchOptions.TimeoutSeconds);
-        RegisterHttpClient(services, GoogleTrendsProvider.ClientName, googleTrendsOptions.BaseUrl, googleTrendsOptions.TimeoutSeconds);
-        RegisterHttpClient(services, GoogleAdsHistoricalMetricsProvider.ClientName, googleAdsOptions.BaseUrl, googleAdsOptions.TimeoutSeconds);
-
-        services.AddSingleton<IExternalSearchProvider>(serviceProvider =>
+        // ── HTTP client for SerpApi ───────────────────────────────────────────
+        services.AddHttpClient(SerpApiTrendsProvider.ClientName, (_, client) =>
         {
-            var options = serviceProvider.GetRequiredService<IntelligenceSearchOptions>();
-            var providerName = options.Provider?.Trim() ?? "Google";
-
-            var clientFactory = serviceProvider.GetRequiredService<IHttpClientFactory>();
-            if (providerName.Equals("Google", StringComparison.OrdinalIgnoreCase))
-            {
-                var httpClient = clientFactory.CreateClient(GoogleSearchProvider.ClientName);
-                var configuredSearchOptions = serviceProvider.GetRequiredService<GoogleSearchOptions>();
-                return new GoogleSearchProvider(httpClient, configuredSearchOptions);
-            }
-
-            return providerName.ToLowerInvariant() switch
-            {
-                "googletrends" or "trends" => new GoogleTrendsProvider(
-                    clientFactory.CreateClient(GoogleTrendsProvider.ClientName),
-                    serviceProvider.GetRequiredService<GoogleTrendsOptions>()),
-                "googleads" or "ads" => new GoogleAdsHistoricalMetricsProvider(
-                    clientFactory.CreateClient(GoogleAdsHistoricalMetricsProvider.ClientName),
-                    serviceProvider.GetRequiredService<GoogleAdsOptions>(),
-                    serviceProvider.GetRequiredService<IIntelligenceProfileRepository>()),
-                _ => new GoogleSearchProvider(
-                    clientFactory.CreateClient(GoogleSearchProvider.ClientName),
-                    serviceProvider.GetRequiredService<GoogleSearchOptions>())
-            };
+            if (Uri.TryCreate(serpApiOptions.BaseUrl, UriKind.Absolute, out var baseUri))
+                client.BaseAddress = baseUri;
+            client.Timeout = TimeSpan.FromSeconds(
+                serpApiOptions.TimeoutSeconds > 0 ? serpApiOptions.TimeoutSeconds : 15);
         });
 
-        services.AddSingleton<IIntelligenceTrendsRepository, IntelligenceTrendsRepository>();
-        services.AddSingleton<IIntelligenceObserver, NoOpIntelligenceObserver>();
+        // ── Provider factory ──────────────────────────────────────────────────
+        // Currently always resolves to SerpApiTrendsProvider.
+        // When new providers are added in future phases, extend this switch.
+        services.AddSingleton<IExternalSearchProvider>(sp =>
+        {
+            var factory = sp.GetRequiredService<IHttpClientFactory>();
+            var opts    = sp.GetRequiredService<SerpApiTrendsOptions>();
+            return new SerpApiTrendsProvider(
+                factory.CreateClient(SerpApiTrendsProvider.ClientName),
+                opts);
+        });
+
+        // ── Repositories ──────────────────────────────────────────────────────
+        services.AddSingleton<IIntelligenceTrendsRepository,  IntelligenceTrendsRepository>();
         services.AddSingleton<IIntelligenceProfileRepository, IntelligenceProfileRepository>();
+
+        // ── Application services ──────────────────────────────────────────────
+        services.AddSingleton<IIntelligenceObserver, NoOpIntelligenceObserver>();
         services.AddSingleton<RefreshIntelligenceTrendsService>();
         services.AddSingleton<QueryIntelligenceTrendsService>();
         services.AddSingleton<GetIntelligenceStatusService>();
         services.AddSingleton<GetSiteInsightsSummaryService>();
         services.AddSingleton<UpsertIntelligenceProfileService>();
         services.AddSingleton<GetIntelligenceProfileService>();
+
+        // ── Background refresh worker ─────────────────────────────────────────
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<IRecurringIntelligenceRefreshExecutor, RecurringIntelligenceRefreshExecutor>();
         services.AddSingleton<RecurringIntelligenceRefreshOrchestrator>();
@@ -89,42 +78,20 @@ public sealed class IntelligenceModule : IAppModule
     {
         ArgumentNullException.ThrowIfNull(endpoints);
 
-        var group = endpoints.MapGroup("/intelligence")
-            .RequireAuthorization();
+        var group = endpoints.MapGroup("/intelligence").RequireAuthorization();
 
-        group.MapPost("/refresh", IntelligenceEndpoints.RefreshAsync);
-        group.MapGet("/trends", IntelligenceEndpoints.GetTrendsAsync);
-        group.MapGet("/status", IntelligenceEndpoints.GetStatusAsync);
-        group.MapGet("/dashboard", IntelligenceEndpoints.GetDashboardAsync);
-        group.MapGet("/site-summary", IntelligenceEndpoints.GetSiteSummaryAsync);
+        group.MapPost("/refresh",          IntelligenceEndpoints.RefreshAsync);
+        group.MapGet("/trends",            IntelligenceEndpoints.GetTrendsAsync);
+        group.MapGet("/status",            IntelligenceEndpoints.GetStatusAsync);
+        group.MapGet("/dashboard",         IntelligenceEndpoints.GetDashboardAsync);
+        group.MapGet("/site-summary",      IntelligenceEndpoints.GetSiteSummaryAsync);
         group.MapPut("/profiles/{siteId}", IntelligenceEndpoints.UpsertProfileAsync);
         group.MapGet("/profiles/{siteId}", IntelligenceEndpoints.GetProfileAsync);
     }
-
-    private static void RegisterHttpClient(IServiceCollection services, string clientName, string? baseUrl, int timeoutSeconds)
-    {
-        services.AddHttpClient(clientName, (_, client) =>
-        {
-            if (Uri.TryCreate(baseUrl, UriKind.Absolute, out var baseUri))
-            {
-                client.BaseAddress = baseUri;
-            }
-
-            client.Timeout = TimeSpan.FromSeconds(timeoutSeconds > 0 ? timeoutSeconds : 10);
-        });
-    }
-}
-
-internal static class IntelligenceHttpClientNames
-{
-    public const string GoogleTrends = "intelligence-google-trends";
-    public const string GoogleAds = "intelligence-google-ads";
 }
 
 internal sealed class NoOpIntelligenceObserver : IIntelligenceObserver
 {
     public Task OnTrendsUpdated(IntelligenceTrendsUpdatedNotification notification, CancellationToken ct)
-    {
-        return Task.CompletedTask;
-    }
+        => Task.CompletedTask;
 }

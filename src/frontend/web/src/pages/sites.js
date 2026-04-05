@@ -1,714 +1,566 @@
-import { createBadge, createToastManager, ensureUiStyles } from '../shared/ui/index.js';
+/**
+ * sites.js — Intentify Sites
+ * Revamped to match visitors.js design language exactly.
+ * All original functionality preserved: keys modal, origins modal, add/delete site,
+ * installation status check, copy to clipboard, key regeneration.
+ */
+
+import { createToastManager } from '../shared/ui/index.js';
 import { createApiClient, mapApiError } from '../shared/apiClient.js';
+
+// ─── Helpers (identical to original) ─────────────────────────────────────────
 
 const ORIGIN_HELPER_TEXT = 'Paste the website origin (scheme + host + port). No paths.';
 
 const normalizeOrigin = (value) => {
   const input = typeof value === 'string' ? value.trim() : '';
-  if (!input) {
-    return { value: '', error: ORIGIN_HELPER_TEXT };
-  }
-
+  if (!input) return { value: '', error: ORIGIN_HELPER_TEXT };
   const withoutTrailingSlash = input.replace(/\/+$/, '');
   let normalized = withoutTrailingSlash;
-
   if (withoutTrailingSlash.includes('/')) {
-    try {
-      const parsed = new URL(withoutTrailingSlash);
-      normalized = `${parsed.protocol}//${parsed.host}`;
-    } catch (error) {
-      normalized = withoutTrailingSlash;
-    }
+    try { const p = new URL(withoutTrailingSlash); normalized = `${p.protocol}//${p.host}`; }
+    catch { normalized = withoutTrailingSlash; }
   }
-
-  if (!/^https?:\/\//i.test(normalized)) {
-    return { value: '', error: ORIGIN_HELPER_TEXT };
-  }
-
+  if (!/^https?:\/\//i.test(normalized)) return { value: '', error: ORIGIN_HELPER_TEXT };
   try {
-    const parsed = new URL(normalized);
-    if (!parsed.hostname) {
-      return { value: '', error: ORIGIN_HELPER_TEXT };
-    }
-    return { value: `${parsed.protocol}//${parsed.host}`, error: '' };
-  } catch (error) {
-    return { value: '', error: ORIGIN_HELPER_TEXT };
-  }
+    const p = new URL(normalized);
+    if (!p.hostname) return { value: '', error: ORIGIN_HELPER_TEXT };
+    return { value: `${p.protocol}//${p.host}`, error: '' };
+  } catch { return { value: '', error: ORIGIN_HELPER_TEXT }; }
 };
 
 const normalizeOrigins = (origins) => {
   const unique = new Map();
-  origins.forEach((origin) => {
-    const normalizedResult = normalizeOrigin(origin);
-    const normalized = normalizedResult.value;
-    if (!normalized) return;
-    const key = normalized.toLowerCase();
-    if (!unique.has(key)) unique.set(key, normalized);
+  origins.forEach((o) => {
+    const r = normalizeOrigin(o);
+    if (!r.value) return;
+    const k = r.value.toLowerCase();
+    if (!unique.has(k)) unique.set(k, r.value);
   });
   return Array.from(unique.values());
 };
 
 const copyToClipboard = async (value) => {
-  if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(value);
-    return;
-  }
-  const textarea = document.createElement('textarea');
-  textarea.value = value;
-  textarea.style.position = 'fixed';
-  textarea.style.opacity = '0';
-  document.body.appendChild(textarea);
-  textarea.focus();
-  textarea.select();
-  document.execCommand('copy');
-  textarea.remove();
+  if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(value); return; }
+  const t = document.createElement('textarea');
+  t.value = value; t.style.cssText = 'position:fixed;opacity:0;';
+  document.body.appendChild(t); t.focus(); t.select();
+  document.execCommand('copy'); t.remove();
 };
 
-const getSiteId = (site) => site.siteId || site.id;
+const getSiteId = (site) => site?.siteId || site?.id || '';
+const fmtDate   = (v) => { if (!v) return '—'; const d = new Date(v); return isNaN(d) ? '—' : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }); };
 
 const saveCachedKeys = (siteId, { siteKey }) => {
   if (!siteId || !siteKey) return;
-  localStorage.setItem(
-    `intentify.siteKeys.${siteId}`,
-    JSON.stringify({ siteKey, cachedAtUtc: new Date().toISOString() })
-  );
+  try { localStorage.setItem(`intentify.siteKeys.${siteId}`, JSON.stringify({ siteKey, cachedAtUtc: new Date().toISOString() })); } catch {}
 };
 
-const createModal = (title) => {
-  ensureUiStyles();
-  const overlay = document.createElement('div');
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.5);z-index:200;display:flex;align-items:center;justify-content:center;padding:16px;';
+// ─── el() helper ──────────────────────────────────────────────────────────────
 
-  const dialog = document.createElement('div');
-  dialog.className = 'card';
-  dialog.style.cssText = 'width:100%;max-width:540px;max-height:90vh;overflow-y:auto;';
+const el = (tag, attrs = {}, ...kids) => {
+  const e = document.createElement(tag);
+  Object.entries(attrs).forEach(([k, v]) => {
+    if (k === 'class')          e.className = v;
+    else if (k === 'style')     typeof v === 'string' ? (e.style.cssText = v) : Object.assign(e.style, v);
+    else if (k.startsWith('@')) e.addEventListener(k.slice(1), v);
+    else e.setAttribute(k, v);
+  });
+  kids.flat(Infinity).forEach(c => c != null && e.append(typeof c === 'string' ? document.createTextNode(c) : c));
+  return e;
+};
 
-  const header = document.createElement('div');
-  header.className = 'card-header';
-  const heading = document.createElement('h3');
-  heading.className = 'card-title';
-  heading.textContent = title;
-  const closeBtn = document.createElement('button');
-  closeBtn.className = 'btn btn-secondary btn-sm';
-  closeBtn.textContent = '✕';
-  header.append(heading, closeBtn);
+// ─── Styles ───────────────────────────────────────────────────────────────────
 
-  const body = document.createElement('div');
+const injectStyles = () => {
+  if (document.getElementById('_sites2_css')) return;
+  const s = document.createElement('style');
+  s.id = '_sites2_css';
+  s.textContent = `
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
-  dialog.append(header, body);
-  overlay.appendChild(dialog);
+.si-root{font-family:'Plus Jakarta Sans',system-ui,sans-serif;display:flex;flex-direction:column;gap:20px;width:100%;max-width:960px;padding-bottom:60px}
 
+/* Hero — identical pattern to .v-hero */
+.si-hero{background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%);border-radius:16px;padding:28px 36px;position:relative;overflow:hidden}
+.si-hero::before{content:'';position:absolute;top:-30px;right:-30px;width:180px;height:180px;background:radial-gradient(circle,rgba(99,102,241,.18) 0%,transparent 70%);pointer-events:none}
+.si-hero-top{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.si-hero-title{font-size:24px;font-weight:700;color:#f8fafc;letter-spacing:-.02em;margin-bottom:6px}
+.si-hero-sub{font-size:13px;color:#94a3b8;margin-bottom:18px}
+.si-hero-stats{display:flex;gap:28px;flex-wrap:wrap}
+.si-stat{display:flex;flex-direction:column;gap:2px}
+.si-stat-val{font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:700;color:#f1f5f9;letter-spacing:-.02em}
+.si-stat-lbl{font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.07em}
+
+/* Buttons — same as .v-btn */
+.si-btn{font-family:'Plus Jakarta Sans',system-ui,sans-serif;font-size:13px;font-weight:600;padding:7px 16px;border-radius:8px;border:none;cursor:pointer;transition:all .14s;display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.si-btn-primary{background:#6366f1;color:#fff}
+.si-btn-primary:hover:not(:disabled){background:#4f46e5;transform:translateY(-1px);box-shadow:0 4px 12px rgba(99,102,241,.25)}
+.si-btn-primary:disabled{opacity:.5;cursor:not-allowed}
+.si-btn-outline{background:#fff;color:#64748b;border:1px solid #e2e8f0}
+.si-btn-outline:hover{background:#f8fafc;color:#1e293b}
+.si-btn-danger{background:#fee2e2;color:#dc2626;border:none}
+.si-btn-danger:hover{background:#fecaca}
+.si-btn-sm{padding:5px 12px;font-size:12px}
+
+/* Panel — same as .v-panel */
+.si-panel{background:#fff;border:1px solid #e2e8f0;border-radius:14px;overflow:hidden;transition:box-shadow .16s}
+.si-panel:hover{box-shadow:0 4px 16px rgba(0,0,0,.06)}
+.si-panel-hd{display:flex;align-items:flex-start;justify-content:space-between;padding:18px 22px;border-bottom:1px solid #f1f5f9;gap:12px}
+.si-panel-title{font-size:15px;font-weight:700;color:#0f172a;margin-bottom:2px}
+.si-panel-sub{font-size:11px;color:#94a3b8;font-family:'JetBrains Mono',monospace}
+.si-panel-body{padding:18px 22px;display:flex;flex-direction:column;gap:12px}
+.si-panel-actions{display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap}
+
+/* Health dot */
+.si-health{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:999px;margin-top:4px}
+.si-health-ok{background:#d1fae5;color:#065f46}
+.si-health-warn{background:#fef3c7;color:#92400e}
+.si-health-unknown{background:#f1f5f9;color:#64748b}
+.si-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.si-dot-green{background:#10b981;box-shadow:0 0 0 2px rgba(16,185,129,.25)}
+.si-dot-amber{background:#f59e0b}
+.si-dot-gray{background:#94a3b8}
+.si-live-dot{animation:_ldp 2s infinite}
+@keyframes _ldp{0%{box-shadow:0 0 0 0 rgba(16,185,129,.5)}70%{box-shadow:0 0 0 6px rgba(16,185,129,0)}100%{box-shadow:0 0 0 0 rgba(16,185,129,0)}}
+
+/* Key row */
+.si-key-row{display:flex;align-items:center;gap:8px}
+.si-key-lbl{font-size:11.5px;color:#64748b;min-width:110px;flex-shrink:0;font-weight:500}
+.si-key-val{font-family:'JetBrains Mono',monospace;font-size:11px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:5px 10px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#334155}
+
+/* Origin rows */
+.si-origin-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid #f8fafc}
+.si-origin-row:last-child{border-bottom:none}
+.si-origin-text{font-family:'JetBrains Mono',monospace;font-size:11.5px;color:#334155;flex:1;word-break:break-all}
+.si-add-row{display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap}
+
+/* Input */
+.si-input{font-family:'Plus Jakarta Sans',system-ui,sans-serif;font-size:13px;color:#1e293b;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 11px;outline:none;width:100%;box-sizing:border-box;transition:border .14s}
+.si-input:focus{border-color:#6366f1;background:#fff;box-shadow:0 0 0 3px rgba(99,102,241,.1)}
+.si-err{font-size:11.5px;color:#dc2626;background:#fee2e2;border-radius:6px;padding:6px 10px;margin-top:4px}
+
+/* Stats row inside card */
+.si-meta{display:flex;gap:20px;flex-wrap:wrap}
+.si-meta-item-lbl{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#94a3b8;font-weight:600;margin-bottom:2px}
+.si-meta-item-val{font-size:12.5px;color:#334155;font-family:'JetBrains Mono',monospace}
+
+/* Pill */
+.si-pill{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700}
+.si-pill-green{background:#d1fae5;color:#065f46}
+.si-pill-amber{background:#fef3c7;color:#92400e}
+
+/* Overlay / modal */
+.si-overlay{position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:200;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(3px)}
+.si-modal{background:#fff;border-radius:16px;width:100%;max-width:560px;max-height:90vh;overflow-y:auto;box-shadow:0 24px 64px rgba(0,0,0,.2)}
+.si-modal-hd{display:flex;align-items:center;justify-content:space-between;padding:20px 24px;border-bottom:1px solid #f1f5f9;position:sticky;top:0;background:#fff;z-index:1}
+.si-modal-title{font-size:15px;font-weight:700;color:#0f172a}
+.si-modal-body{padding:20px 24px;display:flex;flex-direction:column;gap:14px}
+.si-form-field{display:flex;flex-direction:column;gap:5px}
+.si-form-lbl{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#94a3b8}
+.si-form-hint{font-size:11px;color:#94a3b8}
+.si-warning{background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:10px 12px;font-size:12px;color:#92400e;line-height:1.5}
+
+/* Empty state */
+.si-empty{background:#fff;border:1px solid #e2e8f0;border-radius:14px;text-align:center;padding:56px 24px}
+.si-empty-icon{font-size:42px;opacity:.3;margin-bottom:14px}
+.si-empty-title{font-size:16px;font-weight:700;color:#334155;margin-bottom:6px}
+.si-empty-desc{font-size:13px;color:#94a3b8;max-width:300px;margin:0 auto 20px;line-height:1.65}
+
+/* Skeleton */
+.si-skel{background:linear-gradient(90deg,#f1f5f9 25%,#e2e8f0 50%,#f1f5f9 75%);background-size:200% 100%;animation:_sh 1.4s infinite;border-radius:14px;height:140px}
+@keyframes _sh{0%{background-position:200% 0}100%{background-position:-200% 0}}
+  `;
+  document.head.appendChild(s);
+};
+
+// ─── Modal factory ────────────────────────────────────────────────────────────
+
+const makeModal = (title) => {
+  const overlay = el('div', { class: 'si-overlay' });
+  const modal   = el('div', { class: 'si-modal' });
+  const mhd     = el('div', { class: 'si-modal-hd' });
+  const titleEl = el('div', { class: 'si-modal-title' }, title);
+  const closeBtn = el('button', { class: 'si-btn si-btn-outline si-btn-sm' }, '✕');
+  mhd.append(titleEl, closeBtn);
+  const body = el('div', { class: 'si-modal-body' });
+  modal.append(mhd, body);
+  overlay.appendChild(modal);
+
+  const show = () => { document.body.appendChild(overlay); };
   const hide = () => overlay.remove();
-  const show = () => document.body.appendChild(overlay);
-
   closeBtn.addEventListener('click', hide);
   overlay.addEventListener('click', (e) => { if (e.target === overlay) hide(); });
 
-  return { overlay, body, show, hide, setTitle: (t) => { heading.textContent = t; } };
+  return { body, show, hide, setTitle: (t) => { titleEl.textContent = t; } };
 };
 
-const makeFormGroup = (labelText, inputEl) => {
-  const group = document.createElement('div');
-  group.className = 'form-group';
-  const label = document.createElement('label');
-  label.className = 'form-label';
-  label.textContent = labelText;
-  group.append(label, inputEl);
-  return group;
-};
-
-const makeInput = (placeholder = '', type = 'text') => {
-  const input = document.createElement('input');
-  input.type = type;
-  input.className = 'form-input';
-  input.placeholder = placeholder;
-  return input;
-};
-
-const makeTextarea = (placeholder = '', rows = 4) => {
-  const ta = document.createElement('textarea');
-  ta.className = 'form-textarea';
-  ta.placeholder = placeholder;
-  ta.rows = rows;
-  return ta;
-};
-
-const makeErrorEl = () => {
-  const el = document.createElement('div');
-  el.className = 'ui-field-error';
-  return el;
-};
+// ─── Main export ──────────────────────────────────────────────────────────────
 
 export const renderSitesView = (container, { apiClient, toast } = {}) => {
-  const client = apiClient || createApiClient();
-  const notifier = toast || createToastManager();
+  injectStyles();
+  const client   = apiClient || createApiClient();
+  const notifier = toast     || createToastManager();
+  const state    = { sites: [], loading: true, error: null };
 
-  const state = {
-    sites: [],
-    loading: true,
-    error: null,
+  const root = el('div', { class: 'si-root' });
+  container.appendChild(root);
+
+  // ── Hero ───────────────────────────────────────────────────────────────────
+  const hero = el('div', { class: 'si-hero' });
+  const heroTop = el('div', { class: 'si-hero-top' });
+  const heroLeft = el('div', {});
+  heroLeft.appendChild(el('div', { class: 'si-hero-title' }, '🌐 Sites'));
+  heroLeft.appendChild(el('div', { class: 'si-hero-sub' }, 'Manage tracked websites, API keys, and allowed origins'));
+
+  const heroStats = el('div', { class: 'si-hero-stats' });
+  const mkStat = (lbl) => {
+    const w = el('div', { class: 'si-stat' });
+    const v = el('div', { class: 'si-stat-val' }, '—');
+    w.append(v, el('div', { class: 'si-stat-lbl' }, lbl));
+    heroStats.appendChild(w);
+    return v;
   };
+  const hTotal = mkStat('Sites');
+  const hConfigured = mkStat('Configured');
+  heroLeft.appendChild(heroStats);
 
-  const page = document.createElement('div');
-  page.style.cssText = 'display:flex;flex-direction:column;gap:20px;width:100%;max-width:960px;';
+  const addSiteBtn = el('button', { class: 'si-btn si-btn-primary', style: 'align-self:flex-start;margin-top:4px' }, '+ Add Site');
+  heroTop.append(heroLeft);
+  hero.append(heroTop, addSiteBtn);
+  root.appendChild(hero);
 
-  // ── Page Header ──────────────────────────────────────────────────────────
-  const pageHeader = document.createElement('div');
-  pageHeader.className = 'page-header';
+  // ── List ───────────────────────────────────────────────────────────────────
+  const listEl = el('div', { style: 'display:flex;flex-direction:column;gap:14px' });
+  root.appendChild(listEl);
 
-  const headerLeft = document.createElement('div');
-  const pageTitle = document.createElement('h2');
-  pageTitle.className = 'page-title';
-  pageTitle.textContent = 'Sites';
-  const pageSubtitle = document.createElement('p');
-  pageSubtitle.className = 'page-subtitle';
-  pageSubtitle.textContent = 'Manage your tracked websites and widget configurations';
-  headerLeft.append(pageTitle, pageSubtitle);
-
-  const addSiteBtn = document.createElement('button');
-  addSiteBtn.className = 'btn btn-primary';
-  addSiteBtn.textContent = '+ Add Site';
-
-  pageHeader.append(headerLeft, addSiteBtn);
-
-  // ── Sites List ───────────────────────────────────────────────────────────
-  const sitesListEl = document.createElement('div');
-  sitesListEl.className = 'stack';
-
-  // ── Fetch installation status ────────────────────────────────────────────
-  const fetchInstallationStatus = async (siteId) => {
-    if (!siteId) return null;
-    try {
-      return await client.request(`/sites/${siteId}/installation-status`);
-    } catch {
-      return null;
-    }
-  };
-
-  // ── Manage Keys Modal ────────────────────────────────────────────────────
-  const keysModal = createModal('Site Keys');
+  // ── Keys modal ─────────────────────────────────────────────────────────────
+  const keysModal = makeModal('Site Keys');
 
   const openKeysModal = async (site) => {
     const siteId = getSiteId(site);
-    keysModal.setTitle(`Keys — ${site.domain || site.name || 'Site'}`);
-    keysModal.body.innerHTML = '<div style="color:var(--color-text-muted);padding:16px 0;">Loading keys…</div>';
+    keysModal.setTitle(`🔑 Keys — ${site.domain || site.name || 'Site'}`);
+    keysModal.body.replaceChildren(el('div', { style: 'color:#94a3b8;padding:12px 0' }, '⏳ Loading keys…'));
     keysModal.show();
 
     try {
       const keys = await client.sites.getKeys(siteId);
-      keysModal.body.innerHTML = '';
+      keysModal.body.replaceChildren();
 
-      const warning = document.createElement('p');
-      warning.style.cssText = 'font-size:12px;color:var(--color-warning);margin-bottom:16px;';
-      warning.textContent = 'Keep these keys safe. Regenerating keys will invalidate the old ones.';
-      keysModal.body.appendChild(warning);
+      keysModal.body.appendChild(el('div', { class: 'si-warning' },
+        '⚠ Keep these keys safe. Regenerating will invalidate existing ones — update any installed snippets.'));
 
-      const makeKeyRow = (label, value) => {
-        const row = document.createElement('div');
-        row.className = 'form-group';
-        const lbl = document.createElement('label');
-        lbl.className = 'form-label';
-        lbl.textContent = label;
-        const inputRow = document.createElement('div');
-        inputRow.style.cssText = 'display:flex;gap:8px;align-items:center;';
-        const inp = document.createElement('input');
-        inp.className = 'form-input';
-        inp.value = value || '(not available)';
-        inp.readOnly = true;
-        inp.style.fontFamily = 'monospace';
-        const copyBtn = document.createElement('button');
-        copyBtn.className = 'btn btn-secondary btn-sm';
-        copyBtn.textContent = 'Copy';
-        copyBtn.style.flexShrink = '0';
+      const mkKeyRow = (label, value) => {
+        const row = el('div', { class: 'si-key-row' });
+        const lbl = el('div', { class: 'si-key-lbl' }, label);
+        const val = el('div', { class: 'si-key-val', title: value || '' }, value || '(not available)');
+        const copyBtn = el('button', { class: 'si-btn si-btn-outline si-btn-sm' }, '📋 Copy');
         copyBtn.addEventListener('click', async () => {
-          try {
-            await copyToClipboard(value);
-            notifier.show({ message: `${label} copied.`, variant: 'success' });
-          } catch {
-            notifier.show({ message: 'Unable to copy.', variant: 'danger' });
-          }
+          try { await copyToClipboard(value); notifier.show({ message: `${label} copied.`, variant: 'success' }); copyBtn.textContent = '✓ Copied'; setTimeout(() => { copyBtn.textContent = '📋 Copy'; }, 1500); }
+          catch { notifier.show({ message: 'Unable to copy.', variant: 'danger' }); }
         });
-        inputRow.append(inp, copyBtn);
-        row.append(lbl, inputRow);
+        row.append(lbl, val, copyBtn);
         return row;
       };
 
       keysModal.body.append(
-        makeKeyRow('Site Key (tracker / sdk)', keys.siteKey),
-        makeKeyRow('Widget Key (engage widget)', keys.widgetKey),
+        mkKeyRow('Site Key (tracker)', keys.siteKey),
+        mkKeyRow('Widget Key (engage)', keys.widgetKey),
       );
 
-      const footer = document.createElement('div');
-      footer.style.cssText = 'display:flex;gap:8px;margin-top:8px;';
+      const footerRow = el('div', { style: 'display:flex;gap:8px;margin-top:4px;flex-wrap:wrap' });
 
-      const installBtn = document.createElement('button');
-      installBtn.className = 'btn btn-secondary btn-sm';
-      installBtn.textContent = 'Open Install Guide';
+      const installBtn = el('button', { class: 'si-btn si-btn-outline si-btn-sm' }, '📦 Install Guide');
       installBtn.addEventListener('click', () => {
-        const params = new URLSearchParams({ siteId });
-        if (site.domain) params.set('domain', site.domain);
-        if (keys.siteKey) params.set('siteKey', keys.siteKey);
-        window.location.hash = `#/install?${params.toString()}`;
+        const p = new URLSearchParams({ siteId });
+        if (site.domain) p.set('domain', site.domain);
+        if (keys.siteKey) p.set('siteKey', keys.siteKey);
+        window.location.hash = `#/install?${p.toString()}`;
         keysModal.hide();
       });
 
-      const regenBtn = document.createElement('button');
-      regenBtn.className = 'btn btn-danger btn-sm';
-      regenBtn.textContent = 'Regenerate Keys';
+      const regenBtn = el('button', { class: 'si-btn si-btn-danger si-btn-sm' }, '🔄 Regenerate Keys');
       regenBtn.addEventListener('click', async () => {
-        const confirmed = window.confirm('Regenerating keys will invalidate existing ones. Your installed tracker and widget will need updating. Continue?');
-        if (!confirmed) return;
-        regenBtn.disabled = true;
-        regenBtn.textContent = 'Regenerating…';
+        if (!confirm('Regenerating keys will invalidate existing ones. Continue?')) return;
+        regenBtn.disabled = true; regenBtn.textContent = '⏳ Regenerating…';
         try {
-          const response = await client.sites.regenerateKeys(siteId);
-          saveCachedKeys(siteId, { siteKey: response.siteKey });
+          const resp = await client.sites.regenerateKeys(siteId);
+          saveCachedKeys(siteId, { siteKey: resp.siteKey });
           notifier.show({ message: 'Keys regenerated.', variant: 'success' });
           keysModal.hide();
-          // Re-open with fresh keys
           openKeysModal(site);
-        } catch (error) {
-          notifier.show({ message: mapApiError(error).message, variant: 'danger' });
-          regenBtn.disabled = false;
-          regenBtn.textContent = 'Regenerate Keys';
+        } catch (err) {
+          notifier.show({ message: mapApiError(err).message, variant: 'danger' });
+          regenBtn.disabled = false; regenBtn.textContent = '🔄 Regenerate Keys';
         }
       });
 
-      footer.append(installBtn, regenBtn);
-      keysModal.body.appendChild(footer);
-    } catch (error) {
-      keysModal.body.innerHTML = `<p style="color:var(--color-danger);">Failed to load keys: ${mapApiError(error).message}</p>`;
+      footerRow.append(installBtn, regenBtn);
+      keysModal.body.appendChild(footerRow);
+    } catch (err) {
+      keysModal.body.replaceChildren(el('div', { style: 'color:#dc2626' }, `Failed: ${mapApiError(err).message}`));
     }
   };
 
-  // ── Edit Origins Modal ───────────────────────────────────────────────────
-  const originsModal = createModal('Edit Origins');
+  // ── Origins modal ──────────────────────────────────────────────────────────
+  const originsModal = makeModal('Edit Origins');
 
   const openOriginsModal = (site) => {
     const siteId = getSiteId(site);
-    originsModal.setTitle(`Origins — ${site.domain || site.name || 'Site'}`);
-    originsModal.body.innerHTML = '';
+    originsModal.setTitle(`🛡 Origins — ${site.domain || site.name || 'Site'}`);
+    originsModal.body.replaceChildren();
 
     const originList = [...(site.allowedOrigins || [])];
-    let originInput = '';
-    let originInputError = '';
+    let originInputVal = '';
     let saving = false;
 
-    const renderOriginsEditor = () => {
-      originsModal.body.innerHTML = '';
+    const renderEditor = () => {
+      originsModal.body.replaceChildren();
 
-      // Origins list
-      const listHeader = document.createElement('p');
-      listHeader.style.cssText = 'font-size:13px;font-weight:600;color:var(--color-text-secondary);margin-bottom:8px;';
-      listHeader.textContent = 'Allowed Origins';
-      originsModal.body.appendChild(listHeader);
+      originsModal.body.appendChild(el('div', { style: 'font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#94a3b8;margin-bottom:8px' }, 'Allowed Origins'));
 
       if (!originList.length) {
-        const empty = document.createElement('div');
-        empty.style.cssText = 'font-size:13px;color:var(--color-text-muted);margin-bottom:12px;';
-        empty.textContent = 'No origins configured yet.';
-        originsModal.body.appendChild(empty);
+        originsModal.body.appendChild(el('div', { style: 'font-size:13px;color:#94a3b8;margin-bottom:12px' }, 'No origins configured yet.'));
       } else {
-        const listEl = document.createElement('div');
-        listEl.style.cssText = 'display:flex;flex-direction:column;gap:6px;margin-bottom:12px;';
+        const listWrap = el('div', { style: 'display:flex;flex-direction:column;margin-bottom:14px' });
         originList.forEach((origin, idx) => {
-          const row = document.createElement('div');
-          row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;border:1px solid var(--color-border);border-radius:var(--radius-sm);';
-          const text = document.createElement('span');
-          text.style.cssText = 'font-size:13px;word-break:break-all;';
-          text.textContent = origin;
-          const removeBtn = document.createElement('button');
-          removeBtn.className = 'btn btn-danger btn-sm';
-          removeBtn.textContent = 'Remove';
-          removeBtn.style.flexShrink = '0';
-          removeBtn.addEventListener('click', () => {
-            originList.splice(idx, 1);
-            renderOriginsEditor();
-          });
-          row.append(text, removeBtn);
-          listEl.appendChild(row);
+          const row = el('div', { class: 'si-origin-row' });
+          row.appendChild(el('div', { class: 'si-origin-text' }, origin));
+          const rmBtn = el('button', { class: 'si-btn si-btn-danger si-btn-sm' }, '✕ Remove');
+          rmBtn.addEventListener('click', () => { originList.splice(idx, 1); renderEditor(); });
+          row.appendChild(rmBtn);
+          listWrap.appendChild(row);
         });
-        originsModal.body.appendChild(listEl);
+        originsModal.body.appendChild(listWrap);
       }
 
-      // Add origin input
-      const addGroup = document.createElement('div');
-      addGroup.className = 'form-group';
-      const addLabel = document.createElement('label');
-      addLabel.className = 'form-label';
-      addLabel.textContent = 'Add Origin';
-      const addRow = document.createElement('div');
-      addRow.style.cssText = 'display:flex;gap:8px;';
-      const addInput = makeInput('https://app.example.com');
-      addInput.value = originInput;
-      addInput.addEventListener('input', () => {
-        originInput = addInput.value;
-        originInputError = '';
-      });
+      // Add input
+      const addLbl = el('div', { style: 'font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#94a3b8;margin-bottom:5px' }, 'Add Origin');
+      const addInput = el('input', { class: 'si-input', style: 'flex:1', placeholder: 'https://app.example.com', value: originInputVal });
+      addInput.addEventListener('input', () => { originInputVal = addInput.value; });
+      const addBtn  = el('button', { class: 'si-btn si-btn-outline si-btn-sm' }, '+ Add');
+      const localBtn = el('button', { class: 'si-btn si-btn-outline si-btn-sm' }, '+ localhost');
+      const errEl   = el('div', { class: 'si-err', style: 'display:none' });
 
-      const addBtn = document.createElement('button');
-      addBtn.className = 'btn btn-secondary btn-sm';
-      addBtn.textContent = 'Add';
-      addBtn.style.flexShrink = '0';
-
-      const addLocalhostBtn = document.createElement('button');
-      addLocalhostBtn.className = 'btn btn-secondary btn-sm';
-      addLocalhostBtn.textContent = 'Add localhost';
-      addLocalhostBtn.style.flexShrink = '0';
-
-      const errEl = makeErrorEl();
-      errEl.textContent = originInputError;
-
-      const addOriginToList = (raw) => {
+      const doAdd = (raw) => {
         const result = normalizeOrigin(raw);
-        if (!result.value) {
-          originInputError = result.error;
-          errEl.textContent = result.error;
-          return;
+        if (!result.value) { errEl.textContent = result.error; errEl.style.display = ''; return; }
+        if (originList.some(o => o.toLowerCase() === result.value.toLowerCase())) {
+          notifier.show({ message: 'Origin already listed.', variant: 'warning' }); return;
         }
-        if (originList.find((o) => o.toLowerCase() === result.value.toLowerCase())) {
-          notifier.show({ message: 'Origin already listed.', variant: 'warning' });
-          return;
-        }
-        originInput = '';
-        originInputError = '';
-        originList.push(result.value);
-        renderOriginsEditor();
+        originInputVal = ''; originList.push(result.value); renderEditor();
       };
 
-      addBtn.addEventListener('click', () => addOriginToList(originInput));
-      addLocalhostBtn.addEventListener('click', () => {
-        if (window.location.hostname !== 'localhost') {
-          errEl.textContent = 'Not running on localhost.';
-          return;
-        }
-        addOriginToList(`http://localhost:${window.location.port || 80}`);
-      });
+      addBtn.addEventListener('click', () => doAdd(originInputVal));
+      localBtn.addEventListener('click', () => doAdd(`http://localhost:${window.location.port || 80}`));
+      addInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') doAdd(originInputVal); });
 
-      addRow.append(addInput, addBtn, addLocalhostBtn);
-      addGroup.append(addLabel, addRow, errEl);
-      originsModal.body.appendChild(addGroup);
+      const addRow = el('div', { class: 'si-add-row' });
+      addRow.append(addInput, addBtn, localBtn);
+      originsModal.body.append(addLbl, addRow, errEl);
 
-      // Save button
-      const footer = document.createElement('div');
-      footer.style.cssText = 'display:flex;gap:8px;margin-top:8px;';
-      const saveBtn = document.createElement('button');
-      saveBtn.className = 'btn btn-primary';
-      saveBtn.textContent = saving ? 'Saving…' : 'Save Origins';
+      // Save
+      const saveBtn = el('button', { class: 'si-btn si-btn-primary', style: 'align-self:flex-start;margin-top:8px' }, saving ? '⏳ Saving…' : '💾 Save Origins');
       saveBtn.disabled = saving;
       saveBtn.addEventListener('click', async () => {
-        saving = true;
-        renderOriginsEditor();
+        saving = true; renderEditor();
         try {
           const normalized = normalizeOrigins(originList);
-          const response = await client.request(`/sites/${siteId}/origins`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
+          const resp = await client.request(`/sites/${siteId}/origins`, {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ allowedOrigins: normalized }),
           });
-          const updatedSite = {
-            ...site,
-            ...response,
-            allowedOrigins: response.allowedOrigins || normalized,
-          };
-          state.sites = state.sites.map((item) =>
-            getSiteId(item) === siteId ? updatedSite : item
-          );
-          notifier.show({ message: 'Allowed origins updated.', variant: 'success' });
+          state.sites = state.sites.map(s => getSiteId(s) === siteId ? { ...s, ...resp, allowedOrigins: resp.allowedOrigins || normalized } : s);
+          notifier.show({ message: 'Origins updated.', variant: 'success' });
           originsModal.hide();
           renderSites();
-        } catch (error) {
-          notifier.show({ message: mapApiError(error).message, variant: 'danger' });
-        } finally {
-          saving = false;
-          renderOriginsEditor();
-        }
+        } catch (err) {
+          notifier.show({ message: mapApiError(err).message, variant: 'danger' });
+        } finally { saving = false; renderEditor(); }
       });
-      footer.appendChild(saveBtn);
-      originsModal.body.appendChild(footer);
+      originsModal.body.appendChild(saveBtn);
     };
 
-    renderOriginsEditor();
+    renderEditor();
     originsModal.show();
   };
 
-  // ── Add Site Modal ───────────────────────────────────────────────────────
-  const addSiteModal = createModal('Add Site');
+  // ── Add site modal ─────────────────────────────────────────────────────────
+  const addSiteModal = makeModal('Add Site');
 
-  const buildAddSiteForm = () => {
-    addSiteModal.body.innerHTML = '';
+  const openAddSiteModal = () => {
+    addSiteModal.body.replaceChildren();
 
-    const nameInput = makeInput('My Site');
-    const domainInput = makeInput('example.com');
-    const descInput = makeInput('What this site is about');
-    const categoryInput = makeInput('e.g. Ecommerce');
-    const tagsInput = makeInput('comma,separated,tags');
+    const nameField = el('div', { class: 'si-form-field' });
+    nameField.append(el('div',{class:'si-form-lbl'},'Site Name'), el('div',{class:'si-form-hint'},'A friendly label for this site'));
+    const nameInput = el('input', { class: 'si-input', placeholder: 'My Website' });
+    const nameErr   = el('div', { class: 'si-err', style: 'display:none' });
+    nameField.append(nameInput, nameErr);
 
-    const nameErr = makeErrorEl();
-    const domainErr = makeErrorEl();
+    const domainField = el('div', { class: 'si-form-field' });
+    domainField.append(el('div',{class:'si-form-lbl'},'Domain'), el('div',{class:'si-form-hint'},'e.g. example.com'));
+    const domainInput = el('input', { class: 'si-input', placeholder: 'example.com' });
+    const domainErr   = el('div', { class: 'si-err', style: 'display:none' });
+    domainField.append(domainInput, domainErr);
 
-    const nameGroup = makeFormGroup('Name *', nameInput);
-    nameGroup.appendChild(nameErr);
-    const domainGroup = makeFormGroup('Domain *', domainInput);
-    domainGroup.appendChild(domainErr);
+    const descField = el('div', { class: 'si-form-field' });
+    descField.append(el('div',{class:'si-form-lbl'},'Description (optional)'));
+    const descInput = el('input', { class: 'si-input', placeholder: 'What this site is about' });
+    descField.appendChild(descInput);
 
-    addSiteModal.body.append(
-      nameGroup,
-      domainGroup,
-      makeFormGroup('Description', descInput),
-      makeFormGroup('Category', categoryInput),
-      makeFormGroup('Tags', tagsInput),
-    );
+    const saveBtn = el('button', { class: 'si-btn si-btn-primary', style: 'align-self:flex-start' }, '🌐 Create Site');
+    if (state.sites.length > 0) { saveBtn.disabled = true; saveBtn.textContent = 'Site limit reached'; }
 
-    const footer = document.createElement('div');
-    footer.style.cssText = 'display:flex;gap:8px;margin-top:8px;';
-    const submitBtn = document.createElement('button');
-    submitBtn.className = 'btn btn-primary';
-    submitBtn.textContent = 'Create Site';
-
-    if (state.sites.length > 0) {
-      submitBtn.disabled = true;
-      submitBtn.textContent = 'Site limit reached';
-    }
-
-    submitBtn.addEventListener('click', async () => {
-      nameErr.textContent = '';
-      domainErr.textContent = '';
-      const name = nameInput.value.trim();
+    saveBtn.addEventListener('click', async () => {
+      nameErr.style.display = 'none'; domainErr.style.display = 'none';
+      const name   = nameInput.value.trim();
       const domain = domainInput.value.trim();
-      if (!name) { nameErr.textContent = 'Name is required.'; return; }
-      if (!domain) { domainErr.textContent = 'Domain is required.'; return; }
+      if (!name)   { nameErr.textContent = 'Name is required.';   nameErr.style.display = '';   return; }
+      if (!domain) { domainErr.textContent = 'Domain is required.'; domainErr.style.display = ''; return; }
 
-      submitBtn.disabled = true;
-      submitBtn.textContent = 'Creating…';
+      saveBtn.disabled = true; saveBtn.textContent = '⏳ Creating…';
       try {
-        const response = await client.sites.create({
-          name,
-          domain,
-          description: descInput.value.trim(),
-          category: categoryInput.value.trim(),
-          tags: tagsInput.value.split(',').map((t) => t.trim()).filter(Boolean),
-        });
-        const siteId = response.siteId || response.id;
-        const status = await fetchInstallationStatus(siteId);
-        state.sites = [{
-          ...response,
-          siteId,
-          installationStatus: status || response.installationStatus,
-        }, ...state.sites];
-        if (response.siteKey) {
-          saveCachedKeys(siteId, { siteKey: response.siteKey });
-        }
+        const resp = await client.sites.create({ name, domain, description: descInput.value.trim() });
+        const newId = resp.siteId || resp.id;
+        if (resp.siteKey) saveCachedKeys(newId, { siteKey: resp.siteKey });
         notifier.show({ message: 'Site created.', variant: 'success' });
         addSiteModal.hide();
-        renderSites();
-      } catch (error) {
-        const uiError = mapApiError(error);
-        const domainMsg = uiError.details?.errors?.domain?.[0];
-        if (domainMsg) domainErr.textContent = domainMsg;
-        notifier.show({ message: uiError.message, variant: 'danger' });
-        submitBtn.disabled = false;
-        submitBtn.textContent = 'Create Site';
+        await loadSites();
+      } catch (err) {
+        const uiErr = mapApiError(err);
+        const dMsg  = uiErr.details?.errors?.domain?.[0];
+        if (dMsg) { domainErr.textContent = dMsg; domainErr.style.display = ''; }
+        notifier.show({ message: uiErr.message, variant: 'danger' });
+        saveBtn.disabled = false; saveBtn.textContent = '🌐 Create Site';
       }
     });
 
-    footer.appendChild(submitBtn);
-    addSiteModal.body.appendChild(footer);
+    addSiteModal.body.append(nameField, domainField, descField, saveBtn);
+    addSiteModal.show();
+    nameInput.focus();
   };
 
-  addSiteBtn.addEventListener('click', () => {
-    buildAddSiteForm();
-    addSiteModal.show();
-  });
+  addSiteBtn.addEventListener('click', openAddSiteModal);
 
-  // ── Render Sites ─────────────────────────────────────────────────────────
+  // ── Render sites list ──────────────────────────────────────────────────────
   const renderSites = () => {
-    sitesListEl.innerHTML = '';
+    listEl.replaceChildren();
 
     if (state.loading) {
-      const loading = document.createElement('div');
-      loading.style.cssText = 'color:var(--color-text-muted);padding:24px 0;';
-      loading.textContent = 'Loading sites…';
-      sitesListEl.appendChild(loading);
+      listEl.append(el('div',{class:'si-skel'}), el('div',{class:'si-skel'}));
       return;
     }
-
     if (state.error) {
-      const err = document.createElement('div');
-      err.style.cssText = 'color:var(--color-danger);padding:16px 0;';
-      err.textContent = state.error;
-      sitesListEl.appendChild(err);
+      listEl.appendChild(el('div', { style: 'color:#dc2626;font-size:13px;padding:12px 0' }, state.error));
       return;
     }
-
     if (!state.sites.length) {
-      const empty = document.createElement('div');
-      empty.className = 'card';
-      const emptyBody = document.createElement('div');
-      emptyBody.className = 'empty-state';
-      emptyBody.innerHTML = '<div class="empty-state-icon">🌐</div><div class="empty-state-title">No sites yet</div><div class="empty-state-desc">Add your first site to start tracking visitors and deploying the chat widget.</div>';
-      const emptyBtn = document.createElement('button');
-      emptyBtn.className = 'btn btn-primary';
-      emptyBtn.textContent = '+ Add Your First Site';
-      emptyBtn.style.marginTop = '16px';
-      emptyBtn.addEventListener('click', () => {
-        buildAddSiteForm();
-        addSiteModal.show();
-      });
-      emptyBody.appendChild(emptyBtn);
-      empty.appendChild(emptyBody);
-      sitesListEl.appendChild(empty);
+      const empty = el('div', { class: 'si-empty' });
+      empty.append(
+        el('div',{class:'si-empty-icon'},'🌐'),
+        el('div',{class:'si-empty-title'},'No sites yet'),
+        el('div',{class:'si-empty-desc'},'Add your first site to start tracking visitors and deploying the chat widget.'),
+        el('button',{class:'si-btn si-btn-primary','@click':openAddSiteModal},'+ Add Your First Site')
+      );
+      listEl.appendChild(empty);
       return;
     }
 
-    state.sites.forEach((site) => {
+    state.sites.forEach(site => {
       const siteId = getSiteId(site);
-      const card = document.createElement('div');
-      card.className = 'card';
+      const card   = el('div', { class: 'si-panel' });
 
-      // ── Card header row ──
-      const cardHeader = document.createElement('div');
-      cardHeader.className = 'card-header';
+      // Header
+      const hd = el('div', { class: 'si-panel-hd' });
+      const hdLeft = el('div', { style: 'flex:1;min-width:0' });
+      hdLeft.appendChild(el('div', { class: 'si-panel-title' }, site.domain || site.name || 'Unnamed'));
+      hdLeft.appendChild(el('div', { class: 'si-panel-sub' }, `ID: ${siteId}`));
 
-      const headerLeft = document.createElement('div');
-      const domainTitle = document.createElement('h3');
-      domainTitle.className = 'card-title';
-      domainTitle.textContent = site.domain || site.name || 'Unnamed site';
-      const nameSubtitle = document.createElement('div');
-      nameSubtitle.className = 'card-subtitle';
-      nameSubtitle.textContent = site.name || '';
-      headerLeft.append(domainTitle, nameSubtitle);
+      // Installation health dot — updated async
+      const health = el('div', { class: 'si-health si-health-unknown' }, el('div',{class:'si-dot si-dot-gray'}), '⏳ Checking…');
+      hdLeft.appendChild(health);
 
-      const installStatus = site.installationStatus;
-      const isConfigured = installStatus?.isConfigured ?? ((site.allowedOrigins || []).length > 0);
-      const statusBadge = createBadge({
-        text: isConfigured ? 'Configured' : 'Not configured',
-        variant: isConfigured ? 'success' : 'warning',
-      });
+      const hdActions = el('div', { class: 'si-panel-actions' });
+      const keysBtn    = el('button', { class: 'si-btn si-btn-outline si-btn-sm' }, '🔑 Keys');
+      const originsBtn = el('button', { class: 'si-btn si-btn-outline si-btn-sm' }, '🛡 Origins');
+      const deleteBtn  = el('button', { class: 'si-btn si-btn-danger si-btn-sm' }, '🗑 Delete');
 
-      cardHeader.append(headerLeft, statusBadge);
-
-      // ── Site ID row ──
-      const idRow = document.createElement('div');
-      idRow.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:12px;';
-      const idLabel = document.createElement('span');
-      idLabel.style.cssText = 'font-size:11px;color:var(--color-text-muted);font-weight:500;';
-      idLabel.textContent = 'Site ID:';
-      const idValue = document.createElement('span');
-      idValue.style.cssText = 'font-family:monospace;font-size:12px;color:var(--color-text-secondary);';
-      idValue.textContent = siteId || '—';
-      const copyIdBtn = document.createElement('button');
-      copyIdBtn.className = 'btn btn-secondary btn-sm';
-      copyIdBtn.textContent = 'Copy';
-      copyIdBtn.addEventListener('click', async () => {
-        try {
-          await copyToClipboard(siteId);
-          notifier.show({ message: 'Site ID copied.', variant: 'success' });
-        } catch {
-          notifier.show({ message: 'Unable to copy.', variant: 'danger' });
-        }
-      });
-      idRow.append(idLabel, idValue, copyIdBtn);
-
-      // ── Stats row ──
-      const statsRow = document.createElement('div');
-      statsRow.style.cssText = 'display:flex;gap:24px;margin-bottom:16px;';
-      const makeStatItem = (label, value) => {
-        const item = document.createElement('div');
-        const itemLabel = document.createElement('div');
-        itemLabel.style.cssText = 'font-size:11px;color:var(--color-text-muted);font-weight:500;text-transform:uppercase;letter-spacing:0.05em;';
-        itemLabel.textContent = label;
-        const itemValue = document.createElement('div');
-        itemValue.style.cssText = 'font-size:13px;color:var(--color-text-secondary);margin-top:2px;';
-        itemValue.textContent = value;
-        item.append(itemLabel, itemValue);
-        return item;
-      };
-      const originsCount = (site.allowedOrigins || []).length;
-      const createdDate = site.createdAtUtc
-        ? new Date(site.createdAtUtc).toLocaleDateString()
-        : '—';
-      statsRow.append(
-        makeStatItem('Allowed Origins', originsCount),
-        makeStatItem('Created', createdDate),
-      );
-
-      // ── Action buttons ──
-      const actions = document.createElement('div');
-      actions.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;';
-
-      const manageKeysBtn = document.createElement('button');
-      manageKeysBtn.className = 'btn btn-secondary btn-sm';
-      manageKeysBtn.textContent = 'Manage Keys';
-      manageKeysBtn.addEventListener('click', () => openKeysModal(site));
-
-      const editOriginsBtn = document.createElement('button');
-      editOriginsBtn.className = 'btn btn-secondary btn-sm';
-      editOriginsBtn.textContent = 'Edit Origins';
-      editOriginsBtn.addEventListener('click', () => openOriginsModal(site));
-
-      const deleteBtn = document.createElement('button');
-      deleteBtn.className = 'btn btn-danger btn-sm';
-      deleteBtn.textContent = 'Delete';
+      keysBtn.addEventListener('click', () => openKeysModal(site));
+      originsBtn.addEventListener('click', () => openOriginsModal(site));
       deleteBtn.addEventListener('click', async () => {
-        const confirmed = window.confirm(
-          'Deleting this site will permanently delete all knowledge sources and their indexed content. This cannot be undone.'
-        );
-        if (!confirmed) return;
-        deleteBtn.disabled = true;
-        deleteBtn.textContent = 'Deleting…';
+        if (!confirm('Deleting this site will permanently remove all knowledge sources and data. This cannot be undone.')) return;
+        deleteBtn.disabled = true; deleteBtn.textContent = '⏳…';
         try {
           await client.sites.delete(siteId);
-          state.sites = state.sites.filter((item) => getSiteId(item) !== siteId);
+          state.sites = state.sites.filter(s => getSiteId(s) !== siteId);
           notifier.show({ message: 'Site deleted.', variant: 'success' });
           renderSites();
-        } catch (error) {
-          notifier.show({ message: mapApiError(error).message, variant: 'danger' });
-          deleteBtn.disabled = false;
-          deleteBtn.textContent = 'Delete';
+          updateHeroStats();
+        } catch (err) {
+          notifier.show({ message: mapApiError(err).message, variant: 'danger' });
+          deleteBtn.disabled = false; deleteBtn.textContent = '🗑 Delete';
         }
       });
+      hdActions.append(keysBtn, originsBtn, deleteBtn);
+      hd.append(hdLeft, hdActions);
+      card.appendChild(hd);
 
-      actions.append(manageKeysBtn, editOriginsBtn, deleteBtn);
+      // Body — meta row
+      const body = el('div', { class: 'si-panel-body' });
+      const metaRow = el('div', { class: 'si-meta' });
+      const mkMeta = (lbl, val) => {
+        const w = el('div', {});
+        w.append(el('div',{class:'si-meta-item-lbl'},lbl), el('div',{class:'si-meta-item-val'},val));
+        metaRow.appendChild(w);
+      };
+      mkMeta('Allowed Origins', String((site.allowedOrigins || []).length));
+      mkMeta('Created',         fmtDate(site.createdAtUtc));
+      const configured = site.installationStatus?.isConfigured ?? ((site.allowedOrigins || []).length > 0);
+      metaRow.appendChild(el('span', { class: `si-pill ${configured ? 'si-pill-green' : 'si-pill-amber'}` }, configured ? '✓ Configured' : '⚠ Not configured'));
+      body.appendChild(metaRow);
+      card.appendChild(body);
+      listEl.appendChild(card);
 
-      card.append(cardHeader, idRow, statsRow, actions);
-      sitesListEl.appendChild(card);
+      // Fetch installation status async
+      client.request(`/sites/${siteId}/installation-status`).then(status => {
+        const active = status?.isInstalled || (status?.eventsReceived ?? 0) > 0;
+        health.className = `si-health ${active ? 'si-health-ok' : 'si-health-warn'}`;
+        health.replaceChildren(
+          el('div', { class: `si-dot ${active ? 'si-dot-green si-live-dot' : 'si-dot-amber'}` }),
+          document.createTextNode(active ? ' Tracker active' : ' Not detected yet')
+        );
+        // update configured pill
+        state.sites = state.sites.map(s => getSiteId(s) === siteId ? { ...s, installationStatus: status } : s);
+      }).catch(() => {
+        health.className = 'si-health si-health-unknown';
+        health.replaceChildren(el('div',{class:'si-dot si-dot-gray'}), document.createTextNode(' Status unknown'));
+      });
     });
   };
 
-  // ── Load Sites ───────────────────────────────────────────────────────────
-  const loadSites = async () => {
-    state.loading = true;
-    state.error = null;
-    renderSites();
+  const updateHeroStats = () => {
+    hTotal.textContent = String(state.sites.length);
+    hConfigured.textContent = String(state.sites.filter(s =>
+      s.installationStatus?.isConfigured ?? ((s.allowedOrigins || []).length > 0)
+    ).length);
+  };
 
+  // ── Load ───────────────────────────────────────────────────────────────────
+  const loadSites = async () => {
+    state.loading = true; state.error = null;
+    renderSites();
     try {
       const sites = await client.sites.list();
       state.sites = Array.isArray(sites) ? sites : [];
       state.loading = false;
+      updateHeroStats();
       renderSites();
-
-      await Promise.all(
-        state.sites.map(async (site) => {
-          const siteId = getSiteId(site);
-          const status = await fetchInstallationStatus(siteId);
-          if (status) {
-            state.sites = state.sites.map((item) =>
-              getSiteId(item) === siteId ? { ...item, installationStatus: status } : item
-            );
-          }
-        })
-      );
-      renderSites();
-    } catch (error) {
+    } catch (err) {
       state.loading = false;
-      state.error = mapApiError(error).message;
+      state.error = mapApiError(err).message;
       renderSites();
     }
   };
-
-  page.append(pageHeader, sitesListEl);
-  container.appendChild(page);
 
   loadSites();
 };

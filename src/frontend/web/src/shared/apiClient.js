@@ -95,7 +95,6 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
     return queryString ? `?${queryString}` : '';
   };
 
-
   const createInvite = async (payload) =>
     request('/auth/invites', {
       method: 'POST',
@@ -160,11 +159,17 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
   const getVisitCounts = async (siteId) =>
     request(`/visitors/visits/counts${buildQueryString({ siteId })}`);
 
-  const getOnlineNow = async (siteId, windowMinutes = 5, limit = 20) =>
+  const getOnlineNow = async (siteId, windowMinutes = 5, limit = 50) =>
     request(`/visitors/online-now${buildQueryString({ siteId, windowMinutes, limit })}`);
 
-  const getPageAnalytics = async (siteId, days = 7, limit = 10) =>
+  const getPageAnalytics = async (siteId, days = 7, limit = 15) =>
     request(`/visitors/analytics/pages${buildQueryString({ siteId, days, limit })}`);
+
+  const getCountryBreakdown = async (siteId, days = 7, limit = 20) =>
+    request(`/visitors/analytics/countries${buildQueryString({ siteId, days, limit })}`);
+
+  const getDashboardAnalytics = async (siteId) =>
+    request(`/visitors/analytics/dashboard${buildQueryString({ siteId })}`);
 
   const listSites = async () => request('/sites');
 
@@ -246,20 +251,60 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
   const getIntelligenceTrends = async (params) =>
     request(`/intelligence/trends${buildQueryString(params)}`);
 
+  const getIntelligenceDashboard = async (params) =>
+    request(`/intelligence/dashboard${buildQueryString({
+      siteId: params.siteId,
+      category: params.category || undefined,
+      location: params.location || undefined,
+      timeWindow: params.timeWindow || undefined,
+      provider: params.provider || undefined,
+      keyword: params.keyword || undefined,
+      audienceType: params.audienceType || undefined,
+      ageRange: params.ageRange || undefined,
+      categoryId: params.categoryId || undefined,
+      searchType: params.searchType || undefined,
+      comparisonTerms: params.comparisonTerms || undefined,
+      subRegion: params.subRegion || undefined,
+      limit: params.limit || undefined,
+    })}`);
+
+  const getIntelligenceSiteSummary = async (params) =>
+    request(`/intelligence/site-summary${buildQueryString({
+      siteId: params.siteId,
+      category: params.category || undefined,
+      location: params.location || undefined,
+      timeWindow: params.timeWindow || undefined,
+      provider: params.provider || undefined,
+      keyword: params.keyword || undefined,
+      audienceType: params.audienceType || undefined,
+      ageRange: params.ageRange || undefined,
+      categoryId: params.categoryId || undefined,
+      searchType: params.searchType || undefined,
+      comparisonTerms: params.comparisonTerms || undefined,
+      subRegion: params.subRegion || undefined,
+      limit: params.limit || undefined,
+    })}`);
+
   const refreshIntelligence = async (payload) =>
     request('/intelligence/refresh', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        siteId: payload.siteId,
+        category: payload.category || 'general',
+        location: payload.location || 'GB',
+        timeWindow: payload.timeWindow || '7d',
+        limit: payload.limit || 25,
+        keyword: payload.keyword || undefined,
+        ageRange: payload.ageRange || undefined,
+        categoryId: payload.categoryId || undefined,
+        searchType: payload.searchType || undefined,
+        comparisonTerms: payload.comparisonTerms || undefined,
+        subRegion: payload.subRegion || undefined,
+      }),
     });
-
-  const getIntelligenceDashboard = async (params) =>
-    request(`/intelligence/dashboard${buildQueryString(params)}`);
-
-  const getIntelligenceSiteSummary = async (params) =>
-    request(`/intelligence/site-summary${buildQueryString(params)}`);
 
   const getIntelligenceProfile = async (siteId) =>
     request(`/intelligence/profiles/${encodeURIComponent(siteId)}`);
@@ -293,7 +338,6 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
     });
   };
 
-
   const createPromo = async (payload) => {
     if (payload instanceof FormData) {
       return request('/promos', {
@@ -323,7 +367,7 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
   const getPromoDetail = async (promoId) =>
     request(`/promos/${encodeURIComponent(promoId)}`);
 
-  const getPromoFlyerUrl = (promoId) => `${baseUrl.replace(/\/$/, "")}/promos/${encodeURIComponent(promoId)}/flyer`;
+  const getPromoFlyerUrl = (promoId) => `${baseUrl.replace(/\/$/, '')}/promos/${encodeURIComponent(promoId)}/flyer`;
 
   const downloadPromoCsv = async (promoId) => {
     const url = buildUrl(`/promos/${encodeURIComponent(promoId)}/export.csv`, baseUrl);
@@ -377,28 +421,11 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
   const getEngageBot = async (siteId) =>
     request(`/engage/bot${buildQueryString({ siteId })}`);
 
-  const updateEngageBot = async (siteId, name, settings = {}) =>
+  const updateEngageBotWithSiteId = async (siteId, payload) =>
     request(`/engage/bot${buildQueryString({ siteId })}`, {
       method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        name,
-        primaryColor: settings.primaryColor,
-        launcherVisible: settings.launcherVisible,
-        tone: settings.tone,
-        verbosity: settings.verbosity,
-        fallbackStyle: settings.fallbackStyle,
-        businessDescription: settings.businessDescription,
-        industry: settings.industry,
-        servicesDescription: settings.servicesDescription,
-        geoFocus: settings.geoFocus || settings.geographicFocus,
-        personalityDescriptor: settings.personalityDescriptor,
-        digestEmailEnabled: settings.digestEmailEnabled ?? false,
-        digestEmailRecipients: settings.digestEmailRecipients,
-        digestEmailFrequency: settings.digestEmailFrequency,
-      }),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
     });
 
   const sendEngageDigest = async (siteId) =>
@@ -460,6 +487,26 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
   const getLead = async (leadId) =>
     request(`/leads/${encodeURIComponent(leadId)}`);
 
+  const getLeadByVisitor = async (siteId, visitorId) =>
+    request(`/leads/by-visitor${buildQueryString({ siteId, visitorId })}`);
+
+  const tagLeadStage = async (leadId, stage) =>
+    request(`/flows/execute`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        triggerType: 'manual_stage_update',
+        payload: { leadId, stage },
+      }),
+    });
+
+  const tagLeadStageViaFlow = async (leadId, stageName) =>
+    request(`/leads/${encodeURIComponent(leadId)}/stage`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ stage: stageName }),
+    });
+
   const listTickets = async ({ siteId, visitorId, engageSessionId, page = 1, pageSize = 50 } = {}) =>
     request(`/tickets${buildQueryString({ siteId, visitorId, engageSessionId, page, pageSize })}`);
 
@@ -477,7 +524,6 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
       },
       body: JSON.stringify({ content }),
     });
-
 
   const listFlows = async (siteId) =>
     request(`/flows${buildQueryString({ siteId })}`);
@@ -519,6 +565,7 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
     request(`/platform-admin/tenants/${encodeURIComponent(tenantId)}`);
 
   const getPlatformOperationalSummary = async () => request('/platform-admin/operations/summary');
+
   const transitionTicketStatus = async (ticketId, status) =>
     request(`/tickets/${encodeURIComponent(ticketId)}/status`, {
       method: 'PUT',
@@ -545,6 +592,8 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
       visitCounts: getVisitCounts,
       onlineNow: getOnlineNow,
       pageAnalytics: getPageAnalytics,
+      countryBreakdown: getCountryBreakdown,
+      dashboardAnalytics: getDashboardAnalytics,
     },
     knowledge: {
       createSource: createKnowledgeSource,
@@ -557,7 +606,6 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
       addQuickFact,
       deleteQuickFact,
     },
-
     intelligence: {
       status: getIntelligenceStatus,
       trends: getIntelligenceTrends,
@@ -567,7 +615,6 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
       getProfile: getIntelligenceProfile,
       upsertProfile: upsertIntelligenceProfile,
     },
-
     ads: {
       listCampaigns: listAdsCampaigns,
       getCampaign: getAdsCampaign,
@@ -595,7 +642,7 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
       getOpportunityAnalytics: getEngageOpportunityAnalytics,
       getConversationMessages: getEngageConversationMessages,
       getBot: getEngageBot,
-      updateBot: updateEngageBot,
+      updateBot: updateEngageBotWithSiteId,
       sendDigest: sendEngageDigest,
     },
     tickets: {
@@ -618,6 +665,8 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
     leads: {
       list: listLeads,
       get: getLead,
+      getByVisitor: getLeadByVisitor,
+      tagStage: tagLeadStageViaFlow,
     },
     auth: {
       createInvite,

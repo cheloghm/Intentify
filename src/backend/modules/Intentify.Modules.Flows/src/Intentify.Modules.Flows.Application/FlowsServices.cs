@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Json;
 using Intentify.Modules.Flows.Domain;
 using Intentify.Modules.Leads.Application;
@@ -133,7 +134,8 @@ public sealed class ExecuteFlowsForTriggerService(
     IFlowsRepository flowsRepository,
     IFlowRunsRepository runsRepository,
     IHttpClientFactory httpClientFactory,
-    IServiceProvider serviceProvider)
+    IServiceProvider serviceProvider,
+    ResendEmailService? emailService = null)
 {
     public async Task<OperationResult<ExecuteFlowsResult>> HandleAsync(ExecuteFlowsTriggerCommand command, CancellationToken ct = default)
     {
@@ -323,13 +325,25 @@ public sealed class ExecuteFlowsForTriggerService(
             var to = action.Params is not null && action.Params.TryGetValue("to", out var t) ? t : null;
             var subject = action.Params is not null && action.Params.TryGetValue("subject", out var s) ? s : "(no subject)";
             var body = action.Params is not null && action.Params.TryGetValue("body", out var b) ? b : string.Empty;
+
             if (string.IsNullOrWhiteSpace(to))
             {
                 return (FlowRunStatus.Failed, "SendEmail action requires a 'to' parameter.");
             }
 
-            // TODO: Implement real SMTP once mail service is configured
-            return (FlowRunStatus.Succeeded, $"Email queued to {to}: {subject}");
+            if (emailService is null || !emailService.IsConfigured)
+            {
+                return (FlowRunStatus.Succeeded, $"[Email not configured — would have sent to {to}: {subject}]");
+            }
+
+            var html = body.TrimStart().StartsWith('<')
+                ? body
+                : $"<p style=\"font-family:sans-serif;color:#1e293b\">{WebUtility.HtmlEncode(body).Replace("\n", "<br>")}</p>";
+
+            var (success, error) = await emailService.SendAsync(to, subject, html, ct);
+            return success
+                ? (FlowRunStatus.Succeeded, null)
+                : (FlowRunStatus.Failed, error ?? "Unknown email error.");
         }
 
         if (string.Equals(action.ActionType, "SendSlackNotification", StringComparison.OrdinalIgnoreCase))

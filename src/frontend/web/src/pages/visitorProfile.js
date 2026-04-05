@@ -1,834 +1,479 @@
-import { createCard, createToastManager } from '../shared/ui/index.js';
+/**
+ * visitorProfile.js — Intentify Visitor Profile
+ * Phase 3: Engage chat history, linked lead, tickets, full identity enrichment display
+ */
+
+import { createToastManager } from '../shared/ui/index.js';
 import { createApiClient, mapApiError } from '../shared/apiClient.js';
 
-const SELECTED_SITE_STORAGE_KEY = 'intentify.selectedSiteId';
+// ─── Utilities ────────────────────────────────────────────────────────────────
 
-const formatDate = (value) => {
-  if (!value) return '—';
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString();
-};
-
-const toShortId = (value) => {
-  if (!value || value.length < 8) {
-    return value || '—';
-  }
-
-  return `${value.slice(0, 8)}…`;
-};
-
-const createSummaryValue = (label, value) => {
-  const block = document.createElement('div');
-  block.style.padding = '10px 12px';
-  block.style.border = '1px solid #e2e8f0';
-  block.style.borderRadius = '8px';
-  block.style.background = '#ffffff';
-
-  const labelNode = document.createElement('div');
-  labelNode.textContent = label;
-  labelNode.style.fontSize = '12px';
-  labelNode.style.color = '#64748b';
-
-  const valueNode = document.createElement('div');
-  valueNode.textContent = value ?? '—';
-  valueNode.style.fontSize = '15px';
-  valueNode.style.fontWeight = '600';
-  valueNode.style.color = '#0f172a';
-
-  block.append(labelNode, valueNode);
-  return block;
-};
-
-const mapPath = (timelineItem) => {
-  const url = timelineItem?.url;
-  if (!url) return '—';
-  try {
-    const parsedUrl = new URL(url);
-    return `${parsedUrl.pathname || '/'}${parsedUrl.search || ''}${parsedUrl.hash || ''}` || url;
-  } catch {
-    return url;
-  }
-};
-
-const mapReferrer = (timelineItem) => {
-  const referrer = timelineItem?.referrer;
-  if (!referrer) return 'Direct / None';
-  try {
-    return new URL(referrer).hostname || referrer;
-  } catch {
-    return referrer;
-  }
-};
-
-const sortByOccurredDesc = (items) =>
-  [...items].sort((left, right) => new Date(right?.occurredAtUtc || 0).getTime() - new Date(left?.occurredAtUtc || 0).getTime());
-
-const normalizeSessionId = (value) =>
-  typeof value === 'string' && value.trim() ? value.trim() : 'sessionless';
-
-const getEventData = (timelineItem) => {
-  const raw = timelineItem?.metadataSummary ?? timelineItem?.data;
-  if (!raw) return null;
-  if (typeof raw === 'string') {
-    try {
-      const parsed = JSON.parse(raw);
-      return parsed && typeof parsed === 'object' ? parsed : null;
-    } catch {
-      return null;
-    }
-  }
-  return typeof raw === 'object' ? raw : null;
-};
-
-const getCollectorSessionId = (timelineItem) => {
-  return normalizeSessionId(timelineItem?.sessionId ?? timelineItem?.SessionId);
-};
-
-const parseNumber = (value) => {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (typeof value === 'string') {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-  return null;
-};
-
-const formatDuration = (secondsValue) => {
-  const seconds = parseNumber(secondsValue);
-  if (seconds === null) return '—';
-  const totalSeconds = Math.max(0, Math.round(seconds));
-  return `${Math.floor(totalSeconds / 60)}m ${totalSeconds % 60}s`;
-};
-
-const formatIdentificationSource = (value) => {
-  if (!value || value === 'unknown') return 'Unknown';
-  if (value === 'lead_capture') return 'Lead capture';
-  return value;
-};
-
-const formatKnownTraits = (traits) => {
-  if (!Array.isArray(traits) || !traits.length) return '—';
-  return traits.join(', ');
-};
-
-const getSessionNarrative = (events, sessionId) => {
-  if (!Array.isArray(events) || !events.length) {
-    return {
-      firstSeenAtUtc: null,
-      lastSeenAtUtc: null,
-      eventCount: 0,
-      firstPath: '—',
-      lastPath: '—',
-      sessionId,
-    };
-  }
-
-  const ordered = [...events].sort((left, right) => new Date(left?.occurredAtUtc || 0).getTime() - new Date(right?.occurredAtUtc || 0).getTime());
-  return {
-    firstSeenAtUtc: ordered[0]?.occurredAtUtc || null,
-    lastSeenAtUtc: ordered[ordered.length - 1]?.occurredAtUtc || null,
-    eventCount: ordered.length,
-    firstPath: mapPath(ordered[0]),
-    lastPath: mapPath(ordered[ordered.length - 1]),
-    sessionId,
-  };
-};
-
-const summarizePromoAnswers = (answers) => {
-  const entries = Object.entries(answers || {});
-  if (!entries.length) return '—';
-  return entries
-    .slice(0, 3)
-    .map(([key, value]) => `${key}: ${value}`)
-    .join('; ');
-};
-
-const getTimelineDetails = (item) => {
-  const data = getEventData(item);
-  if (!data) return '—';
-
-  const type = String(item?.type || '').toLowerCase();
-  if (type === 'time_on_page') {
-    const duration = formatDuration(data.seconds);
-    if (duration === '—') return '—';
-    const reason = typeof data.reason === 'string' ? data.reason.trim() : '';
-    return reason ? `${duration} (${reason})` : duration;
-  }
-
-  if (type === 'scroll_depth') {
-    const percent = parseNumber(data.percent ?? data.value);
-    return percent === null ? '—' : `${Math.round(percent)}%`;
-  }
-
-  if (type === 'pageview') return data.title || data.pageTitle || '—';
-
-  if (type === 'click' || type === 'outbound_click') {
-    const text = typeof data.text === 'string' ? data.text.trim() : '';
-    const id = typeof data.id === 'string' ? data.id.trim() : '';
-    const tag = typeof data.tag === 'string' ? data.tag.trim() : '';
-    if (text && id) return `${text} (#${id})`;
-    return text || (id ? `#${id}` : '') || data.href || tag || '—';
-  }
-
-  return '—';
-};
-
-const formatConfidencePercent = (value) => {
-  const numeric = typeof value === 'number' ? value : Number(value);
-  if (!Number.isFinite(numeric)) {
-    return 'n/a';
-  }
-
-  return `${Math.round(numeric * 100)}%`;
-};
-
-const buildStage7TargetSummary = (targetRefs) => {
-  if (!targetRefs || typeof targetRefs !== 'object') {
-    return '';
-  }
-
-  return [
-    targetRefs.promoId ? `promoId: ${targetRefs.promoId}` : null,
-    targetRefs.promoPublicKey ? `promoKey: ${targetRefs.promoPublicKey}` : null,
-    targetRefs.knowledgeSourceId ? `knowledgeSourceId: ${targetRefs.knowledgeSourceId}` : null,
-    targetRefs.ticketId ? `ticketId: ${targetRefs.ticketId}` : null,
-    targetRefs.visitorId ? `visitorId: ${targetRefs.visitorId}` : null,
-  ].filter(Boolean).join(' · ');
-};
-
-const getReadOnlyStage7Recommendations = (message) => {
-  const decision = message?.stage7Decision;
-  const recommendations = decision?.recommendations ?? message?.recommendations;
-
-  if (decision && decision.validationStatus && decision.validationStatus !== 'Valid') {
-    return [];
-  }
-
-  if (!Array.isArray(recommendations)) {
-    return [];
-  }
-
-  return recommendations.filter((item) => {
-    if (!item || typeof item !== 'object') {
-      return false;
-    }
-
-    if (typeof item.type !== 'string' || !item.type.trim()) {
-      return false;
-    }
-
-    if (typeof item.rationale !== 'string' || !item.rationale.trim()) {
-      return false;
-    }
-
-    return true;
+const el = (tag, attrs = {}, ...kids) => {
+  const e = document.createElement(tag);
+  Object.entries(attrs).forEach(([k, v]) => {
+    if (k === 'class')         e.className = v;
+    else if (k === 'style')    typeof v === 'string' ? (e.style.cssText = v) : Object.assign(e.style, v);
+    else if (k.startsWith('@')) e.addEventListener(k.slice(1), v);
+    else e.setAttribute(k, v);
   });
+  kids.flat(Infinity).forEach(c => c != null && e.append(typeof c === 'string' ? document.createTextNode(c) : c));
+  return e;
 };
 
-const getTimeOnSite = (events = []) => {
-  const totalSeconds = events.reduce((sum, item) => {
-    if (String(item?.type || '').toLowerCase() !== 'time_on_page') return sum;
-    const data = getEventData(item);
-    const seconds = parseNumber(data?.seconds ?? data?.durationSeconds ?? data?.duration ?? item?.seconds);
-    return seconds === null ? sum : sum + seconds;
-  }, 0);
+const fmtDate    = v => { if (!v) return '—'; const d = new Date(v); return isNaN(d) ? '—' : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }); };
+const fmtTime    = v => { if (!v) return '—'; const d = new Date(v); return isNaN(d) ? '—' : d.toLocaleString('en-GB'); };
+const fmtAgo     = v => {
+  if (!v) return '—';
+  const m = Math.floor((Date.now() - new Date(v)) / 60000);
+  if (m < 1)  return 'just now';
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+};
+const fmtDur  = s => { if (!s || s < 1) return '—'; if (s < 60) return `${s}s`; const m = Math.floor(s/60); return `${m}m ${s%60 > 0 ? s%60+'s':''}`.trim(); };
+const normPath = url => { if (!url) return '—'; try { const u = new URL(url); return u.pathname + u.search || '/'; } catch { return url; } };
+const normHost = url => { if (!url) return 'Direct'; try { return new URL(url).hostname; } catch { return url; } };
+const shortId  = v => (!v || v.length < 8) ? (v || '—') : `${v.slice(0,8)}…`;
 
-  return totalSeconds > 0 ? formatDuration(totalSeconds) : '—';
+const PLATFORM_ICON = { mobile: '📱', desktop: '🖥️', tablet: '📋' };
+const FLAGS = { GB:'🇬🇧', IE:'🇮🇪', US:'🇺🇸', DE:'🇩🇪', FR:'🇫🇷', AU:'🇦🇺', CA:'🇨🇦', NL:'🇳🇱' };
+const flag = c => FLAGS[c?.toUpperCase()] || '🌍';
+
+const TL_CFG = {
+  pageview:    { icon: '👁️', cls: 'vp-tl-pv', label: 'Page View'         },
+  page_view:   { icon: '👁️', cls: 'vp-tl-pv', label: 'Page View'         },
+  engage:      { icon: '💬', cls: 'vp-tl-en', label: 'Chatted with Bot'  },
+  lead_capture:{ icon: '⭐', cls: 'vp-tl-lc', label: 'Lead Captured'     },
+  exit:        { icon: '🚪', cls: 'vp-tl-ot', label: 'Left Page'         },
+  scroll:      { icon: '↕️', cls: 'vp-tl-ot', label: 'Scrolled'          },
+};
+const tlCfg = t => TL_CFG[t?.toLowerCase()] || { icon: '⚡', cls: 'vp-tl-ot', label: t || 'Event' };
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
+const injectStyles = () => {
+  if (document.getElementById('_vp3_css')) return;
+  const s = document.createElement('style');
+  s.id = '_vp3_css';
+  s.textContent = `
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+.vp-root{font-family:'Plus Jakarta Sans',system-ui,sans-serif;display:flex;flex-direction:column;gap:16px;width:100%;max-width:1100px;padding-bottom:60px}
+.vp-back{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:#6366f1;cursor:pointer;background:none;border:none;padding:0;font-family:inherit}
+.vp-back:hover{text-decoration:underline}
+/* Hero */
+.vp-hero{background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:22px 26px}
+.vp-hero-top{display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap}
+.vp-avatar{width:52px;height:52px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;flex-shrink:0}
+.vp-avatar-id{background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff}
+.vp-avatar-anon{background:#f1f5f9;color:#94a3b8}
+.vp-hero-body{flex:1;min-width:0}
+.vp-hero-name{font-size:17px;font-weight:700;color:#0f172a;margin-bottom:2px}
+.vp-hero-sub{font-size:11.5px;color:#94a3b8;font-family:'JetBrains Mono',monospace;margin-bottom:8px}
+.vp-chips{display:flex;gap:6px;flex-wrap:wrap}
+.vp-chip{display:inline-flex;align-items:center;gap:3px;padding:3px 8px;border-radius:999px;font-size:10.5px;font-weight:600;border:1px solid}
+.vp-chip-green{background:#d1fae5;color:#065f46;border-color:#6ee7b7}
+.vp-chip-blue{background:#dbeafe;color:#1e40af;border-color:#93c5fd}
+.vp-chip-gray{background:#f1f5f9;color:#475569;border-color:#e2e8f0}
+.vp-chip-amber{background:#fef3c7;color:#92400e;border-color:#fcd34d}
+.vp-hero-stats{display:flex;gap:18px;flex-wrap:wrap;margin-top:14px;padding-top:12px;border-top:1px solid #f1f5f9}
+.vp-stat-val{font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:700;color:#0f172a;line-height:1}
+.vp-stat-lbl{font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;margin-top:2px}
+/* Layout */
+.vp-grid{display:grid;grid-template-columns:1fr 320px;gap:14px;align-items:start}
+@media(max-width:820px){.vp-grid{grid-template-columns:1fr}}
+/* Panel */
+.vp-panel{background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden}
+.vp-panel-hd{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #f1f5f9}
+.vp-panel-title{font-size:12.5px;font-weight:700;color:#0f172a;display:flex;align-items:center;gap:6px}
+.vp-panel-meta{font-size:10.5px;color:#94a3b8}
+.vp-panel-body{padding:14px 16px}
+/* Identity rows */
+.vp-id-row{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid #f8fafc}
+.vp-id-row:last-child{border-bottom:none}
+.vp-id-lbl{font-size:10.5px;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;font-weight:600;flex-shrink:0;padding-top:1px}
+.vp-id-val{font-size:12px;color:#1e293b;text-align:right;word-break:break-all;font-family:'JetBrains Mono',monospace}
+.vp-conf-wrap{display:flex;align-items:center;gap:6px;width:100%}
+.vp-conf-track{flex:1;height:4px;background:#e2e8f0;border-radius:999px}
+.vp-conf-fill{height:100%;border-radius:999px;background:#6366f1;transition:width .5s cubic-bezier(.34,1.56,.64,1)}
+/* Timeline */
+.vp-timeline{display:flex;flex-direction:column;max-height:480px;overflow-y:auto}
+.vp-tl-item{display:flex;gap:10px;padding:8px 0;position:relative}
+.vp-tl-item::before{content:'';position:absolute;left:15px;top:28px;bottom:-8px;width:1px;background:#e2e8f0}
+.vp-tl-item:last-child::before{display:none}
+.vp-tl-dot{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;z-index:1;border:2px solid}
+.vp-tl-pv{background:#eef2ff;border-color:#c7d2fe}
+.vp-tl-en{background:#d1fae5;border-color:#6ee7b7}
+.vp-tl-lc{background:#fef3c7;border-color:#fcd34d}
+.vp-tl-ot{background:#f1f5f9;border-color:#e2e8f0}
+.vp-tl-body{flex:1;min-width:0;padding-top:2px}
+.vp-tl-title{font-size:12px;font-weight:600;color:#1e293b}
+.vp-tl-path{font-size:10.5px;color:#6366f1;font-family:'JetBrains Mono',monospace;word-break:break-all;margin-top:1px}
+.vp-tl-ref{font-size:10px;color:#94a3b8;margin-top:1px}
+.vp-tl-time{font-size:10px;color:#94a3b8;margin-top:2px}
+/* Engage chat */
+.vp-chat-session{background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;margin-bottom:10px;overflow:hidden}
+.vp-chat-session-hd{display:flex;align-items:center;justify-content:space-between;padding:9px 12px;border-bottom:1px solid #e2e8f0;cursor:pointer;user-select:none}
+.vp-chat-session-title{font-size:11.5px;font-weight:600;color:#1e293b;display:flex;align-items:center;gap:6px}
+.vp-chat-session-meta{font-size:10px;color:#94a3b8;font-family:'JetBrains Mono',monospace}
+.vp-chat-messages{padding:10px 12px;display:flex;flex-direction:column;gap:7px}
+.vp-msg{max-width:85%;padding:8px 11px;border-radius:10px;font-size:12px;line-height:1.5}
+.vp-msg-user{background:#6366f1;color:#fff;align-self:flex-end;border-radius:10px 10px 2px 10px}
+.vp-msg-bot{background:#fff;color:#334155;border:1px solid #e2e8f0;align-self:flex-start;border-radius:10px 10px 10px 2px}
+.vp-msg-time{font-size:9px;opacity:.6;margin-top:3px;text-align:right}
+.vp-badge{display:inline-flex;align-items:center;gap:3px;padding:1px 6px;border-radius:999px;font-size:9.5px;font-weight:700}
+.vp-badge-lead{background:#d1fae5;color:#065f46}
+.vp-badge-ticket{background:#dbeafe;color:#1e40af}
+/* Lead box */
+.vp-lead-box{background:linear-gradient(135deg,#d1fae5,#a7f3d0);border:1px solid #6ee7b7;border-radius:10px;padding:12px 14px}
+.vp-lead-hd{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.vp-lead-icon{font-size:18px}
+.vp-lead-name{font-size:13px;font-weight:700;color:#065f46}
+.vp-lead-link{font-size:11px;font-weight:700;color:#065f46;cursor:pointer;text-decoration:underline;margin-left:auto}
+.vp-lead-rows{display:flex;flex-direction:column;gap:3px}
+.vp-lead-row{display:flex;gap:8px;font-size:11.5px}
+.vp-lead-row-lbl{color:#6ee7b7;font-weight:600;min-width:48px}
+.vp-lead-row-val{color:#065f46;font-family:'JetBrains Mono',monospace;word-break:break-all}
+/* Ticket */
+.vp-ticket{background:#fff;border:1px solid #e2e8f0;border-radius:9px;padding:11px 13px;margin-bottom:8px}
+.vp-ticket-hd{display:flex;align-items:flex-start;justify-content:space-between;gap:6px;margin-bottom:5px}
+.vp-ticket-subject{font-size:12.5px;font-weight:600;color:#1e293b}
+.vp-ticket-status{display:inline-flex;padding:2px 8px;border-radius:999px;font-size:9.5px;font-weight:700;text-transform:uppercase}
+.vp-ticket-open{background:#fef3c7;color:#92400e}
+.vp-ticket-closed{background:#d1fae5;color:#065f46}
+.vp-ticket-meta{font-size:10.5px;color:#94a3b8;font-family:'JetBrains Mono',monospace}
+/* Session cards */
+.vp-session{background:#f8fafc;border:1px solid #e2e8f0;border-radius:9px;padding:10px 12px;margin-bottom:8px}
+.vp-session-hd{display:flex;align-items:flex-start;justify-content:space-between;gap:6px;margin-bottom:5px}
+.vp-session-title{font-size:11.5px;font-weight:600;color:#1e293b}
+.vp-session-time{font-size:10px;color:#94a3b8;font-family:'JetBrains Mono',monospace}
+.vp-session-stats{display:flex;gap:10px;flex-wrap:wrap}
+.vp-session-stat{font-size:11px;color:#64748b}
+/* Intelligence */
+.vp-intel{background:linear-gradient(135deg,#0f172a,#1e1b4b);border-radius:12px;padding:14px 16px}
+.vp-intel-lbl{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#818cf8;margin-bottom:7px;display:flex;align-items:center;gap:4px}
+.vp-intel-text{font-size:12.5px;line-height:1.65;color:#e2e8f0}
+/* Empty/loading */
+.vp-empty{text-align:center;padding:30px 16px;display:flex;flex-direction:column;align-items:center;gap:7px}
+.vp-empty-icon{font-size:30px;opacity:.3}
+.vp-empty-title{font-size:13px;font-weight:600;color:#334155}
+.vp-empty-desc{font-size:11.5px;color:#94a3b8;max-width:240px;line-height:1.6}
+  `;
+  document.head.appendChild(s);
 };
 
-// ── Event type icons ──────────────────────────────────────────────────
-const EVENT_ICONS = {
-  pageview: '📄',
-  time_on_page: '⏱',
-  exit_intent: '🚪',
-  referral_source: '🔗',
-  engage_chat: '💬',
+// ─── Panel helper ─────────────────────────────────────────────────────────────
+const mkPanel = (title, meta = '') => {
+  const panel = el('div', { class: 'vp-panel' });
+  const hd    = el('div', { class: 'vp-panel-hd' });
+  hd.appendChild(el('div', { class: 'vp-panel-title' }, title));
+  if (meta) hd.appendChild(el('div', { class: 'vp-panel-meta' }, meta));
+  panel.appendChild(hd);
+  const body = el('div', { class: 'vp-panel-body' });
+  panel.appendChild(body);
+  return { panel, body, hd };
 };
-const getEventIcon = (type) => EVENT_ICONS[String(type || '').toLowerCase()] || '•';
 
-export const renderVisitorProfileView = async (
-  container,
-  { apiClient, toast, params = {}, query = {} } = {}
-) => {
-  const client = apiClient || createApiClient();
-  const notifier = toast || createToastManager();
-  const visitorId = params.visitorId;
+// ─── Main export ──────────────────────────────────────────────────────────────
 
-  let selectedSiteId = '';
-  try {
-    selectedSiteId = localStorage.getItem(SELECTED_SITE_STORAGE_KEY) || '';
-  } catch {
-    selectedSiteId = '';
+export const renderVisitorProfileView = async (container, { apiClient, toast, visitorId, siteId } = {}) => {
+  injectStyles();
+  const client   = apiClient || createApiClient();
+  const notifier = toast     || createToastManager();
+
+  if (!visitorId) {
+    const hash  = window.location.hash;
+    const match = hash.match(/#\/visitors\/([^?]+)/);
+    visitorId   = match?.[1];
+    const sp    = new URLSearchParams(hash.split('?')[1] || '');
+    siteId      = siteId || sp.get('siteId') || '';
   }
-  const siteId = query.siteId || selectedSiteId || '';
 
-  // ── Root ──────────────────────────────────────────────────────────
-  const page = document.createElement('div');
-  page.className = 'stack';
-  page.style.maxWidth = '1100px';
-  page.style.width = '100%';
+  const root = el('div', { class: 'vp-root' });
+  container.appendChild(root);
 
-  // ── Back link ─────────────────────────────────────────────────────
-  const backLink = document.createElement('a');
-  backLink.textContent = '← Back to Visitors';
-  backLink.href = siteId ? `#/visitors?siteId=${encodeURIComponent(siteId)}` : '#/visitors';
-  backLink.style.cssText = 'color:var(--brand-primary);text-decoration:none;font-size:13px;font-weight:500;';
+  root.appendChild(el('button', { class: 'vp-back', '@click': () => { window.location.hash = '#/visitors'; } }, '← Back to Visitors'));
 
-  // ── Header ────────────────────────────────────────────────────────
-  const pageHeader = document.createElement('div');
-  pageHeader.className = 'page-header';
-  const titleGroup = document.createElement('div');
-  const titleEl = document.createElement('h2');
-  titleEl.className = 'page-title';
-  titleEl.textContent = 'Visitor Profile';
-  const subtitleEl = document.createElement('div');
-  subtitleEl.className = 'page-subtitle';
-  subtitleEl.textContent = visitorId ? `ID: ${toShortId(visitorId)}` : '—';
-  titleGroup.append(titleEl, subtitleEl);
-  pageHeader.appendChild(titleGroup);
-
-  // ── Top row (Overview + Signals) ──────────────────────────────────
-  const topRow = document.createElement('div');
-  topRow.className = 'grid-2';
-
-  const overviewBody = document.createElement('div');
-  const signalsBody = document.createElement('div');
-
-  topRow.append(
-    createCard({ title: 'Visitor Overview', body: overviewBody }),
-    createCard({ title: 'Signals', body: signalsBody }),
-  );
-
-  // ── Timeline card ─────────────────────────────────────────────────
-  const timelineBody = document.createElement('div');
-  timelineBody.className = 'stack';
-  const timelineCard = createCard({ title: 'Journey Timeline', body: timelineBody });
-
-  // ── Linked leads & tickets card ───────────────────────────────────
-  const linkedBody = document.createElement('div');
-  linkedBody.className = 'stack';
-  const linkedCard = createCard({ title: 'Linked Leads & Tickets', body: linkedBody });
-
-  // ── Conversations card ────────────────────────────────────────────
-  const conversationsBody = document.createElement('div');
-  conversationsBody.className = 'stack';
-  const conversationsCard = createCard({ title: 'Engage Conversations', body: conversationsBody });
-
-  // ── Conversation modal ────────────────────────────────────────────
-  const modalOverlay = document.createElement('div');
-  modalOverlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.55);display:none;align-items:center;justify-content:center;z-index:1000;padding:20px;';
-  const modalCard = document.createElement('div');
-  modalCard.className = 'card';
-  modalCard.style.cssText = 'width:100%;max-width:760px;max-height:85vh;overflow-y:auto;';
-  modalOverlay.appendChild(modalCard);
-  document.body.appendChild(modalOverlay);
-
-  const handleModalKey = (e) => { if (e.key === 'Escape') closeModal(); };
-  const closeModal = () => {
-    modalOverlay.style.display = 'none';
-    document.removeEventListener('keydown', handleModalKey);
-  };
-  modalOverlay.addEventListener('click', (e) => { if (e.target === modalOverlay) closeModal(); });
-
-  // ── Assemble page ─────────────────────────────────────────────────
-  page.append(backLink, pageHeader, topRow, timelineCard, linkedCard, conversationsCard);
-  container.appendChild(page);
-
-  // ── Helper: field row ─────────────────────────────────────────────
-  const makeField = (label, value) => {
-    const row = document.createElement('div');
-    row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--color-border);gap:8px;';
-    const lbl = document.createElement('span');
-    lbl.style.cssText = 'font-size:12px;color:var(--color-text-muted);font-weight:500;white-space:nowrap;';
-    lbl.textContent = label;
-    const val = document.createElement('span');
-    val.style.cssText = 'font-size:13px;color:var(--color-text);font-weight:600;text-align:right;';
-    if (value instanceof Element) {
-      val.appendChild(value);
-    } else {
-      val.textContent = (value !== null && value !== undefined && String(value).trim() !== '') ? String(value) : '—';
-    }
-    row.append(lbl, val);
-    return row;
-  };
-
-  // ── Render: Overview card ─────────────────────────────────────────
-  const renderOverview = (detail) => {
-    overviewBody.innerHTML = '';
-    const sessions = Array.isArray(detail?.recentSessions) ? detail.recentSessions : [];
-    const latestSession = sessions.length
-      ? sessions.reduce((a, b) => new Date(a.lastSeenAtUtc || 0) > new Date(b.lastSeenAtUtc || 0) ? a : b)
-      : null;
-
-    const lastSeen = detail?.lastSeenAtUtc || null;
-    const isOnline = lastSeen && (Date.now() - new Date(lastSeen).getTime()) < 5 * 60 * 1000;
-    const statusBadge = document.createElement('span');
-    statusBadge.className = `badge badge-${isOnline ? 'success' : 'neutral'}`;
-    statusBadge.textContent = isOnline ? 'Online' : 'Offline';
-
-    overviewBody.append(
-      makeField('First seen', formatDate(detail?.firstSeenAtUtc)),
-      makeField('Last seen', formatDate(detail?.lastSeenAtUtc)),
-      makeField('Total sessions', detail?.visitCount ?? '—'),
-      makeField('Pages visited', detail?.totalPagesVisited ?? '—'),
-      makeField('Engagement score', latestSession?.engagementScore ?? '—'),
-      makeField('Status', statusBadge),
-    );
-  };
-
-  // ── Render: Signals card ──────────────────────────────────────────
-  const renderSignals = (detail, events) => {
-    signalsBody.innerHTML = '';
-
-    // Referral source — most recent referral_source event
-    const referralEvent = [...events]
-      .find((e) => String(e?.type || '').toLowerCase() === 'referral_source');
-    const referralData = referralEvent ? getEventData(referralEvent) : null;
-    let referralSource = '—';
-    if (referralData) {
-      const parts = [
-        referralData.referrer && referralData.referrer !== 'direct' ? referralData.referrer : null,
-        referralData.utmSource ? `utm: ${referralData.utmSource}` : null,
-      ].filter(Boolean);
-      if (parts.length) referralSource = parts.join(' / ');
-      else if (referralData.referrer === 'direct') referralSource = 'Direct';
-    }
-
-    // Device / browser from userAgent
-    const ua = detail?.userAgent || '';
-    let deviceInfo = '—';
-    if (ua) {
-      const isMobile = /Mobile|Android|iPhone|iPad/i.test(ua);
-      deviceInfo = isMobile ? 'Mobile' : 'Desktop';
-      if (/Edg\//i.test(ua)) deviceInfo += ' / Edge';
-      else if (/Chrome/i.test(ua)) deviceInfo += ' / Chrome';
-      else if (/Firefox/i.test(ua)) deviceInfo += ' / Firefox';
-      else if (/Safari/i.test(ua)) deviceInfo += ' / Safari';
-    }
-
-    // Max scroll depth — most recent scroll_depth event
-    const scrollEvent = events.find((e) => String(e?.type || '').toLowerCase() === 'scroll_depth');
-    const scrollData = scrollEvent ? getEventData(scrollEvent) : null;
-    const scrollDepth = scrollData?.percent !== undefined ? `${scrollData.percent}%` : '—';
-
-    // Time on page — most recent time_on_page event
-    const topEvent = events.find((e) => String(e?.type || '').toLowerCase() === 'time_on_page');
-    const topData = topEvent ? getEventData(topEvent) : null;
-    const timeOnPage = topData?.seconds !== undefined ? formatDuration(topData.seconds) : '—';
-
-    // Return visitor
-    const returnVisitor = (detail?.visitCount ?? 0) > 1 ? 'Yes' : 'No';
-
-    signalsBody.append(
-      makeField('Referral source', referralSource),
-      makeField('Device / Browser', deviceInfo),
-      makeField('Max scroll depth', scrollDepth),
-      makeField('Time on page (last)', timeOnPage),
-      makeField('Return visitor', returnVisitor),
-    );
-  };
-
-  // ── Render: Timeline card ─────────────────────────────────────────
-  const renderTimeline = (events) => {
-    timelineBody.innerHTML = '';
-
-    if (!events.length) {
-      const empty = document.createElement('div');
-      empty.className = 'empty-state';
-      const icon = document.createElement('div');
-      icon.className = 'empty-state-icon';
-      icon.textContent = '📋';
-      const title = document.createElement('div');
-      title.className = 'empty-state-title';
-      title.textContent = 'No events recorded';
-      empty.append(icon, title);
-      timelineBody.appendChild(empty);
-      return;
-    }
-
-    const grouped = new Map();
-    events.forEach((item) => {
-      const sid = getCollectorSessionId(item);
-      if (!grouped.has(sid)) grouped.set(sid, []);
-      grouped.get(sid).push(item);
-    });
-
-    const sortedSessions = Array.from(grouped.entries())
-      .map(([sid, evts]) => ({ sid, evts: sortByOccurredDesc(evts) }))
-      .sort((a, b) => new Date(b.evts[0]?.occurredAtUtc || 0) - new Date(a.evts[0]?.occurredAtUtc || 0));
-
-    sortedSessions.forEach(({ sid, evts }) => {
-      const divider = document.createElement('div');
-      divider.style.cssText = 'display:flex;align-items:center;gap:8px;padding:8px 0 4px;';
-      const pill = document.createElement('span');
-      pill.className = 'badge badge-neutral';
-      pill.textContent = `Session ${toShortId(sid)}`;
-      const timeSpan = document.createElement('span');
-      timeSpan.style.cssText = 'font-size:11px;color:var(--color-text-muted);';
-      const earliest = evts[evts.length - 1]?.occurredAtUtc;
-      const latest = evts[0]?.occurredAtUtc;
-      timeSpan.textContent = `${formatDate(earliest)} → ${formatDate(latest)} · ${evts.length} events`;
-      divider.append(pill, timeSpan);
-      timelineBody.appendChild(divider);
-
-      const table = document.createElement('table');
-      table.className = 'data-table';
-      const thead = document.createElement('thead');
-      const headRow = document.createElement('tr');
-      ['', 'Event', 'Page', 'Details', 'Time'].forEach((h) => {
-        const th = document.createElement('th');
-        th.textContent = h;
-        headRow.appendChild(th);
-      });
-      thead.appendChild(headRow);
-      table.appendChild(thead);
-
-      const tbody = document.createElement('tbody');
-      evts.forEach((item) => {
-        const tr = document.createElement('tr');
-        const type = String(item?.type || '').toLowerCase();
-
-        const iconTd = document.createElement('td');
-        iconTd.style.cssText = 'width:28px;text-align:center;font-size:14px;';
-        iconTd.textContent = getEventIcon(type);
-
-        const typeTd = document.createElement('td');
-        typeTd.textContent = item.type || '—';
-
-        const pageTd = document.createElement('td');
-        pageTd.style.cssText = 'max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
-        pageTd.textContent = mapPath(item);
-
-        const detailsTd = document.createElement('td');
-        detailsTd.textContent = getTimelineDetails(item);
-
-        const timeTd = document.createElement('td');
-        timeTd.style.whiteSpace = 'nowrap';
-        timeTd.textContent = formatDate(item.occurredAtUtc);
-
-        tr.append(iconTd, typeTd, pageTd, detailsTd, timeTd);
-        tbody.appendChild(tr);
-      });
-      table.appendChild(tbody);
-      timelineBody.appendChild(table);
-    });
-  };
-
-  // ── Render: Linked Leads & Tickets ────────────────────────────────
-  const renderLinked = async (detail) => {
-    linkedBody.innerHTML = '';
-    let hasContent = false;
-
-    // Linked lead — VisitorDetailResult has no linkedLeadId field, so find by linkedVisitorId
-    try {
-      const allLeads = siteId ? await client.leads.list(siteId, 1, 200) : [];
-      if (Array.isArray(allLeads) && visitorId) {
-        const normVisitorId = String(visitorId).toLowerCase().replace(/-/g, '');
-        const linkedLead = allLeads.find((l) => {
-          const lv = String(l.linkedVisitorId || l.LinkedVisitorId || '').toLowerCase().replace(/-/g, '');
-          return lv && lv === normVisitorId;
-        }) || null;
-
-        if (linkedLead) {
-          hasContent = true;
-          const leadSection = document.createElement('div');
-          const leadTitle = document.createElement('div');
-          leadTitle.style.cssText = 'font-weight:600;font-size:13px;margin-bottom:8px;color:var(--color-text);';
-          leadTitle.textContent = 'Linked Lead';
-          leadSection.appendChild(leadTitle);
-
-          const leadRow = document.createElement('div');
-          leadRow.style.cssText = 'border:1px solid var(--color-border);border-radius:var(--radius-md);padding:12px 16px;display:flex;justify-content:space-between;align-items:center;';
-          const nameEmail = document.createElement('div');
-          const nameEl = document.createElement('div');
-          nameEl.style.cssText = 'font-weight:600;font-size:13px;color:var(--color-text);';
-          nameEl.textContent = linkedLead.displayName || linkedLead.fullName || linkedLead.name || '—';
-          const emailEl = document.createElement('div');
-          emailEl.style.cssText = 'font-size:12px;color:var(--color-text-muted);';
-          emailEl.textContent = linkedLead.primaryEmail || linkedLead.email || '—';
-          nameEmail.append(nameEl, emailEl);
-          const rightSide = document.createElement('div');
-          rightSide.style.cssText = 'display:flex;align-items:center;gap:8px;';
-          if (linkedLead.opportunityLabel) {
-            const badge = document.createElement('span');
-            badge.className = 'badge badge-info';
-            badge.textContent = linkedLead.opportunityLabel;
-            rightSide.appendChild(badge);
-          }
-          const viewLink = document.createElement('a');
-          viewLink.href = '#/leads';
-          viewLink.className = 'btn btn-sm btn-secondary';
-          viewLink.textContent = 'View Leads';
-          rightSide.appendChild(viewLink);
-          leadRow.append(nameEmail, rightSide);
-          leadSection.appendChild(leadRow);
-          linkedBody.appendChild(leadSection);
-        }
-      }
-    } catch {
-      // fail-soft: lead section skipped on error
-    }
-
-    // Linked tickets
-    try {
-      const ticketResult = visitorId && siteId
-        ? await client.tickets.listTickets({ siteId, visitorId, page: 1, pageSize: 50 })
-        : [];
-      const ticketArr = Array.isArray(ticketResult) ? ticketResult : [];
-
-      if (ticketArr.length > 0) {
-        hasContent = true;
-        const ticketSection = document.createElement('div');
-        const ticketTitle = document.createElement('div');
-        ticketTitle.style.cssText = 'font-weight:600;font-size:13px;margin-bottom:8px;color:var(--color-text);';
-        ticketTitle.textContent = 'Linked Tickets';
-        ticketSection.appendChild(ticketTitle);
-
-        const table = document.createElement('table');
-        table.className = 'data-table';
-        const thead = document.createElement('thead');
-        const headRow = document.createElement('tr');
-        ['Subject', 'Status', 'Created'].forEach((h) => {
-          const th = document.createElement('th');
-          th.textContent = h;
-          headRow.appendChild(th);
-        });
-        thead.appendChild(headRow);
-        table.appendChild(thead);
-
-        const tbody = document.createElement('tbody');
-        ticketArr.forEach((ticket) => {
-          const tr = document.createElement('tr');
-          const sv = String(ticket.status || '').toLowerCase().replace(/[^a-z]/g, '');
-          const variant = sv === 'open' ? 'warning' : sv === 'inprogress' ? 'info' : (sv === 'resolved' || sv === 'closed') ? 'success' : 'neutral';
-          const statusBadge = document.createElement('span');
-          statusBadge.className = `badge badge-${variant}`;
-          statusBadge.textContent = ticket.status || '—';
-          const statusTd = document.createElement('td');
-          statusTd.appendChild(statusBadge);
-
-          const subjectTd = document.createElement('td');
-          subjectTd.textContent = ticket.subject || '—';
-          const dateTd = document.createElement('td');
-          dateTd.textContent = formatDate(ticket.createdAtUtc);
-
-          tr.append(subjectTd, statusTd, dateTd);
-          tbody.appendChild(tr);
-        });
-        table.appendChild(tbody);
-        ticketSection.appendChild(table);
-        linkedBody.appendChild(ticketSection);
-      }
-    } catch {
-      // silently skip tickets section on error
-    }
-
-    if (!hasContent) {
-      const empty = document.createElement('div');
-      empty.className = 'empty-state';
-      const icon = document.createElement('div');
-      icon.className = 'empty-state-icon';
-      icon.textContent = '🔗';
-      const title = document.createElement('div');
-      title.className = 'empty-state-title';
-      title.textContent = 'No linked leads or tickets';
-      empty.append(icon, title);
-      linkedBody.appendChild(empty);
-    }
-  };
-
-  // ── Render: Conversations card ────────────────────────────────────
-  const renderConversations = (conversations) => {
-    conversationsBody.innerHTML = '';
-
-    if (!conversations.length) {
-      const empty = document.createElement('div');
-      empty.className = 'empty-state';
-      const icon = document.createElement('div');
-      icon.className = 'empty-state-icon';
-      icon.textContent = '💬';
-      const title = document.createElement('div');
-      title.className = 'empty-state-title';
-      title.textContent = 'No Engage conversations';
-      empty.append(icon, title);
-      conversationsBody.appendChild(empty);
-      return;
-    }
-
-    const table = document.createElement('table');
-    table.className = 'data-table';
-    const thead = document.createElement('thead');
-    const headRow = document.createElement('tr');
-    ['Session ID', 'Started', 'Last active', ''].forEach((h) => {
-      const th = document.createElement('th');
-      th.textContent = h;
-      headRow.appendChild(th);
-    });
-    thead.appendChild(headRow);
-    table.appendChild(thead);
-
-    const tbody = document.createElement('tbody');
-    conversations.forEach((conversation) => {
-      const tr = document.createElement('tr');
-
-      const sidTd = document.createElement('td');
-      sidTd.style.cssText = 'font-family:ui-monospace,SFMono-Regular,monospace;font-size:12px;';
-      sidTd.textContent = toShortId(conversation.sessionId);
-
-      const startedTd = document.createElement('td');
-      startedTd.textContent = formatDate(conversation.createdAtUtc);
-
-      const lastTd = document.createElement('td');
-      lastTd.textContent = formatDate(conversation.updatedAtUtc);
-
-      const actionTd = document.createElement('td');
-      const viewBtn = document.createElement('button');
-      viewBtn.className = 'btn btn-sm btn-secondary';
-      viewBtn.textContent = 'View';
-      viewBtn.addEventListener('click', () => loadConversationMessages(conversation.sessionId));
-      actionTd.appendChild(viewBtn);
-
-      tr.append(sidTd, startedTd, lastTd, actionTd);
-      tbody.appendChild(tr);
-    });
-    table.appendChild(tbody);
-    conversationsBody.appendChild(table);
-  };
-
-  // ── Render: Conversation modal ────────────────────────────────────
-  const renderConversationModal = (conversationId, messages) => {
-    modalCard.innerHTML = '';
-
-    const mHeader = document.createElement('div');
-    mHeader.className = 'card-header';
-    mHeader.style.marginBottom = '16px';
-    const mTitle = document.createElement('div');
-    mTitle.className = 'card-title';
-    mTitle.textContent = `Conversation ${toShortId(conversationId)}`;
-    const closeBtn = document.createElement('button');
-    closeBtn.className = 'btn btn-secondary btn-sm';
-    closeBtn.textContent = '×';
-    closeBtn.setAttribute('aria-label', 'Close');
-    closeBtn.addEventListener('click', closeModal);
-    mHeader.append(mTitle, closeBtn);
-    modalCard.appendChild(mHeader);
-
-    if (!messages || !messages.length) {
-      const empty = document.createElement('div');
-      empty.style.cssText = 'padding:24px;text-align:center;color:var(--color-text-muted);';
-      empty.textContent = 'No messages';
-      modalCard.appendChild(empty);
-      return;
-    }
-
-    const wrap = document.createElement('div');
-    wrap.className = 'stack';
-    wrap.style.padding = '0 4px 16px';
-    messages.forEach((message) => {
-      const row = document.createElement('div');
-      row.style.cssText = 'border:1px solid var(--color-border);border-radius:var(--radius-md);padding:10px 12px;';
-      const meta = document.createElement('div');
-      meta.style.cssText = 'font-size:11px;color:var(--color-text-muted);margin-bottom:6px;';
-      meta.textContent = `${message.role} · ${formatDate(message.createdAtUtc)}`;
-      const content = document.createElement('div');
-      content.style.cssText = 'font-size:13px;color:var(--color-text);white-space:pre-wrap;line-height:1.5;';
-      content.textContent = message.content || '—';
-      row.append(meta, content);
-      wrap.appendChild(row);
-    });
-    modalCard.appendChild(wrap);
-  };
-
-  const loadConversationMessages = async (conversationId) => {
-    if (!conversationId || !siteId) return;
-    modalCard.innerHTML = '<div style="padding:24px;text-align:center;color:var(--color-text-muted)">Loading…</div>';
-    modalOverlay.style.display = 'flex';
-    document.addEventListener('keydown', handleModalKey);
-    try {
-      const messages = await client.engage.getConversationMessages(conversationId, siteId);
-      renderConversationModal(conversationId, Array.isArray(messages) ? messages : []);
-    } catch (error) {
-      modalCard.innerHTML = `<div style="padding:24px;color:var(--color-danger)">${mapApiError(error).message}</div>`;
-    }
-  };
-
-  // ── Early exit if missing params ──────────────────────────────────
-  if (!visitorId || !siteId) {
-    overviewBody.innerHTML = '<div class="empty-state"><div class="empty-state-title">No visitor selected</div></div>';
-    signalsBody.innerHTML = '';
-    timelineBody.innerHTML = '<div class="empty-state"><div class="empty-state-title">No visitor selected</div></div>';
-    linkedBody.innerHTML = '';
-    conversationsBody.innerHTML = '';
+  if (!visitorId) {
+    root.appendChild(el('div', { class: 'vp-empty' }, el('div',{class:'vp-empty-icon'},'🔍'), el('div',{class:'vp-empty-title'},'No visitor selected')));
     return;
   }
 
-  // ── Loading states ────────────────────────────────────────────────
-  overviewBody.innerHTML = '<div style="padding:16px;color:var(--color-text-muted);font-size:13px;">Loading…</div>';
-  signalsBody.innerHTML = '<div style="padding:16px;color:var(--color-text-muted);font-size:13px;">Loading…</div>';
-  timelineBody.innerHTML = '<div style="padding:16px;color:var(--color-text-muted);font-size:13px;">Loading…</div>';
-  linkedBody.innerHTML = '<div style="padding:16px;color:var(--color-text-muted);font-size:13px;">Loading…</div>';
-  conversationsBody.innerHTML = '<div style="padding:16px;color:var(--color-text-muted);font-size:13px;">Loading…</div>';
+  const loadingEl = el('div', { style: 'padding:40px;text-align:center;color:#94a3b8;font-size:13px' }, '⏳ Loading visitor profile…');
+  root.appendChild(loadingEl);
 
-  // ── Fetch visitor data ────────────────────────────────────────────
-  const [detailResult, timelineResult] = await Promise.allSettled([
-    client.visitors?.detail
-      ? client.visitors.detail(visitorId, siteId)
-      : client.request(`/visitors/${visitorId}?siteId=${encodeURIComponent(siteId)}`),
-    client.visitors?.timeline
-      ? client.visitors.timeline(visitorId, 200, siteId)
-      : client.request(`/visitors/${visitorId}/timeline?siteId=${encodeURIComponent(siteId)}&limit=200`),
+  let visitor = null, timeline = [], conversations = [], linkedLead = null, tickets = [], intelligence = null;
+
+  try {
+    [visitor, timeline] = await Promise.all([
+      client.visitors.detail(visitorId, siteId),
+      client.visitors.timeline(visitorId, 200, siteId),
+    ]);
+  } catch (err) {
+    loadingEl.remove();
+    root.appendChild(el('div', { class: 'vp-empty' }, el('div',{class:'vp-empty-icon'},'😕'), el('div',{class:'vp-empty-title'},'Could not load visitor'), el('div',{class:'vp-empty-desc'}, mapApiError(err).message)));
+    return;
+  }
+
+  loadingEl.remove();
+  if (!visitor) { root.appendChild(el('div', { class: 'vp-empty' }, el('div',{class:'vp-empty-icon'},'🔍'), el('div',{class:'vp-empty-title'},'Visitor not found'))); return; }
+
+  // Load secondary data in parallel — non-blocking
+  const collectorSessionId = visitor.sessions?.[0]?.sessionId || visitor.recentSessions?.[0]?.sessionId || '';
+
+  // Collect all session IDs — tickets created before the VisitorId fix only have EngageSessionId set
+  const allSessionIds = [
+    ...(visitor.sessions || []).map(s => s.sessionId),
+    ...(visitor.recentSessions || []).map(s => s.sessionId),
+  ].filter((v, i, a) => v && a.indexOf(v) === i);
+
+  await Promise.allSettled([
+    siteId ? client.engage.listConversations(siteId, collectorSessionId).then(r => { conversations = Array.isArray(r) ? r : []; }) : Promise.resolve(),
+    siteId ? client.leads.getByVisitor(siteId, visitorId).then(r => { linkedLead = r; }).catch(() => {}) : Promise.resolve(),
+    // Query by visitorId AND by each engageSessionId to catch all tickets regardless of how they were indexed
+    siteId ? (async () => {
+      const seen = new Set();
+      const merge = arr => (Array.isArray(arr) ? arr : []).filter(t => {
+        const id = t.id || t.ticketId || JSON.stringify(t);
+        if (seen.has(id)) return false;
+        seen.add(id); return true;
+      });
+      const results = await Promise.allSettled([
+        client.tickets.listTickets({ siteId, visitorId, page: 1, pageSize: 50 }),
+        ...allSessionIds.map(sid => client.tickets.listTickets({ siteId, engageSessionId: sid, page: 1, pageSize: 20 })),
+      ]);
+      tickets = results.flatMap(r => r.status === 'fulfilled' ? merge(r.value) : []);
+    })() : Promise.resolve(),
+    siteId ? client.intelligence.siteSummary({ siteId, timeWindow: '7d' }).then(r => { intelligence = r; }).catch(() => {}) : Promise.resolve(),
   ]);
 
-  const detail = detailResult.status === 'fulfilled' ? (detailResult.value || null) : null;
-  const events = timelineResult.status === 'fulfilled' && Array.isArray(timelineResult.value)
-    ? sortByOccurredDesc(timelineResult.value)
-    : [];
+  // ── Hero ───────────────────────────────────────────────────────────────────
+  const isId      = visitor.identification?.isIdentified;
+  const dispName  = visitor.displayName || visitor.primaryEmail || 'Anonymous Visitor';
+  const initials  = isId ? (dispName[0]?.toUpperCase() || '?') : (PLATFORM_ICON[visitor.platform] || '👤');
 
-  if (detailResult.status === 'rejected') {
-    notifier.show({ message: mapApiError(detailResult.reason).message, variant: 'danger' });
+  const hero = el('div', { class: 'vp-hero' });
+  const heroTop = el('div', { class: 'vp-hero-top' });
+  heroTop.appendChild(el('div', { class: `vp-avatar ${isId ? 'vp-avatar-id' : 'vp-avatar-anon'}` }, initials));
+
+  const heroBody = el('div', { class: 'vp-hero-body' });
+  heroBody.appendChild(el('div', { class: 'vp-hero-name' }, dispName));
+  heroBody.appendChild(el('div', { class: 'vp-hero-sub' }, `ID: ${shortId(visitorId)}`));
+
+  const chips = el('div', { class: 'vp-chips' });
+  if (isId)             chips.appendChild(el('span', { class: 'vp-chip vp-chip-green' }, '✓ Identified'));
+  if (linkedLead)       chips.appendChild(el('span', { class: 'vp-chip vp-chip-amber' }, '⭐ Lead'));
+  if (tickets.length)   chips.appendChild(el('span', { class: 'vp-chip vp-chip-blue'  }, `🎫 ${tickets.length} ticket${tickets.length > 1 ? 's' : ''}`));
+  if (visitor.country)  chips.appendChild(el('span', { class: 'vp-chip vp-chip-blue'  }, flag(visitor.country), ' ', visitor.country));
+  if (visitor.platform) chips.appendChild(el('span', { class: 'vp-chip vp-chip-gray'  }, PLATFORM_ICON[visitor.platform] || '💻', ' ', visitor.platform));
+  heroBody.appendChild(chips);
+
+  const heroStats = el('div', { class: 'vp-hero-stats' });
+  const mkStat = (val, lbl) => { const w = el('div',{}); w.append(el('div',{class:'vp-stat-val'},String(val)), el('div',{class:'vp-stat-lbl'},lbl)); heroStats.appendChild(w); };
+  mkStat(visitor.visitCount || 0, 'Visits');
+  mkStat(visitor.totalPagesVisited || 0, 'Pages');
+  mkStat(conversations.length, 'Conversations');
+  mkStat(fmtAgo(visitor.lastSeenAtUtc), 'Last seen');
+  heroBody.appendChild(heroStats);
+
+  heroTop.appendChild(heroBody);
+  hero.appendChild(heroTop);
+  root.appendChild(hero);
+
+  // ── Lead banner ────────────────────────────────────────────────────────────
+  if (linkedLead) {
+    const leadBox = el('div', { class: 'vp-lead-box' });
+    const leadHd  = el('div', { class: 'vp-lead-hd' });
+    leadHd.appendChild(el('div', { class: 'vp-lead-icon' }, '⭐'));
+    leadHd.appendChild(el('div', { class: 'vp-lead-name' }, linkedLead.displayName || linkedLead.primaryEmail || 'Lead'));
+    leadHd.appendChild(el('span', { class: 'vp-lead-link', '@click': () => { window.location.hash = '#/leads'; } }, 'View Leads →'));
+    leadBox.appendChild(leadHd);
+
+    const rows = el('div', { class: 'vp-lead-rows' });
+    const addRow = (lbl, val) => {
+      if (!val) return;
+      const r = el('div', { class: 'vp-lead-row' });
+      r.append(el('span', { class: 'vp-lead-row-lbl' }, lbl), el('span', { class: 'vp-lead-row-val' }, val));
+      rows.appendChild(r);
+    };
+    addRow('Email',    linkedLead.primaryEmail);
+    addRow('Phone',    linkedLead.phone);
+    addRow('Intent',   linkedLead.opportunityLabel);
+    addRow('Score',    linkedLead.intentScore?.toString());
+    leadBox.appendChild(rows);
+    root.appendChild(leadBox);
   }
-  if (timelineResult.status === 'rejected') {
-    notifier.show({ message: mapApiError(timelineResult.reason).message, variant: 'danger' });
+
+  // ── Grid ───────────────────────────────────────────────────────────────────
+  const grid = el('div', { class: 'vp-grid' });
+  root.appendChild(grid);
+
+  // ── LEFT column ────────────────────────────────────────────────────────────
+  const left = el('div', { style: 'display:flex;flex-direction:column;gap:14px' });
+
+  // Intelligence overlay
+  if (intelligence?.summary) {
+    const intel = el('div', { class: 'vp-intel' });
+    intel.appendChild(el('div', { class: 'vp-intel-lbl' }, '✦ What this audience is searching for'));
+    intel.appendChild(el('div', { class: 'vp-intel-text' }, intelligence.summary));
+    left.appendChild(intel);
   }
 
-  // ── Render cards ──────────────────────────────────────────────────
-  renderOverview(detail);
-  renderSignals(detail, events);
-  renderTimeline(events);
-
-  // Linked (async — fetches tickets)
-  await renderLinked(detail);
-
-  // Conversations — fetch per session ID from visitor detail
-  conversationsBody.innerHTML = '';
-  const sessions = Array.isArray(detail?.recentSessions) ? detail.recentSessions : [];
-  const sessionIds = [...new Set(
-    sessions
-      .map((s) => normalizeSessionId(s?.sessionId))
-      .filter((id) => id && id !== 'sessionless'),
-  )];
-
-  if (sessionIds.length > 0) {
-    try {
-      const convResults = await Promise.allSettled(
-        sessionIds.map((sid) => client.engage.getConversations(siteId, sid)),
-      );
-      const deduped = new Map();
-      convResults.forEach((result) => {
-        if (result.status !== 'fulfilled' || !Array.isArray(result.value)) return;
-        result.value.forEach((c) => {
-          const key = c?.sessionId || c?.updatedAtUtc;
-          if (key && !deduped.has(key)) deduped.set(key, c);
-        });
-      });
-      const conversations = Array.from(deduped.values()).sort(
-        (a, b) => new Date(b.updatedAtUtc || 0) - new Date(a.updatedAtUtc || 0),
-      );
-      renderConversations(conversations);
-    } catch {
-      renderConversations([]);
-    }
+  // Engage chat history
+  const { panel: chatPanel, body: chatBody } = mkPanel('💬 Chat History', `${conversations.length} session${conversations.length !== 1 ? 's' : ''}`);
+  if (!conversations.length) {
+    chatBody.appendChild(el('div', { class: 'vp-empty' }, el('div',{class:'vp-empty-icon'},'💬'), el('div',{class:'vp-empty-title'},'No chat sessions'), el('div',{class:'vp-empty-desc'},'This visitor has not interacted with the chat widget.')));
   } else {
-    renderConversations([]);
+    conversations.forEach(conv => {
+      const sessionBox = el('div', { class: 'vp-chat-session' });
+      const hd = el('div', { class: 'vp-chat-session-hd' });
+      const titleEl = el('div', { class: 'vp-chat-session-title' }, '💬 Session');
+      if (conv.hasLead)   titleEl.appendChild(el('span', { class: 'vp-badge vp-badge-lead' }, '⭐ Lead'));
+      if (conv.hasTicket) titleEl.appendChild(el('span', { class: 'vp-badge vp-badge-ticket' }, '🎫 Ticket'));
+      hd.append(titleEl, el('div', { class: 'vp-chat-session-meta' }, fmtDate(conv.createdAtUtc)));
+      sessionBox.appendChild(hd);
+
+      // Load messages lazily when visible
+      const messagesEl = el('div', { class: 'vp-chat-messages', style: 'display:none' });
+      sessionBox.appendChild(messagesEl);
+      let loaded = false;
+      hd.addEventListener('click', async () => {
+        const open = messagesEl.style.display !== 'none';
+        messagesEl.style.display = open ? 'none' : 'flex';
+        if (!open && !loaded) {
+          loaded = true;
+          messagesEl.appendChild(el('div', { style: 'font-size:11px;color:#94a3b8;padding:4px' }, '⏳ Loading…'));
+          try {
+            const msgs = await client.engage.getConversationMessages(conv.sessionId, siteId);
+            messagesEl.replaceChildren();
+            if (!msgs?.length) { messagesEl.appendChild(el('div',{style:'font-size:11px;color:#94a3b8'},'No messages')); return; }
+            msgs.forEach(m => {
+              const isUser = m.role === 'user';
+              const wrap   = el('div', { style: 'display:flex;flex-direction:column;align-items:' + (isUser ? 'flex-end' : 'flex-start') });
+              const bubble = el('div', { class: `vp-msg ${isUser ? 'vp-msg-user' : 'vp-msg-bot'}` }, m.content || '');
+              bubble.appendChild(el('div', { class: 'vp-msg-time' }, fmtTime(m.createdAtUtc)));
+              wrap.appendChild(bubble);
+              messagesEl.appendChild(wrap);
+            });
+          } catch { messagesEl.replaceChildren(el('div',{style:'font-size:11px;color:#ef4444'},'Failed to load messages')); }
+        }
+      });
+      chatBody.appendChild(sessionBox);
+    });
   }
+  left.appendChild(chatPanel);
+
+  // Session timeline
+  const { panel: tlPanel, body: tlBody } = mkPanel('📍 Page Timeline', `${timeline.length} events`);
+  const tlList = el('div', { class: 'vp-timeline' });
+  if (!timeline.length) {
+    tlList.appendChild(el('div', { class: 'vp-empty' }, el('div',{class:'vp-empty-icon'},'📭'), el('div',{class:'vp-empty-title'},'No events yet')));
+  } else {
+    timeline.forEach(item => {
+      const cfg  = tlCfg(item.type);
+      const row  = el('div', { class: 'vp-tl-item' });
+      row.appendChild(el('div', { class: `vp-tl-dot ${cfg.cls}` }, cfg.icon));
+      const body = el('div', { class: 'vp-tl-body' });
+      body.appendChild(el('div', { class: 'vp-tl-title' }, cfg.label));
+      if (item.url)      body.appendChild(el('div', { class: 'vp-tl-path' }, normPath(item.url)));
+      if (item.referrer) body.appendChild(el('div', { class: 'vp-tl-ref' }, '↗ ', normHost(item.referrer)));
+      body.appendChild(el('div', { class: 'vp-tl-time' }, fmtTime(item.occurredAtUtc)));
+      row.appendChild(body);
+      tlList.appendChild(row);
+    });
+  }
+  tlBody.appendChild(tlList);
+  left.appendChild(tlPanel);
+
+  // Recent sessions
+  if (visitor.recentSessions?.length) {
+    const { panel: sessPanel, body: sessBody } = mkPanel('🔄 Sessions', `${visitor.visitCount} total`);
+    visitor.recentSessions.forEach((sess, i) => {
+      const card = el('div', { class: 'vp-session' });
+      const hd   = el('div', { class: 'vp-session-hd' });
+      hd.append(el('div',{class:'vp-session-title'},`Session ${i+1}`), el('div',{class:'vp-session-time'},`${fmtDate(sess.firstSeenAtUtc)}`));
+      card.appendChild(hd);
+      const stats = el('div', { class: 'vp-session-stats' });
+      stats.append(
+        el('div',{class:'vp-session-stat'},'📄 ', `${sess.pagesVisited} pages`),
+        el('div',{class:'vp-session-stat'},'⏱ ', fmtDur(sess.timeOnSiteSeconds)),
+        el('div',{class:'vp-session-stat'},'⚡ ', `Score: ${sess.engagementScore}`)
+      );
+      card.appendChild(stats);
+      sessBody.appendChild(card);
+    });
+    left.appendChild(sessPanel);
+  }
+
+  grid.appendChild(left);
+
+  // ── RIGHT column ───────────────────────────────────────────────────────────
+  const right = el('div', { style: 'display:flex;flex-direction:column;gap:14px' });
+
+  // Identity
+  const { panel: idPanel, body: idBody } = mkPanel('🪪 Identity');
+  const idRows = [
+    ['Email',    visitor.primaryEmail],
+    ['Name',     visitor.displayName],
+    ['Phone',    visitor.phone],
+    ['Country',  visitor.country ? `${flag(visitor.country)} ${visitor.country}` : null],
+    ['Platform', visitor.platform ? `${PLATFORM_ICON[visitor.platform] || '💻'} ${visitor.platform}` : null],
+    ['Language', visitor.language],
+  ];
+  idRows.forEach(([lbl, val]) => {
+    if (!val) return;
+    const row = el('div', { class: 'vp-id-row' });
+    row.append(el('div',{class:'vp-id-lbl'},lbl), el('div',{class:'vp-id-val'},val));
+    idBody.appendChild(row);
+  });
+
+  if (visitor.identification) {
+    const conf = Math.round((Number(visitor.identification.confidence) || 0) * 100);
+    const confRow = el('div', { class: 'vp-id-row', style: 'flex-direction:column;gap:5px;align-items:flex-start' });
+    confRow.appendChild(el('div',{class:'vp-id-lbl'},'Identity Confidence'));
+    const cw = el('div', { class: 'vp-conf-wrap' });
+    const track = el('div',{class:'vp-conf-track'}); const fill = el('div',{class:'vp-conf-fill',style:'width:0%'});
+    track.appendChild(fill); setTimeout(() => { fill.style.width = `${conf}%`; }, 100);
+    cw.append(track, el('span',{style:'font-size:11px;color:#94a3b8;font-family:JetBrains Mono,monospace'},`${conf}%`));
+    confRow.appendChild(cw);
+    idBody.appendChild(confRow);
+  }
+  right.appendChild(idPanel);
+
+  // Tickets
+  const { panel: tickPanel, body: tickBody } = mkPanel('🎫 Support Tickets', `${tickets.length}`);
+  if (!tickets.length) {
+    tickBody.appendChild(el('div',{class:'vp-empty'}, el('div',{class:'vp-empty-icon'},'🎫'), el('div',{class:'vp-empty-title'},'No tickets'), el('div',{class:'vp-empty-desc'},'Tickets created during chats appear here.')));
+  } else {
+    tickets.forEach(t => {
+      const card = el('div', { class: 'vp-ticket' });
+      const hd   = el('div', { class: 'vp-ticket-hd' });
+      hd.appendChild(el('div',{class:'vp-ticket-subject'},t.subject || 'Untitled ticket'));
+      const statusLbl = (t.status || 'open').toLowerCase();
+      const statusCls = statusLbl === 'closed' || statusLbl === 'resolved' ? 'vp-ticket-closed' : 'vp-ticket-open';
+      hd.appendChild(el('span',{class:`vp-ticket-status ${statusCls}`},t.status || 'Open'));
+      card.appendChild(hd);
+      card.appendChild(el('div',{class:'vp-ticket-meta'}, fmtDate(t.createdAtUtc)));
+      tickBody.appendChild(card);
+    });
+  }
+  right.appendChild(tickPanel);
+
+  // Activity stats
+  const { panel: statsPanel, body: statsBody } = mkPanel('📊 Activity');
+  [
+    ['First Visit',  fmtDate(visitor.firstSeenAtUtc)],
+    ['Last Seen',    fmtAgo(visitor.lastSeenAtUtc)],
+    ['Total Visits', String(visitor.visitCount || 0)],
+    ['Pages Viewed', String(visitor.totalPagesVisited || 0)],
+    ['Chats',        String(conversations.length)],
+    ['Tickets',      String(tickets.length)],
+  ].forEach(([lbl, val]) => {
+    const row = el('div', { class: 'vp-id-row' });
+    row.append(el('div',{class:'vp-id-lbl'},lbl), el('div',{class:'vp-id-val'},val));
+    statsBody.appendChild(row);
+  });
+  right.appendChild(statsPanel);
+
+  grid.appendChild(right);
 };

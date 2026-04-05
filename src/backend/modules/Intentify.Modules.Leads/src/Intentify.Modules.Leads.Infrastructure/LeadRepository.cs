@@ -19,19 +19,31 @@ public sealed class LeadRepository : ILeadRepository
     public async Task<Lead?> GetByEmailAsync(Guid tenantId, Guid siteId, string email, CancellationToken cancellationToken = default)
     {
         await _ensureIndexes;
-        return await _leads.Find(item => item.TenantId == tenantId && item.SiteId == siteId && item.PrimaryEmail == email).FirstOrDefaultAsync(cancellationToken);
+        return await _leads.Find(item => item.TenantId == tenantId && item.SiteId == siteId && item.PrimaryEmail == email)
+            .FirstOrDefaultAsync(cancellationToken);
     }
 
     public async Task<Lead?> GetByFirstPartyIdAsync(Guid tenantId, Guid siteId, string firstPartyId, CancellationToken cancellationToken = default)
     {
         await _ensureIndexes;
-        return await _leads.Find(item => item.TenantId == tenantId && item.SiteId == siteId && item.FirstPartyId == firstPartyId).FirstOrDefaultAsync(cancellationToken);
+        return await _leads.Find(item => item.TenantId == tenantId && item.SiteId == siteId && item.FirstPartyId == firstPartyId)
+            .FirstOrDefaultAsync(cancellationToken);
     }
 
     public async Task<Lead?> GetByIdAsync(Guid tenantId, Guid leadId, CancellationToken cancellationToken = default)
     {
         await _ensureIndexes;
-        return await _leads.Find(item => item.TenantId == tenantId && item.Id == leadId).FirstOrDefaultAsync(cancellationToken);
+        return await _leads.Find(item => item.TenantId == tenantId && item.Id == leadId)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    // Phase 3: look up a lead by the visitor it was linked to during lead capture
+    public async Task<Lead?> GetByLinkedVisitorIdAsync(Guid tenantId, Guid siteId, Guid visitorId, CancellationToken cancellationToken = default)
+    {
+        await _ensureIndexes;
+        return await _leads.Find(item => item.TenantId == tenantId && item.SiteId == siteId && item.LinkedVisitorId == visitorId)
+            .SortByDescending(item => item.UpdatedAtUtc)
+            .FirstOrDefaultAsync(cancellationToken);
     }
 
     public async Task InsertAsync(Lead lead, CancellationToken cancellationToken = default)
@@ -43,7 +55,8 @@ public sealed class LeadRepository : ILeadRepository
     public async Task ReplaceAsync(Lead lead, CancellationToken cancellationToken = default)
     {
         await _ensureIndexes;
-        await _leads.ReplaceOneAsync(item => item.TenantId == lead.TenantId && item.Id == lead.Id, lead, cancellationToken: cancellationToken);
+        await _leads.ReplaceOneAsync(item => item.TenantId == lead.TenantId && item.Id == lead.Id, lead,
+            cancellationToken: cancellationToken);
     }
 
     public async Task<IReadOnlyCollection<Lead>> ListAsync(ListLeadsQuery query, CancellationToken cancellationToken = default)
@@ -51,9 +64,7 @@ public sealed class LeadRepository : ILeadRepository
         await _ensureIndexes;
         var filter = Builders<Lead>.Filter.Eq(item => item.TenantId, query.TenantId);
         if (query.SiteId is { } siteId)
-        {
             filter &= Builders<Lead>.Filter.Eq(item => item.SiteId, siteId);
-        }
 
         return await _leads.Find(filter)
             .SortByDescending(item => item.UpdatedAtUtc)
@@ -66,11 +77,19 @@ public sealed class LeadRepository : ILeadRepository
     {
         var indexes = new[]
         {
-            new CreateIndexModel<Lead>(Builders<Lead>.IndexKeys.Ascending(item => item.TenantId).Ascending(item => item.SiteId).Ascending(item => item.PrimaryEmail)),
-            new CreateIndexModel<Lead>(Builders<Lead>.IndexKeys.Ascending(item => item.TenantId).Ascending(item => item.SiteId).Ascending(item => item.FirstPartyId)),
-            new CreateIndexModel<Lead>(Builders<Lead>.IndexKeys.Ascending(item => item.TenantId).Ascending(item => item.UpdatedAtUtc))
+            new CreateIndexModel<Lead>(Builders<Lead>.IndexKeys
+                .Ascending(item => item.TenantId).Ascending(item => item.SiteId)
+                .Ascending(item => item.PrimaryEmail)),
+            new CreateIndexModel<Lead>(Builders<Lead>.IndexKeys
+                .Ascending(item => item.TenantId).Ascending(item => item.SiteId)
+                .Ascending(item => item.FirstPartyId)),
+            new CreateIndexModel<Lead>(Builders<Lead>.IndexKeys
+                .Ascending(item => item.TenantId).Ascending(item => item.UpdatedAtUtc)),
+            // Phase 3: index for visitor-linked lead lookups
+            new CreateIndexModel<Lead>(Builders<Lead>.IndexKeys
+                .Ascending(item => item.TenantId).Ascending(item => item.SiteId)
+                .Ascending(item => item.LinkedVisitorId)),
         };
-
         return MongoIndexHelper.EnsureIndexesAsync(_leads, indexes);
     }
 }

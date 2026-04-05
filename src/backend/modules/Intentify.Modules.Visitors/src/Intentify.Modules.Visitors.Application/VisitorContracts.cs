@@ -3,6 +3,8 @@ using Intentify.Modules.Visitors.Domain;
 
 namespace Intentify.Modules.Visitors.Application;
 
+// ── Collector event ingestion ─────────────────────────────────────────────────
+
 public sealed record UpsertVisitorFromCollectorEvent(
     Guid SiteId,
     Guid TenantId,
@@ -14,9 +16,13 @@ public sealed record UpsertVisitorFromCollectorEvent(
     string? FirstPartyId,
     string? UserAgent,
     string? Language,
-    string? Platform);
+    string? Platform,
+    string? Country = null,
+    string? City    = null);
 
 public sealed record UpsertVisitorResult(Guid VisitorId, VisitorSession Session, int SessionsCount = 0);
+
+// ── Visitor list ──────────────────────────────────────────────────────────────
 
 public sealed record ListVisitorsQuery(Guid TenantId, Guid SiteId, int Page, int PageSize);
 
@@ -27,7 +33,12 @@ public sealed record VisitorListItem(
     int TotalPagesVisited,
     int LastSessionEngagementScore,
     string? LastPath,
-    string? LastReferrer);
+    string? LastReferrer,
+    string? Country      = null,
+    string? Platform     = null,
+    string? PrimaryEmail = null);
+
+// ── Timeline ──────────────────────────────────────────────────────────────────
 
 public sealed record VisitorTimelineQuery(Guid TenantId, Guid SiteId, Guid VisitorId, int Limit);
 
@@ -38,6 +49,8 @@ public sealed record VisitorTimelineItem(
     string Url,
     string? Referrer,
     IReadOnlyDictionary<string, string>? MetadataSummary);
+
+// ── Visitor detail ────────────────────────────────────────────────────────────
 
 public sealed record GetVisitorDetailQuery(Guid TenantId, Guid SiteId, Guid VisitorId);
 
@@ -73,10 +86,15 @@ public sealed record VisitorDetailResult(
     string? UserAgent,
     string? Language,
     string? Platform,
+    string? Country,
     VisitorIdentificationSummary Identification,
     IReadOnlyCollection<VisitorRecentSessionItem> RecentSessions);
 
+// ── Visit counts ──────────────────────────────────────────────────────────────
+
 public sealed record VisitCountWindows(int Last7, int Last30, int Last90);
+
+// ── Online now ────────────────────────────────────────────────────────────────
 
 public sealed record OnlineNowQuery(Guid TenantId, Guid SiteId, int WindowMinutes, int Limit);
 
@@ -85,7 +103,12 @@ public sealed record OnlineVisitorItem(
     DateTime LastSeenAtUtc,
     int ActiveSessionsCount,
     string? LastPath,
-    string? LastReferrer);
+    string? LastReferrer,
+    string? Country      = null,
+    string? Platform     = null,
+    string? PrimaryEmail = null);
+
+// ── Page analytics ────────────────────────────────────────────────────────────
 
 public sealed record PageAnalyticsQuery(Guid TenantId, Guid SiteId, int Days, int Limit);
 
@@ -94,6 +117,14 @@ public sealed record PageAnalyticsItem(
     int PageViews,
     int UniqueSessions,
     decimal AvgTimeOnPageSeconds);
+
+// ── Country breakdown ─────────────────────────────────────────────────────────
+
+public sealed record CountryBreakdownQuery(Guid TenantId, Guid SiteId, int Days, int Limit);
+
+public sealed record CountryBreakdownItem(string Country, int VisitorCount, double Percentage);
+
+// ── Interfaces ────────────────────────────────────────────────────────────────
 
 public interface IVisitorRepository
 {
@@ -112,7 +143,10 @@ public interface IVisitorAnalyticsReader
 {
     Task<IReadOnlyCollection<OnlineVisitorItem>> GetOnlineNowAsync(Guid tenantId, Guid siteId, DateTime cutoffUtc, int limit, CancellationToken cancellationToken = default);
     Task<IReadOnlyCollection<PageAnalyticsItem>> GetTopPagesAsync(Guid tenantId, Guid siteId, DateTime sinceUtc, int limit, CancellationToken cancellationToken = default);
+    Task<IReadOnlyCollection<CountryBreakdownItem>> GetCountryBreakdownAsync(Guid tenantId, Guid siteId, DateTime sinceUtc, int limit, CancellationToken cancellationToken = default);
 }
+
+// ── Notifications & observers ─────────────────────────────────────────────────
 
 public sealed record VisitorPageViewNotification(
     Guid TenantId,
@@ -167,9 +201,7 @@ public sealed class CollectorVisitorEventObserver : ICollectorEventObserver
                 notification.OccurredAtUtc);
 
             foreach (var observer in _visitorObservers)
-            {
                 await observer.OnPageViewAsync(pageViewNotification, cancellationToken);
-            }
         }
     }
 }
