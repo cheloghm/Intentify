@@ -21,6 +21,7 @@ public sealed class EngageOrchestrator
     private readonly VisitorContextBundleHandler _visitorContextBundleHandler;
     private readonly TenantVocabularyResolver _tenantVocabularyResolver;
     private readonly EngageBusinessOutcomeExecutor _businessOutcomeExecutor;
+    private readonly IReadOnlyCollection<IEngageConversationObserver> _conversationObservers;
     private readonly ILogger<EngageOrchestrator> _logger;
 
     public EngageOrchestrator(
@@ -34,6 +35,7 @@ public sealed class EngageOrchestrator
         VisitorContextBundleHandler visitorContextBundleHandler,
         TenantVocabularyResolver tenantVocabularyResolver,
         EngageBusinessOutcomeExecutor businessOutcomeExecutor,
+        IEnumerable<IEngageConversationObserver> conversationObservers,
         ILogger<EngageOrchestrator> logger)
     {
         _contextAnalyzer = contextAnalyzer;
@@ -46,6 +48,7 @@ public sealed class EngageOrchestrator
         _visitorContextBundleHandler = visitorContextBundleHandler;
         _tenantVocabularyResolver = tenantVocabularyResolver;
         _businessOutcomeExecutor = businessOutcomeExecutor;
+        _conversationObservers = conversationObservers.ToArray();
         _logger = logger;
     }
 
@@ -137,6 +140,21 @@ public sealed class EngageOrchestrator
 
         session.UpdatedAtUtc = DateTime.UtcNow;
         await _sessionRepository.UpdateStateAsync(session, cancellationToken);
+
+        if (session.IsConversationComplete && _conversationObservers.Count > 0)
+        {
+            var completedNotification = new ConversationCompletedNotification(
+                session.TenantId,
+                session.SiteId,
+                session.Id,
+                session.UpdatedAtUtc);
+
+            foreach (var observer in _conversationObservers)
+            {
+                await observer.OnConversationCompletedAsync(completedNotification, cancellationToken);
+            }
+        }
+
         if (result.Status == OperationStatus.Success && result.Value is not null)
         {
             var playbookResponse = ApplyTenantPlaybook(result.Value.Response, bot, tenantVocab);

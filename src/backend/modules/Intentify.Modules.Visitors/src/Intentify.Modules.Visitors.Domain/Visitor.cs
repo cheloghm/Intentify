@@ -1,4 +1,3 @@
-
 namespace Intentify.Modules.Visitors.Domain;
 
 public sealed class Visitor
@@ -21,6 +20,11 @@ public sealed class Visitor
 
     public string? Platform { get; set; }
 
+    // Phase 2: country inferred from IP or collector event geo data
+    public string? Country { get; set; }
+
+    public string? City { get; set; }
+
     public string? PrimaryEmail { get; set; }
 
     public string? DisplayName { get; set; }
@@ -30,6 +34,19 @@ public sealed class Visitor
     public DateTime? LastIdentifiedAtUtc { get; set; }
 
     public List<VisitorSession> Sessions { get; set; } = [];
+
+    // ── GDPR Consent (Phase 6) ─────────────────────────────────────────────
+    public List<VisitorConsentDecision> ConsentDecisions { get; set; } = [];
+    public bool? LatestConsentGiven { get; set; }
+    public DateTime? LatestConsentAtUtc { get; set; }
+    public bool IsAnonymised { get; set; }
+}
+
+public sealed class VisitorConsentDecision
+{
+    public DateTime DecidedAtUtc { get; init; }
+    public bool ConsentGiven     { get; init; }
+    public string Version        { get; init; } = "1.0";
 }
 
 public sealed class VisitorSession

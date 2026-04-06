@@ -45,11 +45,12 @@ public sealed class RegisterUserHandler
         }
 
         var now = DateTime.UtcNow;
+        var plan = !string.IsNullOrWhiteSpace(command.Plan) ? command.Plan.Trim().ToLowerInvariant() : "starter";
         var tenant = new Tenant
         {
             Name = command.OrganizationName.Trim(),
             Domain = $"{Guid.NewGuid():N}.tenant.local",
-            Plan = "dev",
+            Plan = plan,
             Industry = "software",
             Category = "default",
             CreatedAt = now,

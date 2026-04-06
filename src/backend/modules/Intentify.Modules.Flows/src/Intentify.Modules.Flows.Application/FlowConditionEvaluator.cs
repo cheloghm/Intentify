@@ -27,6 +27,14 @@ public static class FlowConditionEvaluator
                         return false;
                     }
                     break;
+                case FlowConditionOperator.GreaterThan:
+                    if (!double.TryParse(currentValue, out var currentNum) ||
+                        !double.TryParse(condition.Value, out var conditionNum) ||
+                        currentNum <= conditionNum)
+                    {
+                        return false;
+                    }
+                    break;
                 default:
                     return false;
             }

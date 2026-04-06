@@ -193,6 +193,15 @@ public sealed class EngageBotRepository : IEngageBotRepository
     }
 
 
+    public async Task<IReadOnlyList<EngageBotDigestInfo>> ListDigestEnabledBotsAsync(CancellationToken ct = default)
+    {
+        await _ensureIndexes;
+        var bots = await _bots
+            .Find(b => b.DigestEmailEnabled && b.DigestEmailRecipients != null && b.DigestEmailRecipients != string.Empty)
+            .ToListAsync(ct);
+        return bots.Select(b => new EngageBotDigestInfo(b.TenantId, b.SiteId, b.Name, b.DisplayName, b.DigestEmailRecipients)).ToList();
+    }
+
     private Task EnsureIndexesAsync()
     {
         var indexes = new[]

@@ -36,6 +36,18 @@ public sealed record TicketListItem(
     DateTime CreatedAtUtc,
     DateTime UpdatedAtUtc);
 
+public sealed record TicketCreatedNotification(
+    Guid TenantId,
+    Guid SiteId,
+    Guid TicketId,
+    string Subject,
+    DateTime CreatedAtUtc);
+
+public interface ITicketEventObserver
+{
+    Task OnTicketCreatedAsync(TicketCreatedNotification notification, CancellationToken ct = default);
+}
+
 public interface ITicketRepository
 {
     Task InsertAsync(Ticket ticket, CancellationToken cancellationToken = default);

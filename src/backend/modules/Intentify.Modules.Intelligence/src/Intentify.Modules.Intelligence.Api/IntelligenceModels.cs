@@ -1,6 +1,11 @@
 namespace Intentify.Modules.Intelligence.Api;
 
-public sealed record RefreshIntelligenceRequest(string SiteId, string Category, string Location, string TimeWindow, int? Limit);
+// ── API-layer request models ──────────────────────────────────────────────────
+// Note: RefreshIntelligenceApiRequest is defined in IntelligenceEndpoints.cs
+// to keep it co-located with the handler that uses it.
+//
+// UpsertIntelligenceProfileRequest is the API-layer shape (uses string fields
+// rather than the application-layer record which has Guid SiteId).
 
 public sealed record UpsertIntelligenceProfileRequest(
     string ProfileName,

@@ -68,7 +68,11 @@ public sealed record EngageBotResult(
     string? PersonalityDescriptor = null,
     bool DigestEmailEnabled = false,
     string? DigestEmailRecipients = null,
-    string? DigestEmailFrequency = null);
+    string? DigestEmailFrequency = null,
+    string? WidgetPosition = null,
+    string? GreetingMessage = null,
+    string? LauncherIcon = null,
+    string? AutoTriggerRulesJson = null);
 
 public sealed record UpdateEngageBotCommand(
     Guid TenantId,
@@ -86,13 +90,35 @@ public sealed record UpdateEngageBotCommand(
     string? PersonalityDescriptor = null,
     bool DigestEmailEnabled = false,
     string? DigestEmailRecipients = null,
-    string? DigestEmailFrequency = null);
+    string? DigestEmailFrequency = null,
+    string? WidgetPosition = null,
+    string? GreetingMessage = null,
+    string? LauncherIcon = null,
+    string? AutoTriggerRulesJson = null);
 
 public sealed record GenerateDigestQuery(Guid TenantId, Guid SiteId);
+
+public sealed record ConversationCompletedNotification(
+    Guid TenantId,
+    Guid SiteId,
+    Guid SessionId,
+    DateTime CompletedAtUtc);
+
+public interface IEngageConversationObserver
+{
+    Task OnConversationCompletedAsync(ConversationCompletedNotification notification, CancellationToken ct = default);
+}
 
 public sealed record DigestLeadEntry(string? Name, string? Email, string? OpportunityLabel, int? IntentScore);
 
 public sealed record DigestTicketEntry(string Subject, string Status);
+
+public sealed record EngageBotDigestInfo(
+    Guid TenantId,
+    Guid SiteId,
+    string? Name,
+    string? DisplayName,
+    string? DigestEmailRecipients);
 
 public sealed record DigestResult(
     Guid SiteId,

@@ -46,7 +46,7 @@ public sealed class VisitorRepository : IVisitorRepository
             };
 
             await _visitors.InsertOneAsync(visitor, cancellationToken: cancellationToken);
-            return new UpsertVisitorResult(visitor.Id, visitor.Sessions.FirstOrDefault() ?? CreateDetachedSession(command, resolvedSessionId));
+            return new UpsertVisitorResult(visitor.Id, visitor.Sessions.FirstOrDefault() ?? CreateDetachedSession(command, resolvedSessionId), visitor.Sessions.Count);
         }
 
         visitor.LastSeenAtUtc = Max(visitor.LastSeenAtUtc, command.OccurredAtUtc);
@@ -75,7 +75,7 @@ public sealed class VisitorRepository : IVisitorRepository
         }
 
         await _visitors.ReplaceOneAsync(existing => existing.Id == visitor.Id, visitor, cancellationToken: cancellationToken);
-        return new UpsertVisitorResult(visitor.Id, session);
+        return new UpsertVisitorResult(visitor.Id, session, visitor.Sessions.Count);
     }
 
     public async Task<IReadOnlyCollection<VisitorListItem>> ListAsync(ListVisitorsQuery query, CancellationToken cancellationToken = default)

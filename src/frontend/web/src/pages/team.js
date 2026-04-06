@@ -1,404 +1,304 @@
-import { createButton, createCard, createInput } from '../shared/ui/index.js';
+/**
+ * team.js — Intentify Team Management
+ * Revamped: dark hero, panel layout, same design language.
+ * All original: invite member, list users, change role, remove user,
+ * list invites, revoke invite. Passes apiClient/capabilities through.
+ */
+
 import { mapApiError } from '../shared/apiClient.js';
 
-const ROLE_LABELS = {
-  admin: 'Admin',
-  manager: 'Manager',
-  user: 'User',
-  super_admin: 'Super Admin',
-};
+const ROLE_LABELS = { admin:'Admin', manager:'Manager', user:'User', super_admin:'Super Admin' };
 
-const getInviteStatus = (invite) => {
-  if (invite.acceptedAtUtc) {
-    return 'Accepted';
-  }
-
-  if (invite.revokedAtUtc) {
-    return 'Revoked';
-  }
-
-  const expiresAt = Date.parse(invite.expiresAtUtc || '');
-  if (!Number.isNaN(expiresAt) && expiresAt <= Date.now()) {
-    return 'Expired';
-  }
-
+const getInviteStatus = invite => {
+  if (invite.acceptedAtUtc) return 'Accepted';
+  if (invite.revokedAtUtc)  return 'Revoked';
+  const exp = Date.parse(invite.expiresAtUtc||'');
+  if (!isNaN(exp) && exp <= Date.now()) return 'Expired';
   return 'Pending';
 };
 
-const createSelectField = ({ label, options }) => {
-  const wrapper = document.createElement('label');
-  wrapper.className = 'ui-field';
-  wrapper.style.display = 'flex';
-  wrapper.style.flexDirection = 'column';
-  wrapper.style.gap = '6px';
-
-  const title = document.createElement('span');
-  title.className = 'ui-label';
-  title.style.fontSize = '14px';
-  title.textContent = label;
-
-  const select = document.createElement('select');
-  select.className = 'ui-input';
-
-  options.forEach((option) => {
-    const element = document.createElement('option');
-    element.value = option.value;
-    element.textContent = option.label;
-    select.appendChild(element);
-  });
-
-  const error = document.createElement('div');
-  error.className = 'ui-field-error';
-
-  wrapper.append(title, select, error);
-  return { wrapper, select, error };
-};
-
-const normalizeRole = (roles = []) => {
-  if (!Array.isArray(roles)) {
-    return 'user';
-  }
-
-  if (roles.includes('super_admin')) {
-    return 'super_admin';
-  }
-
-  if (roles.includes('platform_admin')) {
-    return 'admin';
-  }
-
-  if (roles.includes('admin')) {
-    return 'admin';
-  }
-
-  if (roles.includes('manager')) {
-    return 'manager';
-  }
-
+const normalizeRole = (roles=[]) => {
+  if (!Array.isArray(roles)) return 'user';
+  if (roles.includes('super_admin'))    return 'super_admin';
+  if (roles.includes('platform_admin')) return 'admin';
+  if (roles.includes('admin'))          return 'admin';
+  if (roles.includes('manager'))        return 'manager';
   return 'user';
 };
 
-export const renderTeamView = async (container, { apiClient, toast, currentUser, capabilities }) => {
+// ─── el() ─────────────────────────────────────────────────────────────────────
+
+const el = (tag, attrs = {}, ...kids) => {
+  const e = document.createElement(tag);
+  Object.entries(attrs).forEach(([k, v]) => {
+    if (k === 'class')          e.className = v;
+    else if (k === 'style')     typeof v === 'string' ? (e.style.cssText = v) : Object.assign(e.style, v);
+    else if (k.startsWith('@')) e.addEventListener(k.slice(1), v);
+    else e.setAttribute(k, v);
+  });
+  kids.flat(Infinity).forEach(c => c != null && e.append(typeof c === 'string' ? document.createTextNode(c) : c));
+  return e;
+};
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
+const injectStyles = () => {
+  if (document.getElementById('_tm_css')) return;
+  const s = document.createElement('style');
+  s.id = '_tm_css';
+  s.textContent = `
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+.tm-root{font-family:'Plus Jakarta Sans',system-ui,sans-serif;display:flex;flex-direction:column;gap:20px;width:100%;max-width:960px;padding-bottom:60px}
+.tm-hero{background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%);border-radius:16px;padding:28px 36px;position:relative;overflow:hidden}
+.tm-hero::before{content:'';position:absolute;top:-30px;right:-30px;width:180px;height:180px;background:radial-gradient(circle,rgba(16,185,129,.15) 0%,transparent 70%);pointer-events:none}
+.tm-hero-title{font-size:24px;font-weight:700;color:#f8fafc;letter-spacing:-.02em;margin-bottom:6px}
+.tm-hero-sub{font-size:13px;color:#94a3b8;margin-bottom:18px}
+.tm-hero-stats{display:flex;gap:28px;flex-wrap:wrap}
+.tm-stat{display:flex;flex-direction:column;gap:2px}
+.tm-stat-val{font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:700;color:#f1f5f9}
+.tm-stat-lbl{font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.07em}
+.tm-btn{font-family:'Plus Jakarta Sans',system-ui,sans-serif;font-size:13px;font-weight:600;padding:7px 16px;border-radius:8px;border:none;cursor:pointer;transition:all .14s;display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.tm-btn-primary{background:#6366f1;color:#fff}.tm-btn-primary:hover:not(:disabled){background:#4f46e5;transform:translateY(-1px)}
+.tm-btn-primary:disabled{opacity:.5;cursor:not-allowed}
+.tm-btn-outline{background:#fff;color:#64748b;border:1px solid #e2e8f0}.tm-btn-outline:hover{background:#f8fafc;color:#1e293b}
+.tm-btn-danger{background:#fee2e2;color:#dc2626;border:none}.tm-btn-danger:hover{background:#fecaca}
+.tm-btn-sm{padding:5px 12px;font-size:12px}
+.tm-panel{background:#fff;border:1px solid #e2e8f0;border-radius:14px;overflow:hidden}
+.tm-panel-hd{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid #f1f5f9}
+.tm-panel-title{font-size:13px;font-weight:700;color:#0f172a;display:flex;align-items:center;gap:7px}
+.tm-panel-body{padding:18px 20px;display:flex;flex-direction:column;gap:12px}
+.tm-invite-row{display:grid;grid-template-columns:1fr 160px auto;gap:12px;align-items:end}
+@media(max-width:600px){.tm-invite-row{grid-template-columns:1fr}}
+.tm-field{display:flex;flex-direction:column;gap:5px}
+.tm-field-lbl{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#94a3b8}
+.tm-input{font-family:'Plus Jakarta Sans',system-ui,sans-serif;font-size:13px;color:#1e293b;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 11px;outline:none;width:100%;box-sizing:border-box}
+.tm-input:focus{border-color:#6366f1;background:#fff;box-shadow:0 0 0 3px rgba(99,102,241,.1)}
+.tm-err{font-size:11.5px;color:#dc2626;margin-top:4px}
+/* Table */
+.tm-table-wrap{border-radius:10px;overflow:hidden;border:1px solid #e2e8f0}
+.tm-table{width:100%;border-collapse:collapse;font-size:12.5px}
+.tm-table thead th{background:#f8fafc;padding:9px 16px;text-align:left;font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#94a3b8;border-bottom:1px solid #e2e8f0;white-space:nowrap}
+.tm-table tbody td{padding:12px 16px;border-bottom:1px solid #f1f5f9;color:#334155;vertical-align:middle}
+.tm-table tbody tr:last-child td{border-bottom:none}
+.tm-table tbody tr:hover{background:#fafbff}
+/* Pill */
+.tm-pill{display:inline-flex;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700}
+.tm-pill-green{background:#d1fae5;color:#065f46}
+.tm-pill-amber{background:#fef3c7;color:#92400e}
+.tm-pill-gray{background:#f1f5f9;color:#475569}
+.tm-pill-blue{background:#dbeafe;color:#1e40af}
+.tm-pill-red{background:#fee2e2;color:#dc2626}
+/* Avatar */
+.tm-avatar{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0}
+.tm-user-cell{display:flex;align-items:center;gap:10px}
+.tm-user-name{font-weight:600;color:#1e293b;font-size:12.5px}
+.tm-user-email{font-size:11px;color:#94a3b8;font-family:'JetBrains Mono',monospace}
+/* Empty */
+.tm-empty{text-align:center;padding:32px 16px;color:#94a3b8;font-size:12.5px}
+.tm-loading{color:#94a3b8;font-size:12.5px;padding:16px 0}
+  `;
+  document.head.appendChild(s);
+};
+
+// ─── Main export ──────────────────────────────────────────────────────────────
+
+export const renderTeamView = async (container, { apiClient, toast, currentUser, capabilities } = {}) => {
+  injectStyles();
   container.innerHTML = '';
 
-  const body = document.createElement('div');
-  body.style.display = 'flex';
-  body.style.flexDirection = 'column';
-  body.style.gap = '20px';
+  const root = el('div', { class: 'tm-root' });
+  container.appendChild(root);
 
-  const card = createCard({
-    title: 'Team Management',
-    body,
-  });
+  // ── Hero ───────────────────────────────────────────────────────────────────
+  const hero = el('div',{class:'tm-hero'});
+  hero.appendChild(el('div',{class:'tm-hero-title'},'👥 Team'));
+  hero.appendChild(el('div',{class:'tm-hero-sub'},'Invite teammates, manage roles, and control access'));
+  const heroStats = el('div',{class:'tm-hero-stats'});
+  const mkS = lbl => { const w=el('div',{class:'tm-stat'}); const v=el('div',{class:'tm-stat-val'},'—'); w.append(v,el('div',{class:'tm-stat-lbl'},lbl)); heroStats.appendChild(w); return v; };
+  const hMembers=mkS('Members'); const hPending=mkS('Pending Invites');
+  hero.appendChild(heroStats);
+  root.appendChild(hero);
 
-  card.style.maxWidth = '1000px';
-  card.style.width = '100%';
-  container.appendChild(card);
+  // ── Invite panel ───────────────────────────────────────────────────────────
+  const invitePanel = el('div',{class:'tm-panel'});
+  const inviteHd = el('div',{class:'tm-panel-hd'}); inviteHd.appendChild(el('div',{class:'tm-panel-title'},'✉️ Invite a Team Member'));
+  const inviteBody = el('div',{class:'tm-panel-body'});
 
-  const pageIntro = document.createElement('p');
-  pageIntro.textContent = 'Invite teammates and manage access in one place.';
-  pageIntro.style.margin = '0';
-  pageIntro.style.color = '#64748b';
+  const inviteRow = el('div',{class:'tm-invite-row'});
 
-  const inviteSection = document.createElement('div');
-  inviteSection.style.display = 'flex';
-  inviteSection.style.flexDirection = 'column';
-  inviteSection.style.gap = '12px';
+  const emailField = el('div',{class:'tm-field'}, el('div',{class:'tm-field-lbl'},'Email Address'));
+  const emailInput = el('input',{class:'tm-input',type:'email',placeholder:'colleague@company.com'});
+  const emailErr   = el('div',{class:'tm-err'});
+  emailField.append(emailInput, emailErr);
 
-  const inviteSectionTitle = document.createElement('h4');
-  inviteSectionTitle.textContent = 'Invite a team member';
-  inviteSectionTitle.style.margin = '0';
-  inviteSectionTitle.style.fontSize = '14px';
-  inviteSectionTitle.style.fontWeight = '600';
-  inviteSectionTitle.style.color = '#1e293b';
+  const roleField = el('div',{class:'tm-field'}, el('div',{class:'tm-field-lbl'},'Role'));
+  const roleSelect = el('select',{class:'tm-input'});
+  [['admin','Admin'],['manager','Manager'],['user','User']].forEach(([v,l])=> roleSelect.appendChild(el('option',{value:v},l)));
+  roleField.appendChild(roleSelect);
 
-  const inviteRow = document.createElement('div');
-  inviteRow.style.display = 'grid';
-  inviteRow.style.gap = '12px';
-  inviteRow.style.alignItems = 'end';
-  inviteRow.style.gridTemplateColumns = 'repeat(auto-fit, minmax(180px, 1fr))';
+  const inviteBtn = el('button',{class:'tm-btn tm-btn-primary',style:'align-self:flex-end;min-height:38px'},'📧 Send Invite');
+  inviteRow.append(emailField, roleField, inviteBtn);
+  inviteBody.appendChild(inviteRow);
+  invitePanel.append(inviteHd, inviteBody);
+  root.appendChild(invitePanel);
 
-  const { wrapper: emailWrapper, input: emailInput } = createInput({
-    label: 'Invite email',
-    type: 'email',
-    placeholder: 'you@example.com',
-  });
-  const emailError = document.createElement('div');
-  emailError.className = 'ui-field-error';
-  emailWrapper.appendChild(emailError);
+  // ── Members panel ──────────────────────────────────────────────────────────
+  const membersPanel = el('div',{class:'tm-panel'});
+  const membersHd = el('div',{class:'tm-panel-hd'}); membersHd.appendChild(el('div',{class:'tm-panel-title'},'🧑‍💼 Members'));
+  const membersBody = el('div',{class:'tm-panel-body',style:'padding:0'});
+  membersPanel.append(membersHd, membersBody);
+  root.appendChild(membersPanel);
 
-  const roleField = createSelectField({
-    label: 'Role',
-    options: [
-      { value: 'admin', label: 'Admin' },
-      { value: 'manager', label: 'Manager' },
-      { value: 'user', label: 'User' },
-    ],
-  });
-  roleField.select.className = 'ui-input__field';
+  // ── Invites panel ──────────────────────────────────────────────────────────
+  const invitesPanel = el('div',{class:'tm-panel'});
+  const invitesHd = el('div',{class:'tm-panel-hd'}); invitesHd.appendChild(el('div',{class:'tm-panel-title'},'📨 Invitations'));
+  const invitesBody = el('div',{class:'tm-panel-body',style:'padding:0'});
+  invitesPanel.append(invitesHd, invitesBody);
+  root.appendChild(invitesPanel);
 
-  const inviteButton = createButton({ label: 'Send invite', variant: 'primary' });
-  inviteButton.style.height = '36px';
-  inviteButton.style.whiteSpace = 'nowrap';
-  inviteButton.style.minWidth = '120px';
-  inviteButton.style.justifySelf = 'start';
-
-  inviteRow.append(emailWrapper, roleField.wrapper, inviteButton);
-  inviteSection.append(inviteSectionTitle, inviteRow);
-
-  const inviteCard = createCard({ body: inviteSection });
-
-  const usersSection = document.createElement('div');
-  usersSection.style.overflowX = 'auto';
-  const usersLoading = document.createElement('div');
-  usersLoading.textContent = 'Loading team...';
-  usersLoading.style.color = '#475569';
-  usersSection.appendChild(usersLoading);
-
-  const invitesSection = document.createElement('div');
-  invitesSection.style.overflowX = 'auto';
-  const invitesLoading = document.createElement('div');
-  invitesLoading.textContent = 'Loading invites...';
-  invitesLoading.style.color = '#475569';
-  invitesSection.appendChild(invitesLoading);
-
-  const membersSection = document.createElement('div');
-  membersSection.style.display = 'flex';
-  membersSection.style.flexDirection = 'column';
-  membersSection.style.gap = '16px';
-
-  const membersSectionTitle = document.createElement('h4');
-  membersSectionTitle.textContent = 'Members & invites';
-  membersSectionTitle.style.margin = '0';
-  membersSectionTitle.style.fontSize = '14px';
-  membersSectionTitle.style.fontWeight = '600';
-  membersSectionTitle.style.color = '#1e293b';
-
-  membersSection.append(membersSectionTitle, usersSection, invitesSection);
-
-  const membersCard = createCard({ body: membersSection });
-
-  body.append(pageIntro, inviteCard, membersCard);
-
+  // ── Reload ─────────────────────────────────────────────────────────────────
   const reload = async () => {
-    usersLoading.textContent = 'Loading team...';
-    usersSection.replaceChildren(usersLoading);
-    invitesLoading.textContent = 'Loading invites...';
-    invitesSection.replaceChildren(invitesLoading);
+    membersBody.replaceChildren(el('div',{class:'tm-loading',style:'padding:16px 20px'},'⏳ Loading members…'));
+    invitesBody.replaceChildren(el('div',{class:'tm-loading',style:'padding:16px 20px'},'⏳ Loading invites…'));
 
     try {
       const users = await apiClient.auth.listUsers();
-      const actorRole = normalizeRole(currentUser?.roles || []);
+      const actorRole = normalizeRole(currentUser?.roles||[]);
+      const userList = Array.isArray(users) ? users : [];
+      hMembers.textContent = String(userList.length);
 
-      const table = document.createElement('table');
-      table.className = 'ui-table';
+      if (!userList.length) { membersBody.replaceChildren(el('div',{class:'tm-empty'},'No team members yet.')); }
+      else {
+        const tableWrap = el('div',{class:'tm-table-wrap'});
+        const table = el('table',{class:'tm-table'});
+        table.appendChild(el('thead',{},el('tr',{}, ...['Member','Role','Status','Actions'].map(c=>el('th',{},c)))));
+        const tbody = el('tbody',{});
 
-      const head = document.createElement('thead');
-      const headRow = document.createElement('tr');
-      ['Display Name', 'Email', 'Role', 'Status', 'Actions'].forEach((label) => {
-        const cell = document.createElement('th');
-        cell.textContent = label;
-        headRow.appendChild(cell);
-      });
-      head.appendChild(headRow);
-      table.appendChild(head);
+        userList.forEach(user => {
+          const role     = normalizeRole(user.roles);
+          const roleLabel= ROLE_LABELS[role]||role;
+          const isSelf   = user.userId === currentUser?.userId;
+          const initial  = (user.displayName||user.email||'?')[0].toUpperCase();
 
-      const bodyRows = document.createElement('tbody');
+          const tr = el('tr',{});
+          const userCell = el('td',{});
+          const userInner = el('div',{class:'tm-user-cell'});
+          userInner.appendChild(el('div',{class:'tm-avatar'},initial));
+          const uinfo = el('div',{});
+          uinfo.append(el('div',{class:'tm-user-name'},user.displayName||user.email||'—'), el('div',{class:'tm-user-email'},user.email||''));
+          userInner.appendChild(uinfo);
+          userCell.appendChild(userInner);
 
-      (Array.isArray(users) ? users : []).forEach((user) => {
-        const row = document.createElement('tr');
-        const roleText = ROLE_LABELS[normalizeRole(user.roles)] || normalizeRole(user.roles);
-
-        const actions = document.createElement('div');
-        actions.style.display = 'flex';
-        actions.style.gap = '8px';
-        actions.style.flexWrap = 'wrap';
-        actions.style.alignItems = 'center';
-
-        const targetRole = normalizeRole(user.roles);
-        const isSelf = (user.userId || '').toLowerCase() === (currentUser?.userId || '').toLowerCase();
-
-        if (capabilities.canChangeRole(actorRole, targetRole) && !isSelf && user.isActive) {
-          const selector = document.createElement('select');
-          selector.className = 'ui-input__field';
-          selector.style.maxWidth = '140px';
-          selector.style.minWidth = '120px';
-
-          ['admin', 'manager', 'user'].forEach((role) => {
-            if (!capabilities.canInviteRole(actorRole, role)) {
-              return;
-            }
-
-            const option = document.createElement('option');
-            option.value = role;
-            option.textContent = ROLE_LABELS[role] || role;
-            if (role === targetRole) {
-              option.selected = true;
-            }
-            selector.appendChild(option);
-          });
-
-          selector.addEventListener('change', async () => {
-            try {
-              await apiClient.auth.updateUserRole(user.userId, selector.value);
-              toast.show({ message: 'Role updated.', variant: 'success' });
-              await reload();
-            } catch (error) {
-              const uiError = mapApiError(error);
-              toast.show({ message: uiError.message, variant: 'danger' });
-              await reload();
-            }
-          });
-
-          actions.appendChild(selector);
-        }
-
-        if (capabilities.canRemoveRole(actorRole, targetRole) && !isSelf && user.isActive) {
-          const removeButton = createButton({ label: 'Remove' });
-          removeButton.style.height = '36px';
-          removeButton.addEventListener('click', async () => {
-            const confirmed = window.confirm(`Remove ${user.email}?`);
-            if (!confirmed) {
-              return;
-            }
-
-            try {
-              await apiClient.auth.removeUser(user.userId);
-              toast.show({ message: 'User removed.', variant: 'success' });
-              await reload();
-            } catch (error) {
-              const uiError = mapApiError(error);
-              toast.show({ message: uiError.message, variant: 'danger' });
-            }
-          });
-          actions.appendChild(removeButton);
-        }
-
-        [
-          user.displayName || '',
-          user.email || '',
-          roleText,
-          user.isActive ? 'Active' : 'Inactive',
-        ].forEach((value) => {
-          const cell = document.createElement('td');
-          cell.textContent = value;
-          row.appendChild(cell);
-        });
-
-        const actionsCell = document.createElement('td');
-        actionsCell.appendChild(actions);
-        row.appendChild(actionsCell);
-        bodyRows.appendChild(row);
-      });
-
-      table.appendChild(bodyRows);
-
-      usersSection.replaceChildren(table);
-
-      try {
-        const invites = await apiClient.auth.listInvites();
-        const invitesTable = document.createElement('table');
-        invitesTable.className = 'ui-table';
-
-        const invitesHead = document.createElement('thead');
-        const invitesHeadRow = document.createElement('tr');
-        ['Pending Invites', 'Role', 'Status', 'Actions'].forEach((label) => {
-          const cell = document.createElement('th');
-          cell.textContent = label;
-          invitesHeadRow.appendChild(cell);
-        });
-        invitesHead.appendChild(invitesHeadRow);
-        invitesTable.appendChild(invitesHead);
-
-        const invitesBody = document.createElement('tbody');
-        const actorRoleForInvites = normalizeRole(currentUser?.roles || []);
-        (Array.isArray(invites) ? invites : []).forEach((invite) => {
-          const row = document.createElement('tr');
-          const status = getInviteStatus(invite);
-          const role = (invite.role || 'user').toLowerCase();
-          const roleText = ROLE_LABELS[role] || role;
-
-          [invite.email || '', roleText, status].forEach((value) => {
-            const cell = document.createElement('td');
-            cell.textContent = value;
-            row.appendChild(cell);
-          });
-
-          const actionsCell = document.createElement('td');
-          if (status === 'Pending' && capabilities.canInviteRole(actorRoleForInvites, role)) {
-            const revokeButton = createButton({ label: 'Revoke' });
-            revokeButton.style.height = '36px';
-            revokeButton.addEventListener('click', async () => {
-              try {
-                await apiClient.auth.revokeInvite(invite.inviteId);
-                toast.show({ message: 'Invitation revoked.', variant: 'success' });
-                await reload();
-              } catch (error) {
-                const uiError = mapApiError(error);
-                toast.show({ message: uiError.message, variant: 'danger' });
-              }
+          const roleCell = el('td',{});
+          const canChangeRole = !isSelf && capabilities?.canInviteRole?.(actorRole, role);
+          if (canChangeRole) {
+            const roleSel = el('select',{class:'tm-input',style:'padding:4px 8px;font-size:12px'});
+            [['admin','Admin'],['manager','Manager'],['user','User']].forEach(([v,l])=>{ const o=el('option',{value:v},l); if(v===role) o.selected=true; roleSel.appendChild(o); });
+            roleSel.addEventListener('change', async ()=>{
+              try { await apiClient.auth.updateUserRole(user.userId, roleSel.value); notifier?.show({message:'Role updated.',variant:'success'}); await reload(); }
+              catch(err){ notifier?.show({message:mapApiError(err).message,variant:'danger'}); }
             });
-            actionsCell.appendChild(revokeButton);
+            roleCell.appendChild(roleSel);
+          } else {
+            roleCell.appendChild(el('span',{class:'tm-pill tm-pill-blue'},roleLabel));
           }
 
-          row.appendChild(actionsCell);
-          invitesBody.appendChild(row);
-        });
+          const statusCell = el('td',{},el('span',{class:'tm-pill tm-pill-green'},'Active'));
 
-        invitesTable.appendChild(invitesBody);
-        invitesSection.replaceChildren(invitesTable);
-      } catch (error) {
-        const uiError = mapApiError(error);
-        invitesSection.replaceChildren();
-        const message = document.createElement('div');
-        message.textContent = uiError.message;
-        message.style.color = '#b91c1c';
-        invitesSection.appendChild(message);
+          const actCell = el('td',{});
+          if (!isSelf && canChangeRole) {
+            const rmBtn = el('button',{class:'tm-btn tm-btn-danger tm-btn-sm'},'Remove');
+            rmBtn.addEventListener('click', async ()=>{
+              if (!confirm(`Remove ${user.displayName||user.email} from the team?`)) return;
+              rmBtn.disabled=true;
+              try { await apiClient.auth.removeUser(user.userId); notifier?.show({message:'User removed.',variant:'success'}); await reload(); }
+              catch(err){ notifier?.show({message:mapApiError(err).message,variant:'danger'}); rmBtn.disabled=false; }
+            });
+            actCell.appendChild(rmBtn);
+          } else if (isSelf) {
+            actCell.appendChild(el('span',{style:'font-size:11.5px;color:#94a3b8'},'You'));
+          }
+
+          tr.append(userCell, roleCell, statusCell, actCell);
+          tbody.appendChild(tr);
+        });
+        table.appendChild(tbody);
+        tableWrap.appendChild(table);
+        membersBody.replaceChildren(tableWrap);
       }
-    } catch (error) {
-      const uiError = mapApiError(error);
-      usersSection.replaceChildren();
-      const message = document.createElement('div');
-      message.textContent = uiError.message;
-      message.style.color = '#b91c1c';
-      usersSection.appendChild(message);
+    } catch(err) {
+      membersBody.replaceChildren(el('div',{style:'color:#dc2626;font-size:12.5px;padding:16px 20px'},mapApiError(err).message));
+    }
+
+    try {
+      const invites = await apiClient.auth.listInvites();
+      const inviteList = Array.isArray(invites) ? invites : [];
+      const pending = inviteList.filter(i=>getInviteStatus(i)==='Pending');
+      hPending.textContent = String(pending.length);
+      const actorRole = normalizeRole(currentUser?.roles||[]);
+
+      if (!inviteList.length) { invitesBody.replaceChildren(el('div',{class:'tm-empty'},'No invitations yet.')); }
+      else {
+        const tableWrap = el('div',{class:'tm-table-wrap'});
+        const table = el('table',{class:'tm-table'});
+        table.appendChild(el('thead',{},el('tr',{}, ...['Email','Role','Status','Invited','Actions'].map(c=>el('th',{},c)))));
+        const tbody = el('tbody',{});
+
+        inviteList.forEach(invite => {
+          const status = getInviteStatus(invite);
+          const role   = invite.role||'user';
+          const statusPillCls = status==='Accepted'?'tm-pill-green':status==='Pending'?'tm-pill-amber':status==='Revoked'?'tm-pill-red':'tm-pill-gray';
+
+          const tr = el('tr',{});
+          tr.append(
+            el('td',{style:'font-family:JetBrains Mono,monospace;font-size:11.5px'},invite.email||'—'),
+            el('td',{},el('span',{class:'tm-pill tm-pill-blue'},ROLE_LABELS[role]||role)),
+            el('td',{},el('span',{class:`tm-pill ${statusPillCls}`},status)),
+            el('td',{style:'font-size:11.5px;color:#94a3b8'},invite.createdAtUtc?new Date(invite.createdAtUtc).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}):'—')
+          );
+
+          const actCell = el('td',{});
+          if (status==='Pending' && capabilities?.canInviteRole?.(actorRole, role)) {
+            const revokeBtn = el('button',{class:'tm-btn tm-btn-outline tm-btn-sm'},'Revoke');
+            revokeBtn.addEventListener('click', async ()=>{
+              revokeBtn.disabled=true;
+              try { await apiClient.auth.revokeInvite(invite.inviteId); notifier?.show({message:'Invite revoked.',variant:'success'}); await reload(); }
+              catch(err){ notifier?.show({message:mapApiError(err).message,variant:'danger'}); revokeBtn.disabled=false; }
+            });
+            actCell.appendChild(revokeBtn);
+          }
+          tr.appendChild(actCell);
+          tbody.appendChild(tr);
+        });
+        table.appendChild(tbody); tableWrap.appendChild(table);
+        invitesBody.replaceChildren(tableWrap);
+      }
+    } catch(err) {
+      invitesBody.replaceChildren(el('div',{style:'color:#dc2626;font-size:12.5px;padding:16px 20px'},mapApiError(err).message));
     }
   };
 
-  inviteButton.addEventListener('click', async () => {
-    emailError.textContent = '';
-    roleField.error.textContent = '';
-
+  // ── Invite button ──────────────────────────────────────────────────────────
+  inviteBtn.addEventListener('click', async () => {
+    emailErr.textContent='';
     const email = emailInput.value.trim();
-    const role = roleField.select.value;
-    const actorRole = normalizeRole(currentUser?.roles || []);
+    const role  = roleSelect.value;
+    const actorRole = normalizeRole(currentUser?.roles||[]);
+    if (!email) { emailErr.textContent='Email is required.'; return; }
+    if (capabilities && !capabilities.canInviteRole?.(actorRole, role)) { emailErr.textContent='You cannot invite this role.'; return; }
 
-    if (!email) {
-      emailError.textContent = 'Email is required.';
-      return;
-    }
-
-    if (!capabilities.canInviteRole(actorRole, role)) {
-      roleField.error.textContent = 'You cannot invite this role.';
-      return;
-    }
-
-    inviteButton.disabled = true;
-    inviteButton.textContent = 'Sending...';
-
+    inviteBtn.disabled=true; inviteBtn.textContent='⏳ Sending…';
     try {
       await apiClient.auth.createInvite({ email, role });
-      emailInput.value = '';
-      toast.show({ message: 'Invitation sent.', variant: 'success' });
+      emailInput.value='';
+      toast?.show({message:'Invitation sent.',variant:'success'});
       await reload();
-    } catch (error) {
-      const uiError = mapApiError(error);
-      toast.show({ message: uiError.message, variant: 'danger' });
-    } finally {
-      inviteButton.disabled = false;
-      inviteButton.textContent = 'Send invite';
-    }
+    } catch(err) {
+      toast?.show({message:mapApiError(err).message,variant:'danger'});
+    } finally { inviteBtn.disabled=false; inviteBtn.textContent='📧 Send Invite'; }
   });
+
+  emailInput.addEventListener('keydown', e=>{ if(e.key==='Enter') inviteBtn.click(); });
 
   await reload();
 };

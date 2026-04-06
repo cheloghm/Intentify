@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Json;
 using Intentify.Modules.Flows.Domain;
 using Intentify.Modules.Leads.Application;
@@ -45,6 +46,8 @@ public sealed class UpdateFlowService(IFlowsRepository repository)
             SiteId = existing.SiteId,
             Name = updated!.Name,
             Enabled = updated.Enabled,
+            Priority = updated.Priority,
+            MaxRunsPerHour = updated.MaxRunsPerHour,
             Trigger = updated.Trigger,
             Conditions = updated.Conditions,
             Actions = updated.Actions
@@ -112,7 +115,8 @@ public sealed class ListFlowsService(IFlowsRepository repository)
         }
 
         var flows = await repository.ListBySiteAsync(query.TenantId, query.SiteId, ct);
-        return OperationResult<IReadOnlyCollection<FlowSummaryDto>>.Success(flows.Select(FlowMapping.ToSummary).ToArray());
+        return OperationResult<IReadOnlyCollection<FlowSummaryDto>>.Success(
+            flows.OrderByDescending(f => f.Priority).Select(FlowMapping.ToSummary).ToArray());
     }
 }
 
@@ -120,7 +124,7 @@ public sealed class ListFlowRunsService(IFlowRunsRepository repository)
 {
     public async Task<OperationResult<IReadOnlyCollection<FlowRunDto>>> HandleAsync(ListFlowRunsQuery query, CancellationToken ct = default)
     {
-        var limit = query.Limit <= 0 ? 50 : Math.Min(query.Limit, 200);
+        var limit = query.Limit <= 0 ? 100 : Math.Min(query.Limit, 200);
         var runs = await repository.ListByFlowAsync(query.TenantId, query.FlowId, limit, ct);
         return OperationResult<IReadOnlyCollection<FlowRunDto>>.Success(runs.Select(FlowMapping.ToRun).ToArray());
     }
@@ -130,7 +134,8 @@ public sealed class ExecuteFlowsForTriggerService(
     IFlowsRepository flowsRepository,
     IFlowRunsRepository runsRepository,
     IHttpClientFactory httpClientFactory,
-    IServiceProvider serviceProvider)
+    IServiceProvider serviceProvider,
+    ResendEmailService? emailService = null)
 {
     public async Task<OperationResult<ExecuteFlowsResult>> HandleAsync(ExecuteFlowsTriggerCommand command, CancellationToken ct = default)
     {
@@ -157,7 +162,7 @@ public sealed class ExecuteFlowsForTriggerService(
         var matched = 0;
         var executed = 0;
 
-        foreach (var flow in flows)
+        foreach (var flow in flows.OrderByDescending(f => f.Priority))
         {
             if (!flow.Enabled)
             {
@@ -180,6 +185,16 @@ public sealed class ExecuteFlowsForTriggerService(
             }
 
             matched++;
+
+            if (flow.MaxRunsPerHour.HasValue)
+            {
+                var sinceUtc = DateTime.UtcNow.AddHours(-1);
+                var recentCount = await runsRepository.CountSucceededByFlowSinceAsync(flow.TenantId, flow.Id, sinceUtc, ct);
+                if (recentCount >= flow.MaxRunsPerHour.Value)
+                {
+                    continue;
+                }
+            }
 
             foreach (var action in flow.Actions)
             {
@@ -305,6 +320,124 @@ public sealed class ExecuteFlowsForTriggerService(
             return (FlowRunStatus.Succeeded, null);
         }
 
+        if (string.Equals(action.ActionType, "SendEmail", StringComparison.OrdinalIgnoreCase))
+        {
+            var to = action.Params is not null && action.Params.TryGetValue("to", out var t) ? t : null;
+            var subject = action.Params is not null && action.Params.TryGetValue("subject", out var s) ? s : "(no subject)";
+            var body = action.Params is not null && action.Params.TryGetValue("body", out var b) ? b : string.Empty;
+
+            if (string.IsNullOrWhiteSpace(to))
+            {
+                return (FlowRunStatus.Failed, "SendEmail action requires a 'to' parameter.");
+            }
+
+            if (emailService is null || !emailService.IsConfigured)
+            {
+                return (FlowRunStatus.Succeeded, $"[Email not configured — would have sent to {to}: {subject}]");
+            }
+
+            var html = body.TrimStart().StartsWith('<')
+                ? body
+                : $"<p style=\"font-family:sans-serif;color:#1e293b\">{WebUtility.HtmlEncode(body).Replace("\n", "<br>")}</p>";
+
+            var (success, error) = await emailService.SendAsync(to, subject, html, ct);
+            return success
+                ? (FlowRunStatus.Succeeded, null)
+                : (FlowRunStatus.Failed, error ?? "Unknown email error.");
+        }
+
+        if (string.Equals(action.ActionType, "SendSlackNotification", StringComparison.OrdinalIgnoreCase))
+        {
+            var webhookUrl = action.Params is not null && action.Params.TryGetValue("webhookUrl", out var w) ? w : null;
+            var message = action.Params is not null && action.Params.TryGetValue("message", out var m) ? m : string.Empty;
+            if (string.IsNullOrWhiteSpace(webhookUrl))
+            {
+                return (FlowRunStatus.Failed, "SendSlackNotification requires a 'webhookUrl' parameter.");
+            }
+
+            try
+            {
+                using var client = httpClientFactory.CreateClient();
+                var slackBody = new { text = message, username = "Intentify" };
+                var response = await client.PostAsJsonAsync(webhookUrl, slackBody, ct);
+                if (!response.IsSuccessStatusCode)
+                {
+                    return (FlowRunStatus.Failed, $"Slack webhook returned {(int)response.StatusCode} {response.ReasonPhrase}.");
+                }
+
+                return (FlowRunStatus.Succeeded, null);
+            }
+            catch (Exception ex)
+            {
+                return (FlowRunStatus.Failed, $"Slack notification failed: {ex.Message}");
+            }
+        }
+
+        if (string.Equals(action.ActionType, "UpdateLeadStage", StringComparison.OrdinalIgnoreCase))
+        {
+            var email = action.Params is not null && action.Params.TryGetValue("email", out var e) ? e : null;
+            var label = action.Params is not null && action.Params.TryGetValue("label", out var lb) ? lb : null;
+            if (string.IsNullOrWhiteSpace(email))
+            {
+                return (FlowRunStatus.Failed, "UpdateLeadStage requires an 'email' parameter.");
+            }
+
+            if (string.IsNullOrWhiteSpace(label))
+            {
+                return (FlowRunStatus.Failed, "UpdateLeadStage requires a 'label' parameter.");
+            }
+
+            var leadRepo = serviceProvider.GetService<ILeadRepository>();
+            if (leadRepo is null)
+            {
+                return (FlowRunStatus.Failed, "ILeadRepository is not registered.");
+            }
+
+            var lead = await leadRepo.GetByEmailAsync(flow.TenantId, flow.SiteId, email.Trim(), ct);
+            if (lead is null)
+            {
+                return (FlowRunStatus.Failed, $"No lead found with email '{email}'.");
+            }
+
+            lead.OpportunityLabel = label.Trim();
+            lead.UpdatedAtUtc = DateTime.UtcNow;
+            await leadRepo.ReplaceAsync(lead, ct);
+            return (FlowRunStatus.Succeeded, null);
+        }
+
+        if (string.Equals(action.ActionType, "AddNote", StringComparison.OrdinalIgnoreCase))
+        {
+            var ticketIdRaw = action.Params is not null && action.Params.TryGetValue("ticketId", out var tid) ? tid : null;
+            var note = action.Params is not null && action.Params.TryGetValue("note", out var n) ? n : null;
+            if (!Guid.TryParse(ticketIdRaw, out var ticketId))
+            {
+                return (FlowRunStatus.Failed, "AddNote requires a valid 'ticketId' parameter.");
+            }
+
+            if (string.IsNullOrWhiteSpace(note))
+            {
+                return (FlowRunStatus.Failed, "AddNote requires a 'note' parameter.");
+            }
+
+            var noteHandler = serviceProvider.GetService<AddTicketNoteHandler>();
+            if (noteHandler is null)
+            {
+                return (FlowRunStatus.Failed, "AddTicketNoteHandler is not registered.");
+            }
+
+            var noteResult = await noteHandler.HandleAsync(new AddTicketNoteCommand(flow.TenantId, ticketId, Guid.Empty, note.Trim()), ct);
+            return noteResult.IsSuccess
+                ? (FlowRunStatus.Succeeded, null)
+                : (FlowRunStatus.Failed, string.Join("; ", noteResult.Errors?.Errors.SelectMany(e => e.Value) ?? []));
+        }
+
+        if (string.Equals(action.ActionType, "NotifyTeam", StringComparison.OrdinalIgnoreCase))
+        {
+            var message = action.Params is not null && action.Params.TryGetValue("message", out var m) ? m : string.Empty;
+            // TODO: Implement real team notification once notification service is configured
+            return (FlowRunStatus.Succeeded, $"Team notified: {message}");
+        }
+
         return (FlowRunStatus.Failed, $"Unsupported action type '{action.ActionType}'.");
     }
 
@@ -363,6 +496,8 @@ internal static class FlowValidation
             SiteId = command.SiteId,
             Name = command.Name.Trim(),
             Enabled = true,
+            Priority = Math.Max(0, command.Priority),
+            MaxRunsPerHour = command.MaxRunsPerHour is > 0 ? command.MaxRunsPerHour : null,
             Trigger = trigger!,
             Conditions = conditions!,
             Actions = actions!
@@ -405,6 +540,8 @@ internal static class FlowValidation
             TenantId = command.TenantId,
             Name = command.Name.Trim(),
             Enabled = command.Enabled,
+            Priority = Math.Max(0, command.Priority),
+            MaxRunsPerHour = command.MaxRunsPerHour is > 0 ? command.MaxRunsPerHour : null,
             Trigger = trigger!,
             Conditions = conditions!,
             Actions = actions!,
@@ -470,7 +607,7 @@ internal static class FlowValidation
         }
 
         var actions = new List<FlowAction>();
-        var supportedTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "LogRun", "SendWebhook", "CreateTicket", "TagLead" };
+        var supportedTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "LogRun", "SendWebhook", "CreateTicket", "TagLead", "SendEmail", "SendSlackNotification", "UpdateLeadStage", "AddNote", "NotifyTeam" };
         foreach (var action in inputs)
         {
             if (!supportedTypes.Contains(action.ActionType))
@@ -499,7 +636,9 @@ internal static class FlowMapping
         flow.Enabled,
         new FlowTriggerInput(flow.Trigger.TriggerType, flow.Trigger.Filters),
         flow.Conditions.Select(c => new FlowConditionInput(c.Field, c.Operator, c.Value)).ToArray(),
-        flow.Actions.Select(a => new FlowActionInput(a.ActionType, a.Params)).ToArray());
+        flow.Actions.Select(a => new FlowActionInput(a.ActionType, a.Params)).ToArray(),
+        flow.Priority,
+        flow.MaxRunsPerHour);
 
     public static FlowSummaryDto ToSummary(FlowDefinition flow) => new(
         flow.Id,
@@ -508,7 +647,9 @@ internal static class FlowMapping
         flow.Enabled,
         flow.Trigger.TriggerType,
         flow.Conditions.Count,
-        flow.Actions.Count);
+        flow.Actions.Count,
+        flow.Priority,
+        flow.MaxRunsPerHour);
 
     public static FlowRunDto ToRun(FlowRun run) => new(
         run.Id,

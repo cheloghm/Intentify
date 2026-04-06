@@ -26,7 +26,9 @@ internal static class FlowsEndpoints
             request.Name,
             request.Trigger.ToInput(),
             request.Conditions?.Select(x => x.ToInput()).ToArray(),
-            request.Actions?.Select(x => x.ToInput()).ToArray()),
+            request.Actions?.Select(x => x.ToInput()).ToArray(),
+            request.Priority,
+            request.MaxRunsPerHour),
             context.RequestAborted);
 
         return MapResult(result);
@@ -52,7 +54,9 @@ internal static class FlowsEndpoints
             request.Enabled,
             request.Trigger.ToInput(),
             request.Conditions?.Select(x => x.ToInput()).ToArray(),
-            request.Actions?.Select(x => x.ToInput()).ToArray()),
+            request.Actions?.Select(x => x.ToInput()).ToArray(),
+            request.Priority,
+            request.MaxRunsPerHour),
             context.RequestAborted);
 
         return MapResult(result);
@@ -113,6 +117,11 @@ internal static class FlowsEndpoints
 
         var result = await service.HandleAsync(new ListFlowRunsQuery(tenantId.Value, flowId, limit ?? 50), context.RequestAborted);
         return MapResult(result);
+    }
+
+    public static IResult GetTemplatesAsync()
+    {
+        return Results.Ok(FlowTemplates.All);
     }
 
     private static async Task<IResult> SetEnabledAsync(string id, bool enabled, HttpContext context, SetFlowEnabledService service)

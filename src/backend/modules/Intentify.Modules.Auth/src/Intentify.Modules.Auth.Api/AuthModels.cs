@@ -2,7 +2,7 @@ namespace Intentify.Modules.Auth.Api;
 
 public sealed record LoginRequest(string Email, string Password);
 
-public sealed record RegisterRequest(string DisplayName, string Email, string Password, string OrganizationName);
+public sealed record RegisterRequest(string DisplayName, string Email, string Password, string OrganizationName, string? Plan = null);
 
 public sealed record LoginResponse(string AccessToken);
 

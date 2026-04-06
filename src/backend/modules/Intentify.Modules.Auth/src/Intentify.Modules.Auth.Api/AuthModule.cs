@@ -33,6 +33,7 @@ public sealed class AuthModule : IAppModule
         services.AddSingleton(mongoClientResult.Value);
         services.AddSingleton(sp => mongoClientResult.Value.GetDatabase(mongoOptions.DatabaseName));
         services.Configure<JwtOptions>(configuration.GetSection("Intentify:Jwt"));
+        services.Configure<GoogleOAuthOptions>(configuration.GetSection("Intentify:Auth:Google"));
         services.AddSingleton<JwtTokenIssuer>();
         services.AddSingleton<JwtTokenValidator>();
         services.AddSingleton<PasswordHasher>();
@@ -60,6 +61,8 @@ public sealed class AuthModule : IAppModule
 
         group.MapPost("/register", AuthEndpoints.RegisterAsync);
         group.MapPost("/login", AuthEndpoints.LoginAsync);
+        group.MapGet("/google", AuthEndpoints.GoogleOAuthInitiate);
+        group.MapGet("/google/callback", AuthEndpoints.GoogleOAuthCallback);
         group.MapPost("/invites/accept", AuthEndpoints.AcceptInviteAsync);
         group.MapGet("/me", AuthEndpoints.GetCurrentUser)
             .AddEndpointFilter<RequireAuthFilter>();

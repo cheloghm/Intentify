@@ -1,5 +1,7 @@
 using Intentify.Modules.Collector.Application;
 using Intentify.Modules.Collector.Infrastructure;
+using Intentify.Modules.Visitors.Application;
+using Intentify.Modules.Visitors.Infrastructure;
 using Intentify.Shared.Web;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -22,6 +24,7 @@ public sealed class CollectorModule : IAppModule
         services.AddSingleton<ISiteLookupRepository, SiteLookupRepository>();
         services.AddSingleton<ICollectorEventObserver, NoOpCollectorEventObserver>();
         services.AddSingleton<IngestCollectorEventHandler>();
+        services.AddSingleton<IVisitorConsentWriter, VisitorConsentWriter>();
     }
 
     public void MapEndpoints(IEndpointRouteBuilder endpoints)
@@ -34,6 +37,7 @@ public sealed class CollectorModule : IAppModule
         group.MapGet("/sdk/bootstrap", CollectorEndpoints.GetSdkBootstrapAsync);
         group.MapGet("/tracker.js", CollectorEndpoints.GetTrackerAsync);
         group.MapPost("/events", CollectorEndpoints.CollectEventAsync);
+        group.MapPost("/consent", GdprConsentEndpoint.HandleAsync).AllowAnonymous();
     }
 }
 

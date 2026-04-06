@@ -96,6 +96,15 @@ public sealed class FlowRunsRepository : IFlowRunsRepository
             .ToListAsync(ct);
     }
 
+    public async Task<int> CountSucceededByFlowSinceAsync(Guid tenantId, Guid flowId, DateTime sinceUtc, CancellationToken ct = default)
+    {
+        await _ensureIndexes;
+
+        return (int)await _collection.CountDocumentsAsync(
+            x => x.TenantId == tenantId && x.FlowId == flowId && x.ExecutedAtUtc >= sinceUtc && x.Status == FlowRunStatus.Succeeded,
+            cancellationToken: ct);
+    }
+
     private Task EnsureIndexesAsync()
     {
         var indexes = new[]

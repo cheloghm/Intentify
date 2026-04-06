@@ -8,14 +8,18 @@ public sealed record CreateFlowRequest(
     string Name,
     FlowTriggerRequest Trigger,
     IReadOnlyCollection<FlowConditionRequest>? Conditions,
-    IReadOnlyCollection<FlowActionRequest>? Actions);
+    IReadOnlyCollection<FlowActionRequest>? Actions,
+    int Priority = 0,
+    int? MaxRunsPerHour = null);
 
 public sealed record UpdateFlowRequest(
     string Name,
     bool Enabled,
     FlowTriggerRequest Trigger,
     IReadOnlyCollection<FlowConditionRequest>? Conditions,
-    IReadOnlyCollection<FlowActionRequest>? Actions);
+    IReadOnlyCollection<FlowActionRequest>? Actions,
+    int Priority = 0,
+    int? MaxRunsPerHour = null);
 
 public sealed record FlowTriggerRequest(string TriggerType, IReadOnlyDictionary<string, string>? Filters);
 public sealed record FlowConditionRequest(string Field, FlowConditionOperator Operator, string Value);

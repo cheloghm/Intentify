@@ -1,644 +1,451 @@
-import { createApiClient, mapApiError } from '../shared/apiClient.js';
+/**
+ * leads.js — Intentify Leads Page
+ * Phase 4: Pipeline kanban, lead detail panel with visitor journey,
+ *          intelligence overlay, CSV export, stage progression
+ */
+
 import { createToastManager } from '../shared/ui/index.js';
+import { createApiClient, mapApiError } from '../shared/apiClient.js';
 
-const getSiteId = (site) => site?.siteId || site?.id || '';
+// ─── Utilities ────────────────────────────────────────────────────────────────
 
-const formatDate = (value) => {
-  if (!value) return '—';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '—';
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+const el = (tag, attrs = {}, ...kids) => {
+  const e = document.createElement(tag);
+  Object.entries(attrs).forEach(([k, v]) => {
+    if (k === 'class')         e.className = v;
+    else if (k === 'style')    typeof v === 'string' ? (e.style.cssText = v) : Object.assign(e.style, v);
+    else if (k.startsWith('@')) e.addEventListener(k.slice(1), v);
+    else e.setAttribute(k, v);
+  });
+  kids.flat(Infinity).forEach(c => c != null && e.append(typeof c === 'string' ? document.createTextNode(c) : c));
+  return e;
 };
 
-const opportunityVariant = (label) => {
-  if (!label) return 'neutral';
-  const l = label.toLowerCase();
-  if (l.includes('evaluating')) return 'warning';
-  if (l.includes('deciding'))   return 'info';
-  if (l.includes('won'))        return 'success';
-  if (l.includes('lost'))       return 'danger';
-  return 'neutral';
+const fmtDate  = v => { if (!v) return '—'; const d = new Date(v); return isNaN(d) ? '—' : d.toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' }); };
+const fmtAgo   = v => { if (!v) return '—'; const m = Math.floor((Date.now()-new Date(v))/60000); if (m<1) return 'just now'; if (m<60) return `${m}m ago`; const h=Math.floor(m/60); if (h<24) return `${h}h ago`; return `${Math.floor(h/24)}d ago`; };
+const normPath = url => { if (!url) return '—'; try { const u=new URL(url); return u.pathname+u.search||'/'; } catch { return url; } };
+const getSiteId = s => s?.siteId || s?.id || '';
+const SITE_KEY  = 'intentify.selectedSiteId';
+const loadSiteId = () => { try { return localStorage.getItem(SITE_KEY)||''; } catch { return ''; } };
+const saveSiteId = id => { try { id ? localStorage.setItem(SITE_KEY,id) : localStorage.removeItem(SITE_KEY); } catch {} };
+
+const STAGES = [
+  { key: 'new',        label: '🆕 New',        color: '#6366f1', light: '#eef2ff', border: '#c7d2fe' },
+  { key: 'evaluating', label: '🔍 Evaluating', color: '#f59e0b', light: '#fef3c7', border: '#fcd34d' },
+  { key: 'deciding',   label: '⚖️ Deciding',  color: '#3b82f6', light: '#dbeafe', border: '#93c5fd' },
+  { key: 'won',        label: '🏆 Won',        color: '#10b981', light: '#d1fae5', border: '#6ee7b7' },
+  { key: 'lost',       label: '❌ Lost',       color: '#ef4444', light: '#fee2e2', border: '#fca5a5' },
+];
+const stageCfg = key => STAGES.find(s => (key||'').toLowerCase().includes(s.key.replace('🆕 ','').replace('🔍 ','').replace('⚖️ ','').replace('🏆 ','').replace('❌ ','').toLowerCase())) || STAGES[0];
+// Simpler key match:
+const getStage = opp => {
+  if (!opp) return STAGES[0];
+  const l = opp.toLowerCase();
+  if (l.includes('won') || l.includes('closed')) return STAGES[3];
+  if (l.includes('lost')) return STAGES[4];
+  if (l.includes('decid')) return STAGES[2];
+  if (l.includes('evaluat')) return STAGES[1];
+  return STAGES[0];
 };
 
-const isWithinLastWeek = (dateStr) => {
-  if (!dateStr) return false;
-  const date = new Date(dateStr);
-  if (Number.isNaN(date.getTime())) return false;
-  const weekAgo = new Date();
-  weekAgo.setDate(weekAgo.getDate() - 7);
-  return date >= weekAgo;
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
+const injectStyles = () => {
+  if (document.getElementById('_leads_css')) return;
+  const s = document.createElement('style');
+  s.id = '_leads_css';
+  s.textContent = `
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+.l-root{font-family:'Plus Jakarta Sans',system-ui,sans-serif;display:flex;flex-direction:column;gap:20px;width:100%;max-width:1280px;padding-bottom:60px}
+/* Hero */
+.l-hero{background:linear-gradient(135deg,#0f172a,#1e293b);border-radius:16px;padding:26px 34px;position:relative;overflow:hidden}
+.l-hero::before{content:'';position:absolute;top:-20px;right:-20px;width:160px;height:160px;background:radial-gradient(circle,rgba(99,102,241,.2) 0%,transparent 70%);pointer-events:none}
+.l-hero-title{font-size:22px;font-weight:700;color:#f8fafc;letter-spacing:-.02em;margin-bottom:4px}
+.l-hero-sub{font-size:12.5px;color:#64748b;margin-bottom:18px}
+.l-hero-stats{display:flex;gap:28px;flex-wrap:wrap}
+.l-stat-val{font-family:'JetBrains Mono',monospace;font-size:24px;font-weight:700;color:#f1f5f9;line-height:1}
+.l-stat-lbl{font-size:10px;color:#475569;text-transform:uppercase;letter-spacing:.07em;margin-top:3px}
+/* Controls */
+.l-controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.l-select{font-family:'Plus Jakarta Sans',system-ui,sans-serif;font-size:13px;color:#1e293b;background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:7px 11px;outline:none}
+.l-select:focus{border-color:#6366f1;box-shadow:0 0 0 3px rgba(99,102,241,.1)}
+.l-input{font-family:'Plus Jakarta Sans',system-ui,sans-serif;font-size:13px;color:#1e293b;background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:7px 11px;outline:none;min-width:180px}
+.l-input:focus{border-color:#6366f1;box-shadow:0 0 0 3px rgba(99,102,241,.1)}
+.l-btn{font-family:'Plus Jakarta Sans',system-ui,sans-serif;font-size:13px;font-weight:600;padding:7px 16px;border-radius:8px;border:none;cursor:pointer;transition:all .14s;display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.l-btn-primary{background:#6366f1;color:#fff}
+.l-btn-primary:hover{background:#4f46e5;transform:translateY(-1px);box-shadow:0 4px 12px rgba(99,102,241,.25)}
+.l-btn-outline{background:#fff;color:#64748b;border:1px solid #e2e8f0}
+.l-btn-outline:hover{background:#f8fafc;color:#1e293b}
+.l-btn-sm{padding:5px 12px;font-size:11.5px}
+.l-view-toggle{display:flex;background:#f1f5f9;border-radius:8px;padding:3px;gap:2px}
+.l-view-btn{padding:5px 12px;border-radius:6px;border:none;font-family:'Plus Jakarta Sans',system-ui,sans-serif;font-size:12px;font-weight:500;color:#64748b;cursor:pointer;transition:all .12s}
+.l-view-btn.active{background:#fff;color:#6366f1;font-weight:700;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+/* Pipeline */
+.l-pipeline{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;align-items:start}
+@media(max-width:900px){.l-pipeline{grid-template-columns:repeat(2,1fr)}}
+.l-col{background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden}
+.l-col-hd{padding:10px 14px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #e2e8f0}
+.l-col-label{font-size:12px;font-weight:700;color:#1e293b}
+.l-col-count{font-family:'JetBrains Mono',monospace;font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:999px}
+.l-col-body{padding:10px;display:flex;flex-direction:column;gap:8px;min-height:120px}
+/* Lead cards */
+.l-card{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px;cursor:pointer;transition:box-shadow .15s,transform .15s;position:relative}
+.l-card:hover{box-shadow:0 4px 14px rgba(0,0,0,.08);transform:translateY(-1px)}
+.l-card.active{border-color:#6366f1;box-shadow:0 0 0 2px rgba(99,102,241,.15)}
+.l-card-accent{position:absolute;top:0;left:0;bottom:0;width:3px;border-radius:10px 0 0 10px}
+.l-card-name{font-size:12.5px;font-weight:700;color:#1e293b;margin-bottom:2px;padding-left:8px}
+.l-card-email{font-size:10.5px;color:#94a3b8;font-family:'JetBrains Mono',monospace;padding-left:8px;margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.l-card-meta{display:flex;gap:6px;flex-wrap:wrap;padding-left:8px}
+.l-pill{display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:999px;font-size:9.5px;font-weight:700;border:1px solid}
+/* Table */
+.l-table-wrap{background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden}
+.l-table{width:100%;border-collapse:collapse;font-size:12.5px}
+.l-table thead th{background:#f8fafc;padding:9px 16px;text-align:left;font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#94a3b8;border-bottom:1px solid #e2e8f0;white-space:nowrap}
+.l-table tbody td{padding:12px 16px;border-bottom:1px solid #f1f5f9;color:#334155;vertical-align:middle}
+.l-table tbody tr:last-child td{border-bottom:none}
+.l-table tbody tr:hover{background:#fafbff;cursor:pointer}
+.l-table tbody tr.active{background:#eef2ff}
+/* Detail panel */
+.l-layout{display:grid;grid-template-columns:1fr 380px;gap:16px;align-items:start}
+@media(max-width:1000px){.l-layout{grid-template-columns:1fr}}
+.l-detail{background:#fff;border:1px solid #e2e8f0;border-radius:14px;overflow:hidden}
+.l-detail-hd{display:flex;align-items:flex-start;gap:14px;padding:18px 20px;border-bottom:1px solid #f1f5f9}
+.l-detail-avatar{width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;flex-shrink:0;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff}
+.l-detail-name{font-size:16px;font-weight:700;color:#0f172a;margin-bottom:2px}
+.l-detail-email{font-size:11.5px;color:#94a3b8;font-family:'JetBrains Mono',monospace;margin-bottom:8px}
+.l-detail-chips{display:flex;gap:6px;flex-wrap:wrap}
+.l-detail-body{padding:16px 20px;display:flex;flex-direction:column;gap:14px}
+/* Rows */
+.l-row{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid #f8fafc}
+.l-row:last-child{border-bottom:none}
+.l-row-lbl{font-size:10.5px;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;font-weight:600;flex-shrink:0;padding-top:1px}
+.l-row-val{font-size:12px;color:#1e293b;text-align:right;font-family:'JetBrains Mono',monospace;word-break:break-all}
+/* Stage selector */
+.l-stages{display:flex;gap:6px;flex-wrap:wrap;padding:12px 20px;border-bottom:1px solid #f1f5f9}
+.l-stage-btn{font-size:11px;font-weight:700;padding:4px 10px;border-radius:999px;border:1px solid;cursor:pointer;transition:all .12s}
+/* Journey timeline */
+.l-journey{max-height:260px;overflow-y:auto;display:flex;flex-direction:column}
+.l-journey-item{display:flex;gap:10px;padding:7px 0;position:relative}
+.l-journey-item::before{content:'';position:absolute;left:14px;top:26px;bottom:-7px;width:1px;background:#e2e8f0}
+.l-journey-item:last-child::before{display:none}
+.l-journey-dot{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;z-index:1;border:2px solid #e2e8f0;background:#f1f5f9}
+.l-journey-body{flex:1;min-width:0;padding-top:2px}
+.l-journey-title{font-size:11.5px;font-weight:600;color:#1e293b}
+.l-journey-sub{font-size:10.5px;color:#6366f1;font-family:'JetBrains Mono',monospace;word-break:break-all;margin-top:1px}
+.l-journey-time{font-size:9.5px;color:#94a3b8;margin-top:1px}
+/* Intel box */
+.l-intel{background:linear-gradient(135deg,#0f172a,#1e1b4b);border-radius:10px;padding:14px 16px}
+.l-intel-lbl{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#818cf8;margin-bottom:7px}
+.l-intel-text{font-size:12px;line-height:1.65;color:#e2e8f0}
+/* Empty */
+.l-empty{text-align:center;padding:40px 20px;display:flex;flex-direction:column;align-items:center;gap:8px}
+.l-empty-icon{font-size:36px;opacity:.3}
+.l-empty-title{font-size:14px;font-weight:600;color:#334155}
+.l-empty-desc{font-size:12px;color:#94a3b8;max-width:260px;line-height:1.6}
+/* Panel section */
+.l-section-title{font-size:11.5px;font-weight:700;color:#0f172a;margin-bottom:10px;display:flex;align-items:center;gap:6px}
+  `;
+  document.head.appendChild(s);
 };
 
-const PAGE_SIZE = 10;
+// ─── Main export ──────────────────────────────────────────────────────────────
 
 export const renderLeadsView = (container, { apiClient, toast } = {}) => {
-  const client = apiClient || createApiClient();
-  const notifier = toast || createToastManager();
-
-  const KANBAN_COLUMNS = [
-    { key: 'evaluating', label: 'Evaluating', color: '#f59e0b' },
-    { key: 'deciding',   label: 'Deciding',   color: '#3b82f6' },
-    { key: 'won',        label: 'Won',         color: '#10b981' },
-    { key: 'lost',       label: 'Lost',        color: '#ef4444' },
-  ];
+  injectStyles();
+  const client   = apiClient || createApiClient();
+  const notifier = toast     || createToastManager();
 
   const state = {
-    sites: [],
-    siteId: '',
-    leads: [],
-    filtered: [],
-    selected: null,
-    currentPage: 1,
-    search: '',
-    view: 'table',
+    sites: [], siteId: loadSiteId(), leads: [], filtered: [],
+    selected: null, view: 'pipeline', search: '', page: 1,
+    visitor: null, timeline: [], intelligence: null,
   };
 
-  // ── Root ──────────────────────────────────────────────────────────────
-  const page = document.createElement('div');
-  page.className = 'stack';
-  page.style.maxWidth = '1100px';
-  page.style.width = '100%';
+  const root = el('div', { class: 'l-root' });
+  container.appendChild(root);
 
-  // ── Page header ───────────────────────────────────────────────────────
-  const pageHeader = document.createElement('div');
-  pageHeader.className = 'page-header';
-  const titleGroup = document.createElement('div');
-  const titleEl = document.createElement('h1');
-  titleEl.className = 'page-title';
-  titleEl.textContent = 'Leads';
-  const subtitleEl = document.createElement('div');
-  subtitleEl.className = 'page-subtitle';
-  subtitleEl.textContent = 'Captured leads from your website conversations';
-  titleGroup.append(titleEl, subtitleEl);
-  const viewToggleWrap = document.createElement('div');
-  viewToggleWrap.style.cssText = 'display:flex;gap:4px;';
-  const tableViewBtn = document.createElement('button');
-  tableViewBtn.className = 'btn btn-primary btn-sm';
-  tableViewBtn.textContent = '≡ Table';
-  const kanbanViewBtn = document.createElement('button');
-  kanbanViewBtn.className = 'btn btn-secondary btn-sm';
-  kanbanViewBtn.textContent = '⊞ Kanban';
-  tableViewBtn.addEventListener('click', () => {
-    state.view = 'table';
-    tableViewBtn.className = 'btn btn-primary btn-sm';
-    kanbanViewBtn.className = 'btn btn-secondary btn-sm';
-    renderView();
-  });
-  kanbanViewBtn.addEventListener('click', () => {
-    state.view = 'kanban';
-    tableViewBtn.className = 'btn btn-secondary btn-sm';
-    kanbanViewBtn.className = 'btn btn-primary btn-sm';
-    renderView();
-  });
-  viewToggleWrap.append(tableViewBtn, kanbanViewBtn);
-  pageHeader.append(titleGroup, viewToggleWrap);
+  // ── Hero ───────────────────────────────────────────────────────────────────
+  const hero = el('div', { class: 'l-hero' });
+  hero.appendChild(el('div', { class: 'l-hero-title' }, '⭐ Lead Pipeline'));
+  hero.appendChild(el('div', { class: 'l-hero-sub' }, 'All leads captured from visitor conversations, with journey context'));
+  const heroStats = el('div', { class: 'l-hero-stats' });
+  const mkStat = lbl => { const w=el('div',{}); const v=el('div',{class:'l-stat-val'},'—'); w.append(v,el('div',{class:'l-stat-lbl'},lbl)); heroStats.appendChild(w); return v; };
+  const hTotal = mkStat('Total Leads');
+  const hNew   = mkStat('New This Week');
+  const hWon   = mkStat('Won');
+  hero.appendChild(heroStats);
+  root.appendChild(hero);
 
-  // ── Filters row ───────────────────────────────────────────────────────
-  const filtersRow = document.createElement('div');
-  filtersRow.style.display = 'flex';
-  filtersRow.style.gap = '10px';
-  filtersRow.style.alignItems = 'center';
-  filtersRow.style.flexWrap = 'wrap';
+  // ── Controls ───────────────────────────────────────────────────────────────
+  const controls = el('div', { class: 'l-controls' });
+  const siteSelect = el('select', { class: 'l-select' }, el('option',{value:''},'Loading sites…'));
+  const searchInput = el('input', { class: 'l-input', placeholder: '🔍 Search name or email…' });
+  const exportBtn   = el('button', { class: 'l-btn l-btn-outline l-btn-sm' }, '⬇ Export CSV');
+  const viewToggle  = el('div', { class: 'l-view-toggle' });
+  const pipelineBtn = el('button', { class: 'l-view-btn active' }, '⊞ Pipeline');
+  const tableBtn    = el('button', { class: 'l-view-btn' }, '≡ Table');
+  viewToggle.append(pipelineBtn, tableBtn);
+  controls.append(siteSelect, searchInput, exportBtn, viewToggle);
+  root.appendChild(controls);
 
-  const siteSelect = document.createElement('select');
-  siteSelect.className = 'form-select';
-  siteSelect.style.minWidth = '220px';
+  // ── Main layout ────────────────────────────────────────────────────────────
+  const layout = el('div', { class: 'l-layout' });
+  const mainCol = el('div', {});
+  const detailCol = el('div', {});
+  layout.append(mainCol, detailCol);
+  root.appendChild(layout);
 
-  const searchInput = document.createElement('input');
-  searchInput.className = 'form-input';
-  searchInput.type = 'text';
-  searchInput.placeholder = 'Search by name or email…';
-  searchInput.style.maxWidth = '260px';
+  // ── Detail panel ───────────────────────────────────────────────────────────
+  const renderDetail = async (lead) => {
+    detailCol.replaceChildren();
+    if (!lead) return;
 
-  filtersRow.append(siteSelect, searchInput);
+    const panel = el('div', { class: 'l-detail' });
+    const stage = getStage(lead.opportunityLabel);
 
-  // ── Metric cards ──────────────────────────────────────────────────────
-  const metricsGrid = document.createElement('div');
-  metricsGrid.className = 'grid-3';
+    // Header
+    const hd = el('div', { class: 'l-detail-hd' });
+    const initials = (lead.displayName || lead.primaryEmail || '?')[0].toUpperCase();
+    hd.appendChild(el('div', { class: 'l-detail-avatar' }, initials));
+    const hdbody = el('div', { style: 'flex:1;min-width:0' });
+    hdbody.appendChild(el('div', { class: 'l-detail-name' }, lead.displayName || 'Anonymous'));
+    hdbody.appendChild(el('div', { class: 'l-detail-email' }, lead.primaryEmail || '—'));
+    const chips = el('div', { class: 'l-detail-chips' });
+    chips.appendChild(el('span', { class: 'l-pill', style: `background:${stage.light};color:${stage.color};border-color:${stage.border}` }, stage.label));
+    if (lead.intentScore) chips.appendChild(el('span', { class: 'l-pill', style: 'background:#f1f5f9;color:#475569;border-color:#e2e8f0' }, `Score: ${lead.intentScore}`));
+    hdbody.appendChild(chips);
+    hd.appendChild(hdbody);
+    panel.appendChild(hd);
 
-  const makeMetricCard = (icon, label, iconBg) => {
-    const card = document.createElement('div');
-    card.className = 'metric-card';
-    const iconEl = document.createElement('div');
-    iconEl.className = 'metric-icon';
-    iconEl.textContent = icon;
-    iconEl.style.background = iconBg;
-    const labelEl = document.createElement('div');
-    labelEl.className = 'metric-label';
-    labelEl.textContent = label;
-    const valueEl = document.createElement('div');
-    valueEl.className = 'metric-value';
-    valueEl.textContent = '—';
-    card.append(iconEl, labelEl, valueEl);
-    return { card, valueEl };
+    // Stage progression buttons
+    const stageBtns = el('div', { class: 'l-stages' });
+    STAGES.forEach(s => {
+      const btn = el('button', { class: 'l-stage-btn', style: `background:${s===stage?s.light:'#f8fafc'};color:${s===stage?s.color:'#64748b'};border-color:${s===stage?s.border:'#e2e8f0'}` }, s.label);
+      btn.addEventListener('click', async () => {
+        try {
+          await client.leads.tagStage(lead.id || lead.leadId, s.key);
+          lead.opportunityLabel = s.key;
+          notifier.show({ message: `Moved to ${s.label}`, variant: 'success' });
+          renderDetail(lead);
+          renderMainView();
+        } catch (err) { notifier.show({ message: mapApiError(err).message, variant: 'danger' }); }
+      });
+      stageBtns.appendChild(btn);
+    });
+    panel.appendChild(stageBtns);
+
+    // Body
+    const body = el('div', { class: 'l-detail-body' });
+
+    // Contact details
+    const detailRows = el('div', {});
+    const addRow = (lbl, val) => {
+      if (!val) return;
+      const r = el('div', { class: 'l-row' });
+      r.append(el('div',{class:'l-row-lbl'},lbl), el('div',{class:'l-row-val'},val));
+      detailRows.appendChild(r);
+    };
+    addRow('Email',   lead.primaryEmail);
+    addRow('Phone',   lead.phone);
+    addRow('Contact', lead.preferredContactMethod);
+    addRow('Intent',  lead.opportunityLabel);
+    addRow('Score',   lead.intentScore?.toString());
+    addRow('Captured',fmtDate(lead.createdAtUtc));
+    addRow('Updated', fmtAgo(lead.updatedAtUtc));
+    body.appendChild(detailRows);
+
+    // Conversation summary
+    if (lead.conversationSummary) {
+      const summaryBox = el('div', {});
+      summaryBox.appendChild(el('div', { class: 'l-section-title' }, '💬 Conversation Summary'));
+      summaryBox.appendChild(el('div', { style: 'font-size:12px;color:#475569;line-height:1.65;background:#f8fafc;border-radius:8px;padding:10px 12px' }, lead.conversationSummary));
+      body.appendChild(summaryBox);
+    }
+    if (lead.suggestedFollowUp) {
+      body.appendChild(el('div', { style: 'background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:10px 12px;font-size:12px;color:#92400e;line-height:1.6' }, '💡 ', lead.suggestedFollowUp));
+    }
+
+    // Visitor journey — load async
+    if (lead.linkedVisitorId) {
+      const journeyBox = el('div', {});
+      journeyBox.appendChild(el('div', { class: 'l-section-title' }, '📍 Pre-Conversion Journey'));
+      const journeyList = el('div', { class: 'l-journey', style: 'font-size:12px;color:#94a3b8' }, '⏳ Loading…');
+      journeyBox.appendChild(journeyList);
+      body.appendChild(journeyBox);
+
+      client.visitors.timeline(lead.linkedVisitorId, 50, state.siteId).then(items => {
+        journeyList.replaceChildren();
+        if (!items?.length) { journeyList.appendChild(el('div',{style:'color:#94a3b8;font-size:11.5px'},'No page history')); return; }
+        items.forEach(item => {
+          const row = el('div', { class: 'l-journey-item' });
+          const icon = item.type === 'pageview' || item.type === 'page_view' ? '👁️' : item.type === 'lead_capture' ? '⭐' : '⚡';
+          row.appendChild(el('div', { class: 'l-journey-dot' }, icon));
+          const body2 = el('div', { class: 'l-journey-body' });
+          body2.appendChild(el('div', { class: 'l-journey-title' }, item.type === 'lead_capture' ? 'Lead captured' : 'Page view'));
+          if (item.url) body2.appendChild(el('div', { class: 'l-journey-sub' }, normPath(item.url)));
+          body2.appendChild(el('div', { class: 'l-journey-time' }, fmtDate(item.occurredAtUtc)));
+          row.appendChild(body2);
+          journeyList.appendChild(row);
+        });
+      }).catch(() => { journeyList.replaceChildren(el('div',{style:'color:#94a3b8;font-size:11.5px'},'Could not load journey')); });
+    }
+
+    // Intelligence overlay — load async
+    if (state.siteId) {
+      client.intelligence.siteSummary({ siteId: state.siteId, timeWindow: '7d' }).then(intel => {
+        if (!intel?.summary) return;
+        const intelBox = el('div', {});
+        intelBox.appendChild(el('div', { class: 'l-section-title' }, '📡 What their audience is searching for'));
+        const box = el('div', { class: 'l-intel' });
+        box.appendChild(el('div', { class: 'l-intel-lbl' }, '✦ Market Intelligence'));
+        box.appendChild(el('div', { class: 'l-intel-text' }, intel.summary));
+        intelBox.appendChild(box);
+        body.appendChild(intelBox);
+      }).catch(() => {});
+    }
+
+    panel.appendChild(body);
+    detailCol.appendChild(panel);
   };
 
-  const mTotal   = makeMetricCard('🧑‍💼', 'Total Leads',     'var(--brand-primary-light)');
-  const mWeek    = makeMetricCard('📅',   'New This Week',   'var(--color-success-light)');
-  const mConvert = makeMetricCard('🎯',   'Conversion Rate', 'var(--color-info-light)');
-  metricsGrid.append(mTotal.card, mWeek.card, mConvert.card);
+  // ── Pipeline view ──────────────────────────────────────────────────────────
+  const renderPipeline = () => {
+    mainCol.replaceChildren();
+    const pipeline = el('div', { class: 'l-pipeline' });
 
-  // ── Table card ────────────────────────────────────────────────────────
-  const tableCard = document.createElement('div');
-  tableCard.className = 'card';
+    STAGES.forEach(stage => {
+      const stageLeads = state.filtered.filter(l => getStage(l.opportunityLabel).key === stage.key);
+      const col = el('div', { class: 'l-col' });
+      const hd  = el('div', { class: 'l-col-hd' });
+      hd.appendChild(el('div', { class: 'l-col-label' }, stage.label));
+      hd.appendChild(el('span', { class: 'l-col-count', style: `background:${stage.light};color:${stage.color}` }, String(stageLeads.length)));
+      col.appendChild(hd);
 
-  const tableCardHeader = document.createElement('div');
-  tableCardHeader.className = 'card-header';
-  const tableTitleGroup = document.createElement('div');
-  const tableTitleEl = document.createElement('div');
-  tableTitleEl.className = 'card-title';
-  tableTitleEl.textContent = 'All Leads';
-  const tableCountEl = document.createElement('div');
-  tableCountEl.className = 'card-subtitle';
-  tableCountEl.textContent = 'Loading…';
-  tableTitleGroup.append(tableTitleEl, tableCountEl);
-  tableCardHeader.append(tableTitleGroup);
+      const body = el('div', { class: 'l-col-body' });
+      if (!stageLeads.length) {
+        body.appendChild(el('div', { style: 'color:#94a3b8;font-size:11px;text-align:center;padding:16px 0' }, 'No leads'));
+      } else {
+        stageLeads.forEach(lead => {
+          const card = el('div', { class: `l-card${state.selected?.id === lead.id ? ' active' : ''}` });
+          card.appendChild(el('div', { class: 'l-card-accent', style: `background:${stage.color}` }));
+          card.appendChild(el('div', { class: 'l-card-name' }, lead.displayName || 'Anonymous'));
+          card.appendChild(el('div', { class: 'l-card-email' }, lead.primaryEmail || '—'));
+          const meta = el('div', { class: 'l-card-meta' });
+          if (lead.intentScore) meta.appendChild(el('span', { class: 'l-pill', style: 'background:#f1f5f9;color:#475569;border-color:#e2e8f0' }, `Score: ${lead.intentScore}`));
+          meta.appendChild(el('span', { class: 'l-pill', style: 'background:#f8fafc;color:#94a3b8;border-color:#e2e8f0' }, fmtAgo(lead.updatedAtUtc)));
+          card.appendChild(meta);
+          card.addEventListener('click', () => { state.selected = lead; renderPipeline(); renderDetail(lead); });
+          body.appendChild(card);
+        });
+      }
+      col.appendChild(body);
+      pipeline.appendChild(col);
+    });
 
-  const tableWrapper = document.createElement('div');
-  tableWrapper.className = 'table-wrapper';
-
-  const paginationEl = document.createElement('div');
-  paginationEl.className = 'pagination';
-  const paginationInfo = document.createElement('div');
-  const paginationControls = document.createElement('div');
-  paginationControls.className = 'pagination-controls';
-  paginationEl.append(paginationInfo, paginationControls);
-
-  tableCard.append(tableCardHeader, tableWrapper, paginationEl);
-
-  // ── Kanban board ──────────────────────────────────────────────────────
-  const kanbanBoard = document.createElement('div');
-  kanbanBoard.style.cssText = 'display:none;gap:12px;overflow-x:auto;align-items:flex-start;';
-
-  // ── Lead detail modal ─────────────────────────────────────────────────
-  const modalOverlay = document.createElement('div');
-  modalOverlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.5);display:none;align-items:center;justify-content:center;z-index:1000;padding:20px;';
-
-  const modalCard = document.createElement('div');
-  modalCard.className = 'card';
-  modalCard.style.cssText = 'width:100%;max-width:580px;max-height:85vh;overflow-y:auto;position:relative;';
-
-  modalOverlay.appendChild(modalCard);
-  document.body.appendChild(modalOverlay);
-
-  // ── Helpers ───────────────────────────────────────────────────────────
-  const makeOpportunityBadge = (label) => {
-    const badge = document.createElement('span');
-    badge.className = `badge badge-${opportunityVariant(label)}`;
-    badge.textContent = label || 'Unknown';
-    return badge;
+    mainCol.appendChild(pipeline);
   };
 
-  const makeDetailRow = (label, value) => {
-    const row = document.createElement('div');
-    const lbl = document.createElement('div');
-    lbl.style.fontSize = '11px';
-    lbl.style.color = 'var(--color-text-muted)';
-    lbl.style.fontWeight = '500';
-    lbl.style.textTransform = 'uppercase';
-    lbl.style.letterSpacing = '0.04em';
-    lbl.style.marginBottom = '2px';
-    lbl.textContent = label;
-    const val = document.createElement('div');
-    val.style.fontSize = '14px';
-    val.style.color = value ? 'var(--color-text)' : 'var(--color-text-muted)';
-    val.textContent = value || '—';
-    row.append(lbl, val);
-    return row;
+  // ── Table view ─────────────────────────────────────────────────────────────
+  const renderTable = () => {
+    mainCol.replaceChildren();
+    if (!state.filtered.length) {
+      mainCol.appendChild(el('div', { class: 'l-empty' }, el('div',{class:'l-empty-icon'},'⭐'), el('div',{class:'l-empty-title'},'No leads yet'), el('div',{class:'l-empty-desc'},'Leads are captured when visitors chat and share contact details.')));
+      return;
+    }
+    const tableWrap = el('div', { class: 'l-table-wrap' });
+    const table = el('table', { class: 'l-table' });
+    table.appendChild(el('thead',{},el('tr',{}, ...['Name','Email','Stage','Score','Intent','Captured'].map(c=>el('th',{},c)))));
+    const tbody = el('tbody',{});
+    state.filtered.forEach(lead => {
+      const tr = el('tr', { class: state.selected?.id === lead.id ? 'active' : '' });
+      const stage = getStage(lead.opportunityLabel);
+      tr.append(
+        el('td',{style:'font-weight:600;color:#1e293b'},lead.displayName||'Anonymous'),
+        el('td',{style:'font-family:JetBrains Mono,monospace;font-size:11px;color:#64748b'},lead.primaryEmail||'—'),
+        el('td',{},el('span',{class:'l-pill',style:`background:${stage.light};color:${stage.color};border-color:${stage.border}`},stage.label)),
+        el('td',{style:'font-family:JetBrains Mono,monospace'},lead.intentScore ? String(lead.intentScore) : '—'),
+        el('td',{style:'font-size:11.5px;color:#475569;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'},lead.opportunityLabel||'—'),
+        el('td',{style:'font-size:11.5px;color:#94a3b8'},fmtDate(lead.createdAtUtc))
+      );
+      tr.addEventListener('click', () => { state.selected = lead; renderTable(); renderDetail(lead); });
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    tableWrap.appendChild(table);
+    mainCol.appendChild(tableWrap);
   };
+
+  const renderMainView = () => state.view === 'pipeline' ? renderPipeline() : renderTable();
 
   const applyFilter = () => {
     const q = state.search.toLowerCase();
-    state.filtered = state.leads.filter((lead) => {
-      if (!q) return true;
-      return (lead.displayName || '').toLowerCase().includes(q)
-          || (lead.primaryEmail || '').toLowerCase().includes(q);
-    });
-    state.currentPage = 1;
-    updateMetrics();
-    renderView();
+    state.filtered = q
+      ? state.leads.filter(l => (l.displayName||'').toLowerCase().includes(q) || (l.primaryEmail||'').toLowerCase().includes(q))
+      : [...state.leads];
+    renderMainView();
+    // Update hero stats
+    hTotal.textContent = String(state.leads.length);
+    const weekAgo = new Date(); weekAgo.setDate(weekAgo.getDate()-7);
+    hNew.textContent = String(state.leads.filter(l => new Date(l.createdAtUtc) >= weekAgo).length);
+    hWon.textContent = String(state.leads.filter(l => getStage(l.opportunityLabel).key === 'won').length);
   };
 
-  const updateMetrics = () => {
-    const total = state.leads.length;
-    const newThisWeek = state.leads.filter((l) => isWithinLastWeek(l.createdAtUtc)).length;
-    mTotal.valueEl.textContent   = total || '—';
-    mWeek.valueEl.textContent    = total > 0 ? newThisWeek : '—';
-    mConvert.valueEl.textContent = '—';
+  // ── CSV export ─────────────────────────────────────────────────────────────
+  const exportCsv = () => {
+    const rows = [['Name','Email','Phone','Stage','Score','Intent','Summary','Captured']];
+    state.leads.forEach(l => rows.push([
+      l.displayName||'', l.primaryEmail||'', l.phone||'',
+      getStage(l.opportunityLabel).label, l.intentScore||'',
+      l.opportunityLabel||'', (l.conversationSummary||'').replace(/,/g,'；'),
+      fmtDate(l.createdAtUtc)
+    ]));
+    const csv = rows.map(r => r.map(c => `"${c}"`).join(',')).join('\n');
+    const a = document.createElement('a');
+    a.href = 'data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
+    a.download = `intentify-leads-${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
   };
 
-  const closeDetail = () => {
-    state.selected = null;
-    modalOverlay.style.display = 'none';
-    document.removeEventListener('keydown', handleModalKeydown);
-  };
-
-  const handleModalKeydown = (e) => {
-    if (e.key === 'Escape') closeDetail();
-  };
-
-  modalOverlay.addEventListener('click', (e) => {
-    if (e.target === modalOverlay) closeDetail();
-  });
-
-  const renderDetail = (lead) => {
-    modalCard.innerHTML = '';
-
-    // Header
-    const detailHeader = document.createElement('div');
-    detailHeader.className = 'card-header';
-    detailHeader.style.marginBottom = '20px';
-
-    const detailTitleGroup = document.createElement('div');
-    const detailName = document.createElement('div');
-    detailName.className = 'card-title';
-    detailName.textContent = lead.displayName || '(no name)';
-    const detailEmail = document.createElement('div');
-    detailEmail.className = 'card-subtitle';
-    detailEmail.textContent = lead.primaryEmail || '(no email)';
-    detailTitleGroup.append(detailName, detailEmail);
-
-    const closeBtn = document.createElement('button');
-    closeBtn.className = 'btn btn-secondary btn-sm';
-    closeBtn.textContent = '×';
-    closeBtn.setAttribute('aria-label', 'Close');
-    closeBtn.addEventListener('click', closeDetail);
-
-    detailHeader.append(detailTitleGroup, closeBtn);
-
-    // Two-column body
-    const detailBody = document.createElement('div');
-    detailBody.className = 'grid-2';
-    detailBody.style.gap = '24px';
-
-    // Left: Contact details
-    const leftCol = document.createElement('div');
-    leftCol.className = 'stack';
-    leftCol.style.gap = '12px';
-
-    const leftTitle = document.createElement('div');
-    leftTitle.style.fontWeight = '600';
-    leftTitle.style.fontSize = '11px';
-    leftTitle.style.color = 'var(--color-text-muted)';
-    leftTitle.style.textTransform = 'uppercase';
-    leftTitle.style.letterSpacing = '0.06em';
-    leftTitle.textContent = 'Contact Details';
-
-    leftCol.append(
-      leftTitle,
-      makeDetailRow('Name',              lead.displayName),
-      makeDetailRow('Email',             lead.primaryEmail),
-      makeDetailRow('Phone',             lead.phone),
-      makeDetailRow('Location',          lead.location),
-      makeDetailRow('Preferred Contact', lead.preferredContactMethod),
-    );
-
-    // Right: Lead intelligence
-    const rightCol = document.createElement('div');
-    rightCol.className = 'stack';
-    rightCol.style.gap = '12px';
-
-    const rightTitle = document.createElement('div');
-    rightTitle.style.fontWeight = '600';
-    rightTitle.style.fontSize = '11px';
-    rightTitle.style.color = 'var(--color-text-muted)';
-    rightTitle.style.textTransform = 'uppercase';
-    rightTitle.style.letterSpacing = '0.06em';
-    rightTitle.textContent = 'Lead Intelligence';
-
-    const opportunityRow = document.createElement('div');
-    const oppLbl = document.createElement('div');
-    oppLbl.style.fontSize = '11px';
-    oppLbl.style.color = 'var(--color-text-muted)';
-    oppLbl.style.fontWeight = '500';
-    oppLbl.style.textTransform = 'uppercase';
-    oppLbl.style.letterSpacing = '0.04em';
-    oppLbl.style.marginBottom = '4px';
-    oppLbl.textContent = 'Opportunity';
-    opportunityRow.append(oppLbl, makeOpportunityBadge(lead.opportunityLabel));
-
-    rightCol.append(
-      rightTitle,
-      opportunityRow,
-      makeDetailRow('Intent Score',         lead.intentScore != null ? String(lead.intentScore) : null),
-      makeDetailRow('Conversation Summary', lead.conversationSummary),
-    );
-
-    detailBody.append(leftCol, rightCol);
-    modalCard.append(detailHeader, detailBody);
-
-    // Suggested follow-up (full-width, bottom)
-    if (lead.suggestedFollowUp) {
-      const followUpSection = document.createElement('div');
-      followUpSection.style.marginTop = '20px';
-      followUpSection.style.paddingTop = '20px';
-      followUpSection.style.borderTop = '1px solid var(--color-border)';
-
-      const followUpLabel = document.createElement('div');
-      followUpLabel.style.fontWeight = '600';
-      followUpLabel.style.fontSize = '13px';
-      followUpLabel.style.marginBottom = '10px';
-      followUpLabel.textContent = 'Suggested Follow-Up Message';
-
-      const followUpBox = document.createElement('div');
-      followUpBox.style.borderLeft = '3px solid var(--brand-primary)';
-      followUpBox.style.background = 'var(--brand-primary-light)';
-      followUpBox.style.padding = '12px 16px';
-      followUpBox.style.borderRadius = '0 var(--radius-sm) var(--radius-sm) 0';
-      followUpBox.style.fontSize = '14px';
-      followUpBox.style.color = 'var(--color-text-secondary)';
-      followUpBox.style.lineHeight = '1.6';
-      followUpBox.textContent = lead.suggestedFollowUp;
-
-      followUpSection.append(followUpLabel, followUpBox);
-      modalCard.appendChild(followUpSection);
-    }
-
-    // Linked visitor
-    if (lead.linkedVisitorId) {
-      const visitorLinkRow = document.createElement('div');
-      visitorLinkRow.style.marginTop = '16px';
-      const vLink = document.createElement('a');
-      vLink.href = `#/visitors/${lead.linkedVisitorId}?siteId=${encodeURIComponent(lead.siteId || '')}`;
-      vLink.style.color = 'var(--brand-primary)';
-      vLink.style.fontSize = '13px';
-      vLink.style.textDecoration = 'none';
-      vLink.textContent = '→ Open visitor profile';
-      visitorLinkRow.appendChild(vLink);
-      modalCard.appendChild(visitorLinkRow);
+  // ── API ────────────────────────────────────────────────────────────────────
+  const loadLeads = async () => {
+    if (!state.siteId) return;
+    try {
+      const data = await client.leads.list(state.siteId, 1, 200);
+      state.leads = Array.isArray(data) ? data : [];
+      applyFilter();
+    } catch (err) {
+      notifier.show({ message: mapApiError(err).message, variant: 'danger' });
     }
   };
 
-  const openDetail = (lead) => {
-    state.selected = lead;
-    // Show loading state
-    modalCard.innerHTML = '<div style="padding:32px;text-align:center;color:var(--color-text-muted)">Loading…</div>';
-    modalOverlay.style.display = 'flex';
-    document.addEventListener('keydown', handleModalKeydown);
-    renderDetail(lead);
-  };
-
-  const renderTable = () => {
-    tableWrapper.innerHTML = '';
-    paginationInfo.textContent = '';
-    paginationControls.innerHTML = '';
-
-    const total = state.filtered.length;
-    tableCountEl.textContent = total
-      ? `${total} lead${total !== 1 ? 's' : ''}`
-      : 'No leads found';
-
-    if (!total) {
-      const empty = document.createElement('div');
-      empty.className = 'empty-state';
-      const icon = document.createElement('div');
-      icon.className = 'empty-state-icon';
-      icon.textContent = '🧑‍💼';
-      const emptyTitle = document.createElement('div');
-      emptyTitle.className = 'empty-state-title';
-      emptyTitle.textContent = state.siteId ? 'No leads yet' : 'Select a site';
-      const emptyDesc = document.createElement('div');
-      emptyDesc.className = 'empty-state-desc';
-      emptyDesc.textContent = state.siteId
-        ? 'Leads are captured from chat conversations on your site.'
-        : 'Choose a site from the dropdown above.';
-      empty.append(icon, emptyTitle, emptyDesc);
-      tableWrapper.appendChild(empty);
-      return;
-    }
-
-    const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-    const pg = Math.min(state.currentPage, totalPages);
-    const start = (pg - 1) * PAGE_SIZE;
-    const end = Math.min(start + PAGE_SIZE, total);
-    const slice = state.filtered.slice(start, end);
-
-    const table = document.createElement('table');
-    table.className = 'data-table';
-
-    const thead = document.createElement('thead');
-    const headRow = document.createElement('tr');
-    ['Name', 'Email', 'Location', 'Opportunity', 'Intent Score', 'Created', 'Actions'].forEach((label) => {
-      const th = document.createElement('th');
-      th.textContent = label;
-      headRow.appendChild(th);
-    });
-    thead.appendChild(headRow);
-    table.appendChild(thead);
-
-    const tbody = document.createElement('tbody');
-    slice.forEach((lead) => {
-      const tr = document.createElement('tr');
-      tr.style.cursor = 'pointer';
-      tr.addEventListener('click', () => openDetail(lead));
-
-      const nameTd = document.createElement('td');
-      const nameSpan = document.createElement('span');
-      if (lead.displayName) {
-        nameSpan.className = 'text-primary';
-        nameSpan.textContent = lead.displayName;
-      } else {
-        nameSpan.style.color = 'var(--color-text-muted)';
-        nameSpan.textContent = '(no name)';
-      }
-      nameTd.appendChild(nameSpan);
-
-      const emailTd = document.createElement('td');
-      const emailSpan = document.createElement('span');
-      emailSpan.style.color = lead.primaryEmail ? 'var(--color-text-secondary)' : 'var(--color-text-muted)';
-      emailSpan.textContent = lead.primaryEmail || '(no email)';
-      emailTd.appendChild(emailSpan);
-
-      const locationTd = document.createElement('td');
-      locationTd.textContent = lead.location || '—';
-
-      const oppTd = document.createElement('td');
-      if (lead.opportunityLabel) {
-        oppTd.appendChild(makeOpportunityBadge(lead.opportunityLabel));
-      } else {
-        oppTd.textContent = '—';
-      }
-
-      const scoreTd = document.createElement('td');
-      scoreTd.textContent = lead.intentScore != null ? String(lead.intentScore) : '—';
-
-      const createdTd = document.createElement('td');
-      createdTd.textContent = formatDate(lead.createdAtUtc);
-
-      const actionTd = document.createElement('td');
-      const viewBtn = document.createElement('button');
-      viewBtn.className = 'btn btn-sm btn-secondary';
-      viewBtn.textContent = 'View';
-      viewBtn.addEventListener('click', (e) => { e.stopPropagation(); openDetail(lead); });
-      actionTd.appendChild(viewBtn);
-
-      tr.append(nameTd, emailTd, locationTd, oppTd, scoreTd, createdTd, actionTd);
-      tbody.appendChild(tr);
-    });
-
-    table.appendChild(tbody);
-    tableWrapper.appendChild(table);
-
-    // Pagination
-    paginationInfo.textContent = `Showing ${start + 1}–${end} of ${total} lead${total !== 1 ? 's' : ''}`;
-
-    if (totalPages > 1) {
-      const prevBtn = document.createElement('button');
-      prevBtn.className = 'page-btn';
-      prevBtn.textContent = '← Prev';
-      prevBtn.disabled = pg <= 1;
-      prevBtn.addEventListener('click', () => { state.currentPage = pg - 1; renderTable(); });
-
-      const pageInfoSpan = document.createElement('span');
-      pageInfoSpan.style.padding = '0 6px';
-      pageInfoSpan.style.fontSize = '12px';
-      pageInfoSpan.style.color = 'var(--color-text-muted)';
-      pageInfoSpan.textContent = `${pg} / ${totalPages}`;
-
-      const nextBtn = document.createElement('button');
-      nextBtn.className = 'page-btn';
-      nextBtn.textContent = 'Next →';
-      nextBtn.disabled = pg >= totalPages;
-      nextBtn.addEventListener('click', () => { state.currentPage = pg + 1; renderTable(); });
-
-      paginationControls.append(prevBtn, pageInfoSpan, nextBtn);
-    }
-  };
-
-  const renderKanban = () => {
-    kanbanBoard.innerHTML = '';
-
-    const grouped = { evaluating: [], deciding: [], won: [], lost: [] };
-    state.filtered.forEach((lead) => {
-      const key = (lead.opportunityLabel || '').toLowerCase().replace(/[^a-z]/g, '');
-      if (Object.prototype.hasOwnProperty.call(grouped, key)) {
-        grouped[key].push(lead);
-      } else {
-        grouped.evaluating.push(lead);
-      }
-    });
-
-    KANBAN_COLUMNS.forEach(({ key, label, color }) => {
-      const col = document.createElement('div');
-      col.style.cssText = 'min-width:240px;flex:1;display:flex;flex-direction:column;gap:8px;';
-
-      const colHeader = document.createElement('div');
-      colHeader.style.cssText = `padding:10px 12px;border-left:3px solid ${color};background:var(--color-surface);border-radius:4px;display:flex;align-items:center;gap:8px;margin-bottom:4px;`;
-      const colLabel = document.createElement('span');
-      colLabel.style.cssText = 'font-weight:600;font-size:13px;color:var(--color-text);';
-      colLabel.textContent = label;
-      const colCount = document.createElement('span');
-      colCount.className = 'badge badge-neutral';
-      colCount.textContent = grouped[key].length;
-      colHeader.append(colLabel, colCount);
-      col.appendChild(colHeader);
-
-      if (grouped[key].length === 0) {
-        const emptyCol = document.createElement('div');
-        emptyCol.style.cssText = 'text-align:center;padding:24px 12px;color:var(--color-text-muted);font-size:12px;border:1px dashed var(--color-border);border-radius:var(--radius);';
-        emptyCol.textContent = 'No leads';
-        col.appendChild(emptyCol);
-      } else {
-        grouped[key].forEach((lead) => {
-          const kanbanCard = document.createElement('div');
-          kanbanCard.className = 'card';
-          kanbanCard.style.cssText = 'cursor:pointer;padding:12px;display:flex;flex-direction:column;gap:4px;';
-          kanbanCard.addEventListener('click', () => openDetail(lead));
-
-          const cardName = document.createElement('div');
-          cardName.style.cssText = 'font-weight:600;font-size:13px;color:var(--color-text);';
-          cardName.textContent = lead.displayName || '(no name)';
-
-          const cardEmail = document.createElement('div');
-          cardEmail.style.cssText = 'font-size:12px;color:var(--color-text-muted);';
-          cardEmail.textContent = lead.primaryEmail || '(no email)';
-
-          kanbanCard.append(cardName, cardEmail);
-
-          if (lead.location) {
-            const cardLoc = document.createElement('div');
-            cardLoc.style.cssText = 'font-size:12px;color:var(--color-text-muted);';
-            cardLoc.textContent = `📍 ${lead.location}`;
-            kanbanCard.appendChild(cardLoc);
-          }
-
-          const cardDate = document.createElement('div');
-          cardDate.style.cssText = 'font-size:11px;color:var(--color-text-muted);margin-top:4px;';
-          cardDate.textContent = formatDate(lead.createdAtUtc);
-          kanbanCard.appendChild(cardDate);
-
-          col.appendChild(kanbanCard);
-        });
-      }
-
-      kanbanBoard.appendChild(col);
-    });
-  };
-
-  const renderView = () => {
-    if (state.view === 'kanban') {
-      tableCard.style.display = 'none';
-      kanbanBoard.style.display = 'flex';
-      renderKanban();
-    } else {
-      tableCard.style.display = '';
-      kanbanBoard.style.display = 'none';
-      renderTable();
-    }
-  };
-
-  const setSiteOptions = () => {
+  const syncSites = sites => {
     siteSelect.innerHTML = '';
-    const allOpt = document.createElement('option');
-    allOpt.value = '';
-    allOpt.textContent = 'All sites';
-    siteSelect.appendChild(allOpt);
-    state.sites.forEach((site) => {
-      const option = document.createElement('option');
-      option.value = getSiteId(site);
-      option.textContent = site.domain || option.value;
-      siteSelect.appendChild(option);
+    if (!sites.length) { siteSelect.appendChild(el('option',{value:''},'No sites')); return; }
+    sites.forEach(s => {
+      const id = getSiteId(s); const opt = el('option',{value:id},s.domain||id);
+      if (id === state.siteId) opt.selected = true;
+      siteSelect.appendChild(opt);
     });
+    if (!state.siteId || !sites.find(s => getSiteId(s) === state.siteId))
+      state.siteId = getSiteId(sites[0]);
     siteSelect.value = state.siteId;
   };
 
-  const loadLeads = async () => {
-    try {
-      state.leads = await client.leads.list(state.siteId || undefined, 1, 100);
-    } catch (error) {
-      notifier.show({ message: mapApiError(error).message, variant: 'danger' });
-      state.leads = [];
-    }
-    applyFilter();
-  };
+  // ── Wire events (after all functions declared) ─────────────────────────────
+  siteSelect.addEventListener('change', () => { state.siteId = siteSelect.value; saveSiteId(state.siteId); loadLeads(); });
+  searchInput.addEventListener('input', () => { state.search = searchInput.value; applyFilter(); });
+  exportBtn.addEventListener('click', exportCsv);
+  pipelineBtn.addEventListener('click', () => { state.view='pipeline'; pipelineBtn.classList.add('active'); tableBtn.classList.remove('active'); renderMainView(); });
+  tableBtn.addEventListener('click', () => { state.view='table'; tableBtn.classList.add('active'); pipelineBtn.classList.remove('active'); renderMainView(); });
 
-  siteSelect.addEventListener('change', async () => {
-    state.siteId = siteSelect.value;
-    closeDetail();
-    await loadLeads();
-  });
-
-  searchInput.addEventListener('input', () => {
-    state.search = searchInput.value;
-    applyFilter();
-  });
-
-  // ── Assemble ──────────────────────────────────────────────────────────
-  page.append(pageHeader, filtersRow, metricsGrid, tableCard, kanbanBoard);
-  container.appendChild(page);
-
-  updateMetrics();
-  renderView();
-
+  // ── Init ───────────────────────────────────────────────────────────────────
   const init = async () => {
     try {
-      state.sites = await client.sites.list();
-      if (state.sites.length) state.siteId = getSiteId(state.sites[0]);
-      setSiteOptions();
+      const sites = await client.sites.list();
+      state.sites = Array.isArray(sites) ? sites : [];
+      syncSites(state.sites);
       await loadLeads();
-    } catch (error) {
-      notifier.show({ message: mapApiError(error).message, variant: 'danger' });
-    }
+    } catch (err) { notifier.show({ message: 'Could not load sites.', variant: 'danger' }); }
   };
 
   init();

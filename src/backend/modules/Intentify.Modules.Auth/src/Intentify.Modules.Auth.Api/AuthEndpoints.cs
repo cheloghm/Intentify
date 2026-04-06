@@ -3,6 +3,7 @@ using System.Security.Claims;
 using Intentify.Modules.Auth.Application;
 using Intentify.Shared.Web;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Options;
 
 namespace Intentify.Modules.Auth.Api;
 
@@ -16,7 +17,8 @@ internal static class AuthEndpoints
             request.DisplayName,
             request.Email,
             request.Password,
-            request.OrganizationName));
+            request.OrganizationName,
+            request.Plan));
 
         return result.Status switch
         {
@@ -311,6 +313,37 @@ internal static class AuthEndpoints
             Intentify.Shared.Validation.OperationStatus.Error => Results.Problem(ProblemDetailsHelpers.CreateInternalErrorProblemDetails()),
             _ => Results.NoContent()
         };
+    }
+
+    // ── Google OAuth ──────────────────────────────────────────────────────────
+
+    public static IResult GoogleOAuthInitiate(IOptions<GoogleOAuthOptions> options)
+    {
+        var clientId = options.Value.ClientId;
+        if (string.IsNullOrWhiteSpace(clientId))
+        {
+            return Results.Json(new { error = "Google OAuth not yet configured. Set Intentify__Auth__Google__ClientId in .env" },
+                statusCode: StatusCodes.Status501NotImplemented);
+        }
+
+        var redirectUri = Uri.EscapeDataString(options.Value.RedirectUri);
+        var scope = Uri.EscapeDataString("openid email profile");
+        var googleUrl = $"https://accounts.google.com/o/oauth2/v2/auth" +
+                        $"?client_id={clientId}" +
+                        $"&redirect_uri={redirectUri}" +
+                        $"&response_type=code" +
+                        $"&scope={scope}" +
+                        $"&access_type=offline" +
+                        $"&prompt=select_account";
+
+        return Results.Redirect(googleUrl);
+    }
+
+    public static IResult GoogleOAuthCallback()
+    {
+        // Stub: full OAuth exchange requires Google credentials configured.
+        // Redirect back to login with an error the frontend can display.
+        return Results.Redirect("/public/login.html?error=google_not_configured");
     }
 
     private static Guid? TryGetUserId(ClaimsPrincipal user)

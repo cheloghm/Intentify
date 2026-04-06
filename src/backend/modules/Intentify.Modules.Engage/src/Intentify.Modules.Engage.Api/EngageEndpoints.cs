@@ -247,7 +247,7 @@ internal static class EngageEndpoints
         }
 
         var results = await handler.HandleAsync(new ListConversationsQuery(tenantId.Value, parsedSiteId, collectorSessionId), context.RequestAborted);
-        return Results.Ok(results.Select(item => new ConversationSummaryResponse(item.SessionId.ToString("N"), item.CreatedAtUtc, item.UpdatedAtUtc)).ToArray());
+        return Results.Ok(results.Select(item => new ConversationSummaryResponse(item.SessionId.ToString("N"), item.CreatedAtUtc, item.UpdatedAtUtc, item.HasLead, item.HasTicket)).ToArray());
     }
 
     public static async Task<IResult> GetOpportunityAnalyticsAsync(string? siteId, HttpContext context, GetOpportunityAnalyticsHandler handler)

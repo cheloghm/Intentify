@@ -1,0 +1,873 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Intentify — Visitor Intelligence & Search Intent Platform</title>
+  <meta name="description" content="Identify anonymous website visitors, overlay real-time search intent data, and convert browsers into buyers — all in one platform." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0a0a0f;
+      --bg2: #0f0f18;
+      --bg3: #13131f;
+      --border: rgba(255,255,255,0.08);
+      --border-light: rgba(255,255,255,0.05);
+      --indigo: #6366f1;
+      --indigo-light: #818cf8;
+      --indigo-dark: #4f46e5;
+      --violet: #8b5cf6;
+      --text: #f1f5f9;
+      --text2: #94a3b8;
+      --text3: #64748b;
+      --radius: 12px;
+      --radius-lg: 20px;
+    }
+
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 16px;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    h1, h2, h3, h4 { font-family: 'Syne', sans-serif; line-height: 1.2; }
+
+    a { color: inherit; text-decoration: none; }
+
+    /* ─── NAV ─────────────────────────────────── */
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(10,10,15,0.85);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border);
+      padding: 0 clamp(20px, 5vw, 80px);
+    }
+    .nav-inner {
+      max-width: 1200px;
+      margin: 0 auto;
+      height: 64px;
+      display: flex;
+      align-items: center;
+      gap: 40px;
+    }
+    .nav-logo { display: flex; align-items: center; gap: 10px; }
+    .nav-logo img { height: 32px; }
+    .nav-logo span { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 20px; color: var(--text); }
+    .nav-links { display: flex; gap: 28px; flex: 1; }
+    .nav-links a { font-size: 14px; font-weight: 500; color: var(--text2); transition: color .2s; }
+    .nav-links a:hover { color: var(--text); }
+    .nav-actions { display: flex; align-items: center; gap: 12px; margin-left: auto; }
+    .btn-ghost { font-size: 14px; font-weight: 500; color: var(--text2); padding: 8px 16px; border-radius: 8px; transition: color .2s; }
+    .btn-ghost:hover { color: var(--text); }
+    .btn-primary {
+      font-size: 14px; font-weight: 600;
+      background: var(--indigo); color: #fff;
+      padding: 8px 20px; border-radius: 8px;
+      border: none; cursor: pointer;
+      transition: background .2s, transform .1s;
+      display: inline-block;
+    }
+    .btn-primary:hover { background: var(--indigo-dark); transform: translateY(-1px); }
+
+    /* ─── HERO ────────────────────────────────── */
+    .hero {
+      padding: clamp(80px, 12vw, 140px) clamp(20px, 5vw, 80px) clamp(60px, 8vw, 100px);
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .hero::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(99,102,241,.15) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(99,102,241,.12);
+      border: 1px solid rgba(99,102,241,.3);
+      border-radius: 100px;
+      padding: 6px 16px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--indigo-light);
+      margin-bottom: 28px;
+    }
+    .hero-badge .dot { width: 6px; height: 6px; background: var(--indigo-light); border-radius: 50%; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+    .hero h1 {
+      font-size: clamp(38px, 6vw, 72px);
+      font-weight: 800;
+      letter-spacing: -1.5px;
+      max-width: 820px;
+      margin: 0 auto 24px;
+      background: linear-gradient(135deg, #fff 30%, var(--indigo-light) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .hero p {
+      font-size: clamp(17px, 2vw, 20px);
+      color: var(--text2);
+      max-width: 580px;
+      margin: 0 auto 40px;
+      font-weight: 400;
+    }
+    .hero-actions { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
+    .btn-hero {
+      font-family: 'DM Sans', sans-serif;
+      font-size: 16px; font-weight: 600;
+      padding: 14px 32px; border-radius: 10px;
+      border: none; cursor: pointer;
+      transition: all .2s;
+      display: inline-block;
+    }
+    .btn-hero-primary {
+      background: var(--indigo); color: #fff;
+    }
+    .btn-hero-primary:hover { background: var(--indigo-dark); transform: translateY(-2px); box-shadow: 0 8px 24px rgba(99,102,241,.35); }
+    .btn-hero-secondary {
+      background: rgba(255,255,255,.06); color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .btn-hero-secondary:hover { background: rgba(255,255,255,.1); transform: translateY(-2px); }
+    .hero-note { margin-top: 20px; font-size: 13px; color: var(--text3); }
+
+    /* ─── LOGO STRIP ──────────────────────────── */
+    .logo-strip {
+      padding: clamp(40px, 5vw, 60px) clamp(20px, 5vw, 80px);
+      border-top: 1px solid var(--border-light);
+      border-bottom: 1px solid var(--border-light);
+      text-align: center;
+    }
+    .logo-strip p { font-size: 13px; font-weight: 500; color: var(--text3); text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 32px; }
+    .logo-strip-logos {
+      display: flex; gap: clamp(24px, 5vw, 64px);
+      align-items: center; justify-content: center; flex-wrap: wrap;
+    }
+    .logo-strip-logos span {
+      font-family: 'Syne', sans-serif; font-size: 18px; font-weight: 700;
+      color: var(--text3); letter-spacing: -0.5px;
+      opacity: .6;
+    }
+
+    /* ─── SECTION COMMON ─────────────────────── */
+    section { padding: clamp(60px, 8vw, 100px) clamp(20px, 5vw, 80px); }
+    .section-inner { max-width: 1200px; margin: 0 auto; }
+    .section-tag {
+      display: inline-block;
+      font-size: 12px; font-weight: 600;
+      color: var(--indigo-light); text-transform: uppercase; letter-spacing: 1.5px;
+      margin-bottom: 16px;
+    }
+    .section-title {
+      font-size: clamp(28px, 4vw, 48px);
+      font-weight: 700;
+      letter-spacing: -1px;
+      margin-bottom: 16px;
+    }
+    .section-sub {
+      font-size: 17px; color: var(--text2);
+      max-width: 560px;
+      line-height: 1.7;
+      margin-bottom: 56px;
+    }
+
+    /* ─── FEATURES ────────────────────────────── */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 20px;
+    }
+    .feature-card {
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 28px 28px 32px;
+      transition: border-color .2s, transform .2s;
+    }
+    .feature-card:hover { border-color: rgba(99,102,241,.4); transform: translateY(-3px); }
+    .feature-icon {
+      width: 44px; height: 44px;
+      background: rgba(99,102,241,.12);
+      border: 1px solid rgba(99,102,241,.2);
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px;
+      margin-bottom: 20px;
+    }
+    .feature-card h3 { font-size: 18px; font-weight: 700; margin-bottom: 10px; }
+    .feature-card p { font-size: 14px; color: var(--text2); line-height: 1.65; }
+
+    /* ─── HOW IT WORKS ────────────────────────── */
+    .how-inner { display: grid; grid-template-columns: 1fr 1fr; gap: 60px; align-items: start; }
+    .how-steps { display: flex; flex-direction: column; gap: 4px; }
+    .how-step {
+      padding: 20px 24px;
+      border-radius: var(--radius);
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: all .2s;
+    }
+    .how-step.active {
+      background: var(--bg3);
+      border-color: rgba(99,102,241,.3);
+    }
+    .how-step-num {
+      font-size: 12px; font-weight: 700;
+      color: var(--indigo-light); text-transform: uppercase; letter-spacing: 1px;
+      margin-bottom: 6px;
+    }
+    .how-step h3 { font-size: 17px; font-weight: 600; margin-bottom: 6px; }
+    .how-step p { font-size: 14px; color: var(--text2); display: none; line-height: 1.65; }
+    .how-step.active p { display: block; }
+    .how-visual {
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 32px;
+      min-height: 360px;
+      display: flex; align-items: center; justify-content: center;
+      position: sticky; top: 80px;
+    }
+    .how-visual-inner { text-align: center; }
+    .how-visual-icon { font-size: 64px; margin-bottom: 16px; }
+    .how-visual-label { font-size: 14px; color: var(--text2); }
+
+    /* ─── STATS ───────────────────────────────── */
+    .stats-section { background: var(--bg2); }
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 32px; }
+    .stat-card { text-align: center; }
+    .stat-card .num {
+      font-family: 'Syne', sans-serif;
+      font-size: clamp(36px, 5vw, 52px); font-weight: 800;
+      background: linear-gradient(135deg, #fff, var(--indigo-light));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+      line-height: 1;
+      margin-bottom: 8px;
+    }
+    .stat-card .label { font-size: 14px; color: var(--text2); font-weight: 500; }
+
+    /* ─── PRICING ─────────────────────────────── */
+    .pricing-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 24px; }
+    .price-card {
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 32px;
+      position: relative;
+      transition: transform .2s, border-color .2s;
+    }
+    .price-card:hover { transform: translateY(-4px); }
+    .price-card.featured {
+      border-color: var(--indigo);
+      background: linear-gradient(135deg, rgba(99,102,241,.08) 0%, var(--bg3) 60%);
+    }
+    .price-card.featured .popular-badge {
+      position: absolute; top: -13px; left: 50%; transform: translateX(-50%);
+      background: var(--indigo); color: #fff;
+      font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;
+      padding: 4px 16px; border-radius: 100px;
+    }
+    .free-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: rgba(34,197,94,.12);
+      border: 1px solid rgba(34,197,94,.25);
+      color: #4ade80;
+      font-size: 12px; font-weight: 600;
+      padding: 5px 12px; border-radius: 100px;
+      margin-bottom: 20px;
+    }
+    .price-name { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text2); margin-bottom: 8px; }
+    .price-amount {
+      font-family: 'Syne', sans-serif;
+      font-size: 42px; font-weight: 800;
+      color: var(--text);
+      line-height: 1;
+      margin-bottom: 4px;
+    }
+    .price-amount sup { font-size: 22px; vertical-align: super; }
+    .price-amount .period { font-size: 16px; font-weight: 400; color: var(--text2); }
+    .price-note { font-size: 13px; color: var(--text3); margin-bottom: 24px; }
+    .price-divider { border: none; border-top: 1px solid var(--border); margin-bottom: 24px; }
+    .price-features { list-style: none; display: flex; flex-direction: column; gap: 10px; margin-bottom: 32px; }
+    .price-features li { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; color: var(--text2); }
+    .price-features li .check { color: #4ade80; flex-shrink: 0; margin-top: 1px; }
+    .price-cta {
+      display: block; text-align: center;
+      background: var(--indigo); color: #fff;
+      font-family: 'DM Sans', sans-serif; font-size: 15px; font-weight: 600;
+      padding: 12px 24px; border-radius: 10px;
+      transition: background .2s, transform .1s;
+    }
+    .price-cta:hover { background: var(--indigo-dark); transform: translateY(-1px); }
+    .price-card:not(.featured) .price-cta {
+      background: rgba(255,255,255,.07);
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+    .price-card:not(.featured) .price-cta:hover { background: rgba(255,255,255,.12); }
+
+    /* ─── TESTIMONIALS ───────────────────────── */
+    .testimonials-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; }
+    .testimonial-card {
+      background: var(--bg3); border: 1px solid var(--border);
+      border-radius: var(--radius-lg); padding: 28px;
+    }
+    .testimonial-quote { font-size: 15px; color: var(--text2); line-height: 1.7; margin-bottom: 20px; font-style: italic; }
+    .testimonial-author { display: flex; align-items: center; gap: 12px; }
+    .testimonial-avatar {
+      width: 40px; height: 40px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--indigo), var(--violet));
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 14px;
+    }
+    .testimonial-name { font-size: 14px; font-weight: 600; }
+    .testimonial-role { font-size: 12px; color: var(--text3); }
+
+    /* ─── ABOUT ───────────────────────────────── */
+    .about-inner { display: grid; grid-template-columns: 1fr 1fr; gap: 80px; align-items: center; }
+    .about-text .section-title { margin-bottom: 16px; }
+    .about-text p { font-size: 16px; color: var(--text2); line-height: 1.8; margin-bottom: 16px; }
+    .about-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .about-stat {
+      background: var(--bg3); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 20px 24px;
+    }
+    .about-stat .num { font-family: 'Syne', sans-serif; font-size: 28px; font-weight: 800; color: var(--indigo-light); }
+    .about-stat .label { font-size: 13px; color: var(--text2); margin-top: 2px; }
+
+    /* ─── CONTACT ─────────────────────────────── */
+    .contact-section { background: var(--bg2); }
+    .contact-inner { display: grid; grid-template-columns: 1fr 1fr; gap: 80px; align-items: start; }
+    .contact-form { display: flex; flex-direction: column; gap: 16px; }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .form-group label { display: block; font-size: 13px; font-weight: 500; color: var(--text2); margin-bottom: 6px; }
+    .form-group input, .form-group textarea, .form-group select {
+      width: 100%;
+      background: var(--bg3); border: 1px solid var(--border);
+      border-radius: 8px; color: var(--text);
+      font-family: 'DM Sans', sans-serif; font-size: 14px;
+      padding: 10px 14px; outline: none;
+      transition: border-color .2s;
+    }
+    .form-group input:focus, .form-group textarea:focus, .form-group select:focus { border-color: var(--indigo); }
+    .form-group textarea { resize: vertical; min-height: 120px; }
+    .contact-submit {
+      background: var(--indigo); color: #fff; border: none; cursor: pointer;
+      font-family: 'DM Sans', sans-serif; font-size: 15px; font-weight: 600;
+      padding: 12px 28px; border-radius: 10px;
+      transition: background .2s; align-self: flex-start;
+    }
+    .contact-submit:hover { background: var(--indigo-dark); }
+
+    /* ─── CTA BAND ────────────────────────────── */
+    .cta-band {
+      padding: clamp(60px, 8vw, 100px) clamp(20px, 5vw, 80px);
+      text-align: center;
+      background: linear-gradient(135deg, rgba(99,102,241,.1) 0%, rgba(139,92,246,.05) 100%);
+      border-top: 1px solid rgba(99,102,241,.2);
+      border-bottom: 1px solid rgba(99,102,241,.2);
+    }
+    .cta-band h2 { font-size: clamp(28px, 4vw, 48px); font-weight: 800; margin-bottom: 16px; letter-spacing: -1px; }
+    .cta-band p { font-size: 18px; color: var(--text2); max-width: 500px; margin: 0 auto 40px; }
+    .cta-band-actions { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
+
+    /* ─── FOOTER ──────────────────────────────── */
+    footer {
+      background: var(--bg);
+      border-top: 1px solid var(--border);
+      padding: clamp(40px, 5vw, 64px) clamp(20px, 5vw, 80px) 32px;
+    }
+    .footer-inner { max-width: 1200px; margin: 0 auto; }
+    .footer-top { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 48px; margin-bottom: 48px; }
+    .footer-brand .footer-logo { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+    .footer-brand .footer-logo img { height: 28px; }
+    .footer-brand .footer-logo span { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 18px; }
+    .footer-brand p { font-size: 14px; color: var(--text3); line-height: 1.7; max-width: 280px; }
+    .footer-col h4 { font-family: 'Syne', sans-serif; font-size: 14px; font-weight: 700; margin-bottom: 16px; }
+    .footer-col a { display: block; font-size: 14px; color: var(--text3); margin-bottom: 10px; transition: color .2s; }
+    .footer-col a:hover { color: var(--text); }
+    .footer-bottom {
+      border-top: 1px solid var(--border); padding-top: 24px;
+      display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;
+    }
+    .footer-bottom p { font-size: 13px; color: var(--text3); }
+    .footer-bottom-links { display: flex; gap: 20px; }
+    .footer-bottom-links a { font-size: 13px; color: var(--text3); }
+    .footer-bottom-links a:hover { color: var(--text2); }
+
+    /* ─── RESPONSIVE ──────────────────────────── */
+    @media (max-width: 768px) {
+      .nav-links { display: none; }
+      .how-inner, .about-inner, .contact-inner { grid-template-columns: 1fr; }
+      .how-visual { display: none; }
+      .footer-top { grid-template-columns: 1fr 1fr; }
+      .form-row { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 480px) {
+      .footer-top { grid-template-columns: 1fr; }
+      .about-stats { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ══ NAV ══════════════════════════════════════ -->
+<nav>
+  <div class="nav-inner">
+    <a href="/" class="nav-logo">
+      <img src="/assets/logo_white.png" alt="Intentify" onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+      <span style="display:none">Intentify</span>
+      <span>Intentify</span>
+    </a>
+    <div class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#how-it-works">How it works</a>
+      <a href="#pricing">Pricing</a>
+      <a href="#about">About</a>
+      <a href="#contact">Contact</a>
+    </div>
+    <div class="nav-actions">
+      <a href="/public/login.html" class="btn-ghost">Sign in</a>
+      <a href="/public/register.html" class="btn-primary">Get started free</a>
+    </div>
+  </div>
+</nav>
+
+<!-- ══ HERO ══════════════════════════════════════ -->
+<section class="hero">
+  <div class="hero-badge">
+    <span class="dot"></span>
+    Now with real-time search intent intelligence
+  </div>
+  <h1>Turn Anonymous Visitors Into Qualified Leads</h1>
+  <p>Identify who's on your website, what they're searching for, and when they're ready to buy — all without a sign-up form.</p>
+  <div class="hero-actions">
+    <a href="/public/register.html" class="btn-hero btn-hero-primary">Start free — no card needed</a>
+    <a href="#how-it-works" class="btn-hero btn-hero-secondary">See how it works →</a>
+  </div>
+  <p class="hero-note">First month completely free · Cancel anytime · GDPR compliant</p>
+</section>
+
+<!-- ══ LOGO STRIP ═════════════════════════════════ -->
+<div class="logo-strip">
+  <p>Trusted by fast-growing B2B teams</p>
+  <div class="logo-strip-logos">
+    <span>Acme Corp</span>
+    <span>NorthStar</span>
+    <span>Meridian AI</span>
+    <span>Pillar Labs</span>
+    <span>Apex Scale</span>
+    <span>GridMind</span>
+  </div>
+</div>
+
+<!-- ══ FEATURES ══════════════════════════════════ -->
+<section id="features">
+  <div class="section-inner">
+    <span class="section-tag">Features</span>
+    <h2 class="section-title">Everything you need to convert browsers into buyers</h2>
+    <p class="section-sub">One platform combining visitor identification, search intent intelligence, and engagement automation.</p>
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon">🔍</div>
+        <h3>Visitor Identification</h3>
+        <p>Reveal the companies and individuals visiting your site in real time — even if they never fill out a form. Build lead profiles automatically.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📡</div>
+        <h3>Search Intent Intelligence</h3>
+        <p>See what your visitors are actively searching for across the web. Powered by Google Trends and Google Ads data to surface buyers in-market right now.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🤖</div>
+        <h3>AI Chat Widget</h3>
+        <p>Deploy a knowledge-grounded AI assistant trained on your content. Captures leads, answers questions, and escalates to your team when it matters most.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">⚡</div>
+        <h3>Automation Flows</h3>
+        <p>Trigger actions based on visitor behaviour, intent scores, or engagement patterns. Set conditions once and let Intentify do the work.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🎯</div>
+        <h3>Ad Audience Builder</h3>
+        <p>Push high-intent visitor segments directly into your Google Ads campaigns. Retarget the right people at the right moment without any manual work.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📊</div>
+        <h3>Intelligence Dashboard</h3>
+        <p>Track visitor trends, lead quality scores, conversation outcomes, and revenue attribution in a single, real-time analytics hub.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ HOW IT WORKS ═══════════════════════════════ -->
+<section id="how-it-works" style="background: var(--bg2);">
+  <div class="section-inner">
+    <span class="section-tag">How it works</span>
+    <h2 class="section-title">From install to insight in four steps</h2>
+    <p class="section-sub">Add one script tag to your site and Intentify starts working immediately.</p>
+    <div class="how-inner">
+      <div class="how-steps">
+        <div class="how-step active" onclick="selectStep(this, 0)">
+          <div class="how-step-num">Step 01</div>
+          <h3>Install the tracker</h3>
+          <p>Paste a single line of JavaScript onto your website — no developer required. Works with any CMS, SPA, or static site.</p>
+        </div>
+        <div class="how-step" onclick="selectStep(this, 1)">
+          <div class="how-step-num">Step 02</div>
+          <h3>Identify visitors</h3>
+          <p>Intentify instantly starts building anonymous visitor profiles — page visits, device type, geography, and session patterns — all without cookies.</p>
+        </div>
+        <div class="how-step" onclick="selectStep(this, 2)">
+          <div class="how-step-num">Step 03</div>
+          <h3>Overlay intent signals</h3>
+          <p>Real-time search intent data from Google is layered onto each visitor, showing you exactly what topics and keywords they're actively researching.</p>
+        </div>
+        <div class="how-step" onclick="selectStep(this, 3)">
+          <div class="how-step-num">Step 04</div>
+          <h3>Act on the intelligence</h3>
+          <p>Your AI chat widget engages high-intent visitors. Automation flows fire personalised outreach. Ad audiences update automatically. Sales teams get warm leads.</p>
+        </div>
+      </div>
+      <div class="how-visual">
+        <div class="how-visual-inner" id="how-visual-content">
+          <div class="how-visual-icon">⚙️</div>
+          <div class="how-visual-label">Install in under 2 minutes</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ STATS ══════════════════════════════════════ -->
+<section class="stats-section">
+  <div class="section-inner">
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="num">3×</div>
+        <div class="label">More leads identified vs forms-only</div>
+      </div>
+      <div class="stat-card">
+        <div class="num">68%</div>
+        <div class="label">Of B2B buyers research before contacting sales</div>
+      </div>
+      <div class="stat-card">
+        <div class="num">&lt;2min</div>
+        <div class="label">Time to first visitor insight after install</div>
+      </div>
+      <div class="stat-card">
+        <div class="num">100%</div>
+        <div class="label">GDPR compliant data handling</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ PRICING ════════════════════════════════════ -->
+<section id="pricing">
+  <div class="section-inner">
+    <span class="section-tag">Pricing</span>
+    <h2 class="section-title">Simple, transparent pricing</h2>
+    <p class="section-sub">Start free. Upgrade as you grow. No hidden fees, no contracts.</p>
+    <div class="pricing-grid">
+
+      <!-- Starter -->
+      <div class="price-card">
+        <div class="free-badge">✦ First month free — no credit card required</div>
+        <div class="price-name">Starter</div>
+        <div class="price-amount"><sup>£</sup>35<span class="period">/month</span></div>
+        <div class="price-note">after your free first month</div>
+        <hr class="price-divider" />
+        <ul class="price-features">
+          <li><span class="check">✓</span>1 website</li>
+          <li><span class="check">✓</span>Up to 5,000 visitors/month</li>
+          <li><span class="check">✓</span>AI chat widget (500 conversations)</li>
+          <li><span class="check">✓</span>Visitor identification &amp; intent scoring</li>
+          <li><span class="check">✓</span>Lead &amp; ticket management</li>
+          <li><span class="check">✓</span>Email support</li>
+        </ul>
+        <a href="/public/register.html" class="price-cta">Get started free</a>
+      </div>
+
+      <!-- Growth -->
+      <div class="price-card featured">
+        <div class="popular-badge">Most Popular</div>
+        <div class="free-badge">✦ First month free — no credit card required</div>
+        <div class="price-name">Growth</div>
+        <div class="price-amount"><sup>£</sup>65<span class="period">/month</span></div>
+        <div class="price-note">after your free first month</div>
+        <hr class="price-divider" />
+        <ul class="price-features">
+          <li><span class="check">✓</span>3 websites</li>
+          <li><span class="check">✓</span>Up to 25,000 visitors/month</li>
+          <li><span class="check">✓</span>Unlimited AI conversations</li>
+          <li><span class="check">✓</span>Full visitor enrichment &amp; scoring</li>
+          <li><span class="check">✓</span>Automation flows (unlimited)</li>
+          <li><span class="check">✓</span>Intelligence &amp; trend reports</li>
+          <li><span class="check">✓</span>Promo &amp; ad management</li>
+          <li><span class="check">✓</span>Priority support</li>
+        </ul>
+        <a href="/public/register.html" class="price-cta">Get started free</a>
+      </div>
+
+      <!-- Agency -->
+      <div class="price-card">
+        <div class="free-badge">✦ First month free — no credit card required</div>
+        <div class="price-name">Agency</div>
+        <div class="price-amount"><sup>£</sup>159<span class="period">/month</span></div>
+        <div class="price-note">after your free first month</div>
+        <hr class="price-divider" />
+        <ul class="price-features">
+          <li><span class="check">✓</span>Unlimited websites</li>
+          <li><span class="check">✓</span>Unlimited visitors</li>
+          <li><span class="check">✓</span>Multi-site analytics dashboard</li>
+          <li><span class="check">✓</span>Role-based access (RBAC)</li>
+          <li><span class="check">✓</span>REST API access &amp; API keys</li>
+          <li><span class="check">✓</span>GDPR consent management</li>
+          <li><span class="check">✓</span>Custom integrations</li>
+          <li><span class="check">✓</span>Dedicated account manager</li>
+          <li><span class="check">✓</span>SLA guarantee</li>
+        </ul>
+        <a href="/public/register.html" class="price-cta">Get started free</a>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ══ TESTIMONIALS ═══════════════════════════════ -->
+<section style="background: var(--bg2);">
+  <div class="section-inner">
+    <span class="section-tag">Testimonials</span>
+    <h2 class="section-title">Trusted by sales and marketing teams</h2>
+    <p class="section-sub" style="margin-bottom: 48px;">See what our customers are saying about Intentify.</p>
+    <div class="testimonials-grid">
+      <div class="testimonial-card">
+        <p class="testimonial-quote">"Intentify identified 340 company visitors in our first week that we had absolutely no record of. Three became customers within a month. The ROI was immediate."</p>
+        <div class="testimonial-author">
+          <div class="testimonial-avatar">SH</div>
+          <div>
+            <div class="testimonial-name">Sarah Hartley</div>
+            <div class="testimonial-role">Head of Growth, NorthStar</div>
+          </div>
+        </div>
+      </div>
+      <div class="testimonial-card">
+        <p class="testimonial-quote">"The AI chat widget is genuinely impressive. It escalates at exactly the right moment — our sales team only gets the warm conversations, not the tyre-kickers."</p>
+        <div class="testimonial-author">
+          <div class="testimonial-avatar">DM</div>
+          <div>
+            <div class="testimonial-name">Daniel Morris</div>
+            <div class="testimonial-role">VP Sales, Meridian AI</div>
+          </div>
+        </div>
+      </div>
+      <div class="testimonial-card">
+        <p class="testimonial-quote">"We manage 12 client websites and the Agency plan is a no-brainer. The multi-site dashboard alone saves us hours every week. The intent data is unlike anything else."</p>
+        <div class="testimonial-author">
+          <div class="testimonial-avatar">PO</div>
+          <div>
+            <div class="testimonial-name">Priya O'Brien</div>
+            <div class="testimonial-role">Director, Pillar Labs Agency</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ ABOUT ══════════════════════════════════════ -->
+<section id="about">
+  <div class="section-inner">
+    <div class="about-inner">
+      <div class="about-text">
+        <span class="section-tag">About Intentify</span>
+        <h2 class="section-title">Built for the modern B2B revenue team</h2>
+        <p>Intentify was built because we were frustrated watching 97% of website visitors leave without a trace. The tools that existed were either too expensive, too complex, or too focused on one piece of the puzzle.</p>
+        <p>We combined visitor identification (what Retention.com does) with real-time search intent intelligence (what Captify does) into one affordable, fast-to-implement platform — designed specifically for lean B2B teams.</p>
+        <p>Privacy-first by design. GDPR compliant out of the box. No cookies required for core functionality.</p>
+      </div>
+      <div class="about-stats">
+        <div class="about-stat">
+          <div class="num">2024</div>
+          <div class="label">Founded</div>
+        </div>
+        <div class="about-stat">
+          <div class="num">100%</div>
+          <div class="label">Privacy-first</div>
+        </div>
+        <div class="about-stat">
+          <div class="num">GDPR</div>
+          <div class="label">Fully compliant</div>
+        </div>
+        <div class="about-stat">
+          <div class="num">24/7</div>
+          <div class="label">AI always on</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ CONTACT ════════════════════════════════════ -->
+<section id="contact" class="contact-section">
+  <div class="section-inner">
+    <div class="contact-inner">
+      <div>
+        <span class="section-tag">Get in touch</span>
+        <h2 class="section-title">Talk to the team</h2>
+        <p style="color: var(--text2); font-size: 16px; line-height: 1.8; margin-bottom: 32px;">Whether you want a live demo, have a question about pricing, or need help choosing the right plan — we're here.</p>
+        <div style="display: flex; flex-direction: column; gap: 16px;">
+          <div style="display: flex; gap: 12px; align-items: center; color: var(--text2); font-size: 14px;">
+            <span style="font-size: 18px;">✉️</span> hello@intentify.io
+          </div>
+          <div style="display: flex; gap: 12px; align-items: center; color: var(--text2); font-size: 14px;">
+            <span style="font-size: 18px;">⏱️</span> Response within 4 hours during business hours
+          </div>
+          <div style="display: flex; gap: 12px; align-items: center; color: var(--text2); font-size: 14px;">
+            <span style="font-size: 18px;">🌍</span> London, UK · Remote-first team
+          </div>
+        </div>
+      </div>
+      <form class="contact-form" onsubmit="handleContact(event)">
+        <div class="form-row">
+          <div class="form-group">
+            <label>First name</label>
+            <input type="text" placeholder="Jane" required />
+          </div>
+          <div class="form-group">
+            <label>Last name</label>
+            <input type="text" placeholder="Doe" required />
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Work email</label>
+          <input type="email" placeholder="jane@company.com" required />
+        </div>
+        <div class="form-group">
+          <label>Company</label>
+          <input type="text" placeholder="Acme Inc" />
+        </div>
+        <div class="form-group">
+          <label>How can we help?</label>
+          <textarea placeholder="Tell us about your use case, questions about pricing, or request a demo..."></textarea>
+        </div>
+        <button type="submit" class="contact-submit">Send message →</button>
+        <div id="contact-success" style="display:none; color: #4ade80; font-size: 14px; margin-top: 8px;">
+          ✓ Message sent! We'll be in touch within 4 hours.
+        </div>
+      </form>
+    </div>
+  </div>
+</section>
+
+<!-- ══ CTA BAND ═══════════════════════════════════ -->
+<div class="cta-band">
+  <h2>Ready to identify your first visitors?</h2>
+  <p>Join B2B teams using Intentify to turn anonymous traffic into pipeline.</p>
+  <div class="cta-band-actions">
+    <a href="/public/register.html" class="btn-hero btn-hero-primary">Start free — first month on us</a>
+    <a href="#contact" class="btn-hero btn-hero-secondary">Talk to sales</a>
+  </div>
+</div>
+
+<!-- ══ FOOTER ═════════════════════════════════════ -->
+<footer>
+  <div class="footer-inner">
+    <div class="footer-top">
+      <div class="footer-brand">
+        <div class="footer-logo">
+          <img src="/assets/logo_white.png" alt="Intentify" style="height:26px;" onerror="this.style.display='none'">
+          <span>Intentify</span>
+        </div>
+        <p>Visitor intelligence and search intent platform for B2B revenue teams.</p>
+      </div>
+      <div class="footer-col">
+        <h4>Product</h4>
+        <a href="#features">Features</a>
+        <a href="#pricing">Pricing</a>
+        <a href="#how-it-works">How it works</a>
+        <a href="/public/register.html">Get started</a>
+      </div>
+      <div class="footer-col">
+        <h4>Company</h4>
+        <a href="#about">About</a>
+        <a href="#contact">Contact</a>
+        <a href="#">Blog</a>
+        <a href="#">Careers</a>
+      </div>
+      <div class="footer-col">
+        <h4>Legal</h4>
+        <a href="#">Privacy Policy</a>
+        <a href="#">Terms of Service</a>
+        <a href="#">GDPR</a>
+        <a href="#">Cookie Policy</a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <p>© 2024 Intentify. All rights reserved.</p>
+      <div class="footer-bottom-links">
+        <a href="/public/login.html">Sign in</a>
+        <a href="/public/register.html">Get started</a>
+        <a href="#contact">Support</a>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<script>
+  // How it works step selector
+  const stepVisuals = [
+    { icon: '⚙️', label: 'Install in under 2 minutes' },
+    { icon: '👁️', label: 'Visitor profiles built automatically' },
+    { icon: '📡', label: 'Real-time intent signals overlaid' },
+    { icon: '🚀', label: 'Revenue actions fired automatically' },
+  ];
+
+  function selectStep(el, idx) {
+    document.querySelectorAll('.how-step').forEach(s => s.classList.remove('active'));
+    el.classList.add('active');
+    const v = stepVisuals[idx];
+    document.getElementById('how-visual-content').innerHTML =
+      `<div class="how-visual-icon">${v.icon}</div><div class="how-visual-label">${v.label}</div>`;
+  }
+
+  // Contact form
+  function handleContact(e) {
+    e.preventDefault();
+    document.getElementById('contact-success').style.display = 'block';
+    e.target.reset();
+  }
+
+  // Nav active link on scroll
+  const sections = document.querySelectorAll('section[id], div[id]');
+  const navLinks = document.querySelectorAll('.nav-links a');
+  window.addEventListener('scroll', () => {
+    let current = '';
+    sections.forEach(s => {
+      if (window.scrollY >= s.offsetTop - 100) current = s.id;
+    });
+    navLinks.forEach(a => {
+      a.style.color = a.getAttribute('href') === '#' + current ? '#f1f5f9' : '';
+    });
+  });
+</script>
+</body>
+</html>

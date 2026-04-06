@@ -50,3 +50,28 @@ public sealed record InstallationDiagnosticsResponse(
     bool SdkScriptExpected,
     bool FirstEventSeen,
     DateTime? FirstEventReceivedAtUtc);
+
+// ── Phase 7.2: REST API Key Management ────────────────────────────────────────
+
+/// <summary>Request body when creating a new API key.</summary>
+public sealed record GenerateApiKeyRequest(string Label);
+
+/// <summary>
+/// Returned once when a key is generated. RawSecret will never be returned again.
+/// The client must copy it immediately.
+/// </summary>
+public sealed record GenerateApiKeyResponse(
+    string KeyId,
+    string Label,
+    string RawSecret,
+    string Hint,
+    DateTime CreatedAtUtc);
+
+/// <summary>Safe read-only view of a key — never exposes the secret or hash.</summary>
+public sealed record ApiKeyResponse(
+    string KeyId,
+    string Label,
+    string Hint,
+    DateTime CreatedAtUtc,
+    DateTime? RevokedAtUtc,
+    bool IsActive);

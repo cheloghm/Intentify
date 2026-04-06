@@ -82,28 +82,33 @@ public sealed class EngageBusinessOutcomeExecutor
             return update.Status == Shared.Validation.OperationStatus.Success;
         }
 
+        // ── Resolve visitor ID ────────────────────────────────────────────────
+        // Prefer explicit visitorId from the command (set by the widget when visitor is known).
+        // This ensures GET /visitors/:id/tickets works on the visitor profile page.
+        Guid? visitorId = null;
+        if (!string.IsNullOrWhiteSpace(command.VisitorId) && Guid.TryParse(command.VisitorId, out var parsedVid))
+            visitorId = parsedVid;
+
         var create = await _createTicketHandler.HandleAsync(
             new CreateTicketCommand(
-                context.Session.TenantId,
-                context.Session.SiteId,
-                null,
-                context.Session.Id,
-                ticketSubject,
-                ticketDescription,
-                null,
-                context.Session.CapturedName,
-                context.Session.CapturedPreferredContactMethod,
-                context.Session.CapturedEmail ?? context.Session.CapturedPhone,
-                context.Session.OpportunityLabel,
-                context.Session.IntentScore,
-                context.Session.ConversationSummary,
-                context.Session.SuggestedFollowUp),
+                TenantId:                context.Session.TenantId,
+                SiteId:                  context.Session.SiteId,
+                VisitorId:               visitorId,            // ← was null; now populated
+                EngageSessionId:         context.Session.Id,
+                Subject:                 ticketSubject,
+                Description:             ticketDescription,
+                AssignedToUserId:        null,
+                ContactName:             context.Session.CapturedName,
+                PreferredContactMethod:  context.Session.CapturedPreferredContactMethod,
+                PreferredContactDetail:  context.Session.CapturedEmail ?? context.Session.CapturedPhone,
+                OpportunityLabel:        context.Session.OpportunityLabel,
+                IntentScore:             context.Session.IntentScore,
+                ConversationSummary:     context.Session.ConversationSummary,
+                SuggestedFollowUp:       context.Session.SuggestedFollowUp),
             cancellationToken);
 
         if (create.Status != Shared.Validation.OperationStatus.Success || create.Value is null)
-        {
             return false;
-        }
 
         await _handoffTicketRepository.InsertAsync(
             new EngageHandoffTicket
@@ -122,15 +127,13 @@ public sealed class EngageBusinessOutcomeExecutor
         return true;
     }
 
-    private async Task<TicketListItem?> FindSessionEscalationTicketAsync(EngageChatSession session, CancellationToken cancellationToken)
+    private async Task<TicketListItem?> FindSessionEscalationTicketAsync(
+        EngageChatSession session, CancellationToken cancellationToken)
     {
         var items = await _listTicketsHandler.HandleAsync(
             new ListTicketsQuery(session.TenantId, session.SiteId, null, session.Id, 1, 20),
             cancellationToken);
-
-        return items
-            .OrderByDescending(item => item.UpdatedAtUtc)
-            .FirstOrDefault();
+        return items.OrderByDescending(item => item.UpdatedAtUtc).FirstOrDefault();
     }
 
     private async Task<bool> UpsertLeadAsync(
@@ -138,23 +141,29 @@ public sealed class EngageBusinessOutcomeExecutor
         ChatSendCommand command,
         CancellationToken cancellationToken)
     {
+        Guid? visitorId = null;
+        if (Guid.TryParse(command.VisitorId, out var parsedVisitorId))
+            visitorId = parsedVisitorId;
+
+        const bool consentGiven = true;
+
         var result = await _upsertLeadHandler.HandleAsync(
             new UpsertLeadFromPromoEntryCommand(
-                context.Session.TenantId,
-                context.Session.SiteId,
-                context.Session.Id,
-                null,
-                command.VisitorId ?? command.CollectorSessionId,
-                context.Session.Id.ToString("N"),
-                context.Session.CapturedEmail,
-                context.Session.CapturedName,
-                false,
-                context.Session.CapturedPhone,
-                context.Session.CapturedPreferredContactMethod,
-                context.Session.OpportunityLabel,
-                context.Session.IntentScore,
-                context.Session.ConversationSummary,
-                context.Session.SuggestedFollowUp),
+                TenantId:                context.Session.TenantId,
+                SiteId:                  context.Session.SiteId,
+                VisitorId:               visitorId,
+                FirstPartyId:            null,
+                SessionId:               command.CollectorSessionId,
+                Email:                   context.Session.CapturedEmail,
+                Name:                    context.Session.CapturedName,
+                ConsentGiven:            consentGiven,
+                Phone:                   context.Session.CapturedPhone,
+                PreferredContactMethod:  context.Session.CapturedPreferredContactMethod,
+                PreferredContactDetail:  null,
+                OpportunityLabel:        context.Session.OpportunityLabel,
+                IntentScore:             context.Session.IntentScore,
+                ConversationSummary:     context.Session.ConversationSummary,
+                SuggestedFollowUp:       context.Session.SuggestedFollowUp),
             cancellationToken);
 
         return result.Status == Shared.Validation.OperationStatus.Success;

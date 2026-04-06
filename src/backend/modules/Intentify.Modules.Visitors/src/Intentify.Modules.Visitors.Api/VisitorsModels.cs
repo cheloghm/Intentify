@@ -12,7 +12,10 @@ public sealed record OnlineVisitorResponse(
     DateTime LastSeenAtUtc,
     int ActiveSessionsCount,
     string? LastPath,
-    string? LastReferrer);
+    string? LastReferrer,
+    string? Country      = null,
+    string? Platform     = null,
+    string? PrimaryEmail = null);
 
 public sealed record PageAnalyticsResponse(
     int Days,
@@ -23,3 +26,7 @@ public sealed record PageAnalyticsItemResponse(
     int PageViews,
     int UniqueSessions,
     decimal AvgTimeOnPageSeconds);
+
+public sealed record CountryBreakdownResponse(
+    int Days,
+    IReadOnlyCollection<Application.CountryBreakdownItem> Countries);

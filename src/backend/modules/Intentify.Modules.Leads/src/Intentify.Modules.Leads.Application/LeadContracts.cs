@@ -5,7 +5,6 @@ namespace Intentify.Modules.Leads.Application;
 public sealed record UpsertLeadFromPromoEntryCommand(
     Guid TenantId,
     Guid SiteId,
-    Guid PromoEntryId,
     Guid? VisitorId,
     string? FirstPartyId,
     string? SessionId,
@@ -14,6 +13,7 @@ public sealed record UpsertLeadFromPromoEntryCommand(
     bool ConsentGiven,
     string? Phone = null,
     string? PreferredContactMethod = null,
+    string? PreferredContactDetail = null,
     string? OpportunityLabel = null,
     int? IntentScore = null,
     string? ConversationSummary = null,
@@ -21,15 +21,31 @@ public sealed record UpsertLeadFromPromoEntryCommand(
 
 public sealed record ListLeadsQuery(Guid TenantId, Guid? SiteId, int Page, int PageSize);
 public sealed record GetLeadQuery(Guid TenantId, Guid LeadId);
+public sealed record GetLeadByVisitorIdQuery(Guid TenantId, Guid SiteId, Guid VisitorId);
 
 public interface ILeadRepository
 {
     Task<Lead?> GetByEmailAsync(Guid tenantId, Guid siteId, string email, CancellationToken cancellationToken = default);
     Task<Lead?> GetByFirstPartyIdAsync(Guid tenantId, Guid siteId, string firstPartyId, CancellationToken cancellationToken = default);
     Task<Lead?> GetByIdAsync(Guid tenantId, Guid leadId, CancellationToken cancellationToken = default);
+    Task<Lead?> GetByLinkedVisitorIdAsync(Guid tenantId, Guid siteId, Guid visitorId, CancellationToken cancellationToken = default);
     Task InsertAsync(Lead lead, CancellationToken cancellationToken = default);
     Task ReplaceAsync(Lead lead, CancellationToken cancellationToken = default);
     Task<IReadOnlyCollection<Lead>> ListAsync(ListLeadsQuery query, CancellationToken cancellationToken = default);
+}
+
+public sealed record LeadCapturedNotification(
+    Guid TenantId,
+    Guid SiteId,
+    Guid LeadId,
+    string? Email,
+    string? Name,
+    DateTime OccurredAtUtc,
+    bool IsNew);
+
+public interface ILeadEventObserver
+{
+    Task OnLeadCapturedAsync(LeadCapturedNotification notification, CancellationToken ct = default);
 }
 
 public interface ILeadVisitorLinker

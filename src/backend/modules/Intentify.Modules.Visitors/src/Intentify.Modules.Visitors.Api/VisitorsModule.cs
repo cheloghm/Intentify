@@ -28,6 +28,7 @@ public sealed class VisitorsModule : IAppModule
         services.AddSingleton<IVisitorRepository, VisitorRepository>();
         services.AddSingleton<IVisitorTimelineReader, VisitorTimelineReader>();
         services.AddSingleton<IVisitorAnalyticsReader, VisitorAnalyticsReader>();
+        services.AddSingleton<IDashboardAnalyticsReader, DashboardAnalyticsReader>(); // Phase 3
         services.AddSingleton<UpsertVisitorFromCollectorEventHandler>();
         services.AddSingleton<ICollectorEventObserver, CollectorVisitorEventObserver>();
         services.AddSingleton<ListVisitorsHandler>();
@@ -36,6 +37,8 @@ public sealed class VisitorsModule : IAppModule
         services.AddSingleton<GetVisitCountWindowsHandler>();
         services.AddSingleton<GetOnlineNowHandler>();
         services.AddSingleton<GetPageAnalyticsHandler>();
+        services.AddSingleton<GetCountryBreakdownHandler>();
+        services.AddSingleton<GetDashboardAnalyticsHandler>(); // Phase 3
     }
 
     public void MapEndpoints(IEndpointRouteBuilder endpoints)
@@ -45,11 +48,13 @@ public sealed class VisitorsModule : IAppModule
         var group = endpoints.MapGroup("/visitors")
             .AddEndpointFilter<RequireAuthFilter>();
 
-        group.MapGet(string.Empty, VisitorsEndpoints.ListVisitorsAsync);
-        group.MapGet("/visits/counts", VisitorsEndpoints.GetVisitCountsAsync);
-        group.MapGet("/online-now", VisitorsEndpoints.GetOnlineNowAsync);
-        group.MapGet("/analytics/pages", VisitorsEndpoints.GetPageAnalyticsAsync);
-        group.MapGet("/{visitorId}", VisitorsEndpoints.GetVisitorAsync);
-        group.MapGet("/{visitorId}/timeline", VisitorsEndpoints.GetTimelineAsync);
+        group.MapGet(string.Empty,                  VisitorsEndpoints.ListVisitorsAsync);
+        group.MapGet("/visits/counts",              VisitorsEndpoints.GetVisitCountsAsync);
+        group.MapGet("/online-now",                 VisitorsEndpoints.GetOnlineNowAsync);
+        group.MapGet("/analytics/pages",            VisitorsEndpoints.GetPageAnalyticsAsync);
+        group.MapGet("/analytics/countries",        VisitorsEndpoints.GetCountryBreakdownAsync);
+        group.MapGet("/analytics/dashboard",        VisitorsEndpoints.GetDashboardAnalyticsAsync); // Phase 3
+        group.MapGet("/{visitorId}",                VisitorsEndpoints.GetVisitorAsync);
+        group.MapGet("/{visitorId}/timeline",       VisitorsEndpoints.GetTimelineAsync);
     }
 }

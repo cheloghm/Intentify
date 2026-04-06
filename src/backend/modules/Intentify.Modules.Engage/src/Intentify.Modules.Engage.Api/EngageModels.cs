@@ -59,7 +59,7 @@ public sealed record EngageChatSendResponse(
     string? FollowUpEmailDraft = null,
     string? NextBestAction = null);
 
-public sealed record ConversationSummaryResponse(string SessionId, DateTime CreatedAtUtc, DateTime UpdatedAtUtc);
+public sealed record ConversationSummaryResponse(string SessionId, DateTime CreatedAtUtc, DateTime UpdatedAtUtc, bool HasLead = false, bool HasTicket = false);
 
 public sealed record OpportunityContactMethodBreakdownResponse(int Email, int Phone, int Unknown);
 
