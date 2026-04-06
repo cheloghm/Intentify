@@ -21,14 +21,14 @@ services:
       - "5000:5000"
     environment:
       ASPNETCORE_URLS: http://+:5000
-      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_ENVIRONMENT: Development
       Intentify__Mongo__ConnectionString: mongodb://mongo:27017
       Intentify__Mongo__DatabaseName: intentify
       Intentify__Jwt__Issuer: intentify
       Intentify__Jwt__Audience: intentify-users
       Intentify__Jwt__SigningKey: dev-signing-key-change-this-in-production-32chars
       Intentify__Jwt__AccessTokenMinutes: "60"
-      Intentify__Cors__AllowedOrigins: http://localhost
+      Intentify__Cors__AllowedOrigins: "http://localhost,http://localhost:80,http://127.0.0.1,http://127.0.0.1:80"
       Intentify__Anthropic__ApiKey: ${Intentify__Anthropic__ApiKey:-}
       Intentify__Email__Resend__ApiKey: ${Intentify__Email__Resend__ApiKey:-}
       Intentify__Email__Resend__FromAddress: notify@intentify.io
@@ -48,7 +48,7 @@ services:
     ports:
       - "80:80"
     environment:
-      INTENTIFY_API_BASE_URL: http://localhost:5000
+      INTENTIFY_API_BASE_URL: /api
     depends_on:
       - backend
 
