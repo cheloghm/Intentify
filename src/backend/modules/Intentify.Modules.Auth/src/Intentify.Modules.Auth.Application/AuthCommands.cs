@@ -1,6 +1,6 @@
 namespace Intentify.Modules.Auth.Application;
 
-public sealed record RegisterUserCommand(string DisplayName, string Email, string Password, string OrganizationName);
+public sealed record RegisterUserCommand(string DisplayName, string Email, string Password, string OrganizationName, string? Plan = null);
 
 public sealed record LoginUserCommand(string Email, string Password);
 
