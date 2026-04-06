@@ -75,9 +75,10 @@ internal static class AppModuleExtensions
         ArgumentNullException.ThrowIfNull(endpoints);
 
         var registry = endpoints.ServiceProvider.GetRequiredService<AppModuleRegistry>();
+        var apiGroup = endpoints.MapGroup("/api");
         foreach (var module in registry.Modules)
         {
-            module.MapEndpoints(endpoints);
+            module.MapEndpoints(apiGroup);
         }
 
         return endpoints;

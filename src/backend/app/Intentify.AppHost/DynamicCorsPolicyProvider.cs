@@ -5,12 +5,10 @@ namespace Intentify.AppHost;
 
 internal sealed class DynamicCorsPolicyProvider : ICorsPolicyProvider
 {
-    private readonly ISiteRepository _siteRepository;
     private readonly string[] _dashboardOrigins;
 
-    public DynamicCorsPolicyProvider(ISiteRepository siteRepository, string[] dashboardOrigins)
+    public DynamicCorsPolicyProvider(string[] dashboardOrigins)
     {
-        _siteRepository = siteRepository;
         _dashboardOrigins = dashboardOrigins;
     }
 
@@ -32,7 +30,9 @@ internal sealed class DynamicCorsPolicyProvider : ICorsPolicyProvider
             var siteKey = context.Request.Query["siteKey"].ToString();
             if (!string.IsNullOrWhiteSpace(siteKey))
             {
-                var site = await _siteRepository.GetBySiteKeyAsync(siteKey.Trim(), context.RequestAborted);
+                // Use request-scoped services to avoid singleton → scoped scope violation
+                var siteRepository = context.RequestServices.GetRequiredService<ISiteRepository>();
+                var site = await siteRepository.GetBySiteKeyAsync(siteKey.Trim(), context.RequestAborted);
                 var allowedOrigins = site?.AllowedOrigins
                     .Select(NormalizeOrigin)
                     .Where(static origin => !string.IsNullOrWhiteSpace(origin))
@@ -65,7 +65,8 @@ internal sealed class DynamicCorsPolicyProvider : ICorsPolicyProvider
                     .Build();
             }
 
-            var site = await _siteRepository.GetByWidgetKeyAsync(widgetKey.Trim(), context.RequestAborted);
+            var siteRepository = context.RequestServices.GetRequiredService<ISiteRepository>();
+            var site = await siteRepository.GetByWidgetKeyAsync(widgetKey.Trim(), context.RequestAborted);
             var allowedOrigins = site?.AllowedOrigins
                 .Select(NormalizeOrigin)
                 .Where(static origin => !string.IsNullOrWhiteSpace(origin))

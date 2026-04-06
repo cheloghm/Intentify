@@ -108,20 +108,35 @@ public static class AppHostApplication
 
         var app = builder.Build();
 
+        app.Use((context, next) => {
+            if (context.Request.Method == "OPTIONS") {
+                context.Response.Headers.Append("Access-Control-Allow-Origin",
+                    context.Request.Headers.Origin.ToString());
+                context.Response.Headers.Append("Access-Control-Allow-Methods",
+                    "GET, POST, PUT, DELETE, OPTIONS, PATCH");
+                context.Response.Headers.Append("Access-Control-Allow-Headers",
+                    "Content-Type, Authorization, X-Requested-With");
+                context.Response.Headers.Append("Access-Control-Max-Age", "86400");
+                context.Response.StatusCode = 200;
+                return Task.CompletedTask;
+            }
+            return next(context);
+        });
+
+        app.UseCors(CorsPolicyName);
+
         if (app.Environment.IsDevelopment())
         {
             app.UseSwagger();
             app.UseSwaggerUI();
         }
 
-        // ✅ Apply global CORS middleware
-        app.UseCors(CorsPolicyName);
-
         // ✅ Auth middleware (must be before endpoints)
         app.UseAuthentication();
         app.UseAuthorization();
 
         app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
+
         app.MapAppModules();
         app.MapDebugEndpoints();
 
@@ -191,10 +206,8 @@ public static class AppHostApplication
             });
         });
 
-        builder.Services.AddSingleton<ICorsPolicyProvider>(serviceProvider =>
-            new DynamicCorsPolicyProvider(
-                serviceProvider.GetRequiredService<ISiteRepository>(),
-                origins));
+        builder.Services.AddSingleton<ICorsPolicyProvider>(
+            _ => new DynamicCorsPolicyProvider(origins));
     }
 
     private static void EnsureMongoConfiguration(WebApplicationBuilder builder)

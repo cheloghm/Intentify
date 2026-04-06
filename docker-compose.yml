@@ -1,69 +1,56 @@
-# Requires .env in repo root. Copy .env.example and fill in values.
+version: '3.9'
+
 services:
-  frontend:
-    build:
-      context: ./src/frontend/web
-      dockerfile: Dockerfile
-    environment:
-      INTENTIFY_API_BASE_URL: ${INTENTIFY_API_BASE_URL}
+
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
     ports:
-      - "${FRONTEND_PORT:-3000}:80"
-    depends_on:
-      backend:
-        condition: service_started
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    environment:
+      MONGO_INITDB_DATABASE: intentify
 
   backend:
     build:
       context: ./src/backend
       dockerfile: app/Intentify.AppHost/Dockerfile
-    environment:
-      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT}
-      ASPNETCORE_URLS: ${ASPNETCORE_URLS}
-      Intentify__Jwt__Issuer: ${Intentify__Jwt__Issuer}
-      Intentify__Jwt__Audience: ${Intentify__Jwt__Audience}
-      Intentify__Jwt__SigningKey: ${Intentify__Jwt__SigningKey}
-      Intentify__Jwt__AccessTokenMinutes: ${Intentify__Jwt__AccessTokenMinutes}
-      Intentify__Cors__AllowedOrigins: ${Intentify__Cors__AllowedOrigins}
-      Intentify__Mongo__ConnectionString: ${Intentify__Mongo__ConnectionString}
-      Intentify__Mongo__DatabaseName: ${Intentify__Mongo__DatabaseName}
-      Intentify__OpenSearch__Enabled: ${Intentify__OpenSearch__Enabled}
-      Intentify__OpenSearch__Url: ${Intentify__OpenSearch__Url}
-      Intentify__OpenSearch__IndexName: ${Intentify__OpenSearch__IndexName}
-      Intentify__OpenSearch__Username: ${Intentify__OpenSearch__Username}
-      Intentify__OpenSearch__Password: ${Intentify__OpenSearch__Password}
-      Intentify__AI__ApiBaseUrl: ${Intentify__AI__ApiBaseUrl}
-      Intentify__AI__ApiKey: ${Intentify__AI__ApiKey}
-      Intentify__AI__ChatModel: ${Intentify__AI__ChatModel}
-      Intentify__AI__TimeoutSeconds: ${Intentify__AI__TimeoutSeconds}
-      Intentify__AI__MaxPromptChars: ${Intentify__AI__MaxPromptChars}
-      Intentify__Intelligence__Google__ApiKey: ${Intentify__Intelligence__Google__ApiKey}
-      Intentify__Intelligence__Google__BaseUrl: ${Intentify__Intelligence__Google__BaseUrl}
-      Intentify__Intelligence__Google__TimeoutSeconds: ${Intentify__Intelligence__Google__TimeoutSeconds}
-      Intentify__Intelligence__Search__Provider: ${Intentify__Intelligence__Search__Provider}
-      INTENTIFY_DEBUG_SECRET: ${INTENTIFY_DEBUG_SECRET}
+    restart: unless-stopped
     ports:
-      - "${BACKEND_PORT:-5000}:5000"
+      - "5000:5000"
+    environment:
+      ASPNETCORE_URLS: http://+:5000
+      ASPNETCORE_ENVIRONMENT: Development
+      Intentify__Mongo__ConnectionString: mongodb://mongo:27017
+      Intentify__Mongo__DatabaseName: intentify
+      Intentify__Jwt__Issuer: intentify
+      Intentify__Jwt__Audience: intentify-users
+      Intentify__Jwt__SigningKey: dev-signing-key-change-this-in-production-32chars
+      Intentify__Jwt__AccessTokenMinutes: "60"
+      Intentify__Cors__AllowedOrigins: "http://localhost,http://localhost:80,http://127.0.0.1,http://127.0.0.1:80"
+      Intentify__Anthropic__ApiKey: ${Intentify__Anthropic__ApiKey:-}
+      Intentify__Email__Resend__ApiKey: ${Intentify__Email__Resend__ApiKey:-}
+      Intentify__Email__Resend__FromAddress: notify@intentify.io
+      Intentify__Email__Resend__FromName: Intentify
+      Intentify__Auth__Google__ClientId: ${Intentify__Auth__Google__ClientId:-}
+      Intentify__Auth__Google__ClientSecret: ${Intentify__Auth__Google__ClientSecret:-}
+      Intentify__Auth__Google__RedirectUri: http://localhost:5000/auth/google/callback
+      Intentify__Sites__AllowLocalhostInstallStatus: "true"
     depends_on:
-      mongo:
-        condition: service_healthy
-      opensearch:
-        condition: service_started
+      - mongo
 
-  mongo:
-    image: mongo:7
+  frontend:
+    build:
+      context: ./src/frontend/web
+      dockerfile: Dockerfile
+    restart: unless-stopped
     ports:
-      - "${MONGO_PORT:-27017}:27017"
-    healthcheck:
-      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-
-  opensearch:
-    image: opensearchproject/opensearch:2.15.0
+      - "80:80"
     environment:
-      discovery.type: single-node
-      DISABLE_SECURITY_PLUGIN: ${OPENSEARCH_DISABLE_SECURITY_PLUGIN}
-      OPENSEARCH_JAVA_OPTS: ${OPENSEARCH_JAVA_OPTS}
-    ports:
-      - "${OPENSEARCH_PORT:-9200}:9200"
+      INTENTIFY_API_BASE_URL: /api
+    depends_on:
+      - backend
+
+volumes:
+  mongo_data:

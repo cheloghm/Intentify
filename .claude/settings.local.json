@@ -16,7 +16,11 @@
       "Bash(find backend/shared/Intentify.Shared.Data.Mongo/tests backend/shared/Intentify.Shared.Observability/tests -type f ! -name \"*.dll\" ! -name \"*.pdb\" ! -name \"*.exe\" -delete)",
       "Bash(cmd.exe /c \"rd /s /q C:\\\\Users\\\\chelo\\\\source\\\\repos\\\\Intentify\\\\src\\\\backend\\\\shared\\\\Intentify.Shared.Data.Mongo\\\\tests\")",
       "Bash(cmd.exe /c \"rd /s /q C:\\\\Users\\\\chelo\\\\source\\\\repos\\\\Intentify\\\\src\\\\backend\\\\shared\\\\Intentify.Shared.Observability\\\\tests\")",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(docker compose:*)",
+      "Bash(curl:*)",
+      "Bash(docker exec intentify-backend-1:*)",
+      "Bash(docker top intentify-backend-1:*)"
     ]
   }
 }
