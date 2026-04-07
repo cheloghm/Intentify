@@ -49,6 +49,7 @@ services:
       - "80:80"
     environment:
       INTENTIFY_API_BASE_URL: /api
+      INTENTIFY_BACKEND_URL: backend:5000
     depends_on:
       - backend
 
