@@ -1083,5 +1083,15 @@ const renderApp = () => {
   }
 };
 
+// Pick up Google OAuth token from redirect (?token=...)
+(function captureOAuthToken() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const oauthToken = urlParams.get('token');
+  if (oauthToken) {
+    setToken(oauthToken);
+    window.history.replaceState({}, document.title, window.location.pathname);
+  }
+})();
+
 window.addEventListener('hashchange', renderApp);
 renderApp();

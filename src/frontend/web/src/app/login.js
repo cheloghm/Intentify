@@ -103,7 +103,12 @@ const render = () => {
   const oauthToken = params.get('token');
   const oauthError = params.get('error');
   if (oauthToken) { setToken(oauthToken); window.location.href = '/public/index.html'; return; }
-  if (oauthError) setTimeout(() => toast.show({ message: 'Google sign-in is not yet configured. Please use email.', variant: 'warning' }), 100);
+  if (oauthError) {
+    const msg = oauthError === 'google_auth_failed'
+      ? 'Google sign-in failed. Please try again.'
+      : 'Google sign-in is not yet configured. Please use email.';
+    setTimeout(() => toast.show({ message: msg, variant: 'warning' }), 100);
+  }
 
   const card = document.createElement('div');
   card.className = 'hv-card';
