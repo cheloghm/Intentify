@@ -7,5 +7,7 @@ window.__INTENTIFY_API_BASE__ = "${API_BASE}";
 window.NEXT_PUBLIC_API_BASE_URL = "${API_BASE}";
 EOT
 
-BACKEND_HOST="${INTENTIFY_BACKEND_URL:-backend:5000}"
+BACKEND_HOST="${INTENTIFY_BACKEND_URL:-intentify-production.up.railway.app}"
 sed -i "s|BACKEND_PLACEHOLDER|${BACKEND_HOST}|g" /etc/nginx/conf.d/default.conf
+
+exec nginx -g 'daemon off;'
