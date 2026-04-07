@@ -34,6 +34,7 @@ public sealed class AuthModule : IAppModule
         services.AddSingleton(sp => mongoClientResult.Value.GetDatabase(mongoOptions.DatabaseName));
         services.Configure<JwtOptions>(configuration.GetSection("Intentify:Jwt"));
         services.Configure<GoogleOAuthOptions>(configuration.GetSection("Intentify:Auth:Google"));
+        services.AddHttpClient();
         services.AddSingleton<JwtTokenIssuer>();
         services.AddSingleton<JwtTokenValidator>();
         services.AddSingleton<PasswordHasher>();

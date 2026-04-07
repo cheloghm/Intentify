@@ -1,6 +1,11 @@
 using System.IdentityModel.Tokens.Jwt;
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
 using System.Security.Claims;
+using System.Text.Json;
 using Intentify.Modules.Auth.Application;
+using Intentify.Modules.Auth.Domain;
+using Intentify.Shared.Security;
 using Intentify.Shared.Web;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Options;
@@ -339,11 +344,122 @@ internal static class AuthEndpoints
         return Results.Redirect(googleUrl);
     }
 
-    public static IResult GoogleOAuthCallback()
+    public static async Task<IResult> GoogleOAuthCallback(
+        HttpContext context,
+        IOptions<GoogleOAuthOptions> options,
+        IHttpClientFactory httpClientFactory,
+        IUserRepository users,
+        ITenantRepository tenants,
+        JwtTokenIssuer tokenIssuer,
+        IOptions<JwtOptions> jwtOptions)
     {
-        // Stub: full OAuth exchange requires Google credentials configured.
-        // Redirect back to login with an error the frontend can display.
-        return Results.Redirect("/public/login.html?error=google_not_configured");
+        try
+        {
+            var code = context.Request.Query["code"].ToString();
+            if (string.IsNullOrWhiteSpace(code))
+            {
+                return Results.Redirect("/public/login.html?error=google_auth_failed");
+            }
+
+            var opts = options.Value;
+            var httpClient = httpClientFactory.CreateClient();
+
+            // Exchange authorisation code for tokens
+            var tokenResponse = await httpClient.PostAsync(
+                "https://oauth2.googleapis.com/token",
+                new FormUrlEncodedContent(new Dictionary<string, string>
+                {
+                    ["grant_type"] = "authorization_code",
+                    ["code"] = code,
+                    ["client_id"] = opts.ClientId,
+                    ["client_secret"] = opts.ClientSecret,
+                    ["redirect_uri"] = opts.RedirectUri
+                }));
+
+            if (!tokenResponse.IsSuccessStatusCode)
+            {
+                return Results.Redirect("/public/login.html?error=google_auth_failed");
+            }
+
+            var tokenJson = await tokenResponse.Content.ReadFromJsonAsync<JsonElement>();
+            var googleAccessToken = tokenJson.GetProperty("access_token").GetString();
+            if (string.IsNullOrWhiteSpace(googleAccessToken))
+            {
+                return Results.Redirect("/public/login.html?error=google_auth_failed");
+            }
+
+            // Fetch user info from Google
+            using var userInfoRequest = new HttpRequestMessage(HttpMethod.Get, "https://www.googleapis.com/oauth2/v2/userinfo");
+            userInfoRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", googleAccessToken);
+            var userInfoResponse = await httpClient.SendAsync(userInfoRequest);
+
+            if (!userInfoResponse.IsSuccessStatusCode)
+            {
+                return Results.Redirect("/public/login.html?error=google_auth_failed");
+            }
+
+            var userInfoJson = await userInfoResponse.Content.ReadFromJsonAsync<JsonElement>();
+            var email = userInfoJson.GetProperty("email").GetString();
+            var displayName = userInfoJson.TryGetProperty("name", out var nameProp) ? nameProp.GetString() : null;
+
+            if (string.IsNullOrWhiteSpace(email))
+            {
+                return Results.Redirect("/public/login.html?error=google_auth_failed");
+            }
+
+            // Find or create user
+            var existingUser = await users.FindByEmailAsync(email, context.RequestAborted);
+            User user;
+            if (existingUser is not null)
+            {
+                user = existingUser;
+            }
+            else
+            {
+                var now = DateTime.UtcNow;
+                var tenant = new Tenant
+                {
+                    Name = displayName ?? email,
+                    Domain = $"{Guid.NewGuid():N}.tenant.local",
+                    Plan = "starter",
+                    Industry = "software",
+                    Category = "default",
+                    CreatedAt = now,
+                    UpdatedAt = now
+                };
+                await tenants.InsertAsync(tenant, context.RequestAborted);
+
+                user = new User
+                {
+                    TenantId = tenant.Id,
+                    Email = email,
+                    PasswordHash = string.Empty,
+                    DisplayName = displayName ?? email,
+                    Roles = new[] { AuthRoles.Admin },
+                    CreatedAt = now,
+                    UpdatedAt = now
+                };
+                await users.InsertAsync(user, context.RequestAborted);
+            }
+
+            // Issue JWT
+            var tokenResult = tokenIssuer.IssueAccessToken(
+                user.Id.ToString("N"),
+                user.TenantId.ToString("N"),
+                user.Roles,
+                jwtOptions.Value);
+
+            if (!tokenResult.IsSuccess || string.IsNullOrWhiteSpace(tokenResult.Value))
+            {
+                return Results.Redirect("/public/login.html?error=google_auth_failed");
+            }
+
+            return Results.Redirect($"/app?token={Uri.EscapeDataString(tokenResult.Value)}");
+        }
+        catch
+        {
+            return Results.Redirect("/public/login.html?error=google_auth_failed");
+        }
     }
 
     private static Guid? TryGetUserId(ClaimsPrincipal user)
