@@ -4,9 +4,10 @@
     return;
   }
 
-  const siteKey = (scriptTag.getAttribute('data-site-key') || '').trim();
+  const siteId = (scriptTag.getAttribute('data-site-id') || '').trim();
+  const siteKey = siteId || (scriptTag.getAttribute('data-site-key') || '').trim();
   if (!siteKey) {
-    console.error('[Intentify SDK] Missing data-site-key on sdk.js script tag.');
+    console.error('[Intentify SDK] Missing data-site-id on sdk.js script tag.');
     return;
   }
 
@@ -46,7 +47,9 @@
 
       loadScript({
         src: `${baseUrl}/collector/tracker.js`,
-        attributes: { 'data-site-key': siteKey },
+        attributes: siteId
+          ? { 'data-site-id': siteId }
+          : { 'data-site-key': siteKey },
       });
 
       // Pass the persistent visitor ID if already stored (returning visitor).

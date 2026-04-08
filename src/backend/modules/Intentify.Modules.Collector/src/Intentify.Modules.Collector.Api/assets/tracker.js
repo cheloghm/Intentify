@@ -13,7 +13,8 @@
       return;
     }
 
-    const siteKey = script.getAttribute('data-site-key');
+    const siteId = (script.getAttribute('data-site-id') || '').trim();
+    const siteKey = siteId || (script.getAttribute('data-site-key') || '').trim();
     if (!siteKey) {
       return;
     }
@@ -61,7 +62,8 @@
     function sendEvent(type, data) {
       try {
         const payload = {
-          siteKey,
+          siteKey: siteId ? null : siteKey,
+          snippetId: siteId || null,
           type,
           url: window.location.href,
           referrer: document.referrer || null,
@@ -171,7 +173,8 @@
       if (useBeacon && navigator.sendBeacon) {
         try {
           const payload = {
-            siteKey,
+            siteKey: siteId ? null : siteKey,
+            snippetId: siteId || null,
             type: 'time_on_page',
             url: window.location.href,
             referrer: document.referrer || null,
