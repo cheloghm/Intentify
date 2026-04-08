@@ -22,7 +22,22 @@ public sealed class KnowledgeModule : IAppModule
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configuration);
 
-        services.AddHttpClient("knowledge");
+        services.AddHttpClient("knowledge", client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(30);
+            client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent",
+                "Mozilla/5.0 (compatible; HvenBot/1.0; +https://hven.io/bot)");
+            client.DefaultRequestHeaders.TryAddWithoutValidation("Accept",
+                "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
+            client.DefaultRequestHeaders.TryAddWithoutValidation("Accept-Language", "en-US,en;q=0.5");
+        })
+        .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+        {
+            AllowAutoRedirect = true,
+            MaxAutomaticRedirections = 5,
+            ServerCertificateCustomValidationCallback = (_, _, _, _) => true,
+            AutomaticDecompression = System.Net.DecompressionMethods.GZip | System.Net.DecompressionMethods.Deflate
+        });
 
         var openSearchOptions = new OpenSearchOptions();
         configuration.GetSection(OpenSearchOptions.ConfigurationSection).Bind(openSearchOptions);
