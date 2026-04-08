@@ -8,11 +8,13 @@ public sealed class CreateSiteHandler
 {
     private readonly ISiteRepository _sites;
     private readonly IKeyGenerator _keyGenerator;
+    private readonly ISiteKnowledgeSeeder _knowledgeSeeder;
 
-    public CreateSiteHandler(ISiteRepository sites, IKeyGenerator keyGenerator)
+    public CreateSiteHandler(ISiteRepository sites, IKeyGenerator keyGenerator, ISiteKnowledgeSeeder knowledgeSeeder)
     {
         _sites = sites;
         _keyGenerator = keyGenerator;
+        _knowledgeSeeder = knowledgeSeeder;
     }
 
     public async Task<OperationResult<Site>> HandleAsync(CreateSiteCommand command, CancellationToken cancellationToken = default)
@@ -63,7 +65,24 @@ public sealed class CreateSiteHandler
 
         await _sites.InsertAsync(site, cancellationToken);
 
-        return OperationResult<Site>.Success(site);
+        // Auto-populate AllowedOrigins from the domain
+        var allowedOrigins = BuildAllowedOrigins(normalizedDomain);
+        var updatedSite = await _sites.UpdateAllowedOriginsAsync(command.TenantId, site.Id, allowedOrigins, cancellationToken);
+
+        // Seed default knowledge sources (URL crawler + quick facts template)
+        await _knowledgeSeeder.SeedDefaultSourcesAsync(command.TenantId, site.Id, normalizedDomain, cancellationToken);
+
+        return OperationResult<Site>.Success(updatedSite ?? site);
+    }
+
+    private static List<string> BuildAllowedOrigins(string normalizedDomain)
+    {
+        var origins = new List<string> { $"https://{normalizedDomain}" };
+        if (!normalizedDomain.StartsWith("www.", StringComparison.OrdinalIgnoreCase))
+        {
+            origins.Add($"https://www.{normalizedDomain}");
+        }
+        return origins;
     }
 
     private static string? NormalizeText(string? value)

@@ -1,6 +1,7 @@
 using Intentify.Modules.Auth.Api;
 using Intentify.Modules.Knowledge.Application;
 using Intentify.Modules.Knowledge.Infrastructure;
+using Intentify.Modules.Sites.Application;
 using Intentify.Shared.AI;
 using Intentify.Shared.Web;
 using Microsoft.AspNetCore.Builder;
@@ -64,6 +65,7 @@ public sealed class KnowledgeModule : IAppModule
         });
         services.AddSingleton<IKnowledgeTextExtractor, KnowledgeTextExtractor>();
         services.AddSingleton<IKnowledgeChunker, KnowledgeChunker>();
+        services.AddSingleton<ISiteKnowledgeSeeder, SiteKnowledgeSeeder>();
         services.AddSingleton<CreateKnowledgeSourceHandler>();
         services.AddSingleton<UploadPdfHandler>();
         services.AddSingleton<IndexKnowledgeSourceHandler>();
