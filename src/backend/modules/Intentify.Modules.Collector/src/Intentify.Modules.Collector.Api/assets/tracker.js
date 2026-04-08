@@ -24,7 +24,8 @@
       return;
     }
 
-    const baseUrl = new URL(src, window.location.href).origin;
+    const trackerSrc = new URL(src, window.location.href).href;
+    const baseUrl = trackerSrc.substring(0, trackerSrc.indexOf('/api/collector/tracker.js'));
     const sessionId = ensureSessionId();
     const visitorId = getOrCreateVisitorId();
     const fingerprint = getBrowserFingerprint();
@@ -74,7 +75,10 @@
           data: data || null
         };
 
-        fetch(`${baseUrl}/collector/events?siteKey=${encodeURIComponent(siteKey)}`, {
+        const eventsUrl = siteId
+          ? `${baseUrl}/api/collector/events`
+          : `${baseUrl}/api/collector/events?siteKey=${encodeURIComponent(siteKey)}`;
+        fetch(eventsUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
@@ -182,8 +186,11 @@
             sessionId,
             data: eventData,
           };
+          const beaconUrl = siteId
+            ? `${baseUrl}/api/collector/events`
+            : `${baseUrl}/api/collector/events?siteKey=${encodeURIComponent(siteKey)}`;
           navigator.sendBeacon(
-            `${baseUrl}/collector/events?siteKey=${encodeURIComponent(siteKey)}`,
+            beaconUrl,
             new Blob([JSON.stringify(payload)], { type: 'application/json' })
           );
           return;

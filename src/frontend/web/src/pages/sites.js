@@ -241,30 +241,34 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
 
       // ── Tracker Snippet section ────────────────────────────────────────────
       const snippetId = site.snippetId || getSiteId(site);
+      const backendBase = (window.__INTENTIFY_API_BASE__ || '/api').startsWith('http')
+        ? window.__INTENTIFY_API_BASE__.replace(/\/api\/?$/, '')
+        : window.location.origin;
+      const sdkUrl = `${backendBase}/api/collector/sdk.js`;
       const SNIPPET_TABS = [
         {
           label: 'HTML',
-          code: `<script src="https://intentify-production-ba68.up.railway.app/api/collector/sdk.js" data-site-id="${snippetId}"></script>`,
+          code: `<script src="${sdkUrl}" data-site-id="${snippetId}"></script>`,
           instruction: 'Paste this inside the <head> tag of your HTML.',
         },
         {
           label: 'WordPress',
-          code: `add_action('wp_head', function() { ?>\n<script src="https://intentify-production-ba68.up.railway.app/api/collector/sdk.js" data-site-id="${snippetId}"></script>\n<?php });`,
+          code: `add_action('wp_head', function() { ?>\n<script src="${sdkUrl}" data-site-id="${snippetId}"></script>\n<?php });`,
           instruction: "Add to your theme's functions.php file.",
         },
         {
           label: 'Shopify',
-          code: `<script src="https://intentify-production-ba68.up.railway.app/api/collector/sdk.js" data-site-id="${snippetId}"></script>`,
+          code: `<script src="${sdkUrl}" data-site-id="${snippetId}"></script>`,
           instruction: 'Paste in Online Store → Themes → Edit Code → theme.liquid, inside <head>.',
         },
         {
           label: 'Webflow',
-          code: `<script src="https://intentify-production-ba68.up.railway.app/api/collector/sdk.js" data-site-id="${snippetId}"></script>`,
+          code: `<script src="${sdkUrl}" data-site-id="${snippetId}"></script>`,
           instruction: 'Paste in Site Settings → Custom Code → Head Code.',
         },
         {
           label: 'Next.js',
-          code: `<Script src="https://intentify-production-ba68.up.railway.app/api/collector/sdk.js" data-site-id="${snippetId}" strategy="afterInteractive" />`,
+          code: `<Script src="${sdkUrl}" data-site-id="${snippetId}" strategy="afterInteractive" />`,
           instruction: 'Add to your app/layout.tsx or pages/_app.js.',
         },
       ];

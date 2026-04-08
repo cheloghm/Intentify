@@ -3,11 +3,12 @@ using System.Text.Json;
 namespace Intentify.Modules.Collector.Api;
 
 public sealed record CollectorEventRequest(
-    string SiteKey,
+    string? SiteKey,
     string Type,
     string Url,
     string? Referrer,
     DateTime? TsUtc,
+    string? SnippetId = null,
     string? SessionId = null,
     string? VisitorId = null,
     string? Fingerprint = null,

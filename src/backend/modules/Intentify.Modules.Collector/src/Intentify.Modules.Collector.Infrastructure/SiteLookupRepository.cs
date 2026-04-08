@@ -23,6 +23,13 @@ public sealed class SiteLookupRepository : ISiteLookupRepository
             .FirstOrDefaultAsync(cancellationToken);
     }
 
+    public async Task<Site?> GetBySnippetIdAsync(Guid snippetId, CancellationToken cancellationToken = default)
+    {
+        await _ensureIndexes;
+        return await _sites.Find(site => site.SnippetId == snippetId)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
     public async Task<Site?> UpdateFirstEventReceivedAsync(Guid siteId, DateTime timestampUtc, CancellationToken cancellationToken = default)
     {
         await _ensureIndexes;

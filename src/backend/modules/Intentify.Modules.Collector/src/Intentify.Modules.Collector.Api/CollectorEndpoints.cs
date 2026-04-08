@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Intentify.Modules.Collector.Application;
+using Intentify.Modules.Sites.Domain;
 using Intentify.Shared.Validation;
 using Intentify.Shared.Web;
 using Microsoft.AspNetCore.Http;
@@ -41,17 +42,20 @@ internal static class CollectorEndpoints
 
     public static async Task<IResult> GetSdkBootstrapAsync(
         string? siteKey,
+        string? snippetId,
         HttpContext context,
         ISiteLookupRepository siteLookupRepository,
         IConfiguration configuration,
         IHostEnvironment environment)
     {
         var normalizedSiteKey = NormalizeOptional(siteKey);
-        if (string.IsNullOrWhiteSpace(normalizedSiteKey))
+        var normalizedSnippetId = NormalizeOptional(snippetId);
+
+        if (string.IsNullOrWhiteSpace(normalizedSiteKey) && string.IsNullOrWhiteSpace(normalizedSnippetId))
         {
             return Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(new Dictionary<string, string[]>
             {
-                ["siteKey"] = ["Site key is required."]
+                ["siteKey"] = ["Either siteKey or snippetId is required."]
             }));
         }
 
@@ -63,7 +67,16 @@ internal static class CollectorEndpoints
             }));
         }
 
-        var site = await siteLookupRepository.GetBySiteKeyAsync(normalizedSiteKey, context.RequestAborted);
+        Site? site = null;
+        if (!string.IsNullOrWhiteSpace(normalizedSiteKey))
+        {
+            site = await siteLookupRepository.GetBySiteKeyAsync(normalizedSiteKey, context.RequestAborted);
+        }
+        else if (Guid.TryParse(normalizedSnippetId, out var parsedSnippetId))
+        {
+            site = await siteLookupRepository.GetBySnippetIdAsync(parsedSnippetId, context.RequestAborted);
+        }
+
         if (site is null)
         {
             return Results.NotFound();
@@ -125,6 +138,7 @@ internal static class CollectorEndpoints
 
         var result = await handler.HandleAsync(new CollectEventCommand(
             resolvedSiteKey,
+            NormalizeOptional(request.SnippetId),
             request.Type,
             request.Url,
             request.Referrer,
@@ -181,11 +195,13 @@ internal static class CollectorEndpoints
             return errors;
         }
 
-        if (string.IsNullOrWhiteSpace(request.SiteKey))
+        var hasSiteKey = !string.IsNullOrWhiteSpace(request.SiteKey);
+        var hasSnippetId = !string.IsNullOrWhiteSpace(request.SnippetId);
+        if (!hasSiteKey && !hasSnippetId)
         {
-            errors["siteKey"] = ["Site key is required."];
+            errors["siteKey"] = ["Either siteKey or snippetId is required."];
         }
-        else if (request.SiteKey.Trim().Length > MaxSiteKeyLength)
+        else if (hasSiteKey && request.SiteKey!.Trim().Length > MaxSiteKeyLength)
         {
             errors["siteKey"] = ["Site key is too long."];
         }

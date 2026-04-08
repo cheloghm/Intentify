@@ -770,7 +770,10 @@ const renderHomeView = (container) => {
   // ── SECTION 4: Install snippet ────────────────────────────────────────────────
   content.appendChild(mkSection('step-4', '4', 'Install the tracking snippet', (body) => {
     body.appendChild(mkDesc('Once you have a site, go to Sites → click the Keys button on your site → find the Tracker Snippet section. Copy the snippet for your platform (HTML, WordPress, Shopify, Webflow, or Next.js) and paste it into your website\'s <head>.'));
-    body.appendChild(mkCode('<script src="https://intentify-production-ba68.up.railway.app/api/collector/sdk.js" data-site-id="YOUR_SITE_ID"></script>'));
+    const _tutorialBackendBase = (window.__INTENTIFY_API_BASE__ || '/api').startsWith('http')
+      ? window.__INTENTIFY_API_BASE__.replace(/\/api\/?$/, '')
+      : window.location.origin;
+    body.appendChild(mkCode(`<script src="${_tutorialBackendBase}/api/collector/sdk.js" data-site-id="YOUR_SITE_ID"></script>`));
     body.appendChild(mkNote('Visitors will start appearing in your dashboard within minutes of installation.'));
   }));
 

@@ -1,4 +1,5 @@
 using Intentify.Modules.Collector.Domain;
+using Intentify.Modules.Sites.Domain;
 using Intentify.Shared.Validation;
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization;
@@ -41,8 +42,16 @@ public sealed class IngestCollectorEventHandler
             return OperationResult<bool>.ValidationFailed(errors);
         }
 
-        var siteKey = command.SiteKey!.Trim();
-        var site = await _sites.GetBySiteKeyAsync(siteKey, cancellationToken);
+        Site? site = null;
+        if (!string.IsNullOrWhiteSpace(command.SiteKey))
+        {
+            site = await _sites.GetBySiteKeyAsync(command.SiteKey.Trim(), cancellationToken);
+        }
+        else if (!string.IsNullOrWhiteSpace(command.SnippetId) && Guid.TryParse(command.SnippetId, out var snippetGuid))
+        {
+            site = await _sites.GetBySnippetIdAsync(snippetGuid, cancellationToken);
+        }
+
         if (site is null)
         {
             return OperationResult<bool>.NotFound();
@@ -105,17 +114,13 @@ public sealed class IngestCollectorEventHandler
         normalizedUrl = null;
         normalizedReferrer = null;
 
-        if (command.SiteKey is null)
+        var hasSiteKey = !string.IsNullOrWhiteSpace(command.SiteKey);
+        var hasSnippetId = !string.IsNullOrWhiteSpace(command.SnippetId);
+        if (!hasSiteKey && !hasSnippetId)
         {
-            errors.Add("body", "Request body is required.");
-            return errors;
+            errors.Add("siteKey", "Either siteKey or snippetId is required.");
         }
-
-        if (string.IsNullOrWhiteSpace(command.SiteKey))
-        {
-            errors.Add("siteKey", "Site key is required.");
-        }
-        else if (command.SiteKey.Trim().Length > MaxSiteKeyLength)
+        else if (hasSiteKey && command.SiteKey!.Trim().Length > MaxSiteKeyLength)
         {
             errors.Add("siteKey", "Site key is too long.");
         }

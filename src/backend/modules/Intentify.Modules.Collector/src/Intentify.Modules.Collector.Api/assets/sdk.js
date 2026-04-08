@@ -11,8 +11,8 @@
     return;
   }
 
-  const sourceUrl = new URL(scriptTag.src, window.location.href);
-  const baseUrl = sourceUrl.origin;
+  const scriptSrc = scriptTag.src;
+  const baseUrl = scriptSrc.substring(0, scriptSrc.indexOf('/api/collector/sdk.js'));
 
   const loadScript = ({ src, attributes = {} }) => {
     if (document.querySelector(`script[src="${src}"]`)) {
@@ -32,7 +32,10 @@
     document.head.appendChild(script);
   };
 
-  fetch(`${baseUrl}/collector/sdk/bootstrap?siteKey=${encodeURIComponent(siteKey)}`)
+  const bootstrapParam = siteId
+    ? `snippetId=${encodeURIComponent(siteId)}`
+    : `siteKey=${encodeURIComponent(siteKey)}`;
+  fetch(`${baseUrl}/api/collector/sdk/bootstrap?${bootstrapParam}`)
     .then((response) => {
       if (!response.ok) {
         throw new Error(`SDK bootstrap failed with status ${response.status}`);
@@ -46,7 +49,7 @@
       }
 
       loadScript({
-        src: `${baseUrl}/collector/tracker.js`,
+        src: `${baseUrl}/api/collector/tracker.js`,
         attributes: siteId
           ? { 'data-site-id': siteId }
           : { 'data-site-key': siteKey },
@@ -58,7 +61,7 @@
       try { existingVisitorId = localStorage.getItem('intentify_vid') || ''; } catch (e) {}
 
       loadScript({
-        src: `${baseUrl}/engage/widget.js`,
+        src: `${baseUrl}/api/engage/widget.js`,
         attributes: { 'data-widget-key': widgetKey, 'data-visitor-id': existingVisitorId },
       });
     })
