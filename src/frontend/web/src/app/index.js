@@ -626,101 +626,260 @@ const createMain = () => {
 // ── Page views ─────────────────────────────────────────────────────────────────
 
 const renderHomeView = (container) => {
-  const wrap = document.createElement('div');
-  wrap.style.cssText = 'max-width:720px;width:100%;display:flex;flex-direction:column;gap:16px';
+  // ── Layout ──────────────────────────────────────────────────────────────────
+  const layout = document.createElement('div');
+  layout.style.cssText = 'display:flex;gap:32px;align-items:flex-start;width:100%;max-width:1000px';
 
-  const mkStepCard = ({ step, title, description, codeBlock, buttonLabel, buttonHref }) => {
-    const body = document.createElement('div');
-    body.style.cssText = 'display:flex;flex-direction:column;gap:10px';
+  // ── Progress sidebar ─────────────────────────────────────────────────────────
+  const sidebar = document.createElement('div');
+  sidebar.style.cssText = [
+    'width:220px;flex-shrink:0;position:sticky;top:80px',
+    'background:#f8fafc;border:1px solid #e4e7f0;border-radius:12px',
+    'padding:20px 16px',
+  ].join(';');
 
-    // Step badge + title row
+  const sidebarTitle = document.createElement('div');
+  sidebarTitle.textContent = 'Getting Started';
+  sidebarTitle.style.cssText = 'font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#94a3b8;margin-bottom:14px;padding:0 4px';
+  sidebar.appendChild(sidebarTitle);
+
+  const stepMeta = [
+    { id: 'step-1', label: 'Welcome to Hven' },
+    { id: 'step-2', label: 'Create your account' },
+    { id: 'step-3', label: 'Add your first site' },
+    { id: 'step-4', label: 'Install the tracking snippet' },
+    { id: 'step-5', label: 'Index your Knowledge Base' },
+    { id: 'step-6', label: 'Configure your Engage bot' },
+    { id: 'step-7', label: 'Set up Flows automation' },
+    { id: 'step-8', label: 'Monitor Visitors & Leads' },
+  ];
+
+  const navItems = [];
+  stepMeta.forEach((s, i) => {
+    const item = document.createElement('div');
+    item.dataset.target = s.id;
+    item.style.cssText = 'display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:8px;font-size:13px;cursor:pointer;color:#64748b;border-left:3px solid transparent;transition:all .15s;margin-bottom:2px';
+    item.innerHTML = `<span style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:#e2e8f0;color:#64748b;font-size:10px;font-weight:700;flex-shrink:0">${i + 1}</span><span style="line-height:1.35">${s.label}</span>`;
+    item.addEventListener('click', () => {
+      const target = document.getElementById(s.id);
+      if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    sidebar.appendChild(item);
+    navItems.push(item);
+  });
+
+  function setActiveNav(index) {
+    navItems.forEach((item, i) => {
+      if (i < index) {
+        item.style.cssText = 'display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:8px;font-size:13px;cursor:pointer;color:#22c55e;border-left:3px solid transparent;margin-bottom:2px';
+        const circle = item.querySelector('span:first-child');
+        if (circle) { circle.textContent = '✓'; circle.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:#dcfce7;color:#16a34a;font-size:10px;font-weight:700;flex-shrink:0'; }
+      } else if (i === index) {
+        item.style.cssText = 'display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:8px;font-size:13px;cursor:pointer;color:#6366f1;font-weight:600;background:#eef2ff;border-left:3px solid #6366f1;margin-bottom:2px';
+      } else {
+        item.style.cssText = 'display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:8px;font-size:13px;cursor:pointer;color:#64748b;border-left:3px solid transparent;margin-bottom:2px';
+      }
+    });
+  }
+  setActiveNav(0);
+
+  // ── Content area ─────────────────────────────────────────────────────────────
+  const content = document.createElement('div');
+  content.style.cssText = 'flex:1;min-width:0;display:flex;flex-direction:column;gap:24px';
+
+  // Helper: action button
+  const mkBtn = (label, href) => {
+    const a = document.createElement('a');
+    a.href = href; a.textContent = label;
+    a.style.cssText = 'display:inline-block;margin-top:8px;padding:8px 16px;background:#0f172a;color:#fff;border-radius:6px;font-size:13px;font-weight:500;text-decoration:none;width:fit-content';
+    return a;
+  };
+
+  // Helper: code block
+  const mkCode = (text) => {
+    const pre = document.createElement('pre');
+    pre.style.cssText = 'background:#0f172a;border-radius:8px;padding:12px 14px;font-size:12px;color:#a5f3fc;overflow-x:auto;margin:0;white-space:pre-wrap;word-break:break-all;font-family:ui-monospace,Consolas,monospace';
+    pre.textContent = text;
+    return pre;
+  };
+
+  // Helper: section card
+  const mkSection = (id, stepNum, title, buildBody) => {
+    const card = document.createElement('div');
+    card.id = id;
+    card.style.cssText = 'background:#fff;border:1px solid #e4e7f0;border-radius:12px;padding:24px;scroll-margin-top:80px';
+
     const header = document.createElement('div');
-    header.style.cssText = 'display:flex;align-items:center;gap:10px';
-    if (step) {
-      const badge = document.createElement('span');
-      badge.textContent = step;
-      badge.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;background:#0f172a;color:#fff;font-size:11px;font-weight:700;flex-shrink:0';
-      header.appendChild(badge);
-    }
+    header.style.cssText = 'display:flex;align-items:center;gap:10px;margin-bottom:14px';
+    const badge = document.createElement('span');
+    badge.textContent = stepNum;
+    badge.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;background:#0f172a;color:#fff;font-size:11px;font-weight:700;flex-shrink:0';
     const titleEl = document.createElement('div');
     titleEl.textContent = title;
     titleEl.style.cssText = 'font-size:15px;font-weight:600;color:#0f172a';
-    header.appendChild(titleEl);
-    body.appendChild(header);
+    header.appendChild(badge); header.appendChild(titleEl);
+    card.appendChild(header);
 
-    const desc = document.createElement('div');
-    desc.style.cssText = 'font-size:13.5px;color:#475569;line-height:1.6';
-    desc.textContent = description;
-    body.appendChild(desc);
+    const body = document.createElement('div');
+    body.style.cssText = 'display:flex;flex-direction:column;gap:10px';
+    buildBody(body);
+    card.appendChild(body);
 
-    if (codeBlock) {
-      const pre = document.createElement('pre');
-      pre.style.cssText = 'background:#f1f5f9;border:1px solid #e2e8f0;border-radius:6px;padding:10px 14px;font-size:12px;color:#334155;overflow-x:auto;margin:0;white-space:pre-wrap;word-break:break-all';
-      pre.textContent = codeBlock;
-      body.appendChild(pre);
-    }
-
-    if (buttonLabel && buttonHref) {
-      const btn = document.createElement('a');
-      btn.href = buttonHref;
-      btn.textContent = buttonLabel;
-      btn.style.cssText = 'display:inline-block;margin-top:2px;padding:8px 16px;background:#0f172a;color:#fff;border-radius:6px;font-size:13px;font-weight:500;text-decoration:none;width:fit-content';
-      body.appendChild(btn);
-    }
-
-    const card = createCard({ body });
-    card.style.cssText = 'width:100%';
     return card;
   };
 
-  // Welcome
-  wrap.appendChild(mkStepCard({
-    title: 'Welcome to Hven',
-    description: 'Hven helps you identify who\'s visiting your site, engage them with AI, and turn anonymous traffic into leads. Follow the steps below to get set up.',
+  const mkDesc = (text) => {
+    const d = document.createElement('div');
+    d.style.cssText = 'font-size:13.5px;color:#475569;line-height:1.65';
+    d.textContent = text;
+    return d;
+  };
+
+  const mkNote = (text) => {
+    const n = document.createElement('div');
+    n.style.cssText = 'font-size:12px;color:#94a3b8;line-height:1.5;margin-top:4px';
+    n.textContent = text;
+    return n;
+  };
+
+  // ── SECTION 1: Welcome ────────────────────────────────────────────────────────
+  content.appendChild(mkSection('step-1', '1', 'Welcome to Hven', (body) => {
+    body.appendChild(mkDesc('Hven is a visitor intelligence and AI engagement platform. It identifies anonymous website visitors, enriches them with company and intent data, and deploys an AI bot trained on your content — so you convert traffic while it\'s hot.'));
   }));
 
-  // Step 1
-  wrap.appendChild(mkStepCard({
-    step: '1',
-    title: 'Add your site',
-    description: 'Go to Sites in the sidebar and add your website domain. You\'ll get a tracking script to paste into your site\'s <head>.',
-    buttonLabel: 'Go to Sites',
-    buttonHref: '#/sites',
+  // ── SECTION 2: Create account ─────────────────────────────────────────────────
+  content.appendChild(mkSection('step-2', '2', 'Create your account', (body) => {
+    body.appendChild(mkDesc('You\'re already here. Your account gives you access to one workspace where you can manage sites, knowledge, engage bots, leads, and automation flows.'));
+    const pill = document.createElement('span');
+    pill.textContent = '✓  Account created';
+    pill.style.cssText = 'display:inline-flex;align-items:center;gap:6px;background:#dcfce7;color:#16a34a;font-size:12px;font-weight:600;padding:5px 12px;border-radius:100px;margin-top:6px;width:fit-content';
+    body.appendChild(pill);
   }));
 
-  // Step 2
-  wrap.appendChild(mkStepCard({
-    step: '2',
-    title: 'Install the tracker',
-    description: 'Copy your site\'s tracking snippet and add it to your website. Hven will start identifying visitors within minutes.',
-    codeBlock: 'Your unique tracking snippet is shown in Sites after you add your first site.',
+  // ── SECTION 3: Add site ───────────────────────────────────────────────────────
+  content.appendChild(mkSection('step-3', '3', 'Add your first site', (body) => {
+    body.appendChild(mkDesc('A site represents one website you want to track. Go to Sites in the sidebar, click Add Site, and enter your domain.'));
+    body.appendChild(mkBtn('Go to Sites →', '#/sites'));
+    body.appendChild(mkNote('Each site gets a unique tracker snippet. You can add multiple sites if you are on Growth plan or above.'));
   }));
 
-  // Step 3
-  wrap.appendChild(mkStepCard({
-    step: '3',
-    title: 'Set up your Knowledge Base',
-    description: 'Add your product docs, FAQs, and pricing to the Knowledge Base. Your AI engagement bot uses this to answer visitor questions.',
-    buttonLabel: 'Go to Knowledge Base',
-    buttonHref: '#/knowledge',
+  // ── SECTION 4: Install snippet ────────────────────────────────────────────────
+  content.appendChild(mkSection('step-4', '4', 'Install the tracking snippet', (body) => {
+    body.appendChild(mkDesc('Once you have a site, go to Sites → click the Keys button on your site → find the Tracker Snippet section. Copy the snippet for your platform (HTML, WordPress, Shopify, Webflow, or Next.js) and paste it into your website\'s <head>.'));
+    body.appendChild(mkCode('<script src="https://cdn.hven.io/tracker.js" data-site-id="YOUR_SITE_ID"></script>'));
+    body.appendChild(mkNote('Visitors will start appearing in your dashboard within minutes of installation.'));
   }));
 
-  // Step 4
-  wrap.appendChild(mkStepCard({
-    step: '4',
-    title: 'Activate Engage',
-    description: 'Go to Engage to configure your AI chat widget. Set its tone, goals, and triggers.',
-    buttonLabel: 'Go to Engage',
-    buttonHref: '#/engage',
+  // ── SECTION 5: Knowledge base ─────────────────────────────────────────────────
+  content.appendChild(mkSection('step-5', '5', 'Index your Knowledge Base', (body) => {
+    body.appendChild(mkDesc('Your AI engagement bot answers questions based on your Knowledge Base. Add your product docs, pricing page, FAQs, case studies, and anything else your bot should know.'));
+    const steps = [
+      '→ Go to Knowledge in the sidebar',
+      '→ Click Add Source',
+      '→ Paste a URL or upload a document',
+      '→ Hven indexes the content automatically',
+    ];
+    const stepList = document.createElement('div');
+    stepList.style.cssText = 'display:flex;flex-direction:column;gap:5px;margin:4px 0';
+    steps.forEach(s => {
+      const line = document.createElement('div');
+      line.textContent = s;
+      line.style.cssText = 'font-size:13px;color:#475569';
+      stepList.appendChild(line);
+    });
+    body.appendChild(stepList);
+    body.appendChild(mkBtn('Go to Knowledge →', '#/knowledge'));
   }));
 
-  // Ready
-  wrap.appendChild(mkStepCard({
-    title: 'You\'re ready',
-    description: 'Once the tracker is live, visit Visitors to see who\'s on your site in real time, and Leads to see identified prospects.',
+  // ── SECTION 6: Engage bot ─────────────────────────────────────────────────────
+  content.appendChild(mkSection('step-6', '6', 'Configure your Engage bot', (body) => {
+    body.appendChild(mkDesc('The Engage bot is your AI sales assistant. It lives on your website, greets visitors, answers questions, qualifies leads, and escalates hot prospects to your team.'));
+    const items = [
+      'Set the bot\'s name and tone (friendly, professional, or direct)',
+      'Define its primary goal (book a demo, capture email, answer questions)',
+      'Set escalation rules — when to notify a human',
+      'Connect it to a site',
+    ];
+    const list = document.createElement('div');
+    list.style.cssText = 'display:flex;flex-direction:column;gap:6px;margin:4px 0';
+    items.forEach(label => {
+      const pill = document.createElement('div');
+      pill.style.cssText = 'display:inline-flex;align-items:center;gap:8px;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:6px;padding:6px 10px;font-size:12.5px;color:#334155;width:fit-content';
+      const dot = document.createElement('span');
+      dot.style.cssText = 'width:6px;height:6px;border-radius:50%;background:#6366f1;flex-shrink:0';
+      pill.appendChild(dot);
+      pill.appendChild(document.createTextNode(label));
+      list.appendChild(pill);
+    });
+    body.appendChild(list);
+    body.appendChild(mkBtn('Go to Engage →', '#/engage'));
   }));
 
-  container.appendChild(wrap);
+  // ── SECTION 7: Flows ──────────────────────────────────────────────────────────
+  content.appendChild(mkSection('step-7', '7', 'Set up Flows automation', (body) => {
+    body.appendChild(mkDesc('Flows let you automate actions based on visitor behaviour. When a visitor matches a trigger — like viewing your pricing page three times — a Flow can send an alert, create a lead, or trigger the Engage bot.'));
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:12px;margin:8px 0;flex-wrap:wrap';
+    const triggerCard = document.createElement('div');
+    triggerCard.style.cssText = 'background:#fff;border:1px solid #e4e7f0;border-radius:8px;padding:10px 14px;font-size:12.5px;color:#334155;line-height:1.45;max-width:200px';
+    triggerCard.innerHTML = '<div style="font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#94a3b8;margin-bottom:4px">Trigger</div>Visitor views /pricing more than 2 times';
+    const arrow = document.createElement('span');
+    arrow.textContent = '→';
+    arrow.style.cssText = 'font-size:18px;color:#6366f1;font-weight:700;flex-shrink:0';
+    const actionCard = document.createElement('div');
+    actionCard.style.cssText = 'background:#eef2ff;border:1px solid rgba(99,102,241,.2);border-radius:8px;padding:10px 14px;font-size:12.5px;color:#3730a3;line-height:1.45;max-width:200px';
+    actionCard.innerHTML = '<div style="font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#818cf8;margin-bottom:4px">Action</div>Create lead + notify Slack';
+    row.appendChild(triggerCard); row.appendChild(arrow); row.appendChild(actionCard);
+    body.appendChild(row);
+    body.appendChild(mkBtn('Go to Flows →', '#/flows'));
+  }));
+
+  // ── SECTION 8: Visitors & Leads ───────────────────────────────────────────────
+  content.appendChild(mkSection('step-8', '8', 'Monitor Visitors and Leads', (body) => {
+    body.appendChild(mkDesc('Once your snippet is installed, Visitors shows everyone on your site right now — identified by company, location, and intent score. Leads shows enriched profiles of visitors who have been qualified.'));
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:12px;margin:8px 0;flex-wrap:wrap';
+    const mkStatCard = (bg, title, sub) => {
+      const c = document.createElement('div');
+      c.style.cssText = `background:${bg};border-radius:10px;padding:14px 18px;flex:1;min-width:140px`;
+      const t = document.createElement('div');
+      t.textContent = title;
+      t.style.cssText = 'font-size:13px;font-weight:700;color:#fff;margin-bottom:4px';
+      const s = document.createElement('div');
+      s.textContent = sub;
+      s.style.cssText = 'font-size:12px;color:rgba(255,255,255,.65)';
+      c.appendChild(t); c.appendChild(s);
+      return c;
+    };
+    row.appendChild(mkStatCard('#0f1729', 'Visitors', 'Live activity on your site'));
+    row.appendChild(mkStatCard('#6366f1', 'Leads', 'Identified and scored prospects'));
+    body.appendChild(row);
+    const btnRow = document.createElement('div');
+    btnRow.style.cssText = 'display:flex;gap:10px;flex-wrap:wrap';
+    btnRow.appendChild(mkBtn('Go to Visitors →', '#/visitors'));
+    btnRow.appendChild(mkBtn('Go to Leads →', '#/leads'));
+    body.appendChild(btnRow);
+  }));
+
+  // ── IntersectionObserver for sidebar ─────────────────────────────────────────
+  const sectionEls = stepMeta.map(s => document.getElementById(s.id)).filter(Boolean);
+  // observe after DOM is appended (requestAnimationFrame ensures IDs exist)
+  requestAnimationFrame(() => {
+    const sectionNodes = stepMeta.map(s => content.querySelector('#' + s.id)).filter(Boolean);
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          const idx = sectionNodes.indexOf(entry.target);
+          if (idx !== -1) setActiveNav(idx);
+        }
+      });
+    }, { threshold: 0.35 });
+    sectionNodes.forEach(n => io.observe(n));
+  });
+
+  layout.appendChild(sidebar);
+  layout.appendChild(content);
+  container.appendChild(layout);
 };
 
 const renderLoginView = (container) => {
