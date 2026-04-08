@@ -626,13 +626,101 @@ const createMain = () => {
 // ── Page views ─────────────────────────────────────────────────────────────────
 
 const renderHomeView = (container) => {
-  const body = document.createElement('div');
-  body.style.color = '#475569';
-  body.style.lineHeight = '1.6';
-  body.textContent = 'Welcome to Hven. Use the navigation to sign in, register, or view your dashboard.';
-  const card = createCard({ title: 'Home', body });
-  card.style.cssText = 'max-width:640px;width:100%';
-  container.appendChild(card);
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'max-width:720px;width:100%;display:flex;flex-direction:column;gap:16px';
+
+  const mkStepCard = ({ step, title, description, codeBlock, buttonLabel, buttonHref }) => {
+    const body = document.createElement('div');
+    body.style.cssText = 'display:flex;flex-direction:column;gap:10px';
+
+    // Step badge + title row
+    const header = document.createElement('div');
+    header.style.cssText = 'display:flex;align-items:center;gap:10px';
+    if (step) {
+      const badge = document.createElement('span');
+      badge.textContent = step;
+      badge.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;background:#0f172a;color:#fff;font-size:11px;font-weight:700;flex-shrink:0';
+      header.appendChild(badge);
+    }
+    const titleEl = document.createElement('div');
+    titleEl.textContent = title;
+    titleEl.style.cssText = 'font-size:15px;font-weight:600;color:#0f172a';
+    header.appendChild(titleEl);
+    body.appendChild(header);
+
+    const desc = document.createElement('div');
+    desc.style.cssText = 'font-size:13.5px;color:#475569;line-height:1.6';
+    desc.textContent = description;
+    body.appendChild(desc);
+
+    if (codeBlock) {
+      const pre = document.createElement('pre');
+      pre.style.cssText = 'background:#f1f5f9;border:1px solid #e2e8f0;border-radius:6px;padding:10px 14px;font-size:12px;color:#334155;overflow-x:auto;margin:0;white-space:pre-wrap;word-break:break-all';
+      pre.textContent = codeBlock;
+      body.appendChild(pre);
+    }
+
+    if (buttonLabel && buttonHref) {
+      const btn = document.createElement('a');
+      btn.href = buttonHref;
+      btn.textContent = buttonLabel;
+      btn.style.cssText = 'display:inline-block;margin-top:2px;padding:8px 16px;background:#0f172a;color:#fff;border-radius:6px;font-size:13px;font-weight:500;text-decoration:none;width:fit-content';
+      body.appendChild(btn);
+    }
+
+    const card = createCard({ body });
+    card.style.cssText = 'width:100%';
+    return card;
+  };
+
+  // Welcome
+  wrap.appendChild(mkStepCard({
+    title: 'Welcome to Hven',
+    description: 'Hven helps you identify who\'s visiting your site, engage them with AI, and turn anonymous traffic into leads. Follow the steps below to get set up.',
+  }));
+
+  // Step 1
+  wrap.appendChild(mkStepCard({
+    step: '1',
+    title: 'Add your site',
+    description: 'Go to Sites in the sidebar and add your website domain. You\'ll get a tracking script to paste into your site\'s <head>.',
+    buttonLabel: 'Go to Sites',
+    buttonHref: '#/sites',
+  }));
+
+  // Step 2
+  wrap.appendChild(mkStepCard({
+    step: '2',
+    title: 'Install the tracker',
+    description: 'Copy your site\'s tracking snippet and add it to your website. Hven will start identifying visitors within minutes.',
+    codeBlock: '<script src="https://hven.io/tracker.js" data-site-id="YOUR_SITE_ID"></script>',
+  }));
+
+  // Step 3
+  wrap.appendChild(mkStepCard({
+    step: '3',
+    title: 'Set up your Knowledge Base',
+    description: 'Add your product docs, FAQs, and pricing to the Knowledge Base. Your AI engagement bot uses this to answer visitor questions.',
+    buttonLabel: 'Go to Knowledge Base',
+    buttonHref: '#/knowledge',
+  }));
+
+  // Step 4
+  wrap.appendChild(mkStepCard({
+    step: '4',
+    title: 'Activate Engage',
+    description: 'Go to Engage to configure your AI chat widget. Set its tone, goals, and triggers.',
+    buttonLabel: 'Go to Engage',
+    buttonHref: '#/engage',
+  }));
+
+  // Ready
+  wrap.appendChild(mkStepCard({
+    title: 'You\'re ready',
+    description: 'Once the tracker is live, visit Visitors to see who\'s on your site in real time, and Leads to see identified prospects.',
+  }));
+
+  container.appendChild(wrap);
 };
 
 const renderLoginView = (container) => {
