@@ -117,7 +117,7 @@ const render = () => {
   const params = new URLSearchParams(window.location.search);
   const oauthToken = params.get('token');
   const oauthError = params.get('error');
-  if (oauthToken) { setToken(oauthToken); window.location.href = '/public/index.html'; return; }
+  if (oauthToken) { setToken(oauthToken); window.location.href = '/app'; return; }
   if (oauthError) setTimeout(() => toast.show({ message: 'Google sign-in is not yet configured. Please use email.', variant: 'warning' }), 100);
 
   let selectedPlan = params.get('plan') || 'starter';
@@ -232,7 +232,7 @@ const render = () => {
         body: JSON.stringify({ displayName, organizationName, email, password, plan: selectedPlan }),
       });
       setToken(response.accessToken);
-      window.location.href = '/public/index.html';
+      window.location.href = '/app';
     } catch (error) {
       const uiError = mapApiError(error);
       const applied = applyFieldErrors(uiError.details?.errors, {

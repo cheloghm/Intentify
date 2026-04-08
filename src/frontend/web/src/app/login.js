@@ -102,7 +102,7 @@ const render = () => {
   const params = new URLSearchParams(window.location.search);
   const oauthToken = params.get('token');
   const oauthError = params.get('error');
-  if (oauthToken) { setToken(oauthToken); window.location.href = '/public/index.html'; return; }
+  if (oauthToken) { setToken(oauthToken); window.location.href = '/app'; return; }
   if (oauthError) {
     const msg = oauthError === 'google_auth_failed'
       ? 'Google sign-in failed. Please try again.'
@@ -180,7 +180,7 @@ const render = () => {
         body: JSON.stringify({ email, password }),
       });
       setToken(response.accessToken);
-      window.location.href = '/public/index.html';
+      window.location.href = '/app';
     } catch (error) {
       const uiError = mapApiError(error);
       const applied = applyFieldErrors(uiError.details?.errors, { email: emailField, password: passwordField });
