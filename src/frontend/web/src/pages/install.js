@@ -126,6 +126,7 @@ export const renderInstallView = (container, { apiClient, toast, query } = {}) =
   const siteId = query?.siteId;
   const domain = query?.domain || '';
   const querySiteKey = typeof query?.siteKey === 'string' ? query.siteKey.trim() : '';
+  const querySnippetId = typeof query?.snippetId === 'string' ? query.snippetId.trim() : '';
 
   if (!siteId) {
     const message = document.createElement('div');
@@ -147,6 +148,7 @@ export const renderInstallView = (container, { apiClient, toast, query } = {}) =
     savingOrigins: false,
     originsError: '',
     rawSiteKey: querySiteKey || cachedKeys?.siteKey || '',
+    snippetId: querySnippetId,
     keysLoading: false,
     revealSiteKey: false,
     copyMessage: '',
@@ -407,9 +409,9 @@ export const renderInstallView = (container, { apiClient, toast, query } = {}) =
   actionErrorText.style.color = '#dc2626';
 
   const updateSnippet = () => {
-    const baseUrl = API_BASE.replace(/\/$/, '');
     const key = state.rawSiteKey ? state.rawSiteKey.trim() : '';
-    snippetValue.value = `<script async src="${baseUrl}/collector/sdk.js" data-site-key="${key}"></script>`;
+    const id = state.snippetId || '';
+    snippetValue.value = `<script src="https://intentify-production-ba68.up.railway.app/api/collector/sdk.js" data-site-id="${id}"></script>`;
 
     const masked = key ? '••••••' : '••••••';
     siteKeyValue.textContent = state.revealSiteKey && key ? key : masked;
@@ -552,7 +554,7 @@ export const renderInstallView = (container, { apiClient, toast, query } = {}) =
       renderDiagnosticItem({
         label: 'Origin allowed',
         ok: Boolean(diagnostics.originAllowed),
-        detail: diagnostics.origin || window.location.origin,
+        detail: diagnostics.origin || (domain ? `https://${domain}` : state.site?.domain || ''),
       }),
       renderDiagnosticItem({
         label: 'SDK script expected',
@@ -663,6 +665,10 @@ export const renderInstallView = (container, { apiClient, toast, query } = {}) =
       const site = (Array.isArray(sites) ? sites : []).find((item) => getSiteId(item) === siteId);
       state.site = site || null;
       state.origins = normalizeOrigins(site?.allowedOrigins || []);
+      if (!state.snippetId && site?.snippetId) {
+        state.snippetId = site.snippetId;
+        updateSnippet();
+      }
     } catch (error) {
       const uiError = mapApiError(error);
       state.originsError = uiError.message;
