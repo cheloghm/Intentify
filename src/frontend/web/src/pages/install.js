@@ -411,7 +411,16 @@ export const renderInstallView = (container, { apiClient, toast, query } = {}) =
   const updateSnippet = () => {
     const key = state.rawSiteKey ? state.rawSiteKey.trim() : '';
     const id = state.snippetId || '';
-    snippetValue.value = `<script src="https://intentify-production-ba68.up.railway.app/api/collector/sdk.js" data-site-id="${id}"></script>`;
+
+    if (id) {
+      snippetValue.value = `<script src="https://intentify-production-ba68.up.railway.app/api/collector/sdk.js" data-site-id="${id}"></script>`;
+      copyButton.disabled = state.keysLoading;
+      snippetHint.textContent = '';
+    } else {
+      snippetValue.value = 'Go to Sites → Keys → Tracker Snippet tab to copy your snippet.';
+      copyButton.disabled = true;
+      snippetHint.textContent = 'Loading site details…';
+    }
 
     const masked = key ? '••••••' : '••••••';
     siteKeyValue.textContent = state.revealSiteKey && key ? key : masked;
@@ -419,16 +428,9 @@ export const renderInstallView = (container, { apiClient, toast, query } = {}) =
     revealButton.textContent = state.revealSiteKey ? 'Hide' : 'Reveal';
 
     const missingKey = !key;
-    copyButton.disabled = missingKey || state.keysLoading;
     generateKeysButton.style.display = missingKey ? 'inline-block' : 'none';
     generateKeysButton.disabled = state.keysLoading;
     generateKeysButton.textContent = state.keysLoading ? 'Generating...' : 'Generate install key';
-
-    snippetHint.textContent = state.keysLoading
-      ? 'Generating install key...'
-      : missingKey
-      ? 'Generate install key to populate the SDK snippet automatically.'
-      : '';
 
     copyStatus.textContent = state.copyMessage;
     actionErrorText.textContent = state.actionError;
