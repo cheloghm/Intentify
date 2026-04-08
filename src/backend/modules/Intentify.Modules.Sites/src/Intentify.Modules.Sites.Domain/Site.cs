@@ -26,6 +26,9 @@ public sealed class Site
 
     public string WidgetKey { get; init; } = string.Empty;
 
+    /// <summary>Stable opaque token used to identify this site in the tracker snippet.</summary>
+    public Guid SnippetId { get; init; } = Guid.NewGuid();
+
     public DateTime CreatedAtUtc { get; init; } = DateTime.UtcNow;
 
     public DateTime UpdatedAtUtc { get; init; } = DateTime.UtcNow;

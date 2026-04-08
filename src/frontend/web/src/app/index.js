@@ -693,7 +693,7 @@ const renderHomeView = (container) => {
     step: '2',
     title: 'Install the tracker',
     description: 'Copy your site\'s tracking snippet and add it to your website. Hven will start identifying visitors within minutes.',
-    codeBlock: '<script src="https://hven.io/tracker.js" data-site-id="YOUR_SITE_ID"></script>',
+    codeBlock: 'Your unique tracking snippet is shown in Sites after you add your first site.',
   }));
 
   // Step 3

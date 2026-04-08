@@ -35,7 +35,8 @@ internal static class SitesEndpoints
                 result.Value.Tags,
                 result.Value.AllowedOrigins,
                 result.Value.SiteKey,
-                result.Value.WidgetKey))
+                result.Value.WidgetKey,
+                result.Value.SnippetId.ToString("N")))
         };
     }
 
@@ -360,7 +361,8 @@ internal static class SitesEndpoints
             site.AllowedOrigins,
             site.CreatedAtUtc,
             site.UpdatedAtUtc,
-            ToInstallationStatusResponse(site));
+            ToInstallationStatusResponse(site),
+            site.SnippetId.ToString("N"));
     }
 
     private static InstallationStatusResponse ToInstallationStatusResponse(Site site)

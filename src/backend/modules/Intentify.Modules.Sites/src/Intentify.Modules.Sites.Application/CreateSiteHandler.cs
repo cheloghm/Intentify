@@ -56,6 +56,7 @@ public sealed class CreateSiteHandler
             AllowedOrigins = [],
             SiteKey = _keyGenerator.GenerateKey(KeyPurpose.SiteKey),
             WidgetKey = _keyGenerator.GenerateKey(KeyPurpose.WidgetKey),
+            SnippetId = Guid.NewGuid(),
             CreatedAtUtc = now,
             UpdatedAtUtc = now
         };

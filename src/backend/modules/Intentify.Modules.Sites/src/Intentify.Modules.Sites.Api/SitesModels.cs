@@ -13,7 +13,8 @@ public sealed record CreateSiteResponse(
     IReadOnlyCollection<string> Tags,
     IReadOnlyCollection<string> AllowedOrigins,
     string SiteKey,
-    string WidgetKey);
+    string WidgetKey,
+    string SnippetId);
 
 public sealed record SiteSummaryResponse(
     string SiteId,
@@ -25,7 +26,8 @@ public sealed record SiteSummaryResponse(
     IReadOnlyCollection<string> AllowedOrigins,
     DateTime CreatedAtUtc,
     DateTime UpdatedAtUtc,
-    InstallationStatusResponse InstallationStatus);
+    InstallationStatusResponse InstallationStatus,
+    string SnippetId);
 
 public sealed record UpdateAllowedOriginsRequest(IReadOnlyCollection<string> AllowedOrigins);
 
