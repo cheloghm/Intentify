@@ -12,8 +12,21 @@ internal sealed class DynamicCorsPolicyProvider : ICorsPolicyProvider
         _dashboardOrigins = dashboardOrigins;
     }
 
+    private static readonly CorsPolicy AnyOriginPolicy = new CorsPolicyBuilder()
+        .AllowAnyOrigin()
+        .AllowAnyHeader()
+        .AllowAnyMethod()
+        .Build();
+
     public async Task<CorsPolicy?> GetPolicyAsync(HttpContext context, string? policyName)
     {
+        // Module-level named policies (CollectorPolicy, EngagePolicy) allow any origin —
+        // application-level validation in the handlers enforces allowed origins / widget keys.
+        if (policyName is "CollectorPolicy" or "EngagePolicy")
+        {
+            return AnyOriginPolicy;
+        }
+
         if (!context.Request.Headers.TryGetValue("Origin", out var requestOriginValues))
         {
             return null;

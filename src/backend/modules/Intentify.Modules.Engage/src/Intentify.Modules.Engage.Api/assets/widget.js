@@ -8,7 +8,10 @@
 
   var baseUrl;
   try {
-    baseUrl = new URL(scriptTag.src, window.location.href).origin;
+    var widgetSrc = new URL(scriptTag.src, window.location.href).href;
+    var apiMarker = '/api/engage/widget.js';
+    var markerIdx = widgetSrc.indexOf(apiMarker);
+    baseUrl = markerIdx !== -1 ? widgetSrc.substring(0, markerIdx) : new URL(widgetSrc).origin;
   } catch (e) {
     baseUrl = window.location.origin;
   }
@@ -41,7 +44,7 @@
     document.head.appendChild(styleTag);
   }
 
-  function endpoint(path) { return baseUrl + path; }
+  function endpoint(path) { return baseUrl + '/api' + path; }
 
   function readCookie(name) {
     var escapedName = name.replace(/[-[\]{}()*+?.,\^$|#\s]/g, '\\$&');

@@ -26,6 +26,14 @@ public sealed class EngageModule : IAppModule
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configuration);
 
+        services.AddCors(options =>
+        {
+            options.AddPolicy("EngagePolicy", policy =>
+                policy.AllowAnyOrigin()
+                      .AllowAnyMethod()
+                      .AllowAnyHeader());
+        });
+
         // Repositories
         services.AddSingleton<IEngageChatSessionRepository, EngageChatSessionRepository>();
         services.AddSingleton<IEngageBotRepository, EngageBotRepository>();
@@ -122,7 +130,7 @@ public sealed class EngageModule : IAppModule
 
     public void MapEndpoints(IEndpointRouteBuilder endpoints)
     {
-        var publicGroup = endpoints.MapGroup("/engage");
+        var publicGroup = endpoints.MapGroup("/engage").RequireCors("EngagePolicy");
         publicGroup.MapGet("/widget.js", EngageEndpoints.WidgetScriptAsync);
         publicGroup.MapGet("/widget/bootstrap", EngageEndpoints.WidgetBootstrapAsync);
         publicGroup.MapPost("/chat/send", EngageEndpoints.ChatSendAsync);
