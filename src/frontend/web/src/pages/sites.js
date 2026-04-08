@@ -239,6 +239,80 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
         mkKeyRow('Widget Key (engage)', keys.widgetKey),
       );
 
+      // ── Tracker Snippet section ────────────────────────────────────────────
+      const snippetId = site.snippetId || getSiteId(site);
+      const SNIPPET_TABS = [
+        {
+          label: 'HTML',
+          code: `<script src="https://cdn.hven.io/tracker.js" data-site-id="${snippetId}"></script>`,
+          instruction: 'Paste this inside the <head> tag of your HTML.',
+        },
+        {
+          label: 'WordPress',
+          code: `add_action('wp_head', function() { ?>\n<script src="https://cdn.hven.io/tracker.js" data-site-id="${snippetId}"></script>\n<?php });`,
+          instruction: "Add to your theme's functions.php file.",
+        },
+        {
+          label: 'Shopify',
+          code: `<script src="https://cdn.hven.io/tracker.js" data-site-id="${snippetId}"></script>`,
+          instruction: 'Paste in Online Store → Themes → Edit Code → theme.liquid, inside <head>.',
+        },
+        {
+          label: 'Webflow',
+          code: `<script src="https://cdn.hven.io/tracker.js" data-site-id="${snippetId}"></script>`,
+          instruction: 'Paste in Site Settings → Custom Code → Head Code.',
+        },
+        {
+          label: 'Next.js',
+          code: `<Script src="https://cdn.hven.io/tracker.js" data-site-id="${snippetId}" strategy="afterInteractive" />`,
+          instruction: 'Add to your app/layout.tsx or pages/_app.js.',
+        },
+      ];
+
+      const snippetSection = el('div', { style: 'margin-top:18px;border-top:1px solid #e2e8f0;padding-top:16px;display:flex;flex-direction:column;gap:10px' });
+      snippetSection.appendChild(el('div', { style: 'font-size:13px;font-weight:700;color:#0f172a' }, 'Tracker Snippet'));
+      snippetSection.appendChild(el('div', { style: 'font-size:12px;color:#64748b;line-height:1.5' }, 'Each site has a unique snippet ID. Do not share snippets between sites.'));
+
+      const tabBar = el('div', { style: 'display:flex;gap:6px;flex-wrap:wrap' });
+      const codeArea = el('div', {});
+
+      const renderSnippetTab = (idx) => {
+        tabBar.querySelectorAll('button').forEach((btn, i) => {
+          btn.style.background = i === idx ? '#0f172a' : '#f1f5f9';
+          btn.style.color      = i === idx ? '#fff'    : '#475569';
+        });
+        const tab = SNIPPET_TABS[idx];
+        codeArea.replaceChildren();
+        codeArea.appendChild(el('div', { style: 'font-size:11.5px;color:#64748b;margin-bottom:6px' }, tab.instruction));
+        const pre = el('pre', {
+          style: 'background:#0f172a;border-radius:8px;padding:12px 14px;font-size:11.5px;color:#a5f3fc;overflow-x:auto;margin:0;white-space:pre-wrap;word-break:break-all;cursor:pointer;line-height:1.6;font-family:"JetBrains Mono",monospace',
+          title: 'Click to copy',
+        }, tab.code);
+        pre.addEventListener('click', async () => {
+          try {
+            await copyToClipboard(tab.code);
+            const orig = pre.textContent;
+            pre.style.color = '#86efac';
+            pre.textContent = '✓ Copied!';
+            setTimeout(() => { pre.style.color = '#a5f3fc'; pre.textContent = orig; }, 1500);
+          } catch { notifier.show({ message: 'Unable to copy.', variant: 'danger' }); }
+        });
+        codeArea.appendChild(pre);
+      };
+
+      SNIPPET_TABS.forEach((tab, idx) => {
+        const btn = el('button', {
+          style: `font-size:11.5px;font-weight:600;padding:4px 12px;border-radius:999px;border:none;cursor:pointer;transition:all .12s;background:${idx === 0 ? '#0f172a' : '#f1f5f9'};color:${idx === 0 ? '#fff' : '#475569'}`,
+        }, tab.label);
+        btn.addEventListener('click', () => renderSnippetTab(idx));
+        tabBar.appendChild(btn);
+      });
+
+      snippetSection.append(tabBar, codeArea);
+      renderSnippetTab(0);
+      keysModal.body.appendChild(snippetSection);
+      // ── End Tracker Snippet section ────────────────────────────────────────
+
       // ── Phase 7.2: REST API Keys section ──────────────────────────────────
       const apiKeySection = el('div', { style: 'margin-top:18px;border-top:1px solid #e2e8f0;padding-top:16px;display:flex;flex-direction:column;gap:10px' });
       apiKeySection.appendChild(el('div', { style: 'font-size:13px;font-weight:700;color:#0f172a' }, '🔐 REST API Keys'));
@@ -333,14 +407,6 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
       // ── End Phase 7.2 section ──────────────────────────────────────────────
 
       const footerRow = el('div', { style: 'display:flex;gap:8px;margin-top:4px;flex-wrap:wrap;border-top:1px solid #f1f5f9;padding-top:14px' });
-      const installBtn = el('button', { class: 'si-btn si-btn-outline si-btn-sm' }, '📦 Install Guide');
-      installBtn.addEventListener('click', () => {
-        const p = new URLSearchParams({ siteId });
-        if (site.domain) p.set('domain', site.domain);
-        if (keys.siteKey) p.set('siteKey', keys.siteKey);
-        window.location.hash = `#/install?${p.toString()}`;
-        keysModal.hide();
-      });
       const regenBtn = el('button', { class: 'si-btn si-btn-danger si-btn-sm' }, '🔄 Regenerate Keys');
       regenBtn.addEventListener('click', async () => {
         if (!confirm('Regenerating keys will invalidate existing ones. Continue?')) return;
@@ -356,7 +422,7 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
           regenBtn.disabled = false; regenBtn.textContent = '🔄 Regenerate Keys';
         }
       });
-      footerRow.append(installBtn, regenBtn);
+      footerRow.append(regenBtn);
       keysModal.body.appendChild(footerRow);
     } catch (err) {
       keysModal.body.replaceChildren(el('div', { style: 'color:#dc2626' }, `Failed: ${mapApiError(err).message}`));
@@ -455,7 +521,6 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
     const descInput = el('input', { class: 'si-input', placeholder: 'What this site is about' });
     descField.appendChild(descInput);
     const saveBtn = el('button', { class: 'si-btn si-btn-primary', style: 'align-self:flex-start' }, '🌐 Create Site');
-    if (state.sites.length > 0) { saveBtn.disabled = true; saveBtn.textContent = 'Site limit reached'; }
     saveBtn.addEventListener('click', async () => {
       nameErr.style.display = 'none'; domainErr.style.display = 'none';
       const name   = nameInput.value.trim();
