@@ -20,6 +20,14 @@ public sealed class CollectorModule : IAppModule
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configuration);
 
+        services.AddCors(options =>
+        {
+            options.AddPolicy("CollectorPolicy", policy =>
+                policy.AllowAnyOrigin()
+                      .AllowAnyMethod()
+                      .AllowAnyHeader());
+        });
+
         services.AddSingleton<ICollectorEventRepository, CollectorEventRepository>();
         services.AddSingleton<ISiteLookupRepository, SiteLookupRepository>();
         services.AddSingleton<ICollectorEventObserver, NoOpCollectorEventObserver>();
@@ -31,7 +39,8 @@ public sealed class CollectorModule : IAppModule
     {
         ArgumentNullException.ThrowIfNull(endpoints);
 
-        var group = endpoints.MapGroup("/collector");
+        var group = endpoints.MapGroup("/collector")
+            .RequireCors("CollectorPolicy");
 
         group.MapGet("/sdk.js", CollectorEndpoints.GetSdkAsync);
         group.MapGet("/sdk/bootstrap", CollectorEndpoints.GetSdkBootstrapAsync);
