@@ -72,9 +72,18 @@ internal static class CollectorEndpoints
         {
             site = await siteLookupRepository.GetBySiteKeyAsync(normalizedSiteKey, context.RequestAborted);
         }
-        else if (Guid.TryParse(normalizedSnippetId, out var parsedSnippetId))
+        else if (!string.IsNullOrWhiteSpace(normalizedSnippetId))
         {
-            site = await siteLookupRepository.GetBySnippetIdAsync(parsedSnippetId, context.RequestAborted);
+            if (Guid.TryParse(normalizedSnippetId, out var parsedSnippetId))
+            {
+                site = await siteLookupRepository.GetBySnippetIdAsync(parsedSnippetId, context.RequestAborted);
+            }
+            // Value is not a Guid — treat as a siteKey for backwards compatibility
+            // (handles sites created before SnippetId was introduced)
+            if (site is null)
+            {
+                site = await siteLookupRepository.GetBySiteKeyAsync(normalizedSnippetId, context.RequestAborted);
+            }
         }
 
         if (site is null)

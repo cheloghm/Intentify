@@ -30,7 +30,6 @@ public sealed class CollectorModule : IAppModule
 
         services.AddSingleton<ICollectorEventRepository, CollectorEventRepository>();
         services.AddSingleton<ISiteLookupRepository, SiteLookupRepository>();
-        services.AddSingleton<ICollectorEventObserver, NoOpCollectorEventObserver>();
         services.AddSingleton<IngestCollectorEventHandler>();
         services.AddSingleton<IVisitorConsentWriter, VisitorConsentWriter>();
     }
@@ -50,10 +49,3 @@ public sealed class CollectorModule : IAppModule
     }
 }
 
-internal sealed class NoOpCollectorEventObserver : ICollectorEventObserver
-{
-    public Task OnCollectorEventIngestedAsync(CollectorEventIngestedNotification notification, CancellationToken cancellationToken = default)
-    {
-        return Task.CompletedTask;
-    }
-}

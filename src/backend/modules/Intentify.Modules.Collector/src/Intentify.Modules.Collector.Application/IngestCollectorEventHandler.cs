@@ -47,9 +47,17 @@ public sealed class IngestCollectorEventHandler
         {
             site = await _sites.GetBySiteKeyAsync(command.SiteKey.Trim(), cancellationToken);
         }
-        else if (!string.IsNullOrWhiteSpace(command.SnippetId) && Guid.TryParse(command.SnippetId, out var snippetGuid))
+        else if (!string.IsNullOrWhiteSpace(command.SnippetId))
         {
-            site = await _sites.GetBySnippetIdAsync(snippetGuid, cancellationToken);
+            if (Guid.TryParse(command.SnippetId, out var snippetGuid))
+            {
+                site = await _sites.GetBySnippetIdAsync(snippetGuid, cancellationToken);
+            }
+            // Value is not a Guid — treat as a siteKey for backwards compatibility
+            if (site is null)
+            {
+                site = await _sites.GetBySiteKeyAsync(command.SnippetId, cancellationToken);
+            }
         }
 
         if (site is null)
