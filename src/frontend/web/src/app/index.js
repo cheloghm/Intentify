@@ -94,18 +94,12 @@ const createNavbar = ({ isAuthenticated, canAccessPlatformAdmin, canAccessTeam }
   const nav = document.createElement('nav');
   nav.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:16px 24px;background:#ffffff;border-bottom:1px solid #e2e8f0';
 
-  const brandLogo = document.createElement('img');
-  brandLogo.src = '/assets/logo_dark.png';
-  brandLogo.alt = 'Intentify';
-  brandLogo.style.cssText = 'width:160px;height:auto;object-fit:contain;vertical-align:middle';
-  const brandLogoFallback = document.createElement('div');
-  brandLogoFallback.textContent = 'Intentify';
-  brandLogoFallback.style.cssText = 'font-weight:700;font-size:18px;color:#6366f1;display:none';
-  brandLogo.onerror = () => { brandLogo.style.display = 'none'; brandLogoFallback.style.display = 'block'; };
-
   const brandWrap = document.createElement('div');
   brandWrap.style.cssText = 'display:flex;align-items:center';
-  brandWrap.append(brandLogo, brandLogoFallback);
+  const brandText = document.createElement('div');
+  brandText.textContent = 'Hven';
+  brandText.style.cssText = 'font-weight:700;font-size:18px;color:#6366f1';
+  brandWrap.appendChild(brandText);
 
   const links = document.createElement('div');
   links.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end';
@@ -394,25 +388,15 @@ const createAuthenticatedShell = ({ route, canAccessPlatformAdmin, canAccessTeam
   const brand = document.createElement('div');
   brand.style.cssText = 'padding:16px 16px 14px;border-bottom:1px solid rgba(255,255,255,0.06);display:flex;flex-direction:column;gap:5px';
 
-  const logoImg = document.createElement('img');
-  logoImg.src = '/assets/logo_white.png';
-  logoImg.alt = 'Intentify';
-  logoImg.style.cssText = 'width:180px;height:auto;object-fit:contain;object-position:left center';
-
-  const brandFallback = document.createElement('div');
-  brandFallback.textContent = 'Intentify';
-  brandFallback.style.cssText = 'font-weight:700;font-size:17px;color:#6366f1;display:none';
-
-  logoImg.onerror = () => {
-    logoImg.style.display = 'none';
-    brandFallback.style.display = 'block';
-  };
+  const sidebarBrandText = document.createElement('div');
+  sidebarBrandText.textContent = 'Hven';
+  sidebarBrandText.style.cssText = 'font-weight:700;font-size:17px;color:#6366f1';
 
   const tagline = document.createElement('div');
   tagline.textContent = "Know who\u2019s visiting. Engage what matters.";
   tagline.style.cssText = 'font-size:9.5px;color:rgba(255,255,255,0.28);line-height:1.45;letter-spacing:0.01em';
 
-  brand.append(logoImg, brandFallback, tagline);
+  brand.append(sidebarBrandText, tagline);
 
   // ── Nav sections ─────────────────────────────────────────────────────────────
   const nav = document.createElement('nav');
@@ -568,21 +552,11 @@ const createAuthenticatedShell = ({ route, canAccessPlatformAdmin, canAccessTeam
   toggleButton.setAttribute('aria-label', 'Toggle navigation');
   toggleButton.style.cssText = 'border:1px solid #e2e8f0;background:#fff;border-radius:8px;padding:6px 10px;cursor:pointer;margin-right:10px';
 
-  const topbarLogo = document.createElement('img');
-  topbarLogo.src = '/assets/logo_dark.png';
-  topbarLogo.alt = 'Intentify';
-  topbarLogo.style.cssText = 'width:150px;height:auto;object-fit:contain;vertical-align:middle';
+  const topbarBrand = document.createElement('div');
+  topbarBrand.textContent = 'Hven';
+  topbarBrand.style.cssText = 'font-weight:700;color:#0f172a;font-size:15px';
 
-  const topbarLogoFallback = document.createElement('div');
-  topbarLogoFallback.textContent = 'Intentify';
-  topbarLogoFallback.style.cssText = 'font-weight:700;color:#0f172a;font-size:15px;display:none';
-
-  topbarLogo.onerror = () => {
-    topbarLogo.style.display = 'none';
-    topbarLogoFallback.style.display = 'block';
-  };
-
-  topbar.append(toggleButton, topbarLogo, topbarLogoFallback);
+  topbar.append(toggleButton, topbarBrand);
 
   const main = createMain();
 
@@ -655,7 +629,7 @@ const renderHomeView = (container) => {
   const body = document.createElement('div');
   body.style.color = '#475569';
   body.style.lineHeight = '1.6';
-  body.textContent = 'Welcome to Intentify. Use the navigation to sign in, register, or view your dashboard.';
+  body.textContent = 'Welcome to Hven. Use the navigation to sign in, register, or view your dashboard.';
   const card = createCard({ title: 'Home', body });
   card.style.cssText = 'max-width:640px;width:100%';
   container.appendChild(card);
