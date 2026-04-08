@@ -414,6 +414,10 @@ const createAuthenticatedShell = ({ route, canAccessPlatformAdmin, canAccessTeam
     });
   };
 
+  addNavSection('START', [
+    { label: 'Getting Started', href: '#/' },
+  ]);
+
   addNavSection('MAIN', [
     { label: 'Dashboard', href: '#/dashboard' },
     { label: 'Sites',     href: '#/sites' },
