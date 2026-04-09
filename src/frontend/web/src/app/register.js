@@ -120,11 +120,99 @@ const render = () => {
   if (oauthToken) { setToken(oauthToken); window.location.href = '/app'; return; }
   if (oauthError) setTimeout(() => toast.show({ message: 'Google sign-in is not yet configured. Please use email.', variant: 'warning' }), 100);
 
+  const inviteToken = params.get('invite');
   let selectedPlan = params.get('plan') || 'starter';
 
   const card = document.createElement('div');
   card.className = 'hv-card';
 
+  // ── Invite flow ─────────────────────────────────────────────────────────────
+  if (inviteToken) {
+    card.innerHTML = `
+      <div class="hv-brand">Hven</div>
+      <div class="hv-tagline">Accept your invitation</div>
+    `;
+
+    const banner = document.createElement('div');
+    banner.style.cssText = 'background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:12px 16px;font-size:13px;color:#15803d;font-weight:500;text-align:center;margin-bottom:20px;line-height:1.5';
+    banner.textContent = "🎉 You've been invited to join Hven. Create your account to accept.";
+    card.appendChild(banner);
+
+    const form = document.createElement('form');
+    const mkField = (labelText, type, placeholder) => {
+      const wrap = document.createElement('div');
+      wrap.className = 'hv-field';
+      const lbl = document.createElement('label');
+      lbl.className = 'hv-label'; lbl.textContent = labelText;
+      const input = document.createElement('input');
+      input.type = type; input.className = 'hv-input'; input.placeholder = placeholder;
+      const error = document.createElement('div'); error.className = 'hv-err';
+      wrap.append(lbl, input, error);
+      return { wrap, input, error };
+    };
+
+    const displayNameField = mkField('Full name', 'text', 'Jane Doe');
+    const emailField       = mkField('Email', 'email', 'you@company.com');
+    const passwordField    = mkField('Password', 'password', 'At least 10 characters');
+
+    const submitBtn = document.createElement('button');
+    submitBtn.type = 'submit'; submitBtn.className = 'hv-submit';
+    submitBtn.textContent = 'Accept invitation & create account →';
+
+    form.append(displayNameField.wrap, emailField.wrap, passwordField.wrap, submitBtn);
+
+    form.addEventListener('submit', async e => {
+      e.preventDefault();
+      displayNameField.error.textContent = '';
+      emailField.error.textContent = '';
+      passwordField.error.textContent = '';
+      const displayName = displayNameField.input.value.trim();
+      const email = emailField.input.value.trim();
+      const password = passwordField.input.value;
+      let hasError = false;
+      if (!displayName) { displayNameField.error.textContent = 'Full name is required.'; hasError = true; }
+      const emailErr = validateEmail(email);
+      if (emailErr) { emailField.error.textContent = emailErr; hasError = true; }
+      const passErr = validatePassword(password);
+      if (passErr) { passwordField.error.textContent = passErr; hasError = true; }
+      if (hasError) { toast.show({ message: 'Please fix the highlighted fields.', variant: 'warning' }); return; }
+      submitBtn.disabled = true; submitBtn.textContent = 'Accepting invitation…';
+      try {
+        const response = await apiClient.request('/auth/invites/accept', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: inviteToken, displayName, email, password }),
+        });
+        setToken(response.accessToken);
+        window.location.href = '/app';
+      } catch (error) {
+        const uiError = mapApiError(error);
+        const applied = applyFieldErrors(uiError.details?.errors, {
+          displayName: displayNameField, email: emailField, password: passwordField,
+        });
+        toast.show({ message: applied ? 'Please review the highlighted errors.' : uiError.message, variant: 'danger' });
+      } finally {
+        submitBtn.disabled = false; submitBtn.textContent = 'Accept invitation & create account →';
+      }
+    });
+
+    card.appendChild(form);
+
+    const links = document.createElement('div');
+    links.className = 'hv-links';
+    links.innerHTML = `<a href="/public/login.html">Already have an account? Sign in</a>`;
+    card.appendChild(links);
+
+    const credit = document.createElement('div');
+    credit.className = 'hv-footer-credit';
+    credit.innerHTML = `Designed by <a href="https://fortiguardian.com" target="_blank">FortiGuardian Consulting</a>`;
+    card.appendChild(credit);
+
+    app.innerHTML = '';
+    app.appendChild(card);
+    return;
+  }
+
+  // ── Normal registration flow ────────────────────────────────────────────────
   card.innerHTML = `
     <div class="hv-brand">Hven</div>
     <div class="hv-tagline">Create your free account</div>

@@ -195,8 +195,8 @@ export const renderTeamView = async (container, { apiClient, toast, currentUser,
             const roleSel = el('select',{class:'tm-input',style:'padding:4px 8px;font-size:12px'});
             [['admin','Admin'],['manager','Manager'],['user','User']].forEach(([v,l])=>{ const o=el('option',{value:v},l); if(v===role) o.selected=true; roleSel.appendChild(o); });
             roleSel.addEventListener('change', async ()=>{
-              try { await apiClient.auth.updateUserRole(user.userId, roleSel.value); notifier?.show({message:'Role updated.',variant:'success'}); await reload(); }
-              catch(err){ notifier?.show({message:mapApiError(err).message,variant:'danger'}); }
+              try { await apiClient.auth.updateUserRole(user.userId, roleSel.value); toast?.show({message:'Role updated.',variant:'success'}); await reload(); }
+              catch(err){ toast?.show({message:mapApiError(err).message,variant:'danger'}); }
             });
             roleCell.appendChild(roleSel);
           } else {
@@ -211,8 +211,8 @@ export const renderTeamView = async (container, { apiClient, toast, currentUser,
             rmBtn.addEventListener('click', async ()=>{
               if (!confirm(`Remove ${user.displayName||user.email} from the team?`)) return;
               rmBtn.disabled=true;
-              try { await apiClient.auth.removeUser(user.userId); notifier?.show({message:'User removed.',variant:'success'}); await reload(); }
-              catch(err){ notifier?.show({message:mapApiError(err).message,variant:'danger'}); rmBtn.disabled=false; }
+              try { await apiClient.auth.removeUser(user.userId); toast?.show({message:'User removed.',variant:'success'}); await reload(); }
+              catch(err){ toast?.show({message:mapApiError(err).message,variant:'danger'}); rmBtn.disabled=false; }
             });
             actCell.appendChild(rmBtn);
           } else if (isSelf) {
@@ -261,9 +261,10 @@ export const renderTeamView = async (container, { apiClient, toast, currentUser,
           if (status==='Pending' && capabilities?.canInviteRole?.(actorRole, role)) {
             const revokeBtn = el('button',{class:'tm-btn tm-btn-outline tm-btn-sm'},'Revoke');
             revokeBtn.addEventListener('click', async ()=>{
+              if (!confirm(`Revoke invite for ${invite.email}?`)) return;
               revokeBtn.disabled=true;
-              try { await apiClient.auth.revokeInvite(invite.inviteId); notifier?.show({message:'Invite revoked.',variant:'success'}); await reload(); }
-              catch(err){ notifier?.show({message:mapApiError(err).message,variant:'danger'}); revokeBtn.disabled=false; }
+              try { await apiClient.auth.revokeInvite(invite.inviteId); toast?.show({message:'Invite revoked.',variant:'success'}); await reload(); }
+              catch(err){ toast?.show({message:mapApiError(err).message,variant:'danger'}); revokeBtn.disabled=false; }
             });
             actCell.appendChild(revokeBtn);
           }
@@ -281,6 +282,7 @@ export const renderTeamView = async (container, { apiClient, toast, currentUser,
   // ── Invite button ──────────────────────────────────────────────────────────
   inviteBtn.addEventListener('click', async () => {
     emailErr.textContent='';
+    inviteBody.querySelector('.tm-invite-link')?.remove();
     const email = emailInput.value.trim();
     const role  = roleSelect.value;
     const actorRole = normalizeRole(currentUser?.roles||[]);
@@ -289,9 +291,25 @@ export const renderTeamView = async (container, { apiClient, toast, currentUser,
 
     inviteBtn.disabled=true; inviteBtn.textContent='⏳ Sending…';
     try {
-      await apiClient.auth.createInvite({ email, role });
+      const result = await apiClient.auth.createInvite({ email, role });
       emailInput.value='';
-      toast?.show({message:'Invitation sent.',variant:'success'});
+      if (result?.token) {
+        const inviteUrl = `${window.location.origin}/public/register.html?invite=${encodeURIComponent(result.token)}`;
+        const linkBox = el('div',{class:'tm-invite-link',style:'background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 14px;margin-top:8px'});
+        linkBox.appendChild(el('div',{style:'font-size:12px;font-weight:600;color:#15803d;margin-bottom:6px'},'✅ Invite created — share this link with ' + email + ':'));
+        const linkRow = el('div',{style:'display:flex;gap:8px;align-items:center'});
+        const linkInput = el('input',{class:'tm-input',style:'flex:1;font-size:11px;font-family:JetBrains Mono,monospace'});
+        linkInput.value = inviteUrl; linkInput.readOnly = true;
+        const copyBtn = el('button',{class:'tm-btn tm-btn-outline tm-btn-sm'},'Copy');
+        copyBtn.addEventListener('click', async () => {
+          try { await navigator.clipboard.writeText(inviteUrl); copyBtn.textContent='✓ Copied'; setTimeout(()=>{copyBtn.textContent='Copy';},2000); } catch {}
+        });
+        linkRow.append(linkInput, copyBtn);
+        linkBox.appendChild(linkRow);
+        inviteBody.appendChild(linkBox);
+      } else {
+        toast?.show({message:'Invitation sent.',variant:'success'});
+      }
       await reload();
     } catch(err) {
       toast?.show({message:mapApiError(err).message,variant:'danger'});
