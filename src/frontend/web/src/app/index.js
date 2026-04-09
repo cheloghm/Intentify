@@ -17,6 +17,8 @@ import { renderTeamView } from '../pages/team.js';
 import { renderDashboardView } from '../pages/dashboard.js';
 import { renderPlatformAdminTenantDetailView, renderPlatformAdminView } from '../pages/platformAdmin.js';
 import { renderMultiSiteAnalyticsView } from '../pages/multiSiteAnalytics.js';
+import { renderLinkTreeView } from '../pages/linktree.js';
+import { renderMicroSiteView } from '../pages/microsite.js';
 import { showBotWizard } from '../pages/botWizard.js';
 
 const app = document.getElementById('app');
@@ -453,8 +455,10 @@ const createAuthenticatedShell = ({ route, canAccessPlatformAdmin, canAccessTeam
   ]);
 
   addNavSection('MARKETING', [
-    { label: 'Ads',    href: '#/ads' },
-    { label: 'Promos', href: '#/promos' },
+    { label: 'Ads',        href: '#/ads' },
+    { label: 'Promos',     href: '#/promos' },
+    { label: '🔗 Link Tree',  href: '#/linktree' },
+    { label: '🌐 Micro-Site', href: '#/microsite' },
   ]);
 
   if (canAccessTeam || canAccessPlatformAdmin) {
@@ -1216,6 +1220,8 @@ const routes = {
   '/leads':                               renderLeadsView,
   '/tickets':                             renderTicketsView,
   '/analytics':                           renderMultiSiteAnalyticsView,
+  '/linktree':                            renderLinkTreeView,
+  '/microsite':                           renderMicroSiteView,
   '/platform-admin':                      renderPlatformAdminView,
   '/platform-admin/tenant/:tenantId':     renderPlatformAdminTenantDetailView,
 };
