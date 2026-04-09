@@ -169,6 +169,19 @@ export const renderKnowledgeView = (container, { apiClient, toast } = {}) => {
     sources: [], loadingSources: false, retrieveResults: [],
   };
 
+  let pollTimer = null;
+  const isInProgress = s => { const st = String(s?.status||'').toUpperCase(); return st==='PROCESSING'||st==='PENDING'||st==='QUEUED'||st==='INDEXING'; };
+  const stopPolling = () => { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } };
+  const schedulePolling = () => {
+    stopPolling();
+    if (!state.siteId || !state.sources.some(isInProgress)) return;
+    pollTimer = setInterval(async () => {
+      if (!state.siteId) { stopPolling(); return; }
+      try { state.sources = await client.knowledge.listSources(state.siteId); renderSources(); } catch {}
+      if (!state.sources.some(isInProgress)) stopPolling();
+    }, 5000);
+  };
+
   const root = el('div', { class: 'kb-root' });
   container.appendChild(root);
 
@@ -313,14 +326,14 @@ export const renderKnowledgeView = (container, { apiClient, toast } = {}) => {
     try {
       state.sources = await client.knowledge.listSources(state.siteId);
     } catch (err) { notifier.show({message:mapApiError(err).message,variant:'danger'}); }
-    finally { state.loadingSources = false; renderSources(); }
+    finally { state.loadingSources = false; renderSources(); schedulePolling(); }
   };
 
   const renderSources = () => {
     srcList.replaceChildren();
-    const fresh = state.sources.filter(s=>getFreshness(s).label.includes('Fresh')).length;
+    const indexed = state.sources.filter(s => String(s?.status||'').toUpperCase() === 'INDEXED').length;
     hSources.textContent = String(state.sources.length);
-    hFresh.textContent   = String(fresh);
+    hFresh.textContent   = String(indexed);
     srcMeta.textContent  = `${state.sources.length} source${state.sources.length!==1?'s':''}`;
 
     if (state.loadingSources) {
@@ -332,32 +345,54 @@ export const renderKnowledgeView = (container, { apiClient, toast } = {}) => {
       return;
     }
     state.sources.forEach(source => {
-      const { label, pill } = getFreshness(source);
+      const statusRaw = String(source?.status||'').toUpperCase();
+      const isFailed   = statusRaw === 'FAILED';
+      const isIndexed  = statusRaw === 'INDEXED';
+      const isIndexing = statusRaw === 'INDEXING' || statusRaw === 'PROCESSING';
+      const isQueued   = statusRaw === 'QUEUED' || statusRaw === 'PENDING';
+
       const row = el('div',{class:'kb-source'});
       const icon = el('div',{class:'kb-source-icon'},TYPE_ICON[source.type?.toUpperCase()]||'📄');
       const body2 = el('div',{class:'kb-source-body'});
       const rawName = source.name||source.url||source.sourceId||'—';
       body2.appendChild(el('div',{class:'kb-source-name',title:rawName},rawName.length>70?rawName.slice(0,67)+'…':rawName));
       if (source.url) body2.appendChild(el('div',{class:'kb-source-url',title:source.url},source.url));
+
       const meta = el('div',{class:'kb-source-meta'});
-      meta.appendChild(el('span',{class:`kb-pill ${pill}`},label));
+      if (isIndexed) {
+        meta.appendChild(el('span',{class:'kb-pill',style:'background:#d1fae5;color:#065f46'},'Indexed ✓'));
+        if (source.chunkCount) meta.appendChild(el('span',{style:'font-size:10px;color:#94a3b8'},`${source.chunkCount} chunks`));
+        if (source.indexedAtUtc) meta.appendChild(el('span',{style:'font-size:10px;color:#94a3b8'},fmtDate(source.indexedAtUtc)));
+      } else if (isIndexing) {
+        meta.appendChild(el('span',{class:'kb-pill',style:'background:#fef3c7;color:#92400e'},'⏳ Indexing…'));
+      } else if (isQueued) {
+        meta.appendChild(el('span',{class:'kb-pill',style:'background:#f1f5f9;color:#64748b'},'Queued'));
+      } else if (isFailed) {
+        meta.appendChild(el('span',{class:'kb-pill',style:'background:#fee2e2;color:#991b1b'},'Failed'));
+      } else {
+        const { label, pill } = getFreshness(source);
+        meta.appendChild(el('span',{class:`kb-pill ${pill}`},label));
+        if (source.chunkCount) meta.appendChild(el('span',{style:'font-size:10px;color:#94a3b8'},`${source.chunkCount} chunks`));
+        if (source.indexedAtUtc) meta.appendChild(el('span',{style:'font-size:10px;color:#94a3b8'},fmtDate(source.indexedAtUtc)));
+      }
       if (source.type) meta.appendChild(el('span',{class:'kb-pill kb-pill-blue'},source.type.toUpperCase()));
-      if (source.indexedAtUtc) meta.appendChild(el('span',{style:'font-size:10px;color:#94a3b8'},fmtDate(source.indexedAtUtc)));
-      if (source.chunkCount)   meta.appendChild(el('span',{style:'font-size:10px;color:#94a3b8'},`${source.chunkCount} chunks`));
       body2.appendChild(meta);
 
+      if (isFailed && source.failureReason) {
+        body2.appendChild(el('div',{style:'font-size:11px;color:#ef4444;margin-top:4px;line-height:1.4'},source.failureReason));
+      }
+
       const acts = el('div',{class:'kb-source-acts'});
-      const idxBtn = el('button',{class:'kb-btn kb-btn-outline kb-btn-sm',title:'Re-index this source'},'🔄');
+      const idxLabel = isFailed ? '↩ Retry' : isIndexed ? '🔄 Re-index' : '▶ Index';
+      const idxBtn = el('button',{class:`kb-btn kb-btn-sm ${isFailed?'kb-btn-danger':'kb-btn-outline'}`,title: isFailed?'Retry indexing':'Index this source'},idxLabel);
       idxBtn.addEventListener('click', async () => {
         idxBtn.disabled=true; idxBtn.textContent='⏳';
         try {
-          const resp = await client.knowledge.indexSource(source.sourceId);
-          const ns = String(resp.status||'').toUpperCase();
-          if (ns==='FAILED') notifier.show({message:resp.failureReason?`Index failed: ${resp.failureReason}`:'Index failed.',variant:'danger'});
-          else notifier.show({message:`Reindex started${resp.chunkCount!=null?` (${resp.chunkCount} chunks)`:'.'}.`,variant:'success'});
+          await client.knowledge.indexSource(source.sourceId);
+          notifier.show({message:'Indexing started.',variant:'success'});
           await loadSources();
         } catch(err){ notifier.show({message:mapApiError(err).message,variant:'danger'}); }
-        finally { idxBtn.disabled=false; idxBtn.textContent='🔄'; }
+        finally { idxBtn.disabled=false; idxBtn.textContent=idxLabel; }
       });
       const delBtn = el('button',{class:'kb-btn kb-btn-danger kb-btn-sm'},'✕');
       delBtn.addEventListener('click', async () => {

@@ -779,12 +779,14 @@ const renderHomeView = (container) => {
 
   // ── SECTION 5: Knowledge base ─────────────────────────────────────────────────
   content.appendChild(mkSection('step-5', '5', 'Index your Knowledge Base', (body) => {
-    body.appendChild(mkDesc('Your AI engagement bot answers questions based on your Knowledge Base. Add your product docs, pricing page, FAQs, case studies, and anything else your bot should know.'));
+    body.appendChild(mkDesc('After adding your site, Hven automatically creates two knowledge sources — your website URL and a Quick Facts template. You need to go to Knowledge in the sidebar and click Index on each source to activate them. The URL source crawls your website; the Quick Facts source is a template you should edit first with your real business details.'));
     const steps = [
       '→ Go to Knowledge in the sidebar',
-      '→ Click Add Source',
-      '→ Paste a URL or upload a document',
-      '→ Hven indexes the content automatically',
+      '→ Your site URL and Quick Facts are already created — click Index to start',
+      '→ Edit the Quick Facts source first with your real business details',
+      '→ Add more sources: paste a URL, upload a PDF, or enter text',
+      '→ Watch the status badge — green Indexed ✓ means your bot can use it',
+      '→ If a source fails, the error is shown below it — click Retry to try again',
     ];
     const stepList = document.createElement('div');
     stepList.style.cssText = 'display:flex;flex-direction:column;gap:5px;margin:4px 0';
@@ -795,6 +797,7 @@ const renderHomeView = (container) => {
       stepList.appendChild(line);
     });
     body.appendChild(stepList);
+    body.appendChild(mkNote('Indexing usually takes 30–60 seconds. If it fails, check that your website has a valid SSL certificate.'));
     body.appendChild(mkBtn('Go to Knowledge →', '#/knowledge'));
   }));
 
