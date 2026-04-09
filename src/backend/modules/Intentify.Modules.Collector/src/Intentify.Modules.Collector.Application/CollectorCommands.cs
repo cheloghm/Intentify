@@ -13,7 +13,8 @@ public sealed record CollectEventCommand(
     string? SessionId,
     string? VisitorId,
     string? Fingerprint,
-    JsonElement? Data);
+    JsonElement? Data,
+    string? IpAddress = null);
 
 public sealed record CollectorEventIngestedNotification(
     Guid SiteId,
@@ -28,7 +29,10 @@ public sealed record CollectorEventIngestedNotification(
     string? Fingerprint,
     string? UserAgent,
     string? Language,
-    string? Platform);
+    string? Platform,
+    string? Country = null,
+    string? City = null,
+    string? Region = null);
 
 public interface ICollectorEventObserver
 {

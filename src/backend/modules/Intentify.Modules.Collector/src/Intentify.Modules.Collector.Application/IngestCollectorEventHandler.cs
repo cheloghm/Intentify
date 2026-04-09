@@ -3,6 +3,7 @@ using Intentify.Modules.Sites.Domain;
 using Intentify.Shared.Validation;
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization;
+using System.Net.Http.Json;
 using System.Text.Json;
 
 namespace Intentify.Modules.Collector.Application;
@@ -17,15 +18,18 @@ public sealed class IngestCollectorEventHandler
     private readonly ISiteLookupRepository _sites;
     private readonly ICollectorEventRepository _events;
     private readonly IReadOnlyCollection<ICollectorEventObserver> _observers;
+    private readonly IHttpClientFactory _httpClientFactory;
 
     public IngestCollectorEventHandler(
         ISiteLookupRepository sites,
         ICollectorEventRepository events,
-        IEnumerable<ICollectorEventObserver> observers)
+        IEnumerable<ICollectorEventObserver> observers,
+        IHttpClientFactory httpClientFactory)
     {
         _sites = sites;
         _events = events;
         _observers = observers.ToArray();
+        _httpClientFactory = httpClientFactory;
     }
 
     public async Task<OperationResult<bool>> HandleAsync(CollectEventCommand command, CancellationToken cancellationToken = default)
@@ -72,6 +76,7 @@ public sealed class IngestCollectorEventHandler
 
         var now = DateTime.UtcNow;
         var occurredAt = command.TsUtc?.ToUniversalTime() ?? now;
+        var (geoCountry, geoCity, geoRegion) = await TryResolveGeoAsync(command.IpAddress);
         var collectorEvent = new CollectorEvent
         {
             SiteId = site.Id,
@@ -83,7 +88,11 @@ public sealed class IngestCollectorEventHandler
             ReceivedAtUtc = now,
             Origin = normalizedOrigin,
             SessionId = command.SessionId,
-            Data = ToBsonDocument(command.Data)
+            Data = ToBsonDocument(command.Data),
+            IpAddress = command.IpAddress,
+            Country = geoCountry,
+            City = geoCity,
+            Region = geoRegion
         };
 
         await _events.InsertAsync(collectorEvent, cancellationToken);
@@ -101,7 +110,10 @@ public sealed class IngestCollectorEventHandler
             command.Fingerprint,
             TryGetString(command.Data, "userAgent"),
             TryGetString(command.Data, "language"),
-            TryGetString(command.Data, "platform"));
+            TryGetString(command.Data, "platform"),
+            collectorEvent.Country,
+            collectorEvent.City,
+            collectorEvent.Region);
 
         foreach (var observer in _observers)
         {
@@ -222,5 +234,34 @@ public sealed class IngestCollectorEventHandler
         }
 
         return value.GetString();
+    }
+
+    private async Task<(string? Country, string? City, string? Region)> TryResolveGeoAsync(string? ip)
+    {
+        if (string.IsNullOrWhiteSpace(ip))
+            return (null, null, null);
+
+        // Skip private/loopback addresses
+        if (ip == "::1" || ip.StartsWith("127.") || ip.StartsWith("10.")
+            || ip.StartsWith("192.168.") || ip.StartsWith("172."))
+            return (null, null, null);
+
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+            var client = _httpClientFactory.CreateClient("geo");
+            var response = await client.GetFromJsonAsync<JsonElement>(
+                $"http://ip-api.com/json/{ip}?fields=country,regionName,city", cts.Token);
+
+            var country = response.TryGetProperty("country", out var c) && c.ValueKind == JsonValueKind.String ? c.GetString() : null;
+            var city    = response.TryGetProperty("city", out var ci) && ci.ValueKind == JsonValueKind.String ? ci.GetString() : null;
+            var region  = response.TryGetProperty("regionName", out var r) && r.ValueKind == JsonValueKind.String ? r.GetString() : null;
+
+            return (country, city, region);
+        }
+        catch
+        {
+            return (null, null, null);
+        }
     }
 }

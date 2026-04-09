@@ -18,7 +18,8 @@ public sealed record UpsertVisitorFromCollectorEvent(
     string? Language,
     string? Platform,
     string? Country = null,
-    string? City    = null);
+    string? City    = null,
+    string? Region  = null);
 
 public sealed record UpsertVisitorResult(Guid VisitorId, VisitorSession Session, int SessionsCount = 0);
 
@@ -202,7 +203,10 @@ public sealed class CollectorVisitorEventObserver : ICollectorEventObserver
             notification.VisitorId,
             notification.UserAgent,
             notification.Language,
-            notification.Platform), cancellationToken);
+            notification.Platform,
+            notification.Country,
+            notification.City,
+            notification.Region), cancellationToken);
 
         if (_visitorObservers.Count > 0
             && string.Equals(notification.Type, "pageview", StringComparison.OrdinalIgnoreCase))

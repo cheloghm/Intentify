@@ -42,6 +42,9 @@ public sealed class VisitorRepository : IVisitorRepository
                 UserAgentHint = Truncate(command.UserAgent, 256),
                 Language = Truncate(command.Language, 32),
                 Platform = Truncate(command.Platform, 32),
+                Country = Truncate(command.Country, 64),
+                City = Truncate(command.City, 64),
+                Region = Truncate(command.Region, 64),
                 Sessions = CreateInitialSessions(command, resolvedSessionId)
             };
 
@@ -54,6 +57,9 @@ public sealed class VisitorRepository : IVisitorRepository
         visitor.UserAgentHint ??= Truncate(command.UserAgent, 256);
         visitor.Language ??= Truncate(command.Language, 32);
         visitor.Platform ??= Truncate(command.Platform, 32);
+        visitor.Country ??= Truncate(command.Country, 64);
+        visitor.City ??= Truncate(command.City, 64);
+        visitor.Region ??= Truncate(command.Region, 64);
 
         VisitorSession session;
         if (resolvedSessionId is null)

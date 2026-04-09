@@ -25,6 +25,8 @@ public sealed class Visitor
 
     public string? City { get; set; }
 
+    public string? Region { get; set; }
+
     public string? PrimaryEmail { get; set; }
 
     public string? DisplayName { get; set; }

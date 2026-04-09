@@ -28,6 +28,11 @@ public sealed class CollectorModule : IAppModule
                       .AllowAnyHeader());
         });
 
+        services.AddHttpClient("geo", client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(2);
+        });
+
         services.AddSingleton<ICollectorEventRepository, CollectorEventRepository>();
         services.AddSingleton<ISiteLookupRepository, SiteLookupRepository>();
         services.AddSingleton<IngestCollectorEventHandler>();

@@ -156,7 +156,8 @@ internal static class CollectorEndpoints
             resolvedSessionId,
             NormalizeOptional(request.VisitorId),
             NormalizeOptional(request.Fingerprint),
-            request.Data),
+            request.Data,
+            TryResolveClientIp(context.Request)),
             context.RequestAborted);
 
         return result.Status switch
@@ -300,6 +301,18 @@ internal static class CollectorEndpoints
         }
 
         return errors;
+    }
+
+    private static string? TryResolveClientIp(HttpRequest request)
+    {
+        if (request.Headers.TryGetValue("X-Forwarded-For", out var xff))
+        {
+            var ip = xff.ToString().Split(',')[0].Trim();
+            if (!string.IsNullOrWhiteSpace(ip))
+                return ip;
+        }
+
+        return request.HttpContext.Connection.RemoteIpAddress?.ToString();
     }
 
     private static string? TryResolveOrigin(HttpRequest request)

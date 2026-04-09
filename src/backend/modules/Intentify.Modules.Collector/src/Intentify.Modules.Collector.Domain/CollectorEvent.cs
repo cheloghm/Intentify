@@ -27,4 +27,12 @@ public sealed class CollectorEvent
     public string? SessionId { get; init; }
 
     public BsonDocument? Data { get; init; }
+
+    public string? IpAddress { get; init; }
+
+    public string? Country { get; init; }
+
+    public string? City { get; init; }
+
+    public string? Region { get; init; }
 }
