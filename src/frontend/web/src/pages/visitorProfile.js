@@ -153,6 +153,8 @@ const injectStyles = () => {
 .vp-intel{background:linear-gradient(135deg,#0f172a,#1e1b4b);border-radius:12px;padding:14px 16px}
 .vp-intel-lbl{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#818cf8;margin-bottom:7px;display:flex;align-items:center;gap:4px}
 .vp-intel-text{font-size:12.5px;line-height:1.65;color:#e2e8f0}
+/* Return visit banner */
+.vp-return-banner{background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;padding:8px 14px;font-size:12.5px;color:#4338ca;display:flex;align-items:center;gap:8px}
 /* Empty/loading */
 .vp-empty{text-align:center;padding:30px 16px;display:flex;flex-direction:column;align-items:center;gap:7px}
 .vp-empty-icon{font-size:30px;opacity:.3}
@@ -279,6 +281,20 @@ export const renderVisitorProfileView = async (container, { apiClient, toast, vi
   heroTop.appendChild(heroBody);
   hero.appendChild(heroTop);
   root.appendChild(hero);
+
+  // ── Return visit banner ────────────────────────────────────────────────────
+  const minsAgo = (Date.now() - new Date(visitor.lastSeenAtUtc)) / 60000;
+  const totalVisits = visitor.visitCount || visitor.recentSessions?.length || 0;
+  if (totalVisits > 1 && minsAgo > 60) {
+    const knownName = visitor.displayName || visitor.primaryEmail;
+    const label = knownName
+      ? `↩ ${knownName} is back — last seen ${fmtAgo(visitor.lastSeenAtUtc)}`
+      : `↩ Return visitor — last seen ${fmtAgo(visitor.lastSeenAtUtc)}`;
+    root.appendChild(el('div', { class: 'vp-return-banner' },
+      el('span', {}, label),
+      el('span', { style: 'margin-left:auto;font-weight:700;white-space:nowrap' }, `${totalVisits} visits total`)
+    ));
+  }
 
   // ── Lead banner ────────────────────────────────────────────────────────────
   if (linkedLead) {

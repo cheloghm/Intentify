@@ -362,7 +362,11 @@ export const renderVisitorsView = async (container, { apiClient, toast, query } 
       // Visitor cell
       const visCell = el('td', {});
       const name = v.primaryEmail || (v.platform ? `${PLATFORM_ICON[v.platform] || '💻'} ${v.platform} visitor` : 'Anonymous visitor');
-      visCell.appendChild(el('div', { class: 'v-visitor-name' }, name));
+      const nameRow = el('div', { style: 'display:flex;align-items:center;gap:6px;flex-wrap:wrap' },
+        el('div', { class: 'v-visitor-name' }, name),
+        ...(v.sessionsCount > 1 ? [el('span', { style: 'background:#f1f5f9;color:#64748b;font-size:10px;padding:2px 6px;border-radius:999px;font-weight:600' }, '↩ Return')] : [])
+      );
+      visCell.appendChild(nameRow);
       visCell.appendChild(el('div', { class: 'v-visitor-sub' }, shortId(v.visitorId?.toString?.() || v.visitorId)));
       tr.appendChild(visCell);
 
