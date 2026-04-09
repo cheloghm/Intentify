@@ -37,6 +37,9 @@ public sealed class Visitor
 
     public List<VisitorSession> Sessions { get; set; } = [];
 
+    // ── Behavioural intent score ───────────────────────────────────────────
+    public int IntentScore { get; set; }
+
     // ── Product / page meta ────────────────────────────────────────────────
     public string? LastProductViewed { get; set; }
     public string? LastProductPrice { get; set; }
@@ -77,4 +80,10 @@ public sealed class VisitorSession
     public Dictionary<string, int> Referrers { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
     public Dictionary<string, int> TopActions { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    // ── Behavioural engagement signals ────────────────────────────────────
+    public int TotalTimeOnPageSeconds { get; set; }
+    public int MaxScrollDepthPct { get; set; }
+    public int PageViewCount { get; set; }
+    public int ChatEngagementCount { get; set; }
 }

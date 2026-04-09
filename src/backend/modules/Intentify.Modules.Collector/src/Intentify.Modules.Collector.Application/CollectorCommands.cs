@@ -36,7 +36,9 @@ public sealed record CollectorEventIngestedNotification(
     string? ProductName = null,
     string? ProductCategory = null,
     string? ProductPrice = null,
-    string? ProductBrand = null);
+    string? ProductBrand = null,
+    int? ScrollDepthPct = null,
+    int? TimeOnPageSeconds = null);
 
 public interface ICollectorEventObserver
 {

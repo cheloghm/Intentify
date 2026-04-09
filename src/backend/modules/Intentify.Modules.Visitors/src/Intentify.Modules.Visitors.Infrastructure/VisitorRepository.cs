@@ -48,6 +48,7 @@ public sealed class VisitorRepository : IVisitorRepository
                 Sessions = CreateInitialSessions(command, resolvedSessionId)
             };
             UpdateProductMeta(visitor, command);
+            visitor.IntentScore = VisitorIntentScorer.ComputeScore(visitor);
 
             await _visitors.InsertOneAsync(visitor, cancellationToken: cancellationToken);
             return new UpsertVisitorResult(visitor.Id, visitor.Sessions.FirstOrDefault() ?? CreateDetachedSession(command, resolvedSessionId), visitor.Sessions.Count);
@@ -82,6 +83,7 @@ public sealed class VisitorRepository : IVisitorRepository
             }
         }
 
+        visitor.IntentScore = VisitorIntentScorer.ComputeScore(visitor);
         await _visitors.ReplaceOneAsync(existing => existing.Id == visitor.Id, visitor, cancellationToken: cancellationToken);
         return new UpsertVisitorResult(visitor.Id, session, visitor.Sessions.Count);
     }
@@ -106,7 +108,8 @@ public sealed class VisitorRepository : IVisitorRepository
                 visitor.Sessions.Sum(item => item.PagesVisited),
                 latestSession?.EngagementScore ?? 0,
                 latestSession?.LastPath,
-                latestSession?.LastReferrer);
+                latestSession?.LastReferrer,
+                IntentScore: visitor.IntentScore);
         }).ToArray();
     }
 
@@ -202,6 +205,25 @@ public sealed class VisitorRepository : IVisitorRepository
         if (IsPageView(command.EventType))
         {
             session.PagesVisited += 1;
+            session.PageViewCount += 1;
+        }
+
+        if (string.Equals(command.EventType, "time_on_page", StringComparison.OrdinalIgnoreCase)
+            && command.TimeOnPageSeconds is > 0)
+        {
+            session.TotalTimeOnPageSeconds += command.TimeOnPageSeconds.Value;
+        }
+
+        if (command.ScrollDepthPct is > 0)
+        {
+            session.MaxScrollDepthPct = Math.Max(session.MaxScrollDepthPct, command.ScrollDepthPct.Value);
+        }
+
+        if (string.Equals(command.EventType, "chat_start", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(command.EventType, "engage_chat", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(command.EventType, "chat_message", StringComparison.OrdinalIgnoreCase))
+        {
+            session.ChatEngagementCount += 1;
         }
 
         if (!string.IsNullOrWhiteSpace(command.Referrer))

@@ -276,6 +276,16 @@ export const renderVisitorProfileView = async (container, { apiClient, toast, vi
   mkStat(visitor.totalPagesVisited || 0, 'Pages');
   mkStat(conversations.length, 'Conversations');
   mkStat(fmtAgo(visitor.lastSeenAtUtc), 'Last seen');
+
+  // Intent score — colored ring stat
+  const intentScore = visitor.intentScore || 0;
+  const intentColor = intentScore >= 80 ? '#10b981' : intentScore >= 60 ? '#3b82f6' : intentScore >= 40 ? '#f59e0b' : '#94a3b8';
+  const intentLabel = intentScore >= 80 ? 'Intent · 🔥 Hot' : intentScore >= 60 ? 'Intent · ♨ Warm' : intentScore >= 40 ? 'Intent · ~ Cool' : 'Intent Score';
+  const intentW = el('div', { style: 'display:flex;flex-direction:column;gap:2px' });
+  intentW.appendChild(el('div', { class: 'vp-stat-val', style: `color:${intentColor}` }, String(intentScore)));
+  intentW.appendChild(el('div', { class: 'vp-stat-lbl' }, intentLabel));
+  heroStats.appendChild(intentW);
+
   heroBody.appendChild(heroStats);
 
   heroTop.appendChild(heroBody);

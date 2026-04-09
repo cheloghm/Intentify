@@ -125,6 +125,12 @@ public sealed class IngestCollectorEventHandler
             ProductSku = TryGetNestedString(command.Data, "pageMeta", "productSku"),
             ProductAvailable = TryGetNestedBool(command.Data, "pageMeta", "productAvailable"),
             OgType = TryGetNestedString(command.Data, "pageMeta", "ogType"),
+            // Behavioural: time_on_page sends data.seconds + data.maxScrollDepth; scroll_depth sends data.percent
+            TimeOnPageSeconds = TryGetInt(command.Data, "seconds") ?? TryGetInt(command.Data, "duration"),
+            ScrollDepthPct    = TryGetInt(command.Data, "maxScrollDepth")
+                             ?? TryGetInt(command.Data, "percent")
+                             ?? TryGetInt(command.Data, "scrollDepth")
+                             ?? TryGetInt(command.Data, "depth"),
         };
 
         await _events.InsertAsync(collectorEvent, cancellationToken);
@@ -149,7 +155,9 @@ public sealed class IngestCollectorEventHandler
             collectorEvent.ProductName,
             collectorEvent.ProductCategory,
             collectorEvent.ProductPrice,
-            collectorEvent.ProductBrand);
+            collectorEvent.ProductBrand,
+            collectorEvent.ScrollDepthPct,
+            collectorEvent.TimeOnPageSeconds);
 
         foreach (var observer in _observers)
         {
@@ -270,6 +278,19 @@ public sealed class IngestCollectorEventHandler
         }
 
         return value.GetString();
+    }
+
+    private static int? TryGetInt(JsonElement? data, string key)
+    {
+        try
+        {
+            if (data is null || data.Value.ValueKind != JsonValueKind.Object) return null;
+            if (!data.Value.TryGetProperty(key, out var value)) return null;
+            if (value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var i)) return i;
+            if (value.ValueKind == JsonValueKind.String && int.TryParse(value.GetString(), out var si)) return si;
+            return null;
+        }
+        catch { return null; }
     }
 
     private static string? TryGetNestedString(JsonElement? data, string outerKey, string innerKey)

@@ -47,4 +47,8 @@ public sealed class CollectorEvent
     public string? ProductSku { get; init; }
     public bool? ProductAvailable { get; init; }
     public string? OgType { get; init; }
+
+    // Behavioural signals (extracted from event data payloads)
+    public int? ScrollDepthPct { get; init; }
+    public int? TimeOnPageSeconds { get; init; }
 }

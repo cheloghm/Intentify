@@ -23,7 +23,9 @@ public sealed record UpsertVisitorFromCollectorEvent(
     string? ProductName = null,
     string? ProductCategory = null,
     string? ProductPrice = null,
-    string? ProductBrand = null);
+    string? ProductBrand = null,
+    int? ScrollDepthPct = null,
+    int? TimeOnPageSeconds = null);
 
 public sealed record UpsertVisitorResult(Guid VisitorId, VisitorSession Session, int SessionsCount = 0);
 
@@ -41,7 +43,8 @@ public sealed record VisitorListItem(
     string? LastReferrer,
     string? Country      = null,
     string? Platform     = null,
-    string? PrimaryEmail = null);
+    string? PrimaryEmail = null,
+    int IntentScore = 0);
 
 // ── Timeline ──────────────────────────────────────────────────────────────────
 
@@ -93,7 +96,8 @@ public sealed record VisitorDetailResult(
     string? Platform,
     string? Country,
     VisitorIdentificationSummary Identification,
-    IReadOnlyCollection<VisitorRecentSessionItem> RecentSessions);
+    IReadOnlyCollection<VisitorRecentSessionItem> RecentSessions,
+    int IntentScore = 0);
 
 // ── Visit counts ──────────────────────────────────────────────────────────────
 
@@ -214,7 +218,9 @@ public sealed class CollectorVisitorEventObserver : ICollectorEventObserver
             notification.ProductName,
             notification.ProductCategory,
             notification.ProductPrice,
-            notification.ProductBrand), cancellationToken);
+            notification.ProductBrand,
+            notification.ScrollDepthPct,
+            notification.TimeOnPageSeconds), cancellationToken);
 
         if (_visitorObservers.Count > 0
             && string.Equals(notification.Type, "pageview", StringComparison.OrdinalIgnoreCase))

@@ -84,7 +84,8 @@ public sealed class GetVisitorDetailHandler(IVisitorRepository repository)
             visitor.UserAgentHint, visitor.Language, visitor.Platform,
             visitor.Country,
             BuildIdentification(visitor),
-            recentSessions);
+            recentSessions,
+            IntentScore: visitor.IntentScore);
     }
 
     private static VisitorIdentificationSummary BuildIdentification(Domain.Visitor visitor)

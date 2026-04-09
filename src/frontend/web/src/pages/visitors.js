@@ -351,7 +351,7 @@ export const renderVisitorsView = async (container, { apiClient, toast, query } 
 
     const table = el('table', { class: 'v-table' });
     const thead = el('thead', {}, el('tr', {},
-      ...['Visitor', 'Last Seen', 'Sessions', 'Pages', 'Last Page', 'Engagement', 'Location'].map(c => el('th', {}, c))
+      ...['Visitor', 'Last Seen', 'Sessions', 'Pages', 'Last Page', 'Engagement', 'Intent', 'Location'].map(c => el('th', {}, c))
     ));
     table.appendChild(thead);
 
@@ -386,6 +386,22 @@ export const renderVisitorsView = async (container, { apiClient, toast, query } 
       setTimeout(() => { fill.style.width = `${score}%`; }, 80);
       engCell.appendChild(engWrap);
       tr.appendChild(engCell);
+
+      // Intent score badge
+      const intentScore = v.intentScore || 0;
+      const intentCell = el('td', {});
+      if (intentScore >= 80) {
+        intentCell.appendChild(el('span', { class: 'v-pill v-pill-green' }, '🔥 Hot'));
+      } else if (intentScore >= 60) {
+        intentCell.appendChild(el('span', { class: 'v-pill v-pill-blue' }, '♨ Warm'));
+      } else if (intentScore >= 40) {
+        intentCell.appendChild(el('span', { class: 'v-pill v-pill-amber' }, '~ Cool'));
+      } else if (intentScore > 0) {
+        intentCell.appendChild(el('span', { class: 'v-pill v-pill-gray' }, String(intentScore)));
+      } else {
+        intentCell.appendChild(el('span', { style: 'color:#cbd5e1;font-size:11px' }, '—'));
+      }
+      tr.appendChild(intentCell);
 
       // Location
       const country = v.country || '';
