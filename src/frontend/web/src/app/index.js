@@ -376,6 +376,13 @@ const createProfileModal = ({
   return { overlay, cleanup: () => window.removeEventListener('keydown', onKeyDown) };
 };
 
+// ── Theme helpers ──────────────────────────────────────────────────────────────
+const getTheme = () => localStorage.getItem('hven_theme') || 'light';
+const applyTheme = (theme) => {
+  document.documentElement.setAttribute('data-theme', theme);
+  localStorage.setItem('hven_theme', theme);
+};
+
 // ── Authenticated shell (sidebar + topbar) ─────────────────────────────────────
 
 const createAuthenticatedShell = ({ route, canAccessPlatformAdmin, canAccessTeam, onLogout, onOpenProfile, firstName }) => {
@@ -541,7 +548,18 @@ const createAuthenticatedShell = ({ route, canAccessPlatformAdmin, canAccessTeam
     }
   });
 
-  userArea.append(popup, userRow);
+  const themeBtn = document.createElement('button');
+  themeBtn.type = 'button';
+  themeBtn.style.cssText = 'width:100%;display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:8px;font-size:12px;color:#64748b;background:none;border:1px solid rgba(255,255,255,0.1);cursor:pointer;margin-bottom:8px;font-family:inherit';
+  themeBtn.textContent = getTheme() === 'dark' ? '☀ Light mode' : '☽ Dark mode';
+  themeBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const next = getTheme() === 'dark' ? 'light' : 'dark';
+    applyTheme(next);
+    themeBtn.textContent = next === 'dark' ? '☀ Light mode' : '☽ Dark mode';
+  });
+
+  userArea.append(popup, themeBtn, userRow);
   sidebar.append(brand, nav, userArea);
 
   // ── Content area ──────────────────────────────────────────────────────────────
@@ -1439,4 +1457,5 @@ const renderApp = () => {
 })();
 
 window.addEventListener('hashchange', renderApp);
+applyTheme(getTheme());
 renderApp();
