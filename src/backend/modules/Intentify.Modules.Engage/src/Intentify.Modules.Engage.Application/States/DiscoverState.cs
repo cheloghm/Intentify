@@ -55,7 +55,7 @@ public sealed class DiscoverState : IEngageState
         // The safety net below handles complete AI failure only (empty reply from invalid decision).
         var rawReply = !string.IsNullOrWhiteSpace(decision.Reply)
             ? decision.Reply
-            : "I'm here to help — could you tell me a bit more about what you're looking for?";
+            : "Thanks for reaching out — what can I help you with today?";
 
         var reply = _shaper.Shape(rawReply, ctx);
 

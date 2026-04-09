@@ -45,35 +45,27 @@ public sealed class EngageContextAnalyzer
 
         var sessionMemory = EngageSessionMemorySnapshot.FromSession(session, lastAssistantQuestion);
 
-        EngageTurnDecision turnDecision;
-        if (visitorBundle is not null)
-        {
-            turnDecision = await _aiDecisionService.GenerateAsync(
-                visitorBundle,
-                bot,
-                tenantVocabulary,
-                sessionMemory,
-                historyWindow,
-                ct);
-        }
-        else
-        {
-            // No visitor bundle — defer to a safe pass-through; state handler provides a minimal safe reply
-            turnDecision = new EngageTurnDecision(
-                Reply: string.Empty,
-                Intent: "unknown — visitor bundle unavailable",
-                CapturedSlots: new EngageTurnSlots(),
-                CreateLead: false,
-                CreateTicket: false,
-                TicketSubject: null,
-                TicketType: null,
-                TicketSummary: null,
-                SuggestedFollowUp: null,
-                ConversationComplete: false,
-                Confidence: 0.4m,
-                IsValid: false,
-                FallbackReason: "NoVisitorBundle");
-        }
+        // Always call the AI — even if the visitor bundle is null or has no knowledge chunks.
+        // The bot config (business description, services, tone) is in the system prompt and
+        // gives the AI enough context to answer from without any retrieved knowledge.
+        var effectiveBundle = visitorBundle ?? new VisitorContextBundle(
+            ContextRef: new AiDecisionContextRef(session.TenantId, session.SiteId),
+            CollectorSessionIds: Array.Empty<string>(),
+            KnowledgeRetrievalSnapshot: new KnowledgeRetrievalSnapshot(userMessage, 0, Array.Empty<RetrievedKnowledgeChunkSummary>()),
+            VisitorProfile: null,
+            RecentTimelineSummary: null,
+            RecentEngageSummary: null,
+            LinkedTicketsSummary: null,
+            PromoInteractionSummary: null,
+            IntelligenceSnapshot: null);
+
+        var turnDecision = await _aiDecisionService.GenerateAsync(
+            effectiveBundle,
+            bot,
+            tenantVocabulary,
+            sessionMemory,
+            historyWindow,
+            ct);
 
         _logger.LogInformation(
             "Engage turn analyzed. stage={Stage}; initial={Initial}; confidence={Confidence}; valid={Valid}; fallback={Fallback}; lead={Lead}; ticket={Ticket}; complete={Complete}",

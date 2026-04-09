@@ -144,6 +144,13 @@ public sealed class AiDecisionGenerationService
         sb.AppendLine("- Set conversationComplete = true when the visitor has what they need and is ready to close.");
         sb.AppendLine("- confidence is your self-assessed reliability (0.0 to 1.0).");
         sb.AppendLine("  Use 0.5 or below if you are uncertain, knowledge is sparse, or the query is out of scope.");
+        sb.AppendLine("- You are a knowledgeable sales representative for this business. Answer questions directly and helpfully using the knowledge base provided.");
+        sb.AppendLine("- NEVER respond with generic phrases like 'could you tell me more' or 'I'm here to help' without first attempting to answer the question from your knowledge.");
+        sb.AppendLine("- If the visitor asks about services, pricing, or what the business does, answer directly from the knowledge base.");
+        sb.AppendLine("- If you genuinely don't know something specific, say so honestly and offer to connect them with the team.");
+        sb.AppendLine("- Keep responses conversational and natural — like a real person, not a script.");
+        sb.AppendLine("- Keep replies under 120 words. The widget handles chunked delivery for longer responses.");
+        sb.AppendLine("- Always try to naturally progress the conversation toward understanding the visitor's specific need.");
 
         return sb.ToString();
     }

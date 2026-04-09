@@ -250,10 +250,18 @@
     for (var i = 0; i < sentences.length; i++) {
       current.push(sentences[i]);
       currentLen += sentences[i].length;
-      if (current.length >= 3 || currentLen >= 200 || i === sentences.length - 1) {
+      if (current.length >= 2 || currentLen >= 180 || i === sentences.length - 1) {
         chunks.push(current.join(' '));
         current = [];
         currentLen = 0;
+        if (chunks.length >= 3) {
+          // Remaining sentences go onto the last chunk rather than a 4th
+          if (i < sentences.length - 1) {
+            var remaining = sentences.slice(i + 1).join(' ');
+            if (remaining) chunks[chunks.length - 1] += ' ' + remaining;
+          }
+          break;
+        }
       }
     }
 
@@ -714,19 +722,19 @@
     var hasContactForm = response === contactDetailsPrompt;
     var hasPromo = !!(payload && payload.responseKind === 'promo' && payload.promoPublicKey);
 
-    // Chunked delivery for long responses that aren't special forms
-    if (!hasContactForm && !hasPromo && response.length > 280) {
+    // Chunked delivery for multi-sentence responses that aren't special forms.
+    // All chunks are timed: 600ms for the first, 1800ms between subsequent ones.
+    // A new user message cancels pending delivery immediately via cancelChunkDelivery().
+    if (!hasContactForm && !hasPromo) {
       var chunks = splitIntoChunks(response);
       if (chunks.length > 1) {
-        addMessage('bot', chunks[0]);
         // Re-enable input immediately — user can send at any time during delivery
         setSendingState(false);
         showTypingIndicator();
 
         var cumulativeDelay = 0;
-        for (var i = 1; i < chunks.length; i++) {
-          // Each chunk waits for the reading time of the chunk before it
-          cumulativeDelay += Math.min(5000, Math.max(2500, chunks[i - 1].length * 50));
+        for (var i = 0; i < chunks.length; i++) {
+          cumulativeDelay += i === 0 ? 600 : 1800;
           (function(chunk, delay, idx) {
             var timer = setTimeout(function() {
               removeTypingIndicator();
