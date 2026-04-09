@@ -55,6 +55,33 @@
 
   function endpoint(path) { return baseUrl + '/api' + path; }
 
+  function getPageMeta() {
+    try {
+      var og = function(prop) { var m = document.querySelector('meta[property="' + prop + '"]'); return (m && m.content) || null; };
+      var itemprop = function(p) { var el = document.querySelector('[itemprop="' + p + '"]'); return el ? (el.content || el.innerText || null) : null; };
+      var schemaData = null;
+      var ldScripts = document.querySelectorAll('script[type="application/ld+json"]');
+      for (var i = 0; i < ldScripts.length; i++) {
+        try {
+          var parsed = JSON.parse(ldScripts[i].textContent);
+          var schema = Array.isArray(parsed) ? parsed[0] : parsed;
+          if (schema && (schema['@type'] === 'Product' || schema['@type'] === 'ItemPage')) { schemaData = schema; break; }
+        } catch(e) {}
+      }
+      var offers = schemaData && schemaData.offers ? schemaData.offers : null;
+      return {
+        productName:     (schemaData && schemaData.name) || itemprop('name') || og('og:title') || null,
+        productPrice:    (offers && (offers.price || offers.lowPrice)) || itemprop('price') || og('product:price:amount') || null,
+        productCurrency: (offers && offers.priceCurrency) || itemprop('priceCurrency') || og('product:price:currency') || null,
+        productBrand:    (schemaData && schemaData.brand && schemaData.brand.name) || itemprop('brand') || null,
+        productCategory: (schemaData && schemaData.category) || itemprop('category') || null,
+        productAvailable:(offers && offers.availability && offers.availability.indexOf('InStock') !== -1) || null,
+      };
+    } catch(e) { return {}; }
+  }
+
+  var pageMeta = getPageMeta();
+
   function readCookie(name) {
     var escapedName = name.replace(/[-[\]{}()*+?.,\^$|#\s]/g, '\\$&');
     var match = document.cookie.match(new RegExp('(?:^|; )' + escapedName + '=([^;]*)'));
@@ -728,7 +755,7 @@
         return fetch(endpoint('/engage/chat/send?widgetKey=' + encodeURIComponent(widgetKey)), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ widgetKey: widgetKey, sessionId: sessionId, message: message, collectorSessionId: collectorSessionId, visitorId: getVisitorId() || null, currentPageUrl: window.location.href, currentPageTitle: document.title || null })
+          body: JSON.stringify({ widgetKey: widgetKey, sessionId: sessionId, message: message, collectorSessionId: collectorSessionId, visitorId: getVisitorId() || null, currentPageUrl: window.location.href, currentPageTitle: document.title || null, productName: pageMeta.productName || null, productPrice: pageMeta.productPrice ? String(pageMeta.productPrice) : null, productBrand: pageMeta.productBrand || null, productCategory: pageMeta.productCategory || null, productCurrency: pageMeta.productCurrency || null, productAvailable: pageMeta.productAvailable || null })
         });
       })
       .then(function(response) {

@@ -115,7 +115,16 @@ public sealed class IngestCollectorEventHandler
             Country = geoCountry,
             City = geoCity,
             Region = geoRegion,
-            CrossOriginEvent = crossOriginEvent
+            CrossOriginEvent = crossOriginEvent,
+            PageType = TryGetNestedString(command.Data, "pageMeta", "pageType"),
+            ProductName = TryGetNestedString(command.Data, "pageMeta", "productName"),
+            ProductPrice = TryGetNestedString(command.Data, "pageMeta", "productPrice")
+                        ?? TryGetNestedNumber(command.Data, "pageMeta", "productPrice"),
+            ProductBrand = TryGetNestedString(command.Data, "pageMeta", "productBrand"),
+            ProductCategory = TryGetNestedString(command.Data, "pageMeta", "productCategory"),
+            ProductSku = TryGetNestedString(command.Data, "pageMeta", "productSku"),
+            ProductAvailable = TryGetNestedBool(command.Data, "pageMeta", "productAvailable"),
+            OgType = TryGetNestedString(command.Data, "pageMeta", "ogType"),
         };
 
         await _events.InsertAsync(collectorEvent, cancellationToken);
@@ -136,7 +145,11 @@ public sealed class IngestCollectorEventHandler
             TryGetString(command.Data, "platform"),
             collectorEvent.Country,
             collectorEvent.City,
-            collectorEvent.Region);
+            collectorEvent.Region,
+            collectorEvent.ProductName,
+            collectorEvent.ProductCategory,
+            collectorEvent.ProductPrice,
+            collectorEvent.ProductBrand);
 
         foreach (var observer in _observers)
         {
@@ -257,6 +270,44 @@ public sealed class IngestCollectorEventHandler
         }
 
         return value.GetString();
+    }
+
+    private static string? TryGetNestedString(JsonElement? data, string outerKey, string innerKey)
+    {
+        try
+        {
+            if (data is null || data.Value.ValueKind != JsonValueKind.Object) return null;
+            if (!data.Value.TryGetProperty(outerKey, out var outer) || outer.ValueKind != JsonValueKind.Object) return null;
+            if (!outer.TryGetProperty(innerKey, out var inner) || inner.ValueKind != JsonValueKind.String) return null;
+            return inner.GetString();
+        }
+        catch { return null; }
+    }
+
+    private static string? TryGetNestedNumber(JsonElement? data, string outerKey, string innerKey)
+    {
+        try
+        {
+            if (data is null || data.Value.ValueKind != JsonValueKind.Object) return null;
+            if (!data.Value.TryGetProperty(outerKey, out var outer) || outer.ValueKind != JsonValueKind.Object) return null;
+            if (!outer.TryGetProperty(innerKey, out var inner)) return null;
+            return inner.ValueKind == JsonValueKind.Number ? inner.GetRawText() : null;
+        }
+        catch { return null; }
+    }
+
+    private static bool? TryGetNestedBool(JsonElement? data, string outerKey, string innerKey)
+    {
+        try
+        {
+            if (data is null || data.Value.ValueKind != JsonValueKind.Object) return null;
+            if (!data.Value.TryGetProperty(outerKey, out var outer) || outer.ValueKind != JsonValueKind.Object) return null;
+            if (!outer.TryGetProperty(innerKey, out var inner)) return null;
+            if (inner.ValueKind == JsonValueKind.True) return true;
+            if (inner.ValueKind == JsonValueKind.False) return false;
+            return null;
+        }
+        catch { return null; }
     }
 
     private async Task<(string? Country, string? City, string? Region)> TryResolveGeoAsync(string? ip)

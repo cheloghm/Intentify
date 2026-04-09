@@ -33,6 +33,7 @@
     let didSendTimeOnPage = false;
     let maxScrollDepth = 0;
     let exitIntentFired = false;
+    var pageMeta = getPageMeta();
 
     function trimValue(value, max) {
       if (typeof value !== 'string') {
@@ -72,7 +73,7 @@
           sessionId,
           visitorId,
           fingerprint,
-          data: data || null
+          data: data != null ? Object.assign({}, data, { pageMeta: pageMeta }) : { pageMeta: pageMeta }
         };
 
         const eventsUrl = siteId
@@ -341,6 +342,46 @@
         setCookie('intentify_vid', stored, 365);
       }
       return stored;
+    }
+
+    function getPageMeta() {
+      try {
+        const og = (prop) => document.querySelector('meta[property="' + prop + '"]')?.content || null;
+        const name = (n) => document.querySelector('meta[name="' + n + '"]')?.content || null;
+        const itemprop = (p) => document.querySelector('[itemprop="' + p + '"]')?.content || document.querySelector('[itemprop="' + p + '"]')?.innerText || null;
+
+        // Try JSON-LD schema first (most reliable for e-commerce)
+        let schemaData = null;
+        const ldScripts = document.querySelectorAll('script[type="application/ld+json"]');
+        for (var i = 0; i < ldScripts.length; i++) {
+          try {
+            const parsed = JSON.parse(ldScripts[i].textContent);
+            const schema = Array.isArray(parsed) ? parsed[0] : parsed;
+            if (schema && (schema['@type'] === 'Product' || schema['@type'] === 'ItemPage')) {
+              schemaData = schema;
+              break;
+            }
+          } catch(e) {}
+        }
+
+        return {
+          ogTitle:          og('og:title') || null,
+          ogDescription:    og('og:description') || null,
+          ogType:           og('og:type') || null,
+          ogImage:          og('og:image') || null,
+          productName:      schemaData?.name || itemprop('name') || og('og:title') || null,
+          productPrice:     schemaData?.offers?.price || schemaData?.offers?.lowPrice || itemprop('price') || og('product:price:amount') || null,
+          productCurrency:  schemaData?.offers?.priceCurrency || itemprop('priceCurrency') || og('product:price:currency') || null,
+          productBrand:     schemaData?.brand?.name || itemprop('brand') || null,
+          productSku:       schemaData?.sku || itemprop('sku') || null,
+          productAvailable: schemaData?.offers?.availability?.includes('InStock') || null,
+          productCategory:  schemaData?.category || itemprop('category') || null,
+          schemaType:       schemaData?.['@type'] || null,
+          pageType:         og('og:type') || null,
+        };
+      } catch(e) {
+        return {};
+      }
     }
 
     function getBrowserFingerprint() {

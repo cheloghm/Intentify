@@ -32,7 +32,11 @@ public sealed record CollectorEventIngestedNotification(
     string? Platform,
     string? Country = null,
     string? City = null,
-    string? Region = null);
+    string? Region = null,
+    string? ProductName = null,
+    string? ProductCategory = null,
+    string? ProductPrice = null,
+    string? ProductBrand = null);
 
 public interface ICollectorEventObserver
 {

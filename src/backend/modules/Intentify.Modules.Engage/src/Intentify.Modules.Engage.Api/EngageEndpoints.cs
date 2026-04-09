@@ -132,7 +132,20 @@ internal static class EngageEndpoints
 
         var resolvedVisitorId = NormalizeOptional(request.VisitorId);
 
-        var result = await handler.HandleAsync(new ChatSendCommand(resolvedWidgetKey, sessionId, request.Message, resolvedCollectorSessionId, resolvedVisitorId, NormalizeOptional(request.CurrentPageUrl), NormalizeOptional(request.CurrentPageTitle)), context.RequestAborted);
+        var result = await handler.HandleAsync(new ChatSendCommand(
+            resolvedWidgetKey,
+            sessionId,
+            request.Message,
+            resolvedCollectorSessionId,
+            resolvedVisitorId,
+            NormalizeOptional(request.CurrentPageUrl),
+            NormalizeOptional(request.CurrentPageTitle),
+            NormalizeOptional(request.ProductName),
+            NormalizeOptional(request.ProductPrice),
+            NormalizeOptional(request.ProductBrand),
+            NormalizeOptional(request.ProductCategory),
+            NormalizeOptional(request.ProductCurrency),
+            request.ProductAvailable), context.RequestAborted);
         return result.Status switch
         {
             OperationStatus.ValidationFailed => Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(result.Errors!.Errors)),

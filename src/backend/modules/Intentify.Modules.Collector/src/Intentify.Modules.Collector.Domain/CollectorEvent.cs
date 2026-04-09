@@ -37,4 +37,14 @@ public sealed class CollectorEvent
     public string? Region { get; init; }
 
     public bool CrossOriginEvent { get; init; }
+
+    // Page / product metadata (extracted from pageMeta in event data)
+    public string? PageType { get; init; }
+    public string? ProductName { get; init; }
+    public string? ProductPrice { get; init; }
+    public string? ProductBrand { get; init; }
+    public string? ProductCategory { get; init; }
+    public string? ProductSku { get; init; }
+    public bool? ProductAvailable { get; init; }
+    public string? OgType { get; init; }
 }

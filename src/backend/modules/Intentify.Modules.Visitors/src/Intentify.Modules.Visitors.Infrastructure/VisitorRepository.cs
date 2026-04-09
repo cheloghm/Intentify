@@ -47,6 +47,7 @@ public sealed class VisitorRepository : IVisitorRepository
                 Region = Truncate(command.Region, 64),
                 Sessions = CreateInitialSessions(command, resolvedSessionId)
             };
+            UpdateProductMeta(visitor, command);
 
             await _visitors.InsertOneAsync(visitor, cancellationToken: cancellationToken);
             return new UpsertVisitorResult(visitor.Id, visitor.Sessions.FirstOrDefault() ?? CreateDetachedSession(command, resolvedSessionId), visitor.Sessions.Count);
@@ -60,6 +61,7 @@ public sealed class VisitorRepository : IVisitorRepository
         visitor.Country ??= Truncate(command.Country, 64);
         visitor.City ??= Truncate(command.City, 64);
         visitor.Region ??= Truncate(command.Region, 64);
+        UpdateProductMeta(visitor, command);
 
         VisitorSession session;
         if (resolvedSessionId is null)
@@ -288,6 +290,23 @@ public sealed class VisitorRepository : IVisitorRepository
         };
 
         return MongoIndexHelper.EnsureIndexesAsync(_visitors, indexes);
+    }
+
+    private static void UpdateProductMeta(Visitor visitor, UpsertVisitorFromCollectorEvent command)
+    {
+        if (string.IsNullOrWhiteSpace(command.ProductName))
+            return;
+
+        var name = command.ProductName.Trim();
+        visitor.LastProductViewed = name;
+        visitor.LastProductPrice = command.ProductPrice;
+
+        if (!visitor.RecentProductViews.Contains(name, StringComparer.OrdinalIgnoreCase))
+        {
+            visitor.RecentProductViews.Add(name);
+            if (visitor.RecentProductViews.Count > 20)
+                visitor.RecentProductViews.RemoveAt(0);
+        }
     }
 
     private static DateTime Max(DateTime left, DateTime right) => left > right ? left : right;

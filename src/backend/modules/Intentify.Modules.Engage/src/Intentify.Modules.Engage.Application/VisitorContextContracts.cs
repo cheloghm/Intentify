@@ -47,7 +47,13 @@ public sealed record VisitorContextBundle(
     IReadOnlyCollection<KnowledgeQuickFactsSummary>? QuickFacts = null,
     IReadOnlyCollection<string>? ManualFacts = null,
     string? CurrentPageUrl = null,
-    string? CurrentPageTitle = null);
+    string? CurrentPageTitle = null,
+    string? ProductName = null,
+    string? ProductPrice = null,
+    string? ProductBrand = null,
+    string? ProductCategory = null,
+    string? ProductCurrency = null,
+    bool? ProductAvailable = null);
 
 public sealed record VisitorProfileSummary(
     Guid VisitorId,

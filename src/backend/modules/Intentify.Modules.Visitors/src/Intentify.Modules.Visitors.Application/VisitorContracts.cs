@@ -19,7 +19,11 @@ public sealed record UpsertVisitorFromCollectorEvent(
     string? Platform,
     string? Country = null,
     string? City    = null,
-    string? Region  = null);
+    string? Region  = null,
+    string? ProductName = null,
+    string? ProductCategory = null,
+    string? ProductPrice = null,
+    string? ProductBrand = null);
 
 public sealed record UpsertVisitorResult(Guid VisitorId, VisitorSession Session, int SessionsCount = 0);
 
@@ -206,7 +210,11 @@ public sealed class CollectorVisitorEventObserver : ICollectorEventObserver
             notification.Platform,
             notification.Country,
             notification.City,
-            notification.Region), cancellationToken);
+            notification.Region,
+            notification.ProductName,
+            notification.ProductCategory,
+            notification.ProductPrice,
+            notification.ProductBrand), cancellationToken);
 
         if (_visitorObservers.Count > 0
             && string.Equals(notification.Type, "pageview", StringComparison.OrdinalIgnoreCase))

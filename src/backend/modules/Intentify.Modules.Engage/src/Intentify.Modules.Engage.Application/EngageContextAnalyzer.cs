@@ -27,7 +27,13 @@ public sealed class EngageContextAnalyzer
         VisitorContextBundle? visitorBundle,
         string? currentPageUrl,
         string? currentPageTitle,
-        CancellationToken ct)
+        CancellationToken ct,
+        string? productName = null,
+        string? productPrice = null,
+        string? productBrand = null,
+        string? productCategory = null,
+        string? productCurrency = null,
+        bool? productAvailable = null)
     {
         // Use the last 15 messages as history context
         var historyWindow = recentMessages
@@ -65,6 +71,20 @@ public sealed class EngageContextAnalyzer
         if (!string.IsNullOrWhiteSpace(currentPageUrl) || !string.IsNullOrWhiteSpace(currentPageTitle))
         {
             effectiveBundle = effectiveBundle with { CurrentPageUrl = currentPageUrl, CurrentPageTitle = currentPageTitle };
+        }
+
+        // Stamp product context onto the bundle
+        if (!string.IsNullOrWhiteSpace(productName) || !string.IsNullOrWhiteSpace(productPrice))
+        {
+            effectiveBundle = effectiveBundle with
+            {
+                ProductName = productName,
+                ProductPrice = productPrice,
+                ProductBrand = productBrand,
+                ProductCategory = productCategory,
+                ProductCurrency = productCurrency,
+                ProductAvailable = productAvailable,
+            };
         }
 
         var turnDecision = await _aiDecisionService.GenerateAsync(

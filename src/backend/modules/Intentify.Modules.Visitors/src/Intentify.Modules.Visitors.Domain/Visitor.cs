@@ -37,6 +37,11 @@ public sealed class Visitor
 
     public List<VisitorSession> Sessions { get; set; } = [];
 
+    // ── Product / page meta ────────────────────────────────────────────────
+    public string? LastProductViewed { get; set; }
+    public string? LastProductPrice { get; set; }
+    public List<string> RecentProductViews { get; set; } = [];
+
     // ── GDPR Consent (Phase 6) ─────────────────────────────────────────────
     public List<VisitorConsentDecision> ConsentDecisions { get; set; } = [];
     public bool? LatestConsentGiven { get; set; }

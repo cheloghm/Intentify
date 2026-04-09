@@ -181,6 +181,34 @@ public sealed class AiDecisionGenerationService
             sb.AppendLine();
             sb.AppendLine("Use this to personalise your response. If the page title or URL suggests a specific product, service, or section, acknowledge it naturally in your response where relevant. Do not mention the URL directly — instead use the page context to inform what you say.");
             sb.AppendLine();
+
+            // Product context (from structured page metadata)
+            if (!string.IsNullOrWhiteSpace(contextBundle.ProductName) || !string.IsNullOrWhiteSpace(contextBundle.ProductPrice))
+            {
+                sb.AppendLine("Product context:");
+                if (!string.IsNullOrWhiteSpace(contextBundle.ProductName))
+                    sb.AppendLine($"  Product being viewed: {contextBundle.ProductName}");
+                if (!string.IsNullOrWhiteSpace(contextBundle.ProductPrice))
+                {
+                    var priceStr = !string.IsNullOrWhiteSpace(contextBundle.ProductCurrency)
+                        ? $"{contextBundle.ProductPrice} {contextBundle.ProductCurrency}"
+                        : contextBundle.ProductPrice;
+                    sb.AppendLine($"  Price: {priceStr}");
+                }
+                if (!string.IsNullOrWhiteSpace(contextBundle.ProductBrand))
+                    sb.AppendLine($"  Brand: {contextBundle.ProductBrand}");
+                if (!string.IsNullOrWhiteSpace(contextBundle.ProductCategory))
+                    sb.AppendLine($"  Category: {contextBundle.ProductCategory}");
+                if (contextBundle.ProductAvailable.HasValue)
+                    sb.AppendLine($"  Availability: {(contextBundle.ProductAvailable.Value ? "In stock" : "Out of stock")}");
+                sb.AppendLine();
+                sb.AppendLine("Use this product context to ask relevant discovery questions. For example:");
+                sb.AppendLine("  - Ask about their budget if no price fit is clear");
+                sb.AppendLine("  - Ask about their use case or who it is for");
+                sb.AppendLine("  - If they seem interested, offer to answer questions or suggest alternatives");
+                sb.AppendLine("  - Never be pushy — be like a helpful shop assistant, not a salesperson");
+                sb.AppendLine();
+            }
         }
 
         // --- Turn context ---

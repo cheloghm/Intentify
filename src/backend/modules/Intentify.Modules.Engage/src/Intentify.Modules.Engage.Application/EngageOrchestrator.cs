@@ -97,7 +97,13 @@ public sealed class EngageOrchestrator
             visitorBundle,
             command.CurrentPageUrl,
             command.CurrentPageTitle,
-            cancellationToken);
+            cancellationToken,
+            command.ProductName,
+            command.ProductPrice,
+            command.ProductBrand,
+            command.ProductCategory,
+            command.ProductCurrency,
+            command.ProductAvailable);
 
         context.SetPrimaryAction(_nextActionSelector.Select(context));
         _logger.LogInformation(
