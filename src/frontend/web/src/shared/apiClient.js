@@ -450,6 +450,13 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
       body: JSON.stringify({ siteId }),
     });
 
+  const generateEngageFollowUp = async (leadId, conversationSummary, visitorName, visitorEmail, siteId) =>
+    request('/engage/generate-followup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ leadId, conversationSummary, visitorName, visitorEmail, siteId }),
+    });
+
   const listAdsCampaigns = async (siteId) =>
     request(`/ads/campaigns${buildQueryString({ siteId })}`);
 
@@ -662,6 +669,7 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
       getBot: getEngageBot,
       updateBot: updateEngageBotWithSiteId,
       sendDigest: sendEngageDigest,
+      generateFollowUp: generateEngageFollowUp,
     },
     tickets: {
       listTickets,

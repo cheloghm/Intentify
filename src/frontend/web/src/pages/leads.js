@@ -265,6 +265,60 @@ export const renderLeadsView = (container, { apiClient, toast } = {}) => {
       body.appendChild(el('div', { style: 'background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:10px 12px;font-size:12px;color:#92400e;line-height:1.6' }, '💡 ', lead.suggestedFollowUp));
     }
 
+    // AI follow-up email generator
+    {
+      const aiBox = el('div', {});
+      aiBox.appendChild(el('div', { class: 'l-section-title' }, '✉ AI Follow-up Email'));
+
+      const genBtn = el('button', { class: 'l-btn l-btn-outline l-btn-sm' }, '✉ Generate follow-up email');
+      const statusEl = el('div', { style: 'font-size:11.5px;color:#94a3b8;margin-top:6px;display:none' }, '⏳ Generating personalised email…');
+      const emailWrap = el('div', { style: 'display:none;margin-top:10px' });
+      const emailTA = el('textarea', { style: 'width:100%;min-height:200px;font-size:12.5px;font-family:inherit;color:#1e293b;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;resize:vertical;outline:none;box-sizing:border-box;line-height:1.65' });
+      const btnRow = el('div', { style: 'display:flex;gap:8px;margin-top:8px' });
+      const copyBtn = el('button', { class: 'l-btn l-btn-outline l-btn-sm' }, '📋 Copy email');
+      const closeBtn = el('button', { class: 'l-btn l-btn-outline l-btn-sm' }, 'Close');
+
+      copyBtn.addEventListener('click', () => {
+        navigator.clipboard.writeText(emailTA.value).then(() => {
+          copyBtn.textContent = '✓ Copied!';
+          setTimeout(() => { copyBtn.textContent = '📋 Copy email'; }, 2000);
+        });
+      });
+      closeBtn.addEventListener('click', () => {
+        emailWrap.style.display = 'none';
+        genBtn.style.display = '';
+      });
+
+      btnRow.append(copyBtn, closeBtn);
+      emailWrap.append(emailTA, btnRow);
+
+      genBtn.addEventListener('click', async () => {
+        genBtn.disabled = true;
+        statusEl.style.display = '';
+        emailWrap.style.display = 'none';
+        try {
+          const result = await client.engage.generateFollowUp(
+            lead.leadId || lead.id,
+            lead.conversationSummary,
+            lead.displayName,
+            lead.primaryEmail,
+            state.siteId
+          );
+          emailTA.value = result?.emailBody || '';
+          emailWrap.style.display = '';
+          genBtn.style.display = 'none';
+        } catch (err) {
+          notifier.show({ message: mapApiError(err).message, variant: 'danger' });
+        } finally {
+          genBtn.disabled = false;
+          statusEl.style.display = 'none';
+        }
+      });
+
+      aiBox.append(genBtn, statusEl, emailWrap);
+      body.appendChild(aiBox);
+    }
+
     // Visitor journey — load async
     if (lead.linkedVisitorId) {
       const journeyBox = el('div', {});

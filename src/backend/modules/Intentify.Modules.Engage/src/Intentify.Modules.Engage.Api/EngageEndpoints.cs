@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Intentify.Modules.Engage.Application;
 using Intentify.Modules.Sites.Application;
+using Intentify.Shared.AI;
 using Intentify.Shared.Validation;
 using Intentify.Shared.Web;
 using Microsoft.AspNetCore.Http;
@@ -507,9 +508,44 @@ internal static class EngageEndpoints
         return value.Trim();
     }
 
+    public static async Task<IResult> GenerateFollowUpAsync(
+        GenerateFollowUpRequest request,
+        HttpContext context,
+        IChatCompletionClient ai)
+    {
+        var tenantId = TryGetTenantId(context.User);
+        if (tenantId is null) return Results.Unauthorized();
+
+        var visitorName  = string.IsNullOrWhiteSpace(request.VisitorName)  ? "a visitor"           : request.VisitorName;
+        var visitorEmail = string.IsNullOrWhiteSpace(request.VisitorEmail) ? "not captured yet"    : request.VisitorEmail;
+        var summary      = string.IsNullOrWhiteSpace(request.ConversationSummary) ? "No summary available." : request.ConversationSummary;
+
+        const string systemPrompt = "You are a sales professional writing a personalised follow-up email.";
+        var userPrompt = $"""
+            Write a short, warm, personalised follow-up email for a lead from our website.
+            Lead name: {visitorName}
+            Their email: {visitorEmail}
+            What they discussed: {summary}
+            Keep it under 150 words. Friendly but professional. No subject line — just the email body.
+            """;
+
+        var result = await ai.CompleteAsync(systemPrompt, userPrompt, context.RequestAborted);
+        if (!result.IsSuccess)
+            return Results.Problem("AI generation failed. Check AI configuration.");
+
+        return Results.Ok(new { emailBody = result.Value });
+    }
+
     private static Guid? TryGetTenantId(ClaimsPrincipal user)
     {
         var tenantIdValue = user.FindFirstValue("tenantId");
         return Guid.TryParse(tenantIdValue, out var tenantId) ? tenantId : null;
     }
 }
+
+public sealed record GenerateFollowUpRequest(
+    string? LeadId,
+    string? ConversationSummary,
+    string? VisitorName,
+    string? VisitorEmail,
+    string? SiteId);
