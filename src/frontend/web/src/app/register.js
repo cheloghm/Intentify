@@ -131,12 +131,30 @@ const render = () => {
     <div class="hv-free-note">✦ First month free — no credit card required</div>
   `;
 
+  // Org name for Google signup
+  const googleOrgWrap = document.createElement('div');
+  googleOrgWrap.className = 'hv-field';
+  googleOrgWrap.style.marginBottom = '8px';
+  const googleOrgNote = document.createElement('div');
+  googleOrgNote.style.cssText = 'font-size:11px;color:#8a8680;font-weight:300;margin-bottom:6px';
+  googleOrgNote.textContent = 'Optional — you can update this later';
+  const googleOrgInput = document.createElement('input');
+  googleOrgInput.type = 'text';
+  googleOrgInput.className = 'hv-input';
+  googleOrgInput.placeholder = 'Company or organisation name';
+  googleOrgWrap.append(googleOrgNote, googleOrgInput);
+  card.appendChild(googleOrgWrap);
+
   // Google
   const googleBtn = document.createElement('button');
   googleBtn.type = 'button';
   googleBtn.className = 'hv-google';
   googleBtn.innerHTML = `${GOOGLE_SVG} Sign up with Google`;
-  googleBtn.addEventListener('click', () => { window.location.href = '/api/auth/google'; });
+  googleBtn.addEventListener('click', () => {
+    const orgName = googleOrgInput.value.trim();
+    const url = orgName ? `/api/auth/google?orgName=${encodeURIComponent(orgName)}` : '/api/auth/google';
+    window.location.href = url;
+  });
   card.appendChild(googleBtn);
 
   // Divider

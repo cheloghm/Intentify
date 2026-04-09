@@ -2,6 +2,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Security.Claims;
+using System.Text;
 using System.Text.Json;
 using Intentify.Modules.Auth.Application;
 using Intentify.Modules.Auth.Domain;
@@ -322,7 +323,7 @@ internal static class AuthEndpoints
 
     // ── Google OAuth ──────────────────────────────────────────────────────────
 
-    public static IResult GoogleOAuthInitiate(IOptions<GoogleOAuthOptions> options)
+    public static IResult GoogleOAuthInitiate(IOptions<GoogleOAuthOptions> options, string? orgName = null)
     {
         var clientId = options.Value.ClientId;
         if (string.IsNullOrWhiteSpace(clientId))
@@ -333,6 +334,12 @@ internal static class AuthEndpoints
 
         var redirectUri = Uri.EscapeDataString(options.Value.RedirectUri);
         var scope = Uri.EscapeDataString("openid email profile");
+
+        // Encode orgName into the state parameter so it survives the OAuth round-trip
+        var stateValue = string.IsNullOrWhiteSpace(orgName)
+            ? string.Empty
+            : Convert.ToBase64String(Encoding.UTF8.GetBytes(orgName.Trim()[..Math.Min(orgName.Trim().Length, 200)]));
+
         var googleUrl = $"https://accounts.google.com/o/oauth2/v2/auth" +
                         $"?client_id={clientId}" +
                         $"&redirect_uri={redirectUri}" +
@@ -340,6 +347,11 @@ internal static class AuthEndpoints
                         $"&scope={scope}" +
                         $"&access_type=offline" +
                         $"&prompt=select_account";
+
+        if (!string.IsNullOrWhiteSpace(stateValue))
+        {
+            googleUrl += $"&state={Uri.EscapeDataString(stateValue)}";
+        }
 
         return Results.Redirect(googleUrl);
     }
@@ -359,6 +371,14 @@ internal static class AuthEndpoints
             if (string.IsNullOrWhiteSpace(code))
             {
                 return Results.Redirect("/public/login.html?error=google_auth_failed");
+            }
+
+            // Decode orgName from state parameter (base64-encoded, set during initiation)
+            string? orgNameFromState = null;
+            var stateParam = context.Request.Query["state"].ToString();
+            if (!string.IsNullOrWhiteSpace(stateParam))
+            {
+                try { orgNameFromState = Encoding.UTF8.GetString(Convert.FromBase64String(stateParam)); } catch { }
             }
 
             var opts = options.Value;
@@ -419,7 +439,7 @@ internal static class AuthEndpoints
                 var now = DateTime.UtcNow;
                 var tenant = new Tenant
                 {
-                    Name = displayName ?? email,
+                    Name = !string.IsNullOrWhiteSpace(orgNameFromState) ? orgNameFromState : (displayName ?? email),
                     Domain = $"{Guid.NewGuid():N}.tenant.local",
                     Plan = "starter",
                     Industry = "software",
