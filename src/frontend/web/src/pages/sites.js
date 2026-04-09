@@ -275,7 +275,7 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
 
       const snippetSection = el('div', { style: 'margin-top:18px;border-top:1px solid #e2e8f0;padding-top:16px;display:flex;flex-direction:column;gap:10px' });
       snippetSection.appendChild(el('div', { style: 'font-size:13px;font-weight:700;color:#0f172a' }, 'Tracker Snippet'));
-      snippetSection.appendChild(el('div', { style: 'font-size:12px;color:#64748b;line-height:1.5' }, 'Each site has a unique snippet ID. Do not share snippets between sites.'));
+      snippetSection.appendChild(el('div', { style: 'font-size:12px;color:#64748b;line-height:1.5' }, 'This snippet is unique to this site. Do not use it on other websites — each site needs its own snippet.'));
 
       const tabBar = el('div', { style: 'display:flex;gap:6px;flex-wrap:wrap' });
       const codeArea = el('div', {});

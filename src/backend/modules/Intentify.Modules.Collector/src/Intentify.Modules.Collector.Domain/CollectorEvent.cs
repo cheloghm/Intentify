@@ -35,4 +35,6 @@ public sealed class CollectorEvent
     public string? City { get; init; }
 
     public string? Region { get; init; }
+
+    public bool CrossOriginEvent { get; init; }
 }

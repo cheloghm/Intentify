@@ -1,6 +1,7 @@
 using Intentify.Modules.Collector.Domain;
 using Intentify.Modules.Sites.Domain;
 using Intentify.Shared.Validation;
+using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization;
 using System.Net.Http.Json;
@@ -19,17 +20,20 @@ public sealed class IngestCollectorEventHandler
     private readonly ICollectorEventRepository _events;
     private readonly IReadOnlyCollection<ICollectorEventObserver> _observers;
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly ILogger<IngestCollectorEventHandler> _logger;
 
     public IngestCollectorEventHandler(
         ISiteLookupRepository sites,
         ICollectorEventRepository events,
         IEnumerable<ICollectorEventObserver> observers,
-        IHttpClientFactory httpClientFactory)
+        IHttpClientFactory httpClientFactory,
+        ILogger<IngestCollectorEventHandler> logger)
     {
         _sites = sites;
         _events = events;
         _observers = observers.ToArray();
         _httpClientFactory = httpClientFactory;
+        _logger = logger;
     }
 
     public async Task<OperationResult<bool>> HandleAsync(CollectEventCommand command, CancellationToken cancellationToken = default)
@@ -74,6 +78,24 @@ public sealed class IngestCollectorEventHandler
             return OperationResult<bool>.Forbidden();
         }
 
+        var crossOriginEvent = false;
+        if (Uri.TryCreate(normalizedOrigin, UriKind.Absolute, out var originUri))
+        {
+            var requestHost = originUri.Host.StartsWith("www.", StringComparison.OrdinalIgnoreCase)
+                ? originUri.Host[4..]
+                : originUri.Host;
+            var siteHost = site.Domain.StartsWith("www.", StringComparison.OrdinalIgnoreCase)
+                ? site.Domain[4..]
+                : site.Domain;
+            crossOriginEvent = !string.Equals(requestHost, siteHost, StringComparison.OrdinalIgnoreCase);
+            if (crossOriginEvent)
+            {
+                _logger.LogWarning(
+                    "Cross-origin event detected: snippet for site {SiteId} (domain: {SiteDomain}) received from origin {RequestOrigin}.",
+                    site.Id, site.Domain, normalizedOrigin);
+            }
+        }
+
         var now = DateTime.UtcNow;
         var occurredAt = command.TsUtc?.ToUniversalTime() ?? now;
         var (geoCountry, geoCity, geoRegion) = await TryResolveGeoAsync(command.IpAddress);
@@ -92,7 +114,8 @@ public sealed class IngestCollectorEventHandler
             IpAddress = command.IpAddress,
             Country = geoCountry,
             City = geoCity,
-            Region = geoRegion
+            Region = geoRegion,
+            CrossOriginEvent = crossOriginEvent
         };
 
         await _events.InsertAsync(collectorEvent, cancellationToken);
