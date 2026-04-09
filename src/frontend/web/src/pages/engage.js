@@ -416,6 +416,13 @@ export const renderEngageView = async (container, { apiClient, toast } = {}) => 
 
   const { body: botBody } = mkPanel('🤖 Bot Configuration', 'These settings shape how the AI assistant responds', panelEls.bot);
 
+  // Site selector shown in Bot Config tab when multiple sites exist
+  const botSiteRow = el('div', { style: 'display:none;align-items:center;gap:10px;padding:14px 20px;border-bottom:1px solid #f1f5f9' });
+  botSiteRow.appendChild(el('span', { style: 'font-size:12px;font-weight:600;color:#64748b;white-space:nowrap' }, 'Configuring for:'));
+  const botSiteSelect = el('select', { class: 'e-input', style: 'width:auto' });
+  botSiteRow.appendChild(botSiteSelect);
+  botBody.appendChild(botSiteRow);
+
   const botForm = el('div', { class: 'e-form-grid' });
   const mkBotField = (lbl, hint='', type='text') => {
     const wrap = el('div', { class: 'e-field' });
@@ -430,16 +437,59 @@ export const renderEngageView = async (container, { apiClient, toast } = {}) => 
 
   const { wrap: bDescWrap, input: bDescInput } = mkBotField('Business Description', 'What does your business do?', 'textarea');
   bDescWrap.style.gridColumn = '1 / -1';
-  const { wrap: bInduWrap, input: bInduInput } = mkBotField('Industry', 'e.g. Web design, Retail, Plumbing');
+  const { wrap: bInduWrap, input: bInduInput } = mkSelect('Industry', [
+    ['','— Select industry —'],['Technology','Technology'],['Cybersecurity','Cybersecurity'],
+    ['Web Design','Web Design'],['Marketing Agency','Marketing Agency'],['E-commerce','E-commerce'],
+    ['Healthcare','Healthcare'],['Legal','Legal'],['Finance','Finance'],
+    ['Real Estate','Real Estate'],['Education','Education'],['Consulting','Consulting'],['Other','Other'],
+  ]);
   const { wrap: bSvcWrap,  input: bSvcInput  } = mkBotField('Services', 'Core services offered');
   const { wrap: bGeoWrap,  input: bGeoInput  } = mkBotField('Geographic Focus', 'e.g. Belfast, Ireland');
-  const { wrap: bPersWrap, input: bPersInput } = mkBotField('Personality', 'e.g. Friendly, Premium, Professional');
-  const { wrap: bToneWrap, input: bToneInput } = mkBotField('Tone', 'e.g. Conversational, Formal');
+  const { wrap: bPersWrap, input: bPersInput } = mkSelect('Personality', [
+    ['','— Select personality —'],['Friendly','Friendly'],['Premium','Premium'],
+    ['Professional','Professional'],['Authoritative','Authoritative'],['Approachable','Approachable'],
+    ['Expert','Expert'],['Casual','Casual'],
+  ]);
+  const { wrap: bToneWrap, input: bToneInput } = mkSelect('Tone', [
+    ['','— Select tone —'],['Conversational','Conversational'],['Formal','Formal'],
+    ['Friendly','Friendly'],['Professional','Professional'],['Direct','Direct'],
+    ['Empathetic','Empathetic'],['Playful','Playful'],
+  ]);
   const bDigWrap = el('div',{class:'e-field'});
   bDigWrap.appendChild(el('div',{class:'e-field-label'},'Weekly Digest Email'));
   const bDigToggle = el('label',{class:'e-toggle'}); const bDigCb = el('input',{type:'checkbox'});
   bDigToggle.append(bDigCb, el('span',{class:'e-toggle-slider'})); bDigWrap.appendChild(bDigToggle);
-  const { wrap: bRecipWrap, input: bRecipInput } = mkBotField('Digest Recipients', 'Comma-separated emails');
+
+  // Email pill input for digest recipients
+  const bRecipEmails = [];
+  const bRecipWrap = el('div', { class: 'e-field', style: 'grid-column:1/-1' });
+  bRecipWrap.appendChild(el('div',{class:'e-field-label'},'Digest Recipients'));
+  const pillContainer = el('div', { style: 'display:flex;flex-wrap:wrap;gap:5px;align-items:center;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:6px 8px;min-height:38px;transition:border .14s,background .14s;cursor:text' });
+  const pillEmailInput = el('input', { type:'email', style:'border:none;outline:none;background:transparent;font-family:inherit;font-size:13px;color:#1e293b;min-width:140px;flex:1', placeholder:'Add email and press Enter…' });
+  const addEmailPill = email => {
+    const v = email.trim().toLowerCase();
+    if (!v || !v.includes('@') || bRecipEmails.includes(v)) return;
+    bRecipEmails.push(v);
+    const pill = el('span', { style:'display:inline-flex;align-items:center;gap:3px;background:#ede9fe;color:#4f46e5;border-radius:999px;font-size:11.5px;font-weight:500;padding:2px 8px' }, v);
+    const x = el('button', { type:'button', style:'background:none;border:none;cursor:pointer;color:#7c3aed;font-size:13px;padding:0;line-height:1;margin-left:2px' }, '×');
+    x.addEventListener('click', () => { bRecipEmails.splice(bRecipEmails.indexOf(v),1); pill.remove(); });
+    pill.appendChild(x);
+    pillContainer.insertBefore(pill, pillEmailInput);
+  };
+  pillEmailInput.addEventListener('keydown', e => {
+    if (e.key==='Enter'||e.key===',') { e.preventDefault(); addEmailPill(pillEmailInput.value); pillEmailInput.value=''; }
+    else if (e.key==='Backspace'&&!pillEmailInput.value&&bRecipEmails.length) {
+      const siblings=[...pillContainer.children].filter(c=>c!==pillEmailInput);
+      if (siblings.length) { siblings[siblings.length-1].remove(); bRecipEmails.pop(); }
+    }
+  });
+  pillEmailInput.addEventListener('blur', () => { if (pillEmailInput.value.trim()) { addEmailPill(pillEmailInput.value); pillEmailInput.value=''; } });
+  pillContainer.appendChild(pillEmailInput);
+  pillContainer.addEventListener('click', () => pillEmailInput.focus());
+  pillEmailInput.addEventListener('focus', () => { pillContainer.style.borderColor='#6366f1'; pillContainer.style.boxShadow='0 0 0 3px rgba(99,102,241,.1)'; pillContainer.style.background='#fff'; });
+  pillEmailInput.addEventListener('blur', () => { setTimeout(()=>{ pillContainer.style.borderColor='#e2e8f0'; pillContainer.style.boxShadow=''; pillContainer.style.background='#f8fafc'; },50); });
+  bRecipWrap.appendChild(pillContainer);
+  bRecipWrap.appendChild(el('div',{class:'e-field-hint'},'Press Enter or comma to add an email address'));
 
   botForm.append(bDescWrap, bInduWrap, bSvcWrap, bGeoWrap, bPersWrap, bToneWrap, bDigWrap, bRecipWrap);
   botBody.appendChild(botForm);
@@ -476,7 +526,9 @@ export const renderEngageView = async (container, { apiClient, toast } = {}) => 
     bPersInput.value    = bot.personalityDescriptor || '';
     bToneInput.value    = bot.tone || '';
     bDigCb.checked      = bot.digestEmailEnabled || false;
-    bRecipInput.value   = bot.digestEmailRecipients || '';
+    bRecipEmails.length = 0;
+    [...pillContainer.children].filter(c => c !== pillEmailInput).forEach(p => p.remove());
+    (bot.digestEmailRecipients || '').split(',').map(e => e.trim()).filter(Boolean).forEach(addEmailPill);
 
     try { state.triggers = JSON.parse(bot.autoTriggerRulesJson || '[]'); } catch { state.triggers = []; }
     renderTriggers();
@@ -497,7 +549,7 @@ export const renderEngageView = async (container, { apiClient, toast } = {}) => 
     personalityDescriptor: bPersInput.value.trim(),
     tone:                  bToneInput.value.trim(),
     digestEmailEnabled:    bDigCb.checked,
-    digestEmailRecipients: bRecipInput.value.trim(),
+    digestEmailRecipients: bRecipEmails.join(','),
     autoTriggerRulesJson:  JSON.stringify(state.triggers),
   });
 
@@ -507,7 +559,8 @@ export const renderEngageView = async (container, { apiClient, toast } = {}) => 
     [widgetSaveBtn, botSaveBtn, triggerSaveBtn].forEach(b => { b.disabled = true; b.textContent = '⏳ Saving…'; });
     try {
       await client.engage.updateBot(state.siteId, { ...buildBotPayload(), ...extra });
-      notifier.show({ message: 'Settings saved.', variant: 'success' });
+      notifier.show({ message: 'Bot settings saved successfully', variant: 'success' });
+      renderTriggers();
     } catch (err) { notifier.show({ message: mapApiError(err).message, variant: 'danger' }); }
     finally {
       state.saving = false;
@@ -534,18 +587,25 @@ export const renderEngageView = async (container, { apiClient, toast } = {}) => 
 
   const syncSites = sites => {
     siteSelect.innerHTML = '';
+    botSiteSelect.innerHTML = '';
     if (!sites.length) { siteSelect.appendChild(el('option',{value:''},'No sites')); return; }
     sites.forEach(s => {
-      const id=getSiteId(s); const opt=el('option',{value:id},s.domain||id);
-      if (id===state.siteId) opt.selected=true;
+      const id=getSiteId(s); const label=s.domain||id;
+      const opt=el('option',{value:id},label);
+      const botOpt=el('option',{value:id},label);
+      if (id===state.siteId) { opt.selected=true; botOpt.selected=true; }
       siteSelect.appendChild(opt);
+      botSiteSelect.appendChild(botOpt);
     });
     if (!state.siteId || !sites.find(s=>getSiteId(s)===state.siteId)) state.siteId=getSiteId(sites[0]);
     siteSelect.value = state.siteId;
+    botSiteSelect.value = state.siteId;
+    botSiteRow.style.display = sites.length > 1 ? 'flex' : 'none';
   };
 
   // ─── Wire events ───────────────────────────────────────────────────────────
-  siteSelect.addEventListener('change', () => { state.siteId=siteSelect.value; saveSiteId(state.siteId); loadConversations(); loadBot(); });
+  siteSelect.addEventListener('change', () => { state.siteId=siteSelect.value; botSiteSelect.value=state.siteId; saveSiteId(state.siteId); loadConversations(); loadBot(); });
+  botSiteSelect.addEventListener('change', () => { state.siteId=botSiteSelect.value; siteSelect.value=state.siteId; saveSiteId(state.siteId); loadBot(); });
   refreshBtn.addEventListener('click', () => { loadConversations(); loadBot(); });
   addTriggerBtn.addEventListener('click', () => { state.triggers.push({ type:'time_on_page', value:'30', message:'Need help? We\'re here!', enabled:true }); renderTriggers(); });
   widgetSaveBtn.addEventListener('click', () => saveBot());
