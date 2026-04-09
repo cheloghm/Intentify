@@ -13,7 +13,8 @@ public sealed record CurrentUserResponse(
     string? DisplayName,
     string? Email,
     string? OrganizationName,
-    bool IsAdmin);
+    bool IsAdmin,
+    string? Plan = null);
 
 public sealed record UpdateCurrentUserProfileRequest(string DisplayName, string? OrganizationName);
 

@@ -471,6 +471,16 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
       body: JSON.stringify({ leadId, conversationSummary, visitorName, visitorEmail, siteId }),
     });
 
+  const getEngageAbTestResults = async (siteId) =>
+    request(`/engage/ab-test-results${buildQueryString({ siteId })}`);
+
+  const resetEngageAbTest = async (siteId) =>
+    request(`/engage/ab-test/reset${buildQueryString({ siteId })}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+
   const listAdsCampaigns = async (siteId) =>
     request(`/ads/campaigns${buildQueryString({ siteId })}`);
 
@@ -686,6 +696,8 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
       updateBot: updateEngageBotWithSiteId,
       sendDigest: sendEngageDigest,
       generateFollowUp: generateEngageFollowUp,
+      getAbTestResults: getEngageAbTestResults,
+      resetAbTest: resetEngageAbTest,
     },
     tickets: {
       listTickets,

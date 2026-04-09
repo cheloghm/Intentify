@@ -13,6 +13,7 @@ public sealed class EngageBusinessOutcomeExecutor
     private readonly IEngageHandoffTicketRepository _handoffTicketRepository;
     private readonly EngageConversationPolicy _policy;
     private readonly ILeadNotificationService? _leadNotifier;
+    private readonly IEngageBotRepository? _botRepository;
 
     public EngageBusinessOutcomeExecutor(
         ListTicketsHandler listTicketsHandler,
@@ -21,7 +22,8 @@ public sealed class EngageBusinessOutcomeExecutor
         UpsertLeadFromPromoEntryHandler upsertLeadHandler,
         IEngageHandoffTicketRepository handoffTicketRepository,
         EngageConversationPolicy policy,
-        ILeadNotificationService? leadNotifier = null)
+        ILeadNotificationService? leadNotifier = null,
+        IEngageBotRepository? botRepository = null)
     {
         _listTicketsHandler = listTicketsHandler;
         _createTicketHandler = createTicketHandler;
@@ -30,6 +32,7 @@ public sealed class EngageBusinessOutcomeExecutor
         _handoffTicketRepository = handoffTicketRepository;
         _policy = policy;
         _leadNotifier = leadNotifier;
+        _botRepository = botRepository;
     }
 
     public async Task<BusinessOutcomeResult> ExecuteAsync(
@@ -50,7 +53,11 @@ public sealed class EngageBusinessOutcomeExecutor
                 ? await UpsertLeadAsync(context, command, cancellationToken)
                 : false;
 
-            if (leadUpdated) FireHotLeadNotification(context);
+            if (leadUpdated)
+            {
+                FireHotLeadNotification(context);
+                FireAbTestConversion(context.Session, command);
+            }
             return new BusinessOutcomeResult(ticketUpdated, leadUpdated);
         }
 
@@ -59,7 +66,11 @@ public sealed class EngageBusinessOutcomeExecutor
             && HasLeadIdentity(context.Session, command))
         {
             var leadUpdated = await UpsertLeadAsync(context, command, cancellationToken);
-            if (leadUpdated) FireHotLeadNotification(context);
+            if (leadUpdated)
+            {
+                FireHotLeadNotification(context);
+                FireAbTestConversion(context.Session, command);
+            }
             return new BusinessOutcomeResult(false, leadUpdated);
         }
 
@@ -178,6 +189,13 @@ public sealed class EngageBusinessOutcomeExecutor
         => !string.IsNullOrWhiteSpace(session.CapturedEmail)
            || !string.IsNullOrWhiteSpace(command.VisitorId)
            || !string.IsNullOrWhiteSpace(command.CollectorSessionId);
+
+    // ── A/B test conversion tracking (fire-and-forget) ───────────────────────
+    private void FireAbTestConversion(EngageChatSession session, ChatSendCommand command)
+    {
+        if (_botRepository is null || string.IsNullOrWhiteSpace(command.AbTestVariant)) return;
+        _ = _botRepository.IncrementAbTestConversionAsync(session.TenantId, session.SiteId, command.AbTestVariant, CancellationToken.None);
+    }
 
     // ── Hot lead notification (fire-and-forget via ILeadNotificationService) ────
     private void FireHotLeadNotification(EngageConversationContext context)

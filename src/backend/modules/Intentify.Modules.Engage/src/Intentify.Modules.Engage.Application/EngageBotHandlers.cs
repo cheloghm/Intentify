@@ -38,7 +38,14 @@ public sealed class GetEngageBotHandler
             bot.DigestEmailRecipients,
             bot.DigestEmailFrequency,
             HideBranding: bot.HideBranding,
-            CustomBrandingText: bot.CustomBrandingText));
+            CustomBrandingText: bot.CustomBrandingText,
+            AbTestEnabled: bot.AbTestEnabled,
+            OpeningMessageA: bot.OpeningMessageA,
+            OpeningMessageB: bot.OpeningMessageB,
+            AbTestImpressionCountA: bot.AbTestImpressionCountA,
+            AbTestImpressionCountB: bot.AbTestImpressionCountB,
+            AbTestConversionCountA: bot.AbTestConversionCountA,
+            AbTestConversionCountB: bot.AbTestConversionCountB));
     }
 }
 
@@ -83,6 +90,9 @@ public sealed class UpdateEngageBotHandler
             command.DigestEmailFrequency,
             command.HideBranding,
             command.CustomBrandingText,
+            command.AbTestEnabled,
+            command.OpeningMessageA,
+            command.OpeningMessageB,
             cancellationToken);
 
         if (updated is null)
@@ -109,6 +119,13 @@ public sealed class UpdateEngageBotHandler
             updated.DigestEmailRecipients,
             updated.DigestEmailFrequency,
             HideBranding: updated.HideBranding,
-            CustomBrandingText: updated.CustomBrandingText));
+            CustomBrandingText: updated.CustomBrandingText,
+            AbTestEnabled: updated.AbTestEnabled,
+            OpeningMessageA: updated.OpeningMessageA,
+            OpeningMessageB: updated.OpeningMessageB,
+            AbTestImpressionCountA: updated.AbTestImpressionCountA,
+            AbTestImpressionCountB: updated.AbTestImpressionCountB,
+            AbTestConversionCountA: updated.AbTestConversionCountA,
+            AbTestConversionCountB: updated.AbTestConversionCountB));
     }
 }

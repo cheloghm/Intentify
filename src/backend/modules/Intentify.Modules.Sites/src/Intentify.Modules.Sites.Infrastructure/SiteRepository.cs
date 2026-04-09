@@ -57,6 +57,13 @@ public sealed class SiteRepository : ISiteRepository
         return await _sites.Find(site => site.TenantId == tenantId).AnyAsync(cancellationToken);
     }
 
+    public async Task<int> CountByTenantAsync(Guid tenantId, CancellationToken cancellationToken = default)
+    {
+        await _ensureIndexes;
+        var count = await _sites.CountDocumentsAsync(site => site.TenantId == tenantId, cancellationToken: cancellationToken);
+        return (int)count;
+    }
+
     public async Task InsertAsync(Site site, CancellationToken cancellationToken = default)
     {
         await _ensureIndexes;

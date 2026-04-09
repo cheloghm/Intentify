@@ -648,9 +648,23 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
         await loadSites();
       } catch (err) {
         const uiErr = mapApiError(err);
+        const limitMsg = uiErr.details?.errors?.siteLimit?.[0];
         const dMsg  = uiErr.details?.errors?.domain?.[0];
-        if (dMsg) { domainErr.textContent = dMsg; domainErr.style.display = ''; }
-        notifier.show({ message: uiErr.message, variant: 'danger' });
+        if (limitMsg) {
+          const upgradeEl = el('div', { style: 'background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:10px 14px;font-size:12.5px;color:#92400e;margin-top:10px;line-height:1.5' });
+          upgradeEl.appendChild(document.createTextNode('You\'ve reached your site limit on your current plan. '));
+          const upgradeLink = el('a', { href: '/public/register.html', style: 'color:#6366f1;font-weight:600;text-decoration:underline' }, 'Upgrade your plan');
+          upgradeEl.appendChild(upgradeLink);
+          upgradeEl.appendChild(document.createTextNode(' to add more sites.'));
+          if (!addSiteModal.body.querySelector('.si-upgrade-notice')) {
+            upgradeEl.className = 'si-upgrade-notice';
+            addSiteModal.body.appendChild(upgradeEl);
+          }
+          notifier.show({ message: 'Site limit reached. Upgrade to add more sites.', variant: 'warning' });
+        } else {
+          if (dMsg) { domainErr.textContent = dMsg; domainErr.style.display = ''; }
+          notifier.show({ message: uiErr.message, variant: 'danger' });
+        }
         saveBtn.disabled = false; saveBtn.textContent = '🌐 Create Site';
       }
     });

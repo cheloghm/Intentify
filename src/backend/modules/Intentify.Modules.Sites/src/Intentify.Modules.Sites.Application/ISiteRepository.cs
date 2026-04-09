@@ -10,6 +10,7 @@ public interface ISiteRepository
     Task<Site?> GetBySiteKeyAsync(string siteKey, CancellationToken cancellationToken = default);
     Task<IReadOnlyCollection<Site>> ListByTenantAsync(Guid tenantId, CancellationToken cancellationToken = default);
     Task<bool> TenantHasSiteAsync(Guid tenantId, CancellationToken cancellationToken = default);
+    Task<int> CountByTenantAsync(Guid tenantId, CancellationToken cancellationToken = default);
     Task InsertAsync(Site site, CancellationToken cancellationToken = default);
     Task<Site?> UpdateProfileAsync(Guid tenantId, Guid siteId, string? name, string domain, string? description, string? category, IReadOnlyCollection<string> tags, CancellationToken cancellationToken = default);
     Task<Site?> UpdateAllowedOriginsAsync(Guid tenantId, Guid siteId, IReadOnlyCollection<string> allowedOrigins, CancellationToken cancellationToken = default);

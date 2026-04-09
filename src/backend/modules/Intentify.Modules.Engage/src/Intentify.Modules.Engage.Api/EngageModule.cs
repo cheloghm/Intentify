@@ -145,5 +145,7 @@ public sealed class EngageModule : IAppModule
         adminGroup.MapGet("/conversations/{sessionId}/messages", EngageEndpoints.GetConversationMessagesAsync);
         adminGroup.MapPost("/digest/send", EngageEndpoints.DigestSendAsync);
         adminGroup.MapPost("/generate-followup", EngageEndpoints.GenerateFollowUpAsync);
+        adminGroup.MapGet("/ab-test-results", EngageEndpoints.GetAbTestResultsAsync);
+        adminGroup.MapPost("/ab-test/reset", EngageEndpoints.ResetAbTestAsync);
     }
 }

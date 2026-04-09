@@ -17,7 +17,8 @@ public sealed record ChatSendCommand(
     string? ProductBrand = null,
     string? ProductCategory = null,
     string? ProductCurrency = null,
-    bool? ProductAvailable = null);
+    bool? ProductAvailable = null,
+    string? AbTestVariant = null);
 
 public sealed record EngageCitationResult(Guid SourceId, Guid ChunkId, int ChunkIndex);
 
@@ -87,7 +88,14 @@ public sealed record EngageBotResult(
     string? LauncherIcon = null,
     string? AutoTriggerRulesJson = null,
     bool HideBranding = false,
-    string? CustomBrandingText = null);
+    string? CustomBrandingText = null,
+    bool AbTestEnabled = false,
+    string? OpeningMessageA = null,
+    string? OpeningMessageB = null,
+    int AbTestImpressionCountA = 0,
+    int AbTestImpressionCountB = 0,
+    int AbTestConversionCountA = 0,
+    int AbTestConversionCountB = 0);
 
 public sealed record UpdateEngageBotCommand(
     Guid TenantId,
@@ -111,7 +119,10 @@ public sealed record UpdateEngageBotCommand(
     string? LauncherIcon = null,
     string? AutoTriggerRulesJson = null,
     bool HideBranding = false,
-    string? CustomBrandingText = null);
+    string? CustomBrandingText = null,
+    bool AbTestEnabled = false,
+    string? OpeningMessageA = null,
+    string? OpeningMessageB = null);
 
 public sealed record GenerateDigestQuery(Guid TenantId, Guid SiteId);
 

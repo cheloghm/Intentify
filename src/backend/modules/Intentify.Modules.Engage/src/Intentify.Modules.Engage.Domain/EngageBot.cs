@@ -56,4 +56,25 @@ public sealed class EngageBot
 
     /// <summary>Replaces the default 'Powered by Hven' text when set (e.g. "Powered by Acme AI"). Only shown when HideBranding is false.</summary>
     public string? CustomBrandingText { get; set; }
+
+    /// <summary>When true, the widget randomly shows OpeningMessageA or OpeningMessageB to new visitors.</summary>
+    public bool AbTestEnabled { get; set; }
+
+    /// <summary>Opening message variant A shown to the widget visitor on first load.</summary>
+    public string? OpeningMessageA { get; set; }
+
+    /// <summary>Opening message variant B shown to the widget visitor on first load.</summary>
+    public string? OpeningMessageB { get; set; }
+
+    /// <summary>Number of times variant A has been shown (impression).</summary>
+    public int AbTestImpressionCountA { get; set; }
+
+    /// <summary>Number of times variant B has been shown (impression).</summary>
+    public int AbTestImpressionCountB { get; set; }
+
+    /// <summary>Number of leads created from sessions where variant A was shown.</summary>
+    public int AbTestConversionCountA { get; set; }
+
+    /// <summary>Number of leads created from sessions where variant B was shown.</summary>
+    public int AbTestConversionCountB { get; set; }
 }

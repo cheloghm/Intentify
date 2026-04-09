@@ -1,6 +1,6 @@
 namespace Intentify.Modules.Engage.Api;
 
-public sealed record WidgetBootstrapResponse(string SiteId, string Domain, string DisplayName, string BotName, string? PrimaryColor = null, bool? LauncherVisible = null, string? AutoTriggerRulesJson = null, bool HideBranding = false, string? CustomBrandingText = null);
+public sealed record WidgetBootstrapResponse(string SiteId, string Domain, string DisplayName, string BotName, string? PrimaryColor = null, bool? LauncherVisible = null, string? AutoTriggerRulesJson = null, bool HideBranding = false, string? CustomBrandingText = null, string? OpeningMessage = null, string? AbTestVariant = null);
 
 public sealed record EngageChatSendRequest(
     string WidgetKey,
@@ -15,7 +15,8 @@ public sealed record EngageChatSendRequest(
     string? ProductBrand = null,
     string? ProductCategory = null,
     string? ProductCurrency = null,
-    bool? ProductAvailable = null);
+    bool? ProductAvailable = null,
+    string? AbTestVariant = null);
 
 public sealed record EngageCitationResponse(string SourceId, string ChunkId, int ChunkIndex);
 
@@ -115,7 +116,14 @@ public sealed record EngageBotResponse(
     string? DigestEmailRecipients = null,
     string? DigestEmailFrequency = null,
     bool HideBranding = false,
-    string? CustomBrandingText = null);
+    string? CustomBrandingText = null,
+    bool AbTestEnabled = false,
+    string? OpeningMessageA = null,
+    string? OpeningMessageB = null,
+    int AbTestImpressionCountA = 0,
+    int AbTestImpressionCountB = 0,
+    int AbTestConversionCountA = 0,
+    int AbTestConversionCountB = 0);
 
 public sealed record UpdateEngageBotRequest(
     string Name,
@@ -133,6 +141,9 @@ public sealed record UpdateEngageBotRequest(
     string? DigestEmailRecipients = null,
     string? DigestEmailFrequency = null,
     bool HideBranding = false,
-    string? CustomBrandingText = null);
+    string? CustomBrandingText = null,
+    bool AbTestEnabled = false,
+    string? OpeningMessageA = null,
+    string? OpeningMessageB = null);
 
 public sealed record DigestSendRequest(string SiteId);

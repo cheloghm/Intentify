@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Intentify.Modules.Auth.Application;
 using Intentify.Modules.Sites.Application;
 using Intentify.Modules.Sites.Domain;
 using Intentify.Shared.Validation;
@@ -12,14 +13,33 @@ internal static class SitesEndpoints
     public static async Task<IResult> CreateSiteAsync(
         CreateSiteRequest request,
         HttpContext context,
-        CreateSiteHandler handler)
+        CreateSiteHandler handler,
+        ISiteRepository siteRepository,
+        ITenantRepository tenantRepository)
     {
         var tenantId = TryGetTenantId(context.User);
         if (tenantId is null)
         {
             return Results.Unauthorized();
         }
-        var result = await handler.HandleAsync(new CreateSiteCommand(tenantId.Value, request.Domain, request.Description, request.Category, request.Tags, request.Name));
+
+        // Enforce plan-based site limit
+        var tenant = await tenantRepository.GetByIdAsync(tenantId.Value, context.RequestAborted);
+        var plan = tenant?.Plan;
+        var limits = PlanLimits.Get(plan);
+        if (limits.MaxSites > 0)
+        {
+            var existingCount = await siteRepository.CountByTenantAsync(tenantId.Value, context.RequestAborted);
+            if (existingCount >= limits.MaxSites)
+            {
+                return Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(new Dictionary<string, string[]>
+                {
+                    ["siteLimit"] = [$"You have reached the site limit for your plan. Upgrade to add more sites."]
+                }));
+            }
+        }
+
+        var result = await handler.HandleAsync(new CreateSiteCommand(tenantId.Value, request.Domain, request.Description, request.Category, request.Tags, request.Name, plan));
 
         return result.Status switch
         {

@@ -341,6 +341,80 @@ export const renderEngageView = async (container, { apiClient, toast } = {}) => 
   brandingWrap.append(hideBrandingWrap, customBrandWrap);
   widgetBody.appendChild(brandingWrap);
 
+  // A/B Test section
+  widgetBody.appendChild(el('div', { style: 'font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;margin:18px 0 8px' }, 'A/B Test Opening Messages'));
+  const abWrap = el('div', { class: 'e-form-grid' });
+
+  const abEnabledWrap = el('div', { class: 'e-field' });
+  abEnabledWrap.appendChild(el('div', { class: 'e-field-label' }, 'Enable A/B test'));
+  const abEnabledToggle = el('label', { class: 'e-toggle' });
+  const abEnabledCb = el('input', { type: 'checkbox' });
+  abEnabledToggle.append(abEnabledCb, el('span', { class: 'e-toggle-slider' }));
+  abEnabledWrap.appendChild(abEnabledToggle);
+  abEnabledWrap.appendChild(el('div', { class: 'e-field-hint' }, 'Randomly show one of two opening messages and track which converts more leads.'));
+
+  const { wrap: msgAWrap, input: msgAInput } = mkField('Opening Message A', 'e.g. Hi! Can I help you find the right plan?');
+  const { wrap: msgBWrap, input: msgBInput } = mkField('Opening Message B', 'e.g. Welcome! What brings you here today?');
+  const abInputsWrap = el('div');
+  abInputsWrap.append(msgAWrap, msgBWrap);
+
+  const abResultsCard = el('div', { style: 'background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px;margin-top:8px;display:none' });
+  const abResultsContent = el('div');
+  abResultsCard.appendChild(el('div', { style: 'font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px' }, 'A/B Test Results'));
+  abResultsCard.appendChild(abResultsContent);
+  const abResetBtn = el('button', { class: 'e-btn e-btn-outline', style: 'margin-top:10px;font-size:12px;padding:5px 12px' }, '🔄 Reset Counters');
+
+  const renderAbResults = results => {
+    if (!results) { abResultsCard.style.display = 'none'; return; }
+    abResultsCard.style.display = '';
+    const fmtRate = r => (r * 100).toFixed(1) + '%';
+    const winnerLabel = results.winner === 'tie' ? '🤝 Tie' : results.winner === 'A' ? '🏆 A wins' : '🏆 B wins';
+    abResultsContent.innerHTML = '';
+    const grid = el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:10px' });
+    const mkStat = (label, val, highlight) => {
+      const card = el('div', { style: `background:#fff;border:1px solid ${highlight ? '#6366f1' : '#e2e8f0'};border-radius:8px;padding:10px 12px` });
+      card.appendChild(el('div', { style: 'font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px' }, label));
+      card.appendChild(el('div', { style: `font-size:18px;font-weight:700;color:${highlight ? '#6366f1' : '#1e293b'}` }, val));
+      return card;
+    };
+    grid.append(
+      mkStat('Variant A Impressions', results.impressionsA, false),
+      mkStat('Variant B Impressions', results.impressionsB, false),
+      mkStat('Variant A Conversions', results.conversionsA + ' (' + fmtRate(results.conversionRateA) + ')', results.winner === 'A'),
+      mkStat('Variant B Conversions', results.conversionsB + ' (' + fmtRate(results.conversionRateB) + ')', results.winner === 'B'),
+    );
+    abResultsContent.appendChild(grid);
+    abResultsContent.appendChild(el('div', { style: 'margin-top:10px;font-size:13px;font-weight:600;color:#1e293b' }, winnerLabel));
+    abResultsCard.appendChild(abResetBtn);
+  };
+
+  const loadAbResults = async () => {
+    if (!state.siteId) return;
+    try {
+      const r = await client.engage.getAbTestResults(state.siteId);
+      renderAbResults(r);
+    } catch { abResultsCard.style.display = 'none'; }
+  };
+
+  abEnabledCb.addEventListener('change', () => {
+    abInputsWrap.style.display = abEnabledCb.checked ? '' : 'none';
+  });
+  abInputsWrap.style.display = 'none';
+
+  abResetBtn.addEventListener('click', async () => {
+    if (!state.siteId) return;
+    abResetBtn.disabled = true; abResetBtn.textContent = '⏳ Resetting…';
+    try {
+      await client.engage.resetAbTest(state.siteId);
+      notifier.show({ message: 'A/B test counters reset', variant: 'success' });
+      await loadAbResults();
+    } catch (err) { notifier.show({ message: mapApiError(err).message, variant: 'danger' }); }
+    finally { abResetBtn.disabled = false; abResetBtn.textContent = '🔄 Reset Counters'; }
+  });
+
+  abWrap.append(abEnabledWrap, abInputsWrap, abResultsCard);
+  widgetBody.appendChild(abWrap);
+
   // Live preview
   widgetBody.appendChild(el('div', { style: 'font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;margin:20px 0 8px' }, 'Live Preview'));
   const previewWrap = el('div', { class: 'e-preview-wrap' });
@@ -564,6 +638,10 @@ export const renderEngageView = async (container, { apiClient, toast } = {}) => 
     hideBrandingCb.checked  = bot.hideBranding || false;
     customBrandInput.value  = bot.customBrandingText || '';
     customBrandWrap.style.display = hideBrandingCb.checked ? '' : 'none';
+    abEnabledCb.checked     = bot.abTestEnabled || false;
+    msgAInput.value         = bot.openingMessageA || '';
+    msgBInput.value         = bot.openingMessageB || '';
+    abInputsWrap.style.display = abEnabledCb.checked ? '' : 'none';
     bDescInput.value    = bot.businessDescription || '';
     bInduInput.value    = bot.industry || '';
     bSvcInput.value     = bot.servicesDescription || '';
@@ -589,6 +667,9 @@ export const renderEngageView = async (container, { apiClient, toast } = {}) => 
     launcherVisible:       launchVisCb.checked,
     hideBranding:          hideBrandingCb.checked,
     customBrandingText:    customBrandInput.value.trim() || undefined,
+    abTestEnabled:         abEnabledCb.checked,
+    openingMessageA:       msgAInput.value.trim() || undefined,
+    openingMessageB:       msgBInput.value.trim() || undefined,
     businessDescription:   bDescInput.value.trim(),
     industry:              bInduInput.value.trim(),
     servicesDescription:   bSvcInput.value.trim(),
@@ -630,6 +711,7 @@ export const renderEngageView = async (container, { apiClient, toast } = {}) => 
   const loadBot = async () => {
     if (!state.siteId) return;
     try { state.bot = await client.engage.getBot(state.siteId); applyBot(state.bot); } catch {}
+    loadAbResults();
   };
 
   const syncSites = sites => {

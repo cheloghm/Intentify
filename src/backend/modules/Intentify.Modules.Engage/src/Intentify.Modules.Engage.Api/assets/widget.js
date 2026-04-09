@@ -37,6 +37,7 @@
   var launcherVisible = true;
   var hideBranding = false;
   var customBrandingText = null;
+  var abTestVariant = null;
   var isSending = false;
   var isHydrating = false;
   var typingIndicatorRow = null;
@@ -690,8 +691,16 @@
       if (payload && typeof payload.customBrandingText === 'string' && payload.customBrandingText) {
         customBrandingText = payload.customBrandingText;
       }
+      if (payload && typeof payload.abTestVariant === 'string' && payload.abTestVariant) {
+        abTestVariant = payload.abTestVariant;
+      }
       applyTheme();
       applyBranding();
+
+      // Show opening message if set (and no prior conversation)
+      if (!sessionId && payload && typeof payload.openingMessage === 'string' && payload.openingMessage) {
+        addMessage('bot', payload.openingMessage);
+      }
 
       // Auto-trigger: check page_view rules after bootstrap resolves
       tryAutoTrigger(payload && payload.autoTriggerRulesJson);
@@ -784,7 +793,7 @@
         return fetch(endpoint('/engage/chat/send?widgetKey=' + encodeURIComponent(widgetKey)), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ widgetKey: widgetKey, sessionId: sessionId, message: message, collectorSessionId: collectorSessionId, visitorId: getVisitorId() || null, currentPageUrl: window.location.href, currentPageTitle: document.title || null, productName: pageMeta.productName || null, productPrice: pageMeta.productPrice ? String(pageMeta.productPrice) : null, productBrand: pageMeta.productBrand || null, productCategory: pageMeta.productCategory || null, productCurrency: pageMeta.productCurrency || null, productAvailable: pageMeta.productAvailable || null })
+          body: JSON.stringify({ widgetKey: widgetKey, sessionId: sessionId, message: message, collectorSessionId: collectorSessionId, visitorId: getVisitorId() || null, currentPageUrl: window.location.href, currentPageTitle: document.title || null, productName: pageMeta.productName || null, productPrice: pageMeta.productPrice ? String(pageMeta.productPrice) : null, productBrand: pageMeta.productBrand || null, productCategory: pageMeta.productCategory || null, productCurrency: pageMeta.productCurrency || null, productAvailable: pageMeta.productAvailable || null, abTestVariant: abTestVariant || null })
         });
       })
       .then(function(response) {

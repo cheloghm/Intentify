@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Intentify.Modules.Auth.Application;
 using Intentify.Modules.Engage.Application;
 using Intentify.Modules.Sites.Application;
 using Intentify.Shared.AI;
@@ -28,14 +29,14 @@ internal static class EngageEndpoints
         return Results.Text(content, "application/javascript; charset=utf-8");
     }
 
-    public static async Task<IResult> WidgetBootstrapAsync(string widgetKey, WidgetBootstrapHandler handler, IEngageBotRepository botRepository, ISiteRepository siteRepository, HttpContext context, IHostEnvironment environment, IConfiguration configuration)
+    public static async Task<IResult> WidgetBootstrapAsync(string widgetKey, WidgetBootstrapHandler handler, IEngageBotRepository botRepository, ISiteRepository siteRepository, ITenantRepository tenantRepository, HttpContext context, IHostEnvironment environment, IConfiguration configuration)
     {
         var result = await handler.HandleAsync(new WidgetBootstrapQuery(widgetKey), context.RequestAborted);
         return result.Status switch
         {
             OperationStatus.ValidationFailed => Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(result.Errors!.Errors)),
             OperationStatus.NotFound => Results.NotFound(),
-            _ => await BuildWidgetBootstrapOkAsync(result.Value!, widgetKey, botRepository, siteRepository, context, environment, configuration)
+            _ => await BuildWidgetBootstrapOkAsync(result.Value!, widgetKey, botRepository, siteRepository, tenantRepository, context, environment, configuration)
         };
     }
 
@@ -44,6 +45,7 @@ internal static class EngageEndpoints
         string widgetKey,
         IEngageBotRepository botRepository,
         ISiteRepository siteRepository,
+        ITenantRepository tenantRepository,
         HttpContext context,
         IHostEnvironment environment,
         IConfiguration configuration)
@@ -61,6 +63,8 @@ internal static class EngageEndpoints
         string? autoTriggerRulesJson = null;
         var hideBranding = false;
         string? customBrandingText = null;
+        string? openingMessage = null;
+        string? abTestVariant = null;
 
         if (site is not null)
         {
@@ -75,11 +79,28 @@ internal static class EngageEndpoints
             primaryColor = bot.PrimaryColor;
             launcherVisible = bot.LauncherVisible;
             autoTriggerRulesJson = bot.AutoTriggerRulesJson;
-            hideBranding = bot.HideBranding;
-            customBrandingText = bot.CustomBrandingText;
+
+            // Gate white-label features by plan
+            var tenant = await tenantRepository.GetByIdAsync(site.TenantId, context.RequestAborted);
+            var planLimits = PlanLimits.Get(tenant?.Plan);
+            hideBranding = planLimits.AllowWhiteLabel && bot.HideBranding;
+            customBrandingText = planLimits.AllowWhiteLabel ? bot.CustomBrandingText : null;
+
+            if (bot.AbTestEnabled
+                && !string.IsNullOrWhiteSpace(bot.OpeningMessageA)
+                && !string.IsNullOrWhiteSpace(bot.OpeningMessageB))
+            {
+                abTestVariant = Random.Shared.Next(2) == 0 ? "A" : "B";
+                openingMessage = abTestVariant == "A" ? bot.OpeningMessageA : bot.OpeningMessageB;
+                _ = botRepository.IncrementAbTestImpressionAsync(site.TenantId, site.Id, abTestVariant, CancellationToken.None);
+            }
+            else if (!string.IsNullOrWhiteSpace(bot.OpeningMessageA))
+            {
+                openingMessage = bot.OpeningMessageA;
+            }
         }
 
-        return Results.Ok(new WidgetBootstrapResponse(result.SiteId.ToString("N"), result.Domain, displayName, botName, primaryColor, launcherVisible, autoTriggerRulesJson, hideBranding, customBrandingText));
+        return Results.Ok(new WidgetBootstrapResponse(result.SiteId.ToString("N"), result.Domain, displayName, botName, primaryColor, launcherVisible, autoTriggerRulesJson, hideBranding, customBrandingText, openingMessage, abTestVariant));
     }
 
     public static async Task<IResult> ChatSendAsync(
@@ -149,7 +170,8 @@ internal static class EngageEndpoints
             NormalizeOptional(request.ProductBrand),
             NormalizeOptional(request.ProductCategory),
             NormalizeOptional(request.ProductCurrency),
-            request.ProductAvailable), context.RequestAborted);
+            request.ProductAvailable,
+            NormalizeOptional(request.AbTestVariant)), context.RequestAborted);
         return result.Status switch
         {
             OperationStatus.ValidationFailed => Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(result.Errors!.Errors)),
@@ -205,7 +227,7 @@ internal static class EngageEndpoints
         return result.Status switch
         {
             OperationStatus.NotFound => Results.NotFound(),
-            _ => Results.Ok(new EngageBotResponse(result.Value!.BotId.ToString("N"), result.Value.Name, result.Value.PrimaryColor, result.Value.LauncherVisible, result.Value.Tone, result.Value.Verbosity, result.Value.FallbackStyle, result.Value.BusinessDescription, result.Value.Industry, result.Value.ServicesDescription, result.Value.GeoFocus, result.Value.PersonalityDescriptor, result.Value.DigestEmailEnabled, result.Value.DigestEmailRecipients, result.Value.DigestEmailFrequency, result.Value.HideBranding, result.Value.CustomBrandingText))
+            _ => Results.Ok(new EngageBotResponse(result.Value!.BotId.ToString("N"), result.Value.Name, result.Value.PrimaryColor, result.Value.LauncherVisible, result.Value.Tone, result.Value.Verbosity, result.Value.FallbackStyle, result.Value.BusinessDescription, result.Value.Industry, result.Value.ServicesDescription, result.Value.GeoFocus, result.Value.PersonalityDescriptor, result.Value.DigestEmailEnabled, result.Value.DigestEmailRecipients, result.Value.DigestEmailFrequency, result.Value.HideBranding, result.Value.CustomBrandingText, result.Value.AbTestEnabled, result.Value.OpeningMessageA, result.Value.OpeningMessageB, result.Value.AbTestImpressionCountA, result.Value.AbTestImpressionCountB, result.Value.AbTestConversionCountA, result.Value.AbTestConversionCountB))
         };
     }
 
@@ -233,12 +255,12 @@ internal static class EngageEndpoints
             return Results.Unauthorized();
         }
 
-        var result = await handler.HandleAsync(new UpdateEngageBotCommand(tenantId.Value, parsedSiteId, request.Name, request.PrimaryColor, request.LauncherVisible, request.Tone, request.Verbosity, request.FallbackStyle, request.BusinessDescription, request.Industry, request.ServicesDescription, request.GeoFocus, request.PersonalityDescriptor, request.DigestEmailEnabled, request.DigestEmailRecipients, request.DigestEmailFrequency, HideBranding: request.HideBranding, CustomBrandingText: request.CustomBrandingText), context.RequestAborted);
+        var result = await handler.HandleAsync(new UpdateEngageBotCommand(tenantId.Value, parsedSiteId, request.Name, request.PrimaryColor, request.LauncherVisible, request.Tone, request.Verbosity, request.FallbackStyle, request.BusinessDescription, request.Industry, request.ServicesDescription, request.GeoFocus, request.PersonalityDescriptor, request.DigestEmailEnabled, request.DigestEmailRecipients, request.DigestEmailFrequency, HideBranding: request.HideBranding, CustomBrandingText: request.CustomBrandingText, AbTestEnabled: request.AbTestEnabled, OpeningMessageA: request.OpeningMessageA, OpeningMessageB: request.OpeningMessageB), context.RequestAborted);
         return result.Status switch
         {
             OperationStatus.ValidationFailed => Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(result.Errors!.Errors)),
             OperationStatus.NotFound => Results.NotFound(),
-            _ => Results.Ok(new EngageBotResponse(result.Value!.BotId.ToString("N"), result.Value.Name, result.Value.PrimaryColor, result.Value.LauncherVisible, result.Value.Tone, result.Value.Verbosity, result.Value.FallbackStyle, result.Value.BusinessDescription, result.Value.Industry, result.Value.ServicesDescription, result.Value.GeoFocus, result.Value.PersonalityDescriptor, result.Value.DigestEmailEnabled, result.Value.DigestEmailRecipients, result.Value.DigestEmailFrequency, result.Value.HideBranding, result.Value.CustomBrandingText))
+            _ => Results.Ok(new EngageBotResponse(result.Value!.BotId.ToString("N"), result.Value.Name, result.Value.PrimaryColor, result.Value.LauncherVisible, result.Value.Tone, result.Value.Verbosity, result.Value.FallbackStyle, result.Value.BusinessDescription, result.Value.Industry, result.Value.ServicesDescription, result.Value.GeoFocus, result.Value.PersonalityDescriptor, result.Value.DigestEmailEnabled, result.Value.DigestEmailRecipients, result.Value.DigestEmailFrequency, result.Value.HideBranding, result.Value.CustomBrandingText, result.Value.AbTestEnabled, result.Value.OpeningMessageA, result.Value.OpeningMessageB, result.Value.AbTestImpressionCountA, result.Value.AbTestImpressionCountB, result.Value.AbTestConversionCountA, result.Value.AbTestConversionCountB))
         };
     }
 
@@ -406,6 +428,63 @@ internal static class EngageEndpoints
 
         var result = await handler.HandleAsync(new GenerateDigestQuery(tenantId.Value, parsedSiteId), context.RequestAborted);
         return Results.Ok(result);
+    }
+
+    public static async Task<IResult> GetAbTestResultsAsync(string? siteId, HttpContext context, IEngageBotRepository botRepository)
+    {
+        if (string.IsNullOrWhiteSpace(siteId) || !Guid.TryParse(siteId, out var parsedSiteId))
+        {
+            return Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(new Dictionary<string, string[]>
+            {
+                ["siteId"] = ["Site id is required and must be a valid GUID."]
+            }));
+        }
+
+        var tenantId = TryGetTenantId(context.User);
+        if (tenantId is null) return Results.Unauthorized();
+
+        var bot = await botRepository.GetBySiteAsync(tenantId.Value, parsedSiteId, context.RequestAborted);
+        if (bot is null) return Results.NotFound();
+
+        var rateA = bot.AbTestImpressionCountA > 0
+            ? (double)bot.AbTestConversionCountA / bot.AbTestImpressionCountA
+            : 0.0;
+        var rateB = bot.AbTestImpressionCountB > 0
+            ? (double)bot.AbTestConversionCountB / bot.AbTestImpressionCountB
+            : 0.0;
+
+        var winner = rateA > rateB ? "A" : rateB > rateA ? "B" : "tie";
+
+        return Results.Ok(new
+        {
+            abTestEnabled = bot.AbTestEnabled,
+            openingMessageA = bot.OpeningMessageA,
+            openingMessageB = bot.OpeningMessageB,
+            impressionsA = bot.AbTestImpressionCountA,
+            impressionsB = bot.AbTestImpressionCountB,
+            conversionsA = bot.AbTestConversionCountA,
+            conversionsB = bot.AbTestConversionCountB,
+            conversionRateA = rateA,
+            conversionRateB = rateB,
+            winner
+        });
+    }
+
+    public static async Task<IResult> ResetAbTestAsync(string? siteId, HttpContext context, IEngageBotRepository botRepository)
+    {
+        if (string.IsNullOrWhiteSpace(siteId) || !Guid.TryParse(siteId, out var parsedSiteId))
+        {
+            return Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(new Dictionary<string, string[]>
+            {
+                ["siteId"] = ["Site id is required and must be a valid GUID."]
+            }));
+        }
+
+        var tenantId = TryGetTenantId(context.User);
+        if (tenantId is null) return Results.Unauthorized();
+
+        await botRepository.ResetAbTestCountersAsync(tenantId.Value, parsedSiteId, context.RequestAborted);
+        return Results.NoContent();
     }
 
     private static IResult? EnsurePublicOriginAllowed(

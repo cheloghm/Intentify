@@ -40,11 +40,8 @@ public sealed class CreateSiteHandler
             return OperationResult<Site>.Conflict();
         }
 
-        if (await _sites.TenantHasSiteAsync(command.TenantId, cancellationToken))
-        {
-            errors.Add("site", "Tenant already has a site.");
-            return OperationResult<Site>.ValidationFailed(errors);
-        }
+        // Plan-based site limit is enforced by the API layer (SitesEndpoints) using PlanLimits.
+        // The handler trusts that the caller has already performed the check.
 
         var now = DateTime.UtcNow;
         var site = new Site

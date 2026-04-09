@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using Intentify.Modules.Engage.Application;
 using Intentify.Modules.Engage.Domain;
 using Intentify.Shared.Data.Mongo;
@@ -62,7 +63,7 @@ public sealed class EngageBotRepository : IEngageBotRepository
             .FirstOrDefaultAsync(cancellationToken);
     }
 
-    public async Task<EngageBot?> UpdateSettingsAsync(Guid tenantId, Guid siteId, string name, string? primaryColor, bool? launcherVisible, string? tone, string? verbosity, string? fallbackStyle, string? businessDescription, string? industry, string? servicesDescription, string? geoFocus, string? personalityDescriptor, bool digestEmailEnabled, string? digestEmailRecipients, string? digestEmailFrequency, bool hideBranding = false, string? customBrandingText = null, CancellationToken cancellationToken = default)
+    public async Task<EngageBot?> UpdateSettingsAsync(Guid tenantId, Guid siteId, string name, string? primaryColor, bool? launcherVisible, string? tone, string? verbosity, string? fallbackStyle, string? businessDescription, string? industry, string? servicesDescription, string? geoFocus, string? personalityDescriptor, bool digestEmailEnabled, string? digestEmailRecipients, string? digestEmailFrequency, bool hideBranding = false, string? customBrandingText = null, bool abTestEnabled = false, string? openingMessageA = null, string? openingMessageB = null, CancellationToken cancellationToken = default)
     {
         await _ensureIndexes;
 
@@ -194,6 +195,26 @@ public sealed class EngageBotRepository : IEngageBotRepository
             updates.Add(Builders<EngageBot>.Update.Set(item => item.CustomBrandingText, customBrandingText.Trim()));
         }
 
+        updates.Add(Builders<EngageBot>.Update.Set(item => item.AbTestEnabled, abTestEnabled));
+
+        if (string.IsNullOrWhiteSpace(openingMessageA))
+        {
+            updates.Add(Builders<EngageBot>.Update.Unset(item => item.OpeningMessageA));
+        }
+        else
+        {
+            updates.Add(Builders<EngageBot>.Update.Set(item => item.OpeningMessageA, openingMessageA.Trim()));
+        }
+
+        if (string.IsNullOrWhiteSpace(openingMessageB))
+        {
+            updates.Add(Builders<EngageBot>.Update.Unset(item => item.OpeningMessageB));
+        }
+        else
+        {
+            updates.Add(Builders<EngageBot>.Update.Set(item => item.OpeningMessageB, openingMessageB.Trim()));
+        }
+
         var update = Builders<EngageBot>.Update.Combine(updates);
 
         return await _bots.FindOneAndUpdateAsync(
@@ -203,6 +224,37 @@ public sealed class EngageBotRepository : IEngageBotRepository
             cancellationToken);
     }
 
+
+    public async Task IncrementAbTestImpressionAsync(Guid tenantId, Guid siteId, string variant, CancellationToken cancellationToken = default)
+    {
+        await _ensureIndexes;
+        var field = string.Equals(variant, "B", StringComparison.OrdinalIgnoreCase)
+            ? (Expression<Func<EngageBot, int>>)(item => item.AbTestImpressionCountB)
+            : item => item.AbTestImpressionCountA;
+        var update = Builders<EngageBot>.Update.Inc(field, 1);
+        await _bots.UpdateOneAsync(item => item.TenantId == tenantId && item.SiteId == siteId, update, cancellationToken: cancellationToken);
+    }
+
+    public async Task IncrementAbTestConversionAsync(Guid tenantId, Guid siteId, string variant, CancellationToken cancellationToken = default)
+    {
+        await _ensureIndexes;
+        var field = string.Equals(variant, "B", StringComparison.OrdinalIgnoreCase)
+            ? (Expression<Func<EngageBot, int>>)(item => item.AbTestConversionCountB)
+            : item => item.AbTestConversionCountA;
+        var update = Builders<EngageBot>.Update.Inc(field, 1);
+        await _bots.UpdateOneAsync(item => item.TenantId == tenantId && item.SiteId == siteId, update, cancellationToken: cancellationToken);
+    }
+
+    public async Task ResetAbTestCountersAsync(Guid tenantId, Guid siteId, CancellationToken cancellationToken = default)
+    {
+        await _ensureIndexes;
+        var update = Builders<EngageBot>.Update
+            .Set(item => item.AbTestImpressionCountA, 0)
+            .Set(item => item.AbTestImpressionCountB, 0)
+            .Set(item => item.AbTestConversionCountA, 0)
+            .Set(item => item.AbTestConversionCountB, 0);
+        await _bots.UpdateOneAsync(item => item.TenantId == tenantId && item.SiteId == siteId, update, cancellationToken: cancellationToken);
+    }
 
     public async Task<IReadOnlyList<EngageBotDigestInfo>> ListDigestEnabledBotsAsync(CancellationToken ct = default)
     {

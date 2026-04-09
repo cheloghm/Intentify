@@ -385,7 +385,14 @@ const applyTheme = (theme) => {
 
 // ── Authenticated shell (sidebar + topbar) ─────────────────────────────────────
 
-const createAuthenticatedShell = ({ route, canAccessPlatformAdmin, canAccessTeam, onLogout, onOpenProfile, firstName }) => {
+const PLAN_BADGE = {
+  starter: { label: 'Starter', bg: '#334155', color: '#94a3b8' },
+  growth:  { label: 'Growth',  bg: '#3730a3', color: '#a5b4fc' },
+  agency:  { label: 'Agency ★', bg: '#1e3a5f', color: '#93c5fd' },
+  admin:   { label: 'Admin',   bg: '#7f1d1d', color: '#fca5a5' },
+};
+
+const createAuthenticatedShell = ({ route, canAccessPlatformAdmin, canAccessTeam, onLogout, onOpenProfile, firstName, plan }) => {
   const shell = document.createElement('div');
   shell.style.cssText = 'display:flex;min-height:100vh;width:100%';
 
@@ -519,18 +526,29 @@ const createAuthenticatedShell = ({ route, canAccessPlatformAdmin, canAccessTeam
   `;
   avatar.textContent = (firstName || '?')[0].toUpperCase();
 
+  const userLabelWrap = document.createElement('div');
+  userLabelWrap.style.cssText = 'flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;text-align:left;';
+
   const userLabel = document.createElement('div');
   userLabel.style.cssText = `
-    flex:1;min-width:0;font-size:13px;font-weight:500;
-    color:rgba(255,255,255,0.8);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left;
+    font-size:13px;font-weight:500;
+    color:rgba(255,255,255,0.8);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
   `;
   userLabel.textContent = firstName;
+
+  const planKey = (plan || 'starter').toLowerCase();
+  const badgeCfg = PLAN_BADGE[planKey] || PLAN_BADGE.starter;
+  const planBadge = document.createElement('span');
+  planBadge.textContent = badgeCfg.label;
+  planBadge.style.cssText = `display:inline-block;font-size:9px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:1px 5px;border-radius:4px;background:${badgeCfg.bg};color:${badgeCfg.color};width:fit-content`;
+
+  userLabelWrap.append(userLabel, planBadge);
 
   const chevron = document.createElement('div');
   chevron.textContent = '⌃';
   chevron.style.cssText = 'font-size:11px;color:rgba(255,255,255,0.3);transform:rotate(180deg);transition:transform 160ms;flex-shrink:0';
 
-  userRow.append(avatar, userLabel, chevron);
+  userRow.append(avatar, userLabelWrap, chevron);
 
   let popupOpen = false;
   userRow.addEventListener('click', (e) => {
@@ -1318,6 +1336,7 @@ const renderApp = () => {
     const { shell, main, overlay } = createAuthenticatedShell({
       route, canAccessPlatformAdmin: false, canAccessTeam: false,
       firstName: getFirstName(authState.profile?.displayName),
+      plan: authState.profile?.isAdmin ? 'admin' : authState.profile?.plan,
       onOpenProfile: () => { authState.profileModalOpen = true; renderApp(); },
       onLogout: () => { clearToken(); window.location.hash = '#/login'; },
     });
@@ -1358,6 +1377,7 @@ const renderApp = () => {
       canAccessPlatformAdmin: hasPlatformAccess(),
       canAccessTeam: canManageUsers(getPrimaryRole(authState.roles)),
       firstName: getFirstName(authState.profile?.displayName),
+      plan: authState.profile?.isAdmin ? 'admin' : authState.profile?.plan,
       onOpenProfile: () => { authState.profileModalOpen = true; renderApp(); },
       onLogout: () => { clearToken(); window.location.hash = '#/login'; },
     });

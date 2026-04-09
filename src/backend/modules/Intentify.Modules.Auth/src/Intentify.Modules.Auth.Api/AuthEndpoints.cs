@@ -117,7 +117,7 @@ internal static class AuthEndpoints
 
         var roles = context.User.FindAll(ClaimTypes.Role).Select(role => role.Value).ToArray();
         var result = await handler.HandleAsync(new GetCurrentUserQuery(userId.Value, tenantId.Value, roles), context.RequestAborted);
-        return Results.Ok(new CurrentUserResponse(result.UserId, result.TenantId, result.Roles, result.DisplayName, result.Email, result.OrganizationName, result.IsAdmin));
+        return Results.Ok(new CurrentUserResponse(result.UserId, result.TenantId, result.Roles, result.DisplayName, result.Email, result.OrganizationName, result.IsAdmin, result.Plan));
     }
 
     public static async Task<IResult> UpdateCurrentUserProfileAsync(

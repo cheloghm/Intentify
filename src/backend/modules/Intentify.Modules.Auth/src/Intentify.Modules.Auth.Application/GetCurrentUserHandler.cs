@@ -14,7 +14,8 @@ public sealed record GetCurrentUserResult(
     string? DisplayName,
     string? Email,
     string? OrganizationName,
-    bool IsAdmin);
+    bool IsAdmin,
+    string? Plan = null);
 
 public sealed class GetCurrentUserHandler
 {
@@ -39,10 +40,12 @@ public sealed class GetCurrentUserHandler
         }
 
         string? organizationName = null;
+        string? plan = null;
         var tenant = await _tenantRepository.GetByIdAsync(query.TenantId, cancellationToken);
         if (tenant is not null)
         {
             organizationName = tenant.Name;
+            plan = string.IsNullOrWhiteSpace(tenant.Plan) ? "starter" : tenant.Plan.ToLowerInvariant();
         }
 
         var isAdmin = query.Roles.Any(role =>
@@ -56,6 +59,7 @@ public sealed class GetCurrentUserHandler
             displayName,
             email,
             organizationName,
-            isAdmin);
+            isAdmin,
+            plan);
     }
 }
