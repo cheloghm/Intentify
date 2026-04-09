@@ -12,6 +12,7 @@ public sealed class EngageBusinessOutcomeExecutor
     private readonly UpsertLeadFromPromoEntryHandler _upsertLeadHandler;
     private readonly IEngageHandoffTicketRepository _handoffTicketRepository;
     private readonly EngageConversationPolicy _policy;
+    private readonly ILeadNotificationService? _leadNotifier;
 
     public EngageBusinessOutcomeExecutor(
         ListTicketsHandler listTicketsHandler,
@@ -19,7 +20,8 @@ public sealed class EngageBusinessOutcomeExecutor
         UpdateTicketHandler updateTicketHandler,
         UpsertLeadFromPromoEntryHandler upsertLeadHandler,
         IEngageHandoffTicketRepository handoffTicketRepository,
-        EngageConversationPolicy policy)
+        EngageConversationPolicy policy,
+        ILeadNotificationService? leadNotifier = null)
     {
         _listTicketsHandler = listTicketsHandler;
         _createTicketHandler = createTicketHandler;
@@ -27,6 +29,7 @@ public sealed class EngageBusinessOutcomeExecutor
         _upsertLeadHandler = upsertLeadHandler;
         _handoffTicketRepository = handoffTicketRepository;
         _policy = policy;
+        _leadNotifier = leadNotifier;
     }
 
     public async Task<BusinessOutcomeResult> ExecuteAsync(
@@ -47,6 +50,7 @@ public sealed class EngageBusinessOutcomeExecutor
                 ? await UpsertLeadAsync(context, command, cancellationToken)
                 : false;
 
+            if (leadUpdated) FireHotLeadNotification(context);
             return new BusinessOutcomeResult(ticketUpdated, leadUpdated);
         }
 
@@ -55,6 +59,7 @@ public sealed class EngageBusinessOutcomeExecutor
             && HasLeadIdentity(context.Session, command))
         {
             var leadUpdated = await UpsertLeadAsync(context, command, cancellationToken);
+            if (leadUpdated) FireHotLeadNotification(context);
             return new BusinessOutcomeResult(false, leadUpdated);
         }
 
@@ -173,6 +178,19 @@ public sealed class EngageBusinessOutcomeExecutor
         => !string.IsNullOrWhiteSpace(session.CapturedEmail)
            || !string.IsNullOrWhiteSpace(command.VisitorId)
            || !string.IsNullOrWhiteSpace(command.CollectorSessionId);
+
+    // ── Hot lead notification (fire-and-forget via ILeadNotificationService) ────
+    private void FireHotLeadNotification(EngageConversationContext context)
+    {
+        _leadNotifier?.NotifyHotLead(
+            tenantId:         context.Session.TenantId,
+            siteId:           context.Session.SiteId,
+            capturedName:     context.Session.CapturedName,
+            capturedEmail:    context.Session.CapturedEmail,
+            userMessage:      context.UserMessage,
+            intentScore:      context.Session.IntentScore,
+            opportunityLabel: context.Session.OpportunityLabel);
+    }
 }
 
 public sealed record BusinessOutcomeResult(bool TicketTouched, bool LeadTouched)

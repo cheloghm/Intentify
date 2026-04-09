@@ -126,6 +126,7 @@ public sealed class EngageModule : IAppModule
         services.AddSingleton<UpdateTicketHandler>();
         services.AddSingleton<GenerateDigestHandler>();
         services.AddHostedService<DigestSchedulerService>();
+        services.AddSingleton<ILeadNotificationService, ResendLeadNotificationService>();
     }
 
     public void MapEndpoints(IEndpointRouteBuilder endpoints)
