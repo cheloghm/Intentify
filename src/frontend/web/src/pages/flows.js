@@ -441,7 +441,8 @@ export const renderFlowsView = async (container, { apiClient, toast } = {}) => {
   injectStyles();
   const client   = apiClient || createApiClient();
   const notifier = toast     || createToastManager();
-  const state    = { sites: [], siteId: '', flows: [] };
+  const SITE_KEY = 'intentify.selectedSiteId';
+  const state    = { sites: [], siteId: localStorage.getItem(SITE_KEY) || '', flows: [] };
 
   const root = el('div', { class: 'fl-root' });
   container.appendChild(root);
@@ -553,7 +554,7 @@ export const renderFlowsView = async (container, { apiClient, toast } = {}) => {
   };
 
   // ── Wire ───────────────────────────────────────────────────────────────────
-  siteSelect.addEventListener('change', () => { state.siteId=siteSelect.value; loadFlows(); });
+  siteSelect.addEventListener('change', () => { state.siteId=siteSelect.value; try { localStorage.setItem(SITE_KEY, state.siteId); } catch {} loadFlows(); });
   newBtn.addEventListener('click', () => {
     if (!state.siteId) { notifier.show({message:'Select a site first.',variant:'warning'}); return; }
     openFlowModal(client, notifier, state.siteId, null, loadFlows);
@@ -571,8 +572,9 @@ export const renderFlowsView = async (container, { apiClient, toast } = {}) => {
     siteSelect.innerHTML = '';
     if (!state.sites.length) { siteSelect.appendChild(el('option',{value:''},'No sites available')); return; }
     state.sites.forEach(s => { const id=getSiteId(s); siteSelect.appendChild(el('option',{value:id},s.name||s.domain||id)); });
-    state.siteId = getSiteId(state.sites[0]);
-    siteSelect.value = state.siteId;
+    const saved = state.siteId && state.sites.find(s => getSiteId(s) === state.siteId);
+    if (saved) { siteSelect.value = state.siteId; }
+    else { state.siteId = getSiteId(state.sites[0]); siteSelect.value = state.siteId; }
     await loadFlows();
   } catch (err) { siteSelect.innerHTML='<option value="">Failed to load sites</option>'; }
 };

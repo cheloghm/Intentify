@@ -176,8 +176,9 @@ export const renderKnowledgeView = (container, { apiClient, toast } = {}) => {
   const client   = apiClient || createApiClient();
   const notifier = toast     || createToastManager();
 
+  const SITE_KEY = 'intentify.selectedSiteId';
   const state = {
-    sites: [], siteId: '',
+    sites: [], siteId: localStorage.getItem(SITE_KEY) || '',
     sources: [], loadingSources: false, retrieveResults: [],
   };
 
@@ -533,7 +534,7 @@ export const renderKnowledgeView = (container, { apiClient, toast } = {}) => {
   testInput.addEventListener('keydown', e => { if (e.key==='Enter') runTest(); });
 
   // ─── Wire controls ─────────────────────────────────────────────────────────
-  siteSelect.addEventListener('change', async () => { state.siteId=siteSelect.value; await Promise.all([loadSources(),loadFacts()]); });
+  siteSelect.addEventListener('change', async () => { state.siteId=siteSelect.value; try { localStorage.setItem(SITE_KEY, state.siteId); } catch {} await Promise.all([loadSources(),loadFacts()]); });
 
   refreshBtn.addEventListener('click', loadSources);
 
@@ -561,7 +562,9 @@ export const renderKnowledgeView = (container, { apiClient, toast } = {}) => {
       if (!state.sites.length) { siteSelect.appendChild(el('option',{value:''},'No sites available')); renderSources(); return; }
       const placeholder = el('option',{value:''},'Select a site'); siteSelect.appendChild(placeholder);
       state.sites.forEach(s => { const id=getSiteId(s); const opt=el('option',{value:id},s.domain||id); siteSelect.appendChild(opt); });
-      if (state.sites[0]) { state.siteId=getSiteId(state.sites[0]); siteSelect.value=state.siteId; }
+      const saved = state.siteId && state.sites.find(s => getSiteId(s) === state.siteId);
+      if (saved) { siteSelect.value = state.siteId; }
+      else if (state.sites[0]) { state.siteId=getSiteId(state.sites[0]); siteSelect.value=state.siteId; }
       await Promise.all([loadSources(), loadFacts()]);
     } catch(err){ notifier.show({message:mapApiError(err).message,variant:'danger'}); }
   };
