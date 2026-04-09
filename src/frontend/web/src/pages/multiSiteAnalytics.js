@@ -9,12 +9,23 @@ import { createToastManager } from '../shared/ui/index.js';
 import { createApiClient, mapApiError } from '../shared/apiClient.js';
 
 const getSiteId = s => s?.siteId || s?.id || '';
-const fmtNum   = n => n == null ? '—' : Number(n).toLocaleString();
-const fmtChg   = pct => {
+const fmtNum    = n => n == null ? '—' : Number(n).toLocaleString();
+const fmtChg    = pct => {
   if (pct == null) return '';
   const sign = pct >= 0 ? '+' : '';
   return `${sign}${pct.toFixed(1)}%`;
 };
+const fmtLastActive = ts => {
+  if (!ts) return 'No activity recorded';
+  const m = Math.floor((Date.now() - new Date(ts)) / 60000);
+  if (m < 2)   return 'Active just now';
+  if (m < 60)  return `Active ${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24)  return `Active ${h}h ago`;
+  const d = Math.floor(h / 24);
+  return d <= 7 ? `Active ${d}d ago` : `No activity in ${d}d`;
+};
+const intentColor = score => score >= 60 ? '#10b981' : score >= 35 ? '#f59e0b' : '#ef4444';
 
 // ─── el() ─────────────────────────────────────────────────────────────────────
 
@@ -123,6 +134,27 @@ const injectStyles = () => {
 .msa-table tbody tr:last-child td{border-bottom:none}
 .msa-table tbody tr:hover{background:#fafbff;cursor:pointer}
 .msa-rank{font-family:'JetBrains Mono',monospace;font-size:11px;color:#94a3b8;font-weight:600}
+/* Aggregate bar */
+.msa-agg-bar{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
+@media(max-width:700px){.msa-agg-bar{grid-template-columns:repeat(2,1fr)}}
+.msa-agg-card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:3px}
+.msa-agg-val{font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:700;color:#0f172a;letter-spacing:-.02em;line-height:1}
+.msa-agg-lbl{font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:.07em;font-weight:700}
+.msa-agg-sub{font-size:10px;color:#94a3b8}
+/* Search input */
+.msa-search{font-family:'Plus Jakarta Sans',system-ui,sans-serif;font-size:13px;color:#1e293b;background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:7px 11px;outline:none;min-width:180px;flex:1;max-width:260px}
+.msa-search:focus{border-color:#6366f1;box-shadow:0 0 0 3px rgba(99,102,241,.1)}
+/* Card intent + last-active */
+.msa-intent-row{display:flex;align-items:center;gap:6px;padding:6px 18px 0}
+.msa-intent-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.msa-intent-lbl{font-size:10.5px;color:#64748b;font-weight:600}
+.msa-last-active{font-size:10.5px;color:#94a3b8;margin-left:auto;font-family:'JetBrains Mono',monospace}
+/* Quick actions */
+.msa-qa{display:flex;align-items:center;gap:6px;flex:1}
+.msa-qa-btn{font-size:11px;font-weight:600;color:#6366f1;text-decoration:none;padding:3px 9px;border:1px solid #c7d2fe;border-radius:6px;background:#eef2ff;transition:background .12s;white-space:nowrap}
+.msa-qa-btn:hover{background:#e0e7ff}
+.msa-qa-btn-engage{color:#059669;border-color:#a7f3d0;background:#d1fae5}
+.msa-qa-btn-engage:hover{background:#a7f3d0}
   `;
   document.head.appendChild(s);
 };
@@ -150,13 +182,35 @@ export const renderMultiSiteAnalyticsView = async (container, { apiClient, toast
   hero.appendChild(heroStats);
   root.appendChild(hero);
 
+  // ── Aggregate summary bar ──────────────────────────────────────────────────
+  const aggBar = el('div', { class: 'msa-agg-bar' });
+  const mkAgg = (lbl, sub) => {
+    const card = el('div', { class: 'msa-agg-card' });
+    const val  = el('div', { class: 'msa-agg-val' }, '—');
+    card.append(val, el('div', { class: 'msa-agg-lbl' }, lbl), el('div', { class: 'msa-agg-sub' }, sub));
+    aggBar.appendChild(card);
+    return val;
+  };
+  const aggVisitors      = mkAgg('Total Visitors',    'Across all sites · 7d');
+  const aggLeads         = mkAgg('Total Leads',       'Across all sites');
+  const aggIdentified    = mkAgg('Identified',        'Known visitors');
+  const aggConversations = mkAgg('Conversations',     'AI chat sessions');
+  const aggActive        = mkAgg('Active Sites',      'Tracking live');
+  root.appendChild(aggBar);
+
   // ── Controls ───────────────────────────────────────────────────────────────
   const controls = el('div', { class: 'msa-controls' });
-  const sortSelect = el('select', { class: 'msa-select' });
-  [['visitors', 'Sort: Visitors (7d)'], ['leads', 'Sort: Leads'], ['tickets', 'Sort: Open Tickets'], ['domain', 'Sort: Domain A–Z']].forEach(([v, l]) =>
-    sortSelect.appendChild(el('option', { value: v }, l)));
+  const searchInput = el('input', { class: 'msa-search', type: 'text', placeholder: '🔍 Filter by name or domain…' });
+  const sortSelect  = el('select', { class: 'msa-select' });
+  [
+    ['visitors',      'Most Visitors'],
+    ['leads',         'Most Leads'],
+    ['conversations', 'Most Conversations'],
+    ['activity',      'Recently Active'],
+    ['domain',        'Alphabetical'],
+  ].forEach(([v, l]) => sortSelect.appendChild(el('option', { value: v }, l)));
   const refreshBtn = el('button', { class: 'msa-btn msa-btn-outline' }, '↻ Refresh');
-  controls.append(sortSelect, refreshBtn);
+  controls.append(searchInput, sortSelect, refreshBtn);
   root.appendChild(controls);
 
   // ── Cards grid ─────────────────────────────────────────────────────────────
@@ -177,10 +231,21 @@ export const renderMultiSiteAnalyticsView = async (container, { apiClient, toast
 
   const sortAndRender = () => {
     const sort = sortSelect.value;
-    const sorted = [...siteData].sort((a, b) => {
-      if (sort === 'visitors') return (b.analytics?.weekVisitors ?? 0) - (a.analytics?.weekVisitors ?? 0);
-      if (sort === 'leads')    return (b.leads ?? 0) - (a.leads ?? 0);
-      if (sort === 'tickets')  return (b.tickets ?? 0) - (a.tickets ?? 0);
+    const q    = searchInput.value.trim().toLowerCase();
+    const base = q
+      ? siteData.filter(d =>
+          (d.site.domain || '').toLowerCase().includes(q) ||
+          (d.site.name   || '').toLowerCase().includes(q))
+      : siteData;
+    const sorted = [...base].sort((a, b) => {
+      if (sort === 'visitors')      return (b.analytics?.weekVisitors ?? 0) - (a.analytics?.weekVisitors ?? 0);
+      if (sort === 'leads')         return (b.leads ?? 0) - (a.leads ?? 0);
+      if (sort === 'conversations') return (b.analytics?.conversations ?? b.analytics?.chatCount ?? 0) - (a.analytics?.conversations ?? a.analytics?.chatCount ?? 0);
+      if (sort === 'activity') {
+        const ta = new Date(a.analytics?.lastActivityAt ?? a.health?.firstEventReceivedAtUtc ?? 0);
+        const tb = new Date(b.analytics?.lastActivityAt ?? b.health?.firstEventReceivedAtUtc ?? 0);
+        return tb - ta;
+      }
       return (a.site.domain ?? '').localeCompare(b.site.domain ?? '');
     });
     renderGrid(sorted);
@@ -199,8 +264,10 @@ export const renderMultiSiteAnalyticsView = async (container, { apiClient, toast
     }
 
     data.forEach(({ site, analytics, leads, tickets, health }) => {
-      const siteId = getSiteId(site);
+      const siteId    = getSiteId(site);
       const isHealthy = health?.isInstalled && health?.firstEventReceivedAtUtc;
+      const avgIntent = analytics?.averageIntentScore ?? analytics?.avgIntentScore ?? null;
+      const lastTs    = analytics?.lastActivityAt ?? health?.firstEventReceivedAtUtc ?? null;
 
       const card = el('div', { class: 'msa-card' });
 
@@ -215,8 +282,19 @@ export const renderMultiSiteAnalyticsView = async (container, { apiClient, toast
       hd.append(hdLeft, hdot);
       card.appendChild(hd);
 
+      // Intent score + last active row
+      const intentRow = el('div', { class: 'msa-intent-row' });
+      if (avgIntent != null) {
+        const dot = el('div', { class: 'msa-intent-dot', style: `background:${intentColor(avgIntent)}`, title: `Avg intent score: ${Math.round(avgIntent)}` });
+        intentRow.append(dot, el('span', { class: 'msa-intent-lbl' }, `Intent ${Math.round(avgIntent)}`));
+      } else {
+        intentRow.append(el('span', { class: 'msa-intent-lbl', style: 'color:#cbd5e1' }, 'No intent data'));
+      }
+      intentRow.appendChild(el('span', { class: 'msa-last-active' }, fmtLastActive(lastTs)));
+      card.appendChild(intentRow);
+
       // Metrics
-      const metrics = el('div', { class: 'msa-metrics' });
+      const metrics = el('div', { class: 'msa-metrics', style: 'margin-top:8px' });
       const mkM = (val, lbl, chg) => {
         const m = el('div', { class: 'msa-metric' });
         m.appendChild(el('div', { class: 'msa-metric-val' }, fmtNum(val)));
@@ -249,11 +327,14 @@ export const renderMultiSiteAnalyticsView = async (container, { apiClient, toast
         });
       }
 
-      // Footer
+      // Footer — quick actions
       const ft = el('div', { class: 'msa-card-ft' });
-      ft.appendChild(el('div', { class: 'msa-ft-label' }, siteId.slice(0, 8) + '…'));
-      const link = el('a', { class: 'msa-view-btn', href: `#/dashboard?siteId=${siteId}` }, 'View Dashboard →');
-      ft.appendChild(link);
+      const qa = el('div', { class: 'msa-qa' });
+      qa.append(
+        el('a', { class: 'msa-qa-btn', href: `#/visitors?siteId=${siteId}` }, 'View visitors →'),
+        el('a', { class: 'msa-qa-btn msa-qa-btn-engage', href: `#/engage?siteId=${siteId}` }, 'Open Engage →'),
+      );
+      ft.append(qa, el('a', { class: 'msa-view-btn', href: `#/dashboard?siteId=${siteId}` }, 'Dashboard →'));
       card.appendChild(ft);
 
       grid.appendChild(card);
@@ -330,12 +411,21 @@ export const renderMultiSiteAnalyticsView = async (container, { apiClient, toast
       siteData = results.map(r => r.status === 'fulfilled' ? r.value : null).filter(Boolean);
 
       // Update hero stats
-      const totalVisitors = siteData.reduce((sum, d) => sum + (d.analytics?.weekVisitors ?? 0), 0);
-      const totalLeads    = siteData.reduce((sum, d) => sum + (d.leads ?? 0), 0);
-      const healthy       = siteData.filter(d => d.health?.isInstalled && d.health?.firstEventReceivedAtUtc).length;
+      const totalVisitors      = siteData.reduce((sum, d) => sum + (d.analytics?.weekVisitors ?? 0), 0);
+      const totalLeads         = siteData.reduce((sum, d) => sum + (d.leads ?? 0), 0);
+      const healthy            = siteData.filter(d => d.health?.isInstalled && d.health?.firstEventReceivedAtUtc).length;
       hVisitors.textContent = fmtNum(totalVisitors);
       hLeads.textContent    = fmtNum(totalLeads);
       hHealthy.textContent  = `${healthy}/${sites.length}`;
+
+      // Update aggregate bar
+      const totalIdentified    = siteData.reduce((sum, d) => sum + (d.analytics?.identifiedVisitors ?? d.analytics?.identified ?? 0), 0);
+      const totalConversations = siteData.reduce((sum, d) => sum + (d.analytics?.conversations ?? d.analytics?.chatCount ?? d.analytics?.totalConversations ?? 0), 0);
+      aggVisitors.textContent      = fmtNum(totalVisitors);
+      aggLeads.textContent         = fmtNum(totalLeads);
+      aggIdentified.textContent    = fmtNum(totalIdentified);
+      aggConversations.textContent = fmtNum(totalConversations);
+      aggActive.textContent        = String(healthy);
 
       sortAndRender();
     } catch (err) {
@@ -345,6 +435,7 @@ export const renderMultiSiteAnalyticsView = async (container, { apiClient, toast
   };
 
   sortSelect.addEventListener('change', sortAndRender);
+  searchInput.addEventListener('input', sortAndRender);
   refreshBtn.addEventListener('click', loadAll);
 
   await loadAll();
