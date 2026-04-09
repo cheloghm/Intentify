@@ -17,6 +17,7 @@ import { renderTeamView } from '../pages/team.js';
 import { renderDashboardView } from '../pages/dashboard.js';
 import { renderPlatformAdminTenantDetailView, renderPlatformAdminView } from '../pages/platformAdmin.js';
 import { renderMultiSiteAnalyticsView } from '../pages/multiSiteAnalytics.js';
+import { showBotWizard } from '../pages/botWizard.js';
 
 const app = document.getElementById('app');
 const toast = createToastManager();
@@ -1112,7 +1113,7 @@ const getRouteFromHash = () => {
 
 // ── Auth state ─────────────────────────────────────────────────────────────────
 
-const authState = { loaded: false, loading: false, roles: [], profile: null, profileModalOpen: false };
+const authState = { loaded: false, loading: false, roles: [], profile: null, profileModalOpen: false, wizardChecked: false };
 
 const getPrimaryRole = (roles) => {
   if (!Array.isArray(roles)) return 'user';
@@ -1279,6 +1280,25 @@ const renderApp = () => {
       canWrite:    canAccessWrite(getPrimaryRole(authState.roles)),
     },
   });
+
+  if (isAuthenticated && authState.loaded && !authState.wizardChecked) {
+    authState.wizardChecked = true;
+    (async () => {
+      try {
+        const sites = await apiClient.sites.list();
+        const firstSite = Array.isArray(sites) && sites.length > 0 ? sites[0] : null;
+        if (!firstSite) return;
+        const siteId = firstSite.siteId || firstSite.id || String(firstSite._id || '');
+        if (!siteId) return;
+        const dismissKey = `hven_wizard_dismissed_${siteId}`;
+        if (localStorage.getItem(dismissKey)) return;
+        const bot = await apiClient.engage.getBot(siteId);
+        if (!bot?.businessDescription) {
+          showBotWizard(app, { apiClient, siteId, toast, onComplete: () => {} });
+        }
+      } catch { /* ignore — wizard is non-critical */ }
+    })();
+  }
 
   if (isAuthenticated && authState.profileModalOpen && authState.profile) {
     const primaryRole    = getPrimaryRole(authState.roles);
