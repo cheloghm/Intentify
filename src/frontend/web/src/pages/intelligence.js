@@ -263,6 +263,25 @@ const injectStyles = () => {
 .i-ns-product-badge{font-size:9.5px;font-weight:700;padding:2px 6px;border-radius:5px;border:1px solid}
 .i-ns-filters{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
 .i-ns-skel{height:32px;border-radius:8px}
+/* Competitor signals */
+.i-cs-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:700px){.i-cs-grid{grid-template-columns:1fr}}
+.i-cs-col-hd{font-size:11.5px;font-weight:700;color:#0f172a;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid #f1f5f9}
+.i-cs-card{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;margin-bottom:6px}
+.i-cs-card-rising{border-left:3px solid #10b981}
+.i-cs-kw{font-size:12.5px;font-weight:600;color:#1e293b;margin-bottom:5px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.i-cs-bar-wrap{display:flex;align-items:center;gap:6px}
+.i-cs-bar-track{flex:1;height:4px;background:#e2e8f0;border-radius:999px;overflow:hidden}
+.i-cs-bar-fill{height:100%;border-radius:999px;transition:width .5s ease}
+.i-cs-bar-val{font-size:10px;font-family:'JetBrains Mono',monospace;color:#94a3b8;min-width:24px;text-align:right}
+.i-cs-intent{display:inline-flex;align-items:center;padding:1px 6px;border-radius:5px;font-size:9.5px;font-weight:700;border:1px solid;flex-shrink:0}
+.i-cs-intent-t{background:#d1fae5;color:#065f46;border-color:#6ee7b7}
+.i-cs-intent-c{background:#dbeafe;color:#1e40af;border-color:#93c5fd}
+.i-cs-intent-i{background:#f1f5f9;color:#475569;border-color:#e2e8f0}
+.i-cs-ai-box{background:#eef2ff;border-left:4px solid #6366f1;border-radius:0 8px 8px 0;padding:12px 16px;margin-bottom:14px}
+.i-cs-ai-lbl{font-size:10px;font-weight:700;color:#6366f1;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px}
+.i-cs-ai-text{font-size:12.5px;color:#334155;line-height:1.6}
+.i-cs-prompt{text-align:center;padding:40px 24px;color:#94a3b8;font-size:12.5px;display:flex;flex-direction:column;align-items:center;gap:8px}
   `;
   document.head.appendChild(s);
 };
@@ -409,6 +428,7 @@ export const renderIntelligenceView = (container, { apiClient, toast } = {}) => 
     { key: 'related',       label: '🔗 Related'       },
     { key: 'opportunities', label: '💡 Opportunities' },
     { key: 'network',       label: '🌐 Network'       },
+    { key: 'competitors',   label: '🥊 Competitors'   },
     { key: 'profile',       label: '⚙️ Profile'       },
   ];
   const tabEls = {}; const panelEls = {};
@@ -743,6 +763,155 @@ export const renderIntelligenceView = (container, { apiClient, toast } = {}) => 
   };
 
   // ─────────────────────────────────────────────────────────────────────────
+  // TAB: COMPETITORS
+  // ─────────────────────────────────────────────────────────────────────────
+  const competitorsPanel = panelEls.competitors;
+
+  const csState = { industry: '', location: '', timeWindow: '7d', data: null, loading: false };
+
+  // ── Filters ───────────────────────────────────────────────────────────────
+  const csFilters = el('div', { class: 'i-ns-filters', style: 'margin-bottom:14px' });
+  const csIndustryEl = el('input', { type: 'text', class: 'i-field', placeholder: 'e.g. fashion, cybersecurity, real estate', style: 'flex:1;min-width:160px' });
+  csIndustryEl.addEventListener('input', () => { csState.industry = csIndustryEl.value.trim(); });
+  csIndustryEl.addEventListener('change', () => { if (csState.industry) loadCompetitorSignals(); });
+
+  const csLocationEl = el('select', { class: 'i-select' });
+  [{ value: 'GB', label: '🇬🇧 United Kingdom' }, { value: 'IE', label: '🇮🇪 Ireland' }, { value: 'US', label: '🇺🇸 United States' }, { value: 'AU', label: '🇦🇺 Australia' }, { value: 'CA', label: '🇨🇦 Canada' }, { value: 'DE', label: '🇩🇪 Germany' }, { value: 'FR', label: '🇫🇷 France' }]
+    .forEach(opt => csLocationEl.appendChild(el('option', { value: opt.value }, opt.label)));
+  csLocationEl.addEventListener('change', () => { csState.location = csLocationEl.value; if (csState.industry) loadCompetitorSignals(); });
+
+  const csTwEl = el('select', { class: 'i-select' });
+  [{ value: '7d', label: 'Past 7 days' }, { value: '30d', label: 'Past 30 days' }, { value: '90d', label: 'Past 90 days' }]
+    .forEach(opt => csTwEl.appendChild(el('option', { value: opt.value }, opt.label)));
+  csTwEl.addEventListener('change', () => { csState.timeWindow = csTwEl.value; if (csState.industry) loadCompetitorSignals(); });
+
+  const csGoBtn = el('button', { class: 'i-btn i-btn-primary' }, '🔍 Analyse');
+  csGoBtn.addEventListener('click', () => { if (csState.industry) loadCompetitorSignals(); });
+
+  csFilters.append(csIndustryEl, csLocationEl, csTwEl, csGoBtn);
+  competitorsPanel.appendChild(csFilters);
+
+  const csContent = el('div', {});
+  competitorsPanel.appendChild(csContent);
+
+  // ── Skeletons ─────────────────────────────────────────────────────────────
+  const renderCompetitorSkeletons = () => {
+    csContent.replaceChildren();
+    const skGrid = el('div', { class: 'i-cs-grid' });
+    [0, 1].forEach(() => {
+      const col = el('div', {});
+      for (let i = 0; i < 5; i++) col.appendChild(el('div', { class: 'i-skel i-ns-skel', style: 'margin-bottom:6px' }));
+      skGrid.appendChild(col);
+    });
+    csContent.appendChild(skGrid);
+  };
+
+  // ── Intent badge ──────────────────────────────────────────────────────────
+  const mkIntentBadge = intent => {
+    const cls = intent === 'Transactional' ? 'i-cs-intent i-cs-intent-t'
+              : intent === 'Commercial'    ? 'i-cs-intent i-cs-intent-c'
+              :                              'i-cs-intent i-cs-intent-i';
+    return el('span', { class: cls }, intent || 'Informational');
+  };
+
+  // ── Keyword card ──────────────────────────────────────────────────────────
+  const mkKeywordCard = (kw, rising) => {
+    const card = el('div', { class: rising ? 'i-cs-card i-cs-card-rising' : 'i-cs-card' });
+    const kwRow = el('div', { class: 'i-cs-kw' });
+    if (rising) kwRow.appendChild(el('span', { style: 'color:#10b981;font-size:13px' }, '↑'));
+    kwRow.appendChild(el('span', {}, kw.keyword));
+    kwRow.appendChild(mkIntentBadge(kw.intent));
+    card.appendChild(kwRow);
+    const barColor = kw.intent === 'Transactional' ? '#10b981' : kw.intent === 'Commercial' ? '#3b82f6' : '#6366f1';
+    const barWrap = el('div', { class: 'i-cs-bar-wrap' });
+    const track = el('div', { class: 'i-cs-bar-track' });
+    const fill  = el('div', { class: 'i-cs-bar-fill', style: `background:${barColor};width:0%` });
+    track.appendChild(fill);
+    barWrap.append(track, el('span', { class: 'i-cs-bar-val' }, String(kw.score)));
+    card.appendChild(barWrap);
+    setTimeout(() => { fill.style.width = `${kw.score}%`; }, 80);
+    return card;
+  };
+
+  // ── Render ────────────────────────────────────────────────────────────────
+  const renderCompetitorSignals = data => {
+    csContent.replaceChildren();
+    if (!data.trendingKeywords?.length && !data.risingKeywords?.length) {
+      csContent.appendChild(el('div', { class: 'i-cs-prompt' },
+        el('div', { style: 'font-size:28px;opacity:.35' }, '🥊'),
+        el('div', { style: 'font-weight:700;color:#334155' }, 'No signals found'),
+        el('div', {}, 'Try a different industry term or broader location.')));
+      return;
+    }
+
+    if (data.aiSummary) {
+      const aiBox = el('div', { class: 'i-cs-ai-box i-fade' });
+      aiBox.appendChild(el('div', { class: 'i-cs-ai-lbl' }, '🤖 AI Analysis'));
+      aiBox.appendChild(el('div', { class: 'i-cs-ai-text' }, data.aiSummary));
+      csContent.appendChild(aiBox);
+    }
+
+    const grid = el('div', { class: 'i-cs-grid i-fade' });
+
+    // Left: trending
+    const leftCol = el('div', {});
+    leftCol.appendChild(el('div', { class: 'i-cs-col-hd' }, '📊 What people are searching for in your industry'));
+    if (data.trendingKeywords?.length) {
+      data.trendingKeywords.forEach(kw => leftCol.appendChild(mkKeywordCard(kw, false)));
+    } else {
+      leftCol.appendChild(el('div', { style: 'color:#94a3b8;font-size:12px;padding:8px 0' }, 'No trending keywords found.'));
+    }
+    grid.appendChild(leftCol);
+
+    // Right: rising
+    const rightCol = el('div', {});
+    rightCol.appendChild(el('div', { class: 'i-cs-col-hd' }, '🚀 Rising fast this week'));
+    if (data.risingKeywords?.length) {
+      data.risingKeywords.forEach(kw => rightCol.appendChild(mkKeywordCard(kw, true)));
+    } else {
+      rightCol.appendChild(el('div', { style: 'color:#94a3b8;font-size:12px;padding:8px 0' }, 'No rising keywords found.'));
+    }
+    grid.appendChild(rightCol);
+
+    csContent.appendChild(grid);
+  };
+
+  // ── Load ──────────────────────────────────────────────────────────────────
+  const loadCompetitorSignals = async () => {
+    if (csState.loading) return;
+    if (!csState.industry) {
+      csContent.replaceChildren(el('div', { class: 'i-cs-prompt' },
+        el('div', { style: 'font-size:28px;opacity:.35' }, '🥊'),
+        el('div', { style: 'font-weight:700;color:#334155' }, 'Enter your industry above'),
+        el('div', {}, 'Type your industry keyword and click Analyse to see competitor signals.')));
+      return;
+    }
+    csState.loading = true;
+    renderCompetitorSkeletons();
+    try {
+      const data = await client.intelligence.getCompetitorSignals(
+        csState.industry,
+        csState.location || csLocationEl.value,
+        csState.timeWindow || csTwEl.value);
+      csState.data = data;
+      renderCompetitorSignals(data);
+    } catch (err) {
+      csContent.replaceChildren(el('div', { class: 'i-empty' },
+        el('div', { class: 'i-empty-icon' }, '⚠️'),
+        el('div', { class: 'i-empty-title' }, 'Could not load competitor signals'),
+        el('div', { class: 'i-empty-desc' }, mapApiError(err).message || 'Check your SerpApi configuration.')));
+    } finally {
+      csState.loading = false;
+    }
+  };
+
+  // Show initial prompt
+  csContent.appendChild(el('div', { class: 'i-cs-prompt' },
+    el('div', { style: 'font-size:28px;opacity:.35' }, '🥊'),
+    el('div', { style: 'font-weight:700;color:#334155' }, 'Enter your industry above'),
+    el('div', {}, 'Type your industry keyword and click Analyse to see competitor signals.')));
+
+  // ─────────────────────────────────────────────────────────────────────────
   // TAB: PROFILE
   // ─────────────────────────────────────────────────────────────────────────
   const profilePanel = panelEls.profile;
@@ -1021,6 +1190,13 @@ export const renderIntelligenceView = (container, { apiClient, toast } = {}) => 
     origSwitchTab(key);
     if (key === 'network' && !nsState.data && !nsState.loading) {
       loadNetworkSignals();
+    }
+    if (key === 'competitors' && !csState.data && !csState.loading) {
+      // Pre-fill industry from profile if available and input is empty
+      if (!csState.industry && pInduEl.value) {
+        csIndustryEl.value = pInduEl.value;
+        csState.industry = pInduEl.value.trim();
+      }
     }
   };
   // Rewire tab buttons to use wrapped switch

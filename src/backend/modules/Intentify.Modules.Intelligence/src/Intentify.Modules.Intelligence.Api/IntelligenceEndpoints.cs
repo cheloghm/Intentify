@@ -222,6 +222,28 @@ internal static class IntelligenceEndpoints
         };
     }
 
+    // ── GET /intelligence/competitor-signals ──────────────────────────────
+
+    public static async Task<IResult> GetCompetitorSignalsAsync(
+        ICompetitorSignalsService service,
+        string? industry = null,
+        string? location = "GB",
+        string? timeWindow = "7d",
+        int maxResults = 10)
+    {
+        if (string.IsNullOrWhiteSpace(industry))
+            return Results.BadRequest("industry is required");
+
+        var result = await service.GetCompetitorSignalsAsync(
+            new CompetitorSignalsQuery(
+                industry.Trim(),
+                string.IsNullOrWhiteSpace(location) ? "GB" : location,
+                string.IsNullOrWhiteSpace(timeWindow) ? "7d" : timeWindow,
+                Math.Clamp(maxResults, 1, 25)));
+
+        return Results.Ok(result);
+    }
+
     // ── GET /intelligence/network-signals ─────────────────────────────────
 
     public static async Task<IResult> GetNetworkSignalsAsync(

@@ -331,6 +331,13 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
       daysBack,
     })}`);
 
+  const getCompetitorSignals = async (industry, location, timeWindow) =>
+    request(`/intelligence/competitor-signals${buildQueryString({
+      industry: industry || undefined,
+      location: location || undefined,
+      timeWindow: timeWindow || undefined,
+    })}`);
+
   const upsertIntelligenceProfile = async (siteId, payload) =>
     request(`/intelligence/profiles/${encodeURIComponent(siteId)}`, {
       method: 'PUT',
@@ -647,6 +654,7 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
       getProfile: getIntelligenceProfile,
       upsertProfile: upsertIntelligenceProfile,
       getNetworkSignals,
+      getCompetitorSignals,
     },
     ads: {
       listCampaigns: listAdsCampaigns,
