@@ -659,6 +659,9 @@ const renderHomeView = (container) => {
     { id: 'step-8', label: 'Monitor Visitors & Leads' },
   ];
 
+  let completedSteps = new Set(['step-2']);
+  let lastActiveIndex = 0;
+
   const navItems = [];
   stepMeta.forEach((s, i) => {
     const item = document.createElement('div');
@@ -674,19 +677,43 @@ const renderHomeView = (container) => {
   });
 
   function setActiveNav(index) {
+    lastActiveIndex = index;
     navItems.forEach((item, i) => {
-      if (i < index) {
-        item.style.cssText = 'display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:8px;font-size:13px;cursor:pointer;color:#22c55e;border-left:3px solid transparent;margin-bottom:2px';
-        const circle = item.querySelector('span:first-child');
-        if (circle) { circle.textContent = '✓'; circle.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:#dcfce7;color:#16a34a;font-size:10px;font-weight:700;flex-shrink:0'; }
-      } else if (i === index) {
+      const isDone = completedSteps.has(stepMeta[i].id);
+      const circle = item.querySelector('span');
+      if (i === index) {
         item.style.cssText = 'display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:8px;font-size:13px;cursor:pointer;color:#6366f1;font-weight:600;background:#eef2ff;border-left:3px solid #6366f1;margin-bottom:2px';
+        if (circle) {
+          if (isDone) {
+            circle.textContent = '✓';
+            circle.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:#dcfce7;color:#16a34a;font-size:10px;font-weight:700;flex-shrink:0';
+          } else {
+            circle.textContent = String(i + 1);
+            circle.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:#c7d2fe;color:#4338ca;font-size:10px;font-weight:700;flex-shrink:0';
+          }
+        }
+      } else if (isDone) {
+        item.style.cssText = 'display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:8px;font-size:13px;cursor:pointer;color:#16a34a;border-left:3px solid transparent;margin-bottom:2px';
+        if (circle) { circle.textContent = '✓'; circle.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:#dcfce7;color:#16a34a;font-size:10px;font-weight:700;flex-shrink:0'; }
       } else {
         item.style.cssText = 'display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:8px;font-size:13px;cursor:pointer;color:#64748b;border-left:3px solid transparent;margin-bottom:2px';
+        if (circle) { circle.textContent = String(i + 1); circle.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:#e2e8f0;color:#64748b;font-size:10px;font-weight:700;flex-shrink:0'; }
       }
     });
   }
   setActiveNav(0);
+
+  const refreshProgressBtn = document.createElement('button');
+  refreshProgressBtn.textContent = '↻ Refresh progress';
+  refreshProgressBtn.style.cssText = 'margin-top:14px;width:100%;background:none;border:1px solid #e2e8f0;border-radius:7px;padding:7px 10px;font-size:11.5px;color:#64748b;cursor:pointer;transition:all .15s;font-family:inherit';
+  refreshProgressBtn.addEventListener('mouseenter', () => { refreshProgressBtn.style.background = '#f1f5f9'; });
+  refreshProgressBtn.addEventListener('mouseleave', () => { refreshProgressBtn.style.background = 'none'; });
+  refreshProgressBtn.addEventListener('click', () => {
+    refreshProgressBtn.textContent = '⏳ Checking…';
+    refreshProgressBtn.disabled = true;
+    runProgressCheck(true).finally(() => { refreshProgressBtn.textContent = '↻ Refresh progress'; refreshProgressBtn.disabled = false; });
+  });
+  sidebar.appendChild(refreshProgressBtn);
 
   // ── Content area ─────────────────────────────────────────────────────────────
   const content = document.createElement('div');
@@ -872,6 +899,71 @@ const renderHomeView = (container) => {
     body.appendChild(btnRow);
   }));
 
+  // ── Tutorial completion tracking ──────────────────────────────────────────────
+  const applyCompletionToCards = (done) => {
+    done.forEach(stepId => {
+      const card = content.querySelector('#' + stepId);
+      if (!card) return;
+      const header = card.firstElementChild;
+      if (!header || header.querySelector('.tut-done-pill')) return;
+      const pill = document.createElement('span');
+      pill.className = 'tut-done-pill';
+      pill.textContent = '✓ Complete';
+      pill.style.cssText = 'display:inline-flex;align-items:center;background:#dcfce7;color:#16a34a;font-size:11px;font-weight:600;padding:3px 10px;border-radius:100px;margin-left:auto;flex-shrink:0;white-space:nowrap';
+      header.appendChild(pill);
+    });
+  };
+
+  const _tutUserId = authState.profile?.userId || authState.profile?.email || 'default';
+  const _tutCacheKey = `hven_tutorial_${_tutUserId}`;
+  const _tutCacheTtl = 30_000;
+
+  const runProgressCheck = async (bust) => {
+    if (bust) { try { localStorage.removeItem(_tutCacheKey); } catch {} }
+    const completed = new Set(['step-2']);
+    try {
+      if (!bust) {
+        const cached = JSON.parse(localStorage.getItem(_tutCacheKey) || 'null');
+        if (cached && Date.now() - cached.ts < _tutCacheTtl) {
+          completedSteps = new Set(cached.completed);
+          setActiveNav(lastActiveIndex);
+          applyCompletionToCards(completedSteps);
+          return;
+        }
+      }
+      const sites = await apiClient.sites.list();
+      const siteList = Array.isArray(sites) ? sites : [];
+      if (siteList.length > 0) {
+        completed.add('step-3');
+        if (siteList.some(s => s.firstEventReceivedAtUtc)) completed.add('step-4');
+        const firstId = siteList[0].siteId || siteList[0].id || '';
+        const [knR, botR, flR, vsR] = await Promise.allSettled([
+          apiClient.knowledge.listSources(firstId),
+          apiClient.engage.getBot(firstId),
+          apiClient.flows.list(firstId),
+          apiClient.visitors.list(firstId, 1, 1),
+        ]);
+        if (knR.status === 'fulfilled') {
+          const srcs = Array.isArray(knR.value) ? knR.value : [];
+          if (srcs.some(s => String(s.status || '').toUpperCase() === 'INDEXED')) completed.add('step-5');
+        }
+        if (botR.status === 'fulfilled' && botR.value?.businessDescription) completed.add('step-6');
+        if (flR.status === 'fulfilled') {
+          const fl = Array.isArray(flR.value) ? flR.value : (flR.value?.items ?? []);
+          if (fl.length > 0) completed.add('step-7');
+        }
+        if (vsR.status === 'fulfilled') {
+          const vs = Array.isArray(vsR.value) ? vsR.value : (vsR.value?.items ?? []);
+          if (vs.length > 0) completed.add('step-8');
+        }
+      }
+      try { localStorage.setItem(_tutCacheKey, JSON.stringify({ ts: Date.now(), completed: [...completed] })); } catch {}
+    } catch { /* non-critical */ }
+    completedSteps = completed;
+    setActiveNav(lastActiveIndex);
+    applyCompletionToCards(completedSteps);
+  };
+
   // ── IntersectionObserver for sidebar ─────────────────────────────────────────
   const sectionEls = stepMeta.map(s => document.getElementById(s.id)).filter(Boolean);
   // observe after DOM is appended (requestAnimationFrame ensures IDs exist)
@@ -891,6 +983,8 @@ const renderHomeView = (container) => {
   layout.appendChild(sidebar);
   layout.appendChild(content);
   container.appendChild(layout);
+
+  requestAnimationFrame(() => runProgressCheck(false));
 };
 
 const renderLoginView = (container) => {
