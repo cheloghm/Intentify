@@ -144,6 +144,17 @@ const injectStyles = () => {
 .l-empty-desc{font-size:12px;color:#94a3b8;max-width:260px;line-height:1.6}
 /* Panel section */
 .l-section-title{font-size:11.5px;font-weight:700;color:#0f172a;margin-bottom:10px;display:flex;align-items:center;gap:6px}
+/* Drag-and-drop */
+.l-col-drag-over{border:2px dashed #6366f1!important;background:#eef2ff!important}
+.l-col-drag-over .l-col-body{background:#eef2ff}
+.l-card[draggable=true]{cursor:grab}
+.l-card[draggable=true]:active{cursor:grabbing}
+/* Kanban card enhancements */
+.l-card-handle{color:#cbd5e1;font-size:15px;line-height:1.2;user-select:none;flex-shrink:0;margin-top:1px}
+.l-card-preview{font-size:11px;color:#64748b;line-height:1.5;margin:3px 0 5px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+/* Summary bar */
+.l-summary-bar{font-size:12px;color:#64748b;padding:2px 0 10px;display:flex;gap:12px;align-items:center}
+.l-summary-bar strong{color:#1e293b}
   `;
   document.head.appendChild(s);
 };
@@ -365,29 +376,80 @@ export const renderLeadsView = (container, { apiClient, toast } = {}) => {
   // ── Pipeline view ──────────────────────────────────────────────────────────
   const renderPipeline = () => {
     mainCol.replaceChildren();
+
+    // ── Summary bar ──
+    const total      = state.filtered.length;
+    const inPipeline = state.filtered.filter(l => { const k = getStage(l.opportunityLabel).key; return k !== 'won' && k !== 'lost'; }).length;
+    const wonCount   = state.filtered.filter(l => getStage(l.opportunityLabel).key === 'won').length;
+    mainCol.appendChild(el('div', { class: 'l-summary-bar' },
+      el('strong', {}, String(total)), ` total lead${total !== 1 ? 's' : ''}`,
+      el('span', { style: 'color:#e2e8f0' }, '·'),
+      el('strong', {}, String(inPipeline)), ' in pipeline',
+      el('span', { style: 'color:#e2e8f0' }, '·'),
+      el('strong', {}, String(wonCount)), ' won'
+    ));
+
     const pipeline = el('div', { class: 'l-pipeline' });
 
     STAGES.forEach(stage => {
       const stageLeads = state.filtered.filter(l => getStage(l.opportunityLabel).key === stage.key);
-      const col = el('div', { class: 'l-col' });
-      const hd  = el('div', { class: 'l-col-hd' });
+      const col  = el('div', { class: 'l-col' });
+      const hd   = el('div', { class: 'l-col-hd' });
       hd.appendChild(el('div', { class: 'l-col-label' }, stage.label));
       hd.appendChild(el('span', { class: 'l-col-count', style: `background:${stage.light};color:${stage.color}` }, String(stageLeads.length)));
       col.appendChild(hd);
 
       const body = el('div', { class: 'l-col-body' });
+
+      // ── Drag-and-drop: column as drop target ──
+      body.addEventListener('dragover', e => { e.preventDefault(); col.classList.add('l-col-drag-over'); });
+      col.addEventListener('dragleave', e => { if (!col.contains(e.relatedTarget)) col.classList.remove('l-col-drag-over'); });
+      col.addEventListener('drop', async e => {
+        e.preventDefault();
+        col.classList.remove('l-col-drag-over');
+        const leadId = e.dataTransfer.getData('text/plain');
+        if (!leadId) return;
+        const lead = state.leads.find(l => String(l.leadId || l.id) === leadId);
+        if (!lead || getStage(lead.opportunityLabel).key === stage.key) return;
+        // Optimistic update
+        lead.opportunityLabel = stage.key;
+        state.selected = lead;
+        renderPipeline();
+        renderDetail(lead);
+        // Sync to API
+        try { await client.leads.tagStage(leadId, stage.key); }
+        catch (err) { notifier.show({ message: mapApiError(err).message, variant: 'danger' }); await loadLeads(); }
+      });
+
       if (!stageLeads.length) {
         body.appendChild(el('div', { style: 'color:#94a3b8;font-size:11px;text-align:center;padding:16px 0' }, 'No leads'));
       } else {
         stageLeads.forEach(lead => {
-          const card = el('div', { class: `l-card${state.selected?.id === lead.id ? ' active' : ''}` });
+          const leadId = String(lead.leadId || lead.id);
+          const card   = el('div', { class: `l-card${state.selected?.id === lead.id ? ' active' : ''}` });
+          card.setAttribute('draggable', 'true');
+          card.addEventListener('dragstart', e => {
+            e.dataTransfer.setData('text/plain', leadId);
+            e.dataTransfer.effectAllowed = 'move';
+            setTimeout(() => { card.style.opacity = '0.45'; }, 0);
+          });
+          card.addEventListener('dragend', () => { card.style.opacity = ''; });
+
           card.appendChild(el('div', { class: 'l-card-accent', style: `background:${stage.color}` }));
-          card.appendChild(el('div', { class: 'l-card-name' }, lead.displayName || 'Anonymous'));
-          card.appendChild(el('div', { class: 'l-card-email' }, lead.primaryEmail || '—'));
-          const meta = el('div', { class: 'l-card-meta' });
-          if (lead.intentScore) meta.appendChild(el('span', { class: 'l-pill', style: 'background:#f1f5f9;color:#475569;border-color:#e2e8f0' }, `Score: ${lead.intentScore}`));
-          meta.appendChild(el('span', { class: 'l-pill', style: 'background:#f8fafc;color:#94a3b8;border-color:#e2e8f0' }, fmtAgo(lead.updatedAtUtc)));
-          card.appendChild(meta);
+          const row  = el('div', { style: 'display:flex;align-items:flex-start;gap:6px;padding-left:8px' });
+          const info = el('div', { style: 'flex:1;min-width:0' });
+
+          info.appendChild(el('div', { class: 'l-card-name', style: 'padding-left:0' }, lead.displayName || 'Anonymous'));
+          if (lead.conversationSummary) {
+            const txt = lead.conversationSummary.length > 60 ? lead.conversationSummary.slice(0,60)+'…' : lead.conversationSummary;
+            info.appendChild(el('div', { class: 'l-card-preview' }, txt));
+          }
+          const meta = el('div', { class: 'l-card-meta', style: 'padding-left:0' });
+          meta.appendChild(el('span', { class: 'l-pill', style: 'background:#f8fafc;color:#94a3b8;border-color:#e2e8f0' }, fmtAgo(lead.updatedAtUtc || lead.createdAtUtc)));
+          info.appendChild(meta);
+
+          row.append(el('span', { class: 'l-card-handle' }, '⠿'), info);
+          card.appendChild(row);
           card.addEventListener('click', () => { state.selected = lead; renderPipeline(); renderDetail(lead); });
           body.appendChild(card);
         });
