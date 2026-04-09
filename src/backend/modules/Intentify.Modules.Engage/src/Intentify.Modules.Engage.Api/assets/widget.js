@@ -636,8 +636,65 @@
         launcherVisible = payload.launcherVisible;
       }
       applyTheme();
+
+      // Auto-trigger: check page_view rules after bootstrap resolves
+      tryAutoTrigger(payload && payload.autoTriggerRulesJson);
     })
     .catch(function(){});
+
+  function tryAutoTrigger(autoTriggerRulesJson) {
+    // Only fire once per browser session
+    try {
+      if (sessionStorage.getItem('hven_auto_triggered_' + widgetKey)) return;
+    } catch(e) {}
+
+    // If a conversation is already in progress, don't auto-open
+    if (sessionId) return;
+
+    if (!autoTriggerRulesJson) return;
+
+    var rules;
+    try { rules = JSON.parse(autoTriggerRulesJson); } catch(e) { return; }
+    if (!Array.isArray(rules) || rules.length === 0) return;
+
+    var currentUrl = window.location.href;
+    var currentPath = window.location.pathname;
+    var currentTitle = document.title || '';
+
+    for (var i = 0; i < rules.length; i++) {
+      var rule = rules[i];
+      if (!rule || (rule.type || '').toLowerCase() !== 'page_view') continue;
+
+      var pattern = rule.urlPattern || '';
+      if (!pattern) continue;
+
+      // Match against full URL or pathname
+      var matched = currentUrl.indexOf(pattern) !== -1 || currentPath.indexOf(pattern) !== -1;
+      if (!matched) continue;
+
+      // Matched — fire after 5 second delay
+      var triggerMessage = rule.message || ('Hi there — I noticed you\'re looking at ' + (currentTitle || 'this page') + '. Happy to answer any questions!');
+
+      setTimeout(function(msg) {
+        // Check again in case user started a conversation while waiting
+        if (sessionId) return;
+        try {
+          if (sessionStorage.getItem('hven_auto_triggered_' + widgetKey)) return;
+          sessionStorage.setItem('hven_auto_triggered_' + widgetKey, '1');
+        } catch(e) {}
+
+        // Open the widget panel
+        persistPanelState(true);
+        renderPanelState();
+        restoreInputFocus();
+
+        // Send the auto trigger opening message as the bot
+        addMessage('bot', msg);
+      }, 5000, triggerMessage);
+
+      break; // Only fire the first matching rule
+    }
+  }
 
   applyTheme();
   renderPanelState();
@@ -671,7 +728,7 @@
         return fetch(endpoint('/engage/chat/send?widgetKey=' + encodeURIComponent(widgetKey)), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ widgetKey: widgetKey, sessionId: sessionId, message: message, collectorSessionId: collectorSessionId, visitorId: getVisitorId() || null })
+          body: JSON.stringify({ widgetKey: widgetKey, sessionId: sessionId, message: message, collectorSessionId: collectorSessionId, visitorId: getVisitorId() || null, currentPageUrl: window.location.href, currentPageTitle: document.title || null })
         });
       })
       .then(function(response) {

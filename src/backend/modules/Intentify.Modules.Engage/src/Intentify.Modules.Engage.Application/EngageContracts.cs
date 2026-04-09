@@ -4,7 +4,7 @@ public sealed record WidgetBootstrapQuery(string WidgetKey);
 
 public sealed record WidgetBootstrapResult(Guid SiteId, string Domain);
 
-public sealed record ChatSendCommand(string WidgetKey, Guid? SessionId, string Message, string? CollectorSessionId, string? VisitorId = null);
+public sealed record ChatSendCommand(string WidgetKey, Guid? SessionId, string Message, string? CollectorSessionId, string? VisitorId = null, string? CurrentPageUrl = null, string? CurrentPageTitle = null);
 
 public sealed record EngageCitationResult(Guid SourceId, Guid ChunkId, int ChunkIndex);
 

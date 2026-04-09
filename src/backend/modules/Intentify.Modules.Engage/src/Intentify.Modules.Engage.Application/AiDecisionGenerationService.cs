@@ -169,6 +169,20 @@ public sealed class AiDecisionGenerationService
         // Current session state (what has been captured so far — changes as slots are filled)
         sb.AppendLine(EngageSalesGuideline.BuildSessionState(sessionMemory));
 
+        // --- Current page context ---
+        if (!string.IsNullOrWhiteSpace(contextBundle.CurrentPageUrl) || !string.IsNullOrWhiteSpace(contextBundle.CurrentPageTitle))
+        {
+            sb.AppendLine("## Current Page Context");
+            sb.AppendLine();
+            if (!string.IsNullOrWhiteSpace(contextBundle.CurrentPageUrl))
+                sb.AppendLine($"The visitor is currently on: {contextBundle.CurrentPageUrl}");
+            if (!string.IsNullOrWhiteSpace(contextBundle.CurrentPageTitle))
+                sb.AppendLine($"Page title: {contextBundle.CurrentPageTitle}");
+            sb.AppendLine();
+            sb.AppendLine("Use this to personalise your response. If the page title or URL suggests a specific product, service, or section, acknowledge it naturally in your response where relevant. Do not mention the URL directly — instead use the page context to inform what you say.");
+            sb.AppendLine();
+        }
+
         // --- Turn context ---
         sb.AppendLine("## Turn Context");
         sb.AppendLine();

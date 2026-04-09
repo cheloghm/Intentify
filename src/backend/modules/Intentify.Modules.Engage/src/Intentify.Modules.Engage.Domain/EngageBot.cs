@@ -47,4 +47,7 @@ public sealed class EngageBot
 
     /// <summary>Digest frequency: "weekly" or "daily". Defaults to "weekly".</summary>
     public string? DigestEmailFrequency { get; set; }
+
+    /// <summary>JSON array of auto-trigger rules, e.g. [{"type":"page_view","urlPattern":"/pricing","message":"..."}]</summary>
+    public string? AutoTriggerRulesJson { get; set; }
 }

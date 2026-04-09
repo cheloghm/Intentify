@@ -25,6 +25,8 @@ public sealed class EngageContextAnalyzer
         IReadOnlyCollection<string> tenantVocabulary,
         EngageBot bot,
         VisitorContextBundle? visitorBundle,
+        string? currentPageUrl,
+        string? currentPageTitle,
         CancellationToken ct)
     {
         // Use the last 15 messages as history context
@@ -58,6 +60,12 @@ public sealed class EngageContextAnalyzer
             LinkedTicketsSummary: null,
             PromoInteractionSummary: null,
             IntelligenceSnapshot: null);
+
+        // Stamp current page context onto the bundle for AI awareness
+        if (!string.IsNullOrWhiteSpace(currentPageUrl) || !string.IsNullOrWhiteSpace(currentPageTitle))
+        {
+            effectiveBundle = effectiveBundle with { CurrentPageUrl = currentPageUrl, CurrentPageTitle = currentPageTitle };
+        }
 
         var turnDecision = await _aiDecisionService.GenerateAsync(
             effectiveBundle,

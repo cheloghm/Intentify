@@ -57,6 +57,7 @@ internal static class EngageEndpoints
         var botName = "Assistant";
         string? primaryColor = null;
         bool? launcherVisible = null;
+        string? autoTriggerRulesJson = null;
 
         if (site is not null)
         {
@@ -70,9 +71,10 @@ internal static class EngageEndpoints
 
             primaryColor = bot.PrimaryColor;
             launcherVisible = bot.LauncherVisible;
+            autoTriggerRulesJson = bot.AutoTriggerRulesJson;
         }
 
-        return Results.Ok(new WidgetBootstrapResponse(result.SiteId.ToString("N"), result.Domain, displayName, botName, primaryColor, launcherVisible));
+        return Results.Ok(new WidgetBootstrapResponse(result.SiteId.ToString("N"), result.Domain, displayName, botName, primaryColor, launcherVisible, autoTriggerRulesJson));
     }
 
     public static async Task<IResult> ChatSendAsync(
@@ -129,7 +131,7 @@ internal static class EngageEndpoints
 
         var resolvedVisitorId = NormalizeOptional(request.VisitorId);
 
-        var result = await handler.HandleAsync(new ChatSendCommand(resolvedWidgetKey, sessionId, request.Message, resolvedCollectorSessionId, resolvedVisitorId), context.RequestAborted);
+        var result = await handler.HandleAsync(new ChatSendCommand(resolvedWidgetKey, sessionId, request.Message, resolvedCollectorSessionId, resolvedVisitorId, NormalizeOptional(request.CurrentPageUrl), NormalizeOptional(request.CurrentPageTitle)), context.RequestAborted);
         return result.Status switch
         {
             OperationStatus.ValidationFailed => Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(result.Errors!.Errors)),

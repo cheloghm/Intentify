@@ -95,6 +95,8 @@ public sealed class EngageOrchestrator
             tenantVocab,
             bot,
             visitorBundle,
+            command.CurrentPageUrl,
+            command.CurrentPageTitle,
             cancellationToken);
 
         context.SetPrimaryAction(_nextActionSelector.Select(context));
