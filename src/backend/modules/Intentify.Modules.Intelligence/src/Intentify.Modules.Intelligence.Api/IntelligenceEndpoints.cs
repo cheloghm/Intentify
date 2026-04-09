@@ -222,6 +222,26 @@ internal static class IntelligenceEndpoints
         };
     }
 
+    // ── GET /intelligence/network-signals ─────────────────────────────────
+
+    public static async Task<IResult> GetNetworkSignalsAsync(
+        INetworkSignalsService service,
+        string? country = null,
+        string? category = null,
+        string? industry = null,
+        int daysBack = 7)
+    {
+        var days = Math.Clamp(daysBack, 1, 90);
+        var result = await service.GetNetworkSignalsAsync(
+            new NetworkSignalsQuery(
+                Country: string.IsNullOrWhiteSpace(country) ? null : country,
+                ProductCategory: string.IsNullOrWhiteSpace(category) ? null : category,
+                Industry: string.IsNullOrWhiteSpace(industry) ? null : industry,
+                DaysBack: days));
+
+        return Results.Ok(result);
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────
 
     private static string? TryGetTenantId(ClaimsPrincipal user)

@@ -59,6 +59,7 @@ public sealed class IntelligenceModule : IAppModule
         services.AddSingleton<IIntelligenceProfileRepository, IntelligenceProfileRepository>();
 
         // ── Application services ──────────────────────────────────────────────
+        services.AddSingleton<INetworkSignalsService, NetworkSignalsService>();
         services.AddSingleton<IIntelligenceObserver, NoOpIntelligenceObserver>();
         services.AddSingleton<RefreshIntelligenceTrendsService>();
         services.AddSingleton<QueryIntelligenceTrendsService>();
@@ -87,6 +88,7 @@ public sealed class IntelligenceModule : IAppModule
         group.MapGet("/site-summary",      IntelligenceEndpoints.GetSiteSummaryAsync);
         group.MapPut("/profiles/{siteId}", IntelligenceEndpoints.UpsertProfileAsync);
         group.MapGet("/profiles/{siteId}", IntelligenceEndpoints.GetProfileAsync);
+        group.MapGet("/network-signals",  IntelligenceEndpoints.GetNetworkSignalsAsync);
     }
 }
 

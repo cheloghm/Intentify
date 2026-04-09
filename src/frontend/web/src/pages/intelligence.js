@@ -239,6 +239,30 @@ const injectStyles = () => {
 .i-section-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
 .i-section-title{font-size:12.5px;font-weight:700;color:#0f172a}
 .i-section-meta{font-size:10.5px;color:#94a3b8;font-family:'JetBrains Mono',monospace}
+/* Network signals */
+.i-ns-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+@media(max-width:860px){.i-ns-grid{grid-template-columns:1fr}}
+.i-ns-panel{background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden}
+.i-ns-panel-hd{padding:12px 16px;border-bottom:1px solid #f1f5f9;font-size:12px;font-weight:700;color:#0f172a;display:flex;align-items:center;gap:6px}
+.i-ns-panel-body{padding:12px 16px;display:flex;flex-direction:column;gap:8px}
+.i-ns-bar-row{display:flex;flex-direction:column;gap:2px}
+.i-ns-bar-label{font-size:11.5px;font-weight:600;color:#1e293b;display:flex;justify-content:space-between}
+.i-ns-bar-track{height:6px;background:#e2e8f0;border-radius:999px;overflow:hidden}
+.i-ns-bar-fill{height:100%;background:linear-gradient(90deg,#6366f1,#818cf8);border-radius:999px;transition:width .5s ease}
+.i-ns-cat-pill{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:999px;font-size:10.5px;font-weight:700;cursor:default}
+.i-ns-cat-hot{background:#eef2ff;color:#4338ca;border:1px solid #c7d2fe}
+.i-ns-cat-norm{background:#f1f5f9;color:#475569;border:1px solid #e2e8f0}
+.i-ns-country-row{display:flex;align-items:center;gap:8px;font-size:12px;color:#1e293b}
+.i-ns-country-count{margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:11px;color:#64748b}
+.i-ns-footer{font-size:11px;color:#94a3b8;padding:10px 0 2px;border-top:1px solid #f1f5f9;margin-top:4px;line-height:1.6}
+.i-ns-footer strong{color:#475569}
+.i-ns-product-scroll{display:flex;gap:10px;overflow-x:auto;padding-bottom:4px}
+.i-ns-product-card{min-width:150px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px;flex-shrink:0}
+.i-ns-product-name{font-size:12px;font-weight:700;color:#1e293b;margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.i-ns-product-badges{display:flex;gap:4px;flex-wrap:wrap}
+.i-ns-product-badge{font-size:9.5px;font-weight:700;padding:2px 6px;border-radius:5px;border:1px solid}
+.i-ns-filters{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+.i-ns-skel{height:32px;border-radius:8px}
   `;
   document.head.appendChild(s);
 };
@@ -384,6 +408,7 @@ export const renderIntelligenceView = (container, { apiClient, toast } = {}) => 
     { key: 'rising',        label: '🚀 Rising'        },
     { key: 'related',       label: '🔗 Related'       },
     { key: 'opportunities', label: '💡 Opportunities' },
+    { key: 'network',       label: '🌐 Network'       },
     { key: 'profile',       label: '⚙️ Profile'       },
   ];
   const tabEls = {}; const panelEls = {};
@@ -517,6 +542,205 @@ export const renderIntelligenceView = (container, { apiClient, toast } = {}) => 
   const { wrap: oppsWrap, body: oppsBody } = mkCanvas({ title: '💡 Detected Opportunities' });
   oppsBody.innerHTML = '<div class="i-empty"><div class="i-empty-icon">💡</div><div class="i-empty-title">No opportunities yet</div><div class="i-empty-desc">Load trend data from the Signals tab to generate insights.</div></div>';
   oppsPanel.appendChild(oppsWrap);
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
+  // TAB: NETWORK SIGNALS
+  // ─────────────────────────────────────────────────────────────────────────
+  const networkPanel = panelEls.network;
+  const nsState = { loading: false, data: null, country: '', category: '', daysBack: 7 };
+
+  const COUNTRY_OPTIONS = [
+    { value: '', label: 'All countries' },
+    { value: 'United Kingdom', label: '🇬🇧 United Kingdom' },
+    { value: 'United States', label: '🇺🇸 United States' },
+    { value: 'Ireland', label: '🇮🇪 Ireland' },
+    { value: 'Germany', label: '🇩🇪 Germany' },
+    { value: 'France', label: '🇫🇷 France' },
+    { value: 'Australia', label: '🇦🇺 Australia' },
+    { value: 'Canada', label: '🇨🇦 Canada' },
+    { value: 'India', label: '🇮🇳 India' },
+    { value: 'Netherlands', label: '🇳🇱 Netherlands' },
+    { value: 'Spain', label: '🇪🇸 Spain' },
+  ];
+
+  const COUNTRY_FLAGS = {
+    'United Kingdom': '🇬🇧', 'United States': '🇺🇸', 'Ireland': '🇮🇪',
+    'Germany': '🇩🇪', 'France': '🇫🇷', 'Australia': '🇦🇺', 'Canada': '🇨🇦',
+    'India': '🇮🇳', 'Netherlands': '🇳🇱', 'Spain': '🇪🇸', 'Italy': '🇮🇹',
+    'Brazil': '🇧🇷', 'Japan': '🇯🇵', 'Singapore': '🇸🇬',
+  };
+
+  // ── Network header ─────────────────────────────────────────────────────
+  const nsHeader = el('div', { style: 'margin-bottom:16px' });
+  nsHeader.appendChild(el('div', { style: 'font-size:16px;font-weight:700;color:#0f172a;margin-bottom:4px' }, '🌐 Hven Network Signals'));
+  nsHeader.appendChild(el('div', { style: 'font-size:12.5px;color:#64748b;line-height:1.6' }, 'Anonymous intent trends from across the Hven network — aggregated from all sites, no individual data'));
+  networkPanel.appendChild(nsHeader);
+
+  // ── Network filters ────────────────────────────────────────────────────
+  const nsFiltersRow = el('div', { class: 'i-ns-filters' });
+  const nsMkSelect = (opts, onChange) => {
+    const s = el('select', { class: 'i-select', style: 'width:auto;min-width:140px' });
+    opts.forEach(o => s.appendChild(el('option', { value: o.value }, o.label)));
+    s.addEventListener('change', () => onChange(s.value));
+    return s;
+  };
+  const nsCountrySel  = nsMkSelect(COUNTRY_OPTIONS,
+    v => { nsState.country = v; loadNetworkSignals(); });
+  const nsCategorySel = nsMkSelect(
+    [{ value: '', label: 'All categories' }, ...GOOGLE_CATEGORIES.filter(c => c.value === '' || true).map(c => ({ value: c.label, label: c.label }))],
+    v => { nsState.category = v; loadNetworkSignals(); });
+  const nsDaysSel = nsMkSelect(
+    [{ value: '7', label: 'Past 7 days' }, { value: '14', label: 'Past 14 days' }, { value: '30', label: 'Past 30 days' }],
+    v => { nsState.daysBack = parseInt(v, 10); loadNetworkSignals(); });
+  nsFiltersRow.append(
+    el('div', { style: 'display:flex;flex-direction:column;gap:3px' }, el('span', { class: 'i-lbl' }, 'Country'), nsCountrySel),
+    el('div', { style: 'display:flex;flex-direction:column;gap:3px' }, el('span', { class: 'i-lbl' }, 'Category'), nsCategorySel),
+    el('div', { style: 'display:flex;flex-direction:column;gap:3px' }, el('span', { class: 'i-lbl' }, 'Period'), nsDaysSel),
+  );
+  networkPanel.appendChild(nsFiltersRow);
+
+  // ── Content area ────────────────────────────────────────────────────────
+  const nsContent = el('div', {});
+  networkPanel.appendChild(nsContent);
+
+  const renderNetworkSkeletons = () => {
+    nsContent.replaceChildren();
+    const grid = el('div', { class: 'i-ns-grid' });
+    for (let i = 0; i < 3; i++) {
+      const p = el('div', { class: 'i-ns-panel' });
+      p.appendChild(el('div', { class: 'i-ns-panel-hd i-skel', style: 'width:60%;height:16px;margin:12px 16px' }));
+      const body = el('div', { class: 'i-ns-panel-body' });
+      for (let j = 0; j < 5; j++) body.appendChild(el('div', { class: 'i-skel i-ns-skel' }));
+      p.appendChild(body);
+      grid.appendChild(p);
+    }
+    nsContent.appendChild(grid);
+  };
+
+  const renderNetworkSignals = data => {
+    nsContent.replaceChildren();
+    if (!data) return;
+
+    const grid = el('div', { class: 'i-ns-grid' });
+
+    // Panel 1: Trending Topics bar chart
+    const p1 = el('div', { class: 'i-ns-panel' });
+    p1.appendChild(el('div', { class: 'i-ns-panel-hd' }, '📈 Trending Topics'));
+    const p1body = el('div', { class: 'i-ns-panel-body' });
+    if (data.trendingTopics?.length) {
+      data.trendingTopics.forEach(t => {
+        const row = el('div', { class: 'i-ns-bar-row' });
+        row.appendChild(el('div', { class: 'i-ns-bar-label' },
+          el('span', {}, t.topic),
+          el('span', { style: 'font-size:10px;color:#94a3b8' }, String(t.signalCount))
+        ));
+        const track = el('div', { class: 'i-ns-bar-track' });
+        const fill  = el('div', { class: 'i-ns-bar-fill' });
+        fill.style.width = Math.round((t.trendScore || 0) * 100) + '%';
+        track.appendChild(fill);
+        row.appendChild(track);
+        p1body.appendChild(row);
+      });
+    } else {
+      p1body.appendChild(el('div', { style: 'font-size:12px;color:#94a3b8;text-align:center;padding:16px 0' }, 'No topic signals yet'));
+    }
+    p1.appendChild(p1body);
+    grid.appendChild(p1);
+
+    // Panel 2: Category intents as pills
+    const p2 = el('div', { class: 'i-ns-panel' });
+    p2.appendChild(el('div', { class: 'i-ns-panel-hd' }, '🏷 Top Categories by Intent'));
+    const p2body = el('div', { class: 'i-ns-panel-body', style: 'flex-direction:row;flex-wrap:wrap;gap:6px' });
+    if (data.categoryIntents?.length) {
+      data.categoryIntents.forEach(c => {
+        const hot = (c.intentScore || 0) > 0.7;
+        const pill = el('span', { class: 'i-ns-cat-pill ' + (hot ? 'i-ns-cat-hot' : 'i-ns-cat-norm') },
+          c.category,
+          el('span', { style: 'font-size:9px;opacity:.7;margin-left:3px' }, String(c.visitorCount))
+        );
+        p2body.appendChild(pill);
+      });
+    } else {
+      p2body.appendChild(el('div', { style: 'font-size:12px;color:#94a3b8;text-align:center;padding:16px 0;width:100%' }, 'No category signals yet'));
+    }
+    p2.appendChild(p2body);
+    grid.appendChild(p2);
+
+    // Panel 3: Geographic signals
+    const p3 = el('div', { class: 'i-ns-panel' });
+    p3.appendChild(el('div', { class: 'i-ns-panel-hd' }, '🗺 Geographic Signals'));
+    const p3body = el('div', { class: 'i-ns-panel-body' });
+    if (data.countryIntents?.length) {
+      data.countryIntents.forEach(c => {
+        const flag = COUNTRY_FLAGS[c.country] || '🌍';
+        const row = el('div', { class: 'i-ns-country-row' },
+          el('span', {}, flag + ' ' + c.country),
+          el('span', { class: 'i-ns-country-count' }, String(c.visitorCount) + ' visits')
+        );
+        p3body.appendChild(row);
+      });
+    } else {
+      p3body.appendChild(el('div', { style: 'font-size:12px;color:#94a3b8;text-align:center;padding:16px 0' }, 'No geographic signals yet'));
+    }
+    p3.appendChild(p3body);
+    grid.appendChild(p3);
+
+    nsContent.appendChild(grid);
+
+    // Product trends row
+    if (data.productTrends?.length) {
+      const ptSection = el('div', { style: 'margin-top:16px' });
+      ptSection.appendChild(el('div', { style: 'font-size:12px;font-weight:700;color:#0f172a;margin-bottom:10px' }, '🛍 Trending Products'));
+      const scroll = el('div', { class: 'i-ns-product-scroll' });
+      data.productTrends.forEach(p => {
+        const card = el('div', { class: 'i-ns-product-card' });
+        card.appendChild(el('div', { class: 'i-ns-product-name', title: p.productName }, p.productName));
+        const badges = el('div', { class: 'i-ns-product-badges' });
+        if (p.category) badges.appendChild(el('span', { class: 'i-ns-product-badge', style: 'background:#eef2ff;color:#4338ca;border-color:#c7d2fe' }, p.category));
+        if (p.priceRange) badges.appendChild(el('span', { class: 'i-ns-product-badge', style: 'background:#f0fdf4;color:#166534;border-color:#bbf7d0' }, p.priceRange));
+        badges.appendChild(el('span', { class: 'i-ns-product-badge', style: 'background:#f1f5f9;color:#64748b;border-color:#e2e8f0' }, String(p.viewCount) + ' views'));
+        card.appendChild(badges);
+        scroll.appendChild(card);
+      });
+      ptSection.appendChild(scroll);
+      nsContent.appendChild(ptSection);
+    }
+
+    // Footer attribution
+    const ago = data.generatedAtUtc ? fmtTimeAgo(data.generatedAtUtc) : '';
+    const footer = el('div', { class: 'i-ns-footer' },
+      'Based on signals from ',
+      el('strong', {}, String(data.totalSitesContributing || 0)), ' sites · ',
+      el('strong', {}, String(data.totalVisitorsContributing || 0)), ' visits · ',
+      'Last ', el('strong', {}, String(nsState.daysBack)), ' days',
+      ago ? (' · Updated ' + ago) : ''
+    );
+    nsContent.appendChild(footer);
+  };
+
+  const loadNetworkSignals = async () => {
+    if (nsState.loading) return;
+    nsState.loading = true;
+    renderNetworkSkeletons();
+    try {
+      const data = await client.intelligence.getNetworkSignals(
+        nsState.country || undefined,
+        nsState.category || undefined,
+        nsState.daysBack);
+      nsState.data = data;
+      renderNetworkSignals(data);
+    } catch (err) {
+      nsContent.replaceChildren();
+      nsContent.appendChild(el('div', { class: 'i-empty' },
+        el('div', { class: 'i-empty-icon' }, '🌐'),
+        el('div', { class: 'i-empty-title' }, 'Network signals unavailable'),
+        el('div', { class: 'i-empty-desc' }, 'No signal data yet — this updates as visitors browse sites using the Hven tracker.')
+      ));
+    } finally {
+      nsState.loading = false;
+    }
+  };
 
   // ─────────────────────────────────────────────────────────────────────────
   // TAB: PROFILE
@@ -790,6 +1014,25 @@ export const renderIntelligenceView = (container, { apiClient, toast } = {}) => 
   applyBtn.addEventListener('click', loadDashboard);
   resetBtn.addEventListener('click', resetFilters);
   saveProfileBtn.addEventListener('click', saveProfile);
+
+  // Load network signals when tab is first switched to
+  const origSwitchTab = switchTab;
+  const switchTabWrapped = key => {
+    origSwitchTab(key);
+    if (key === 'network' && !nsState.data && !nsState.loading) {
+      loadNetworkSignals();
+    }
+  };
+  // Rewire tab buttons to use wrapped switch
+  TABS.forEach(({ key }) => {
+    const btn = tabEls[key];
+    if (btn) {
+      const cloned = btn.cloneNode(true);
+      cloned.addEventListener('click', () => switchTabWrapped(key));
+      btn.replaceWith(cloned);
+      tabEls[key] = cloned;
+    }
+  });
 
   // Init
   const initialize = async () => {

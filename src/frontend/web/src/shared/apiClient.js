@@ -324,6 +324,13 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
   const getIntelligenceProfile = async (siteId) =>
     request(`/intelligence/profiles/${encodeURIComponent(siteId)}`);
 
+  const getNetworkSignals = async (country, category, daysBack = 7) =>
+    request(`/intelligence/network-signals${buildQueryString({
+      country: country || undefined,
+      category: category || undefined,
+      daysBack,
+    })}`);
+
   const upsertIntelligenceProfile = async (siteId, payload) =>
     request(`/intelligence/profiles/${encodeURIComponent(siteId)}`, {
       method: 'PUT',
@@ -639,6 +646,7 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
       refresh: refreshIntelligence,
       getProfile: getIntelligenceProfile,
       upsertProfile: upsertIntelligenceProfile,
+      getNetworkSignals,
     },
     ads: {
       listCampaigns: listAdsCampaigns,
