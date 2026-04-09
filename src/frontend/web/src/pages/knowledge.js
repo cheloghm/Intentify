@@ -140,6 +140,18 @@ const injectStyles = () => {
 .kb-empty-desc{font-size:12px;color:#94a3b8;max-width:260px;line-height:1.6}
 .kb-skel{background:linear-gradient(90deg,#f1f5f9 25%,#e2e8f0 50%,#f1f5f9 75%);background-size:200% 100%;animation:_sh 1.4s infinite;border-radius:8px;height:68px}
 @keyframes _sh{0%{background-position:200% 0}100%{background-position:-200% 0}}
+/* Drag-drop zone */
+.kb-dz{border:2px dashed #c7d2fe;border-radius:12px;padding:48px 24px;text-align:center;transition:all .15s;background:#fafbff;cursor:default}
+.kb-dz.kb-dz-over{border-color:#6366f1;background:#eef2ff}
+/* Source grid */
+.kb-source-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:700px){.kb-source-grid{grid-template-columns:1fr}}
+/* Progress bar */
+.kb-prog-wrap{height:4px;background:#e2e8f0;border-radius:999px;overflow:hidden;margin-top:8px}
+.kb-prog-fill{height:100%;border-radius:999px}
+.kb-prog-animate{background:#6366f1;animation:kb-fill 8s ease-out forwards}
+@keyframes kb-fill{from{width:0}to{width:85%}}
+.kb-prog-done{background:#10b981;width:100%}
   `;
   document.head.appendChild(s);
 };
@@ -165,7 +177,7 @@ export const renderKnowledgeView = (container, { apiClient, toast } = {}) => {
   const notifier = toast     || createToastManager();
 
   const state = {
-    sites: [], siteId: '', activeTab: 'URL',
+    sites: [], siteId: '',
     sources: [], loadingSources: false, retrieveResults: [],
   };
 
@@ -187,12 +199,12 @@ export const renderKnowledgeView = (container, { apiClient, toast } = {}) => {
 
   // ── Hero ───────────────────────────────────────────────────────────────────
   const hero = el('div', { class: 'kb-hero' });
-  hero.appendChild(el('div', { class: 'kb-hero-title' }, '📚 Knowledge Base'));
-  hero.appendChild(el('div', { class: 'kb-hero-sub' }, 'Teach your AI assistant — index URLs, upload PDFs, add quick facts, and test retrieval'));
+  hero.appendChild(el('div', { class: 'kb-hero-title' }, '📚 Knowledge Workspace'));
+  hero.appendChild(el('div', { class: 'kb-hero-sub' }, 'Everything your AI assistant knows about your business'));
   const heroStats = el('div', { class: 'kb-hero-stats' });
   const mkStat = lbl => { const w=el('div',{class:'kb-stat'}); const v=el('div',{class:'kb-stat-val'},'—'); w.append(v,el('div',{class:'kb-stat-lbl'},lbl)); heroStats.appendChild(w); return v; };
   const hSources = mkStat('Sources');
-  const hFresh   = mkStat('Fresh');
+  const hFresh   = mkStat('Indexed');
   const hFacts   = mkStat('Quick Facts');
   hero.appendChild(heroStats);
   root.appendChild(hero);
@@ -216,100 +228,122 @@ export const renderKnowledgeView = (container, { apiClient, toast } = {}) => {
   const { panel: addPanel, body: addBody } = mkPanel('➕ Add Knowledge Source');
   leftCol.appendChild(addPanel);
 
-  // Source type tabs
-  const tabBar = el('div', { class: 'kb-tabs' });
-  const TAB_DEFS = [{ key:'URL', label:'🔗 URL' }, { key:'TEXT', label:'📝 Text' }, { key:'PDF', label:'📄 PDF' }];
-  const tabEls = {}, tabPanels = {};
-  TAB_DEFS.forEach(({ key, label }) => {
-    const btn = el('button', { class: `kb-tab${key===state.activeTab?' active':''}` }, label);
-    btn.addEventListener('click', () => {
-      state.activeTab = key;
-      TAB_DEFS.forEach(t => { tabEls[t.key].classList.toggle('active', t.key===key); tabPanels[t.key].style.display = t.key===key?'block':'none'; });
-    });
-    tabEls[key] = btn; tabBar.appendChild(btn);
+  // ── Drag-drop zone ─────────────────────────────────────────────────────────
+  const CLOUD_SVG = `<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>`;
+
+  const dzFileInput = el('input',{type:'file',style:'display:none'}); dzFileInput.accept='application/pdf';
+  addBody.appendChild(dzFileInput);
+  const dropZone = el('div',{class:'kb-dz'});
+  addBody.appendChild(dropZone);
+
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('kb-dz-over'); });
+  dropZone.addEventListener('dragleave', e => { if (!dropZone.contains(e.relatedTarget)) dropZone.classList.remove('kb-dz-over'); });
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault(); dropZone.classList.remove('kb-dz-over');
+    const f = e.dataTransfer.files[0];
+    if (f && f.type === 'application/pdf') handlePdfDz(f);
+    else if (f) notifier.show({message:'Please drop a PDF file.',variant:'warning'});
   });
-  addBody.appendChild(tabBar);
+  dzFileInput.addEventListener('change', () => { if (dzFileInput.files[0]) handlePdfDz(dzFileInput.files[0]); dzFileInput.value=''; });
 
-  // ── URL tab ────────────────────────────────────────────────────────────────
-  const urlPanel = el('div', {});
-  const urlNameField = el('div',{class:'kb-field'}, el('div',{class:'kb-field-lbl'},'Source Name (optional)'));
-  const urlNameInput = el('input',{class:'kb-input',placeholder:'My documentation'});
-  urlNameField.appendChild(urlNameInput);
-  const urlField = el('div',{class:'kb-field'}, el('div',{class:'kb-field-lbl'},'URL'));
-  const urlInput = el('input',{class:'kb-input',type:'url',placeholder:'https://example.com/docs'});
-  urlField.appendChild(urlInput);
-  const addUrlBtn = el('button',{class:'kb-btn kb-btn-primary',style:'width:100%;justify-content:center'},'🔗 Add URL Source');
-  addUrlBtn.addEventListener('click', async () => {
-    const url = urlInput.value.trim();
-    if (!url) { notifier.show({message:'URL is required.',variant:'warning'}); return; }
-    if (!state.siteId) { notifier.show({message:'Select a site first.',variant:'warning'}); return; }
-    addUrlBtn.disabled=true; addUrlBtn.textContent='⏳ Adding…';
-    try {
-      await client.knowledge.createSource({ siteId:state.siteId, type:'URL', name:urlNameInput.value.trim()||url, url });
-      urlInput.value=''; urlNameInput.value='';
-      notifier.show({message:'URL source added. Indexing starts shortly.',variant:'success'});
-      await loadSources();
-    } catch (err) { notifier.show({message:mapApiError(err).message,variant:'danger'}); }
-    finally { addUrlBtn.disabled=false; addUrlBtn.textContent='🔗 Add URL Source'; }
-  });
-  urlPanel.append(urlNameField, urlField, addUrlBtn);
-  tabPanels.URL = urlPanel;
-
-  // ── TEXT tab ───────────────────────────────────────────────────────────────
-  const textPanel = el('div',{style:'display:none'});
-  const txNameField = el('div',{class:'kb-field'}, el('div',{class:'kb-field-lbl'},'Source Name'));
-  const txNameInput = el('input',{class:'kb-input',placeholder:'e.g. Company FAQ'});
-  txNameField.appendChild(txNameInput);
-  const txField = el('div',{class:'kb-field'}, el('div',{class:'kb-field-lbl'},'Content'));
-  const txArea  = el('textarea',{class:'kb-input kb-textarea',placeholder:'Paste raw text to index…'});
-  txField.appendChild(txArea);
-  const addTxtBtn = el('button',{class:'kb-btn kb-btn-primary',style:'width:100%;justify-content:center'},'📝 Add Text Source');
-  addTxtBtn.addEventListener('click', async () => {
-    const text = txArea.value.trim();
-    if (!text) { notifier.show({message:'Content is required.',variant:'warning'}); return; }
-    if (!state.siteId) { notifier.show({message:'Select a site first.',variant:'warning'}); return; }
-    addTxtBtn.disabled=true; addTxtBtn.textContent='⏳ Adding…';
-    try {
-      await client.knowledge.createSource({ siteId:state.siteId, type:'TEXT', name:txNameInput.value.trim()||'Text source', text });
-      txNameInput.value=''; txArea.value='';
-      notifier.show({message:'Text source added.',variant:'success'});
-      await loadSources();
-    } catch (err) { notifier.show({message:mapApiError(err).message,variant:'danger'}); }
-    finally { addTxtBtn.disabled=false; addTxtBtn.textContent='📝 Add Text Source'; }
-  });
-  textPanel.append(txNameField, txField, addTxtBtn);
-  tabPanels.TEXT = textPanel;
-
-  // ── PDF tab ────────────────────────────────────────────────────────────────
-  const pdfPanel = el('div',{style:'display:none'});
-  const pdfNameField = el('div',{class:'kb-field'}, el('div',{class:'kb-field-lbl'},'Source Name (optional)'));
-  const pdfNameInput = el('input',{class:'kb-input',placeholder:'e.g. Product Manual'});
-  pdfNameField.appendChild(pdfNameInput);
-  const fileInput = el('input',{type:'file',style:'display:none'}); fileInput.accept='application/pdf';
-  const dropArea = el('div',{class:'kb-drop'},'📄 Click or drag a PDF here to upload');
-  dropArea.addEventListener('click', () => fileInput.click());
-  dropArea.addEventListener('dragover', e => { e.preventDefault(); dropArea.classList.add('over'); });
-  dropArea.addEventListener('dragleave', () => dropArea.classList.remove('over'));
-  dropArea.addEventListener('drop', e => { e.preventDefault(); dropArea.classList.remove('over'); const f=e.dataTransfer.files[0]; if (f) handlePdf(f); });
-  fileInput.addEventListener('change', () => { if (fileInput.files[0]) handlePdf(fileInput.files[0]); });
-
-  const handlePdf = async (file) => {
-    if (!state.siteId) { notifier.show({message:'Select a site first.',variant:'warning'}); return; }
-    dropArea.textContent='⏳ Uploading…'; dropArea.style.pointerEvents='none';
-    try {
-      const created = await client.knowledge.createSource({ siteId:state.siteId, type:'PDF', name:pdfNameInput.value.trim()||file.name });
-      await client.knowledge.uploadPdf(created.sourceId, file);
-      pdfNameInput.value=''; fileInput.value='';
-      notifier.show({message:'PDF uploaded. Indexing starts shortly.',variant:'success'});
-      await loadSources();
-    } catch (err) { notifier.show({message:mapApiError(err).message,variant:'danger'}); }
-    finally { dropArea.textContent='📄 Click or drag a PDF here to upload'; dropArea.style.pointerEvents=''; }
+  const showDzEmpty = () => {
+    dropZone.innerHTML = '';
+    const iconWrap = el('div',{style:'margin-bottom:10px;cursor:pointer;display:inline-block'});
+    iconWrap.innerHTML = CLOUD_SVG;
+    iconWrap.addEventListener('click', () => dzFileInput.click());
+    const hint = el('div',{style:'font-size:14px;color:#475569;margin-bottom:4px;font-weight:500'},'Drop a PDF here, or');
+    const sub  = el('div',{style:'font-size:12px;color:#94a3b8;margin-bottom:18px'},'Click the cloud icon to browse files');
+    const btnRow = el('div',{style:'display:flex;gap:10px;justify-content:center;flex-wrap:wrap'});
+    const urlBtn = el('button',{class:'kb-btn kb-btn-outline'},'🔗 Paste a URL');
+    const txtBtn = el('button',{class:'kb-btn kb-btn-outline'},'📝 Enter text');
+    urlBtn.addEventListener('click', e => { e.stopPropagation(); showDzUrl(); });
+    txtBtn.addEventListener('click', e => { e.stopPropagation(); showDzText(); });
+    btnRow.append(urlBtn, txtBtn);
+    dropZone.append(iconWrap, hint, sub, btnRow);
   };
 
-  pdfPanel.append(pdfNameField, fileInput, dropArea);
-  tabPanels.PDF = pdfPanel;
+  const showDzUrl = () => {
+    dropZone.innerHTML = '';
+    const lbl = el('div',{style:'font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px'},'Paste a URL');
+    const input = el('input',{class:'kb-input',type:'url',placeholder:'https://example.com/docs',style:'margin-bottom:10px'});
+    const btnRow = el('div',{style:'display:flex;gap:8px;justify-content:flex-end'});
+    const cancelBtn = el('button',{class:'kb-btn kb-btn-outline kb-btn-sm'},'Cancel');
+    const addBtn    = el('button',{class:'kb-btn kb-btn-primary kb-btn-sm'},'Add URL →');
+    cancelBtn.addEventListener('click', showDzEmpty);
+    const doAddUrl = async () => {
+      const url = input.value.trim();
+      if (!url) { notifier.show({message:'URL is required.',variant:'warning'}); return; }
+      if (!state.siteId) { notifier.show({message:'Select a site first.',variant:'warning'}); return; }
+      addBtn.disabled=true; addBtn.textContent='⏳ Adding…';
+      try {
+        await client.knowledge.createSource({siteId:state.siteId,type:'URL',name:url,url});
+        notifier.show({message:'URL source added. Indexing starts shortly.',variant:'success'});
+        showDzEmpty(); await loadSources();
+      } catch(err){ notifier.show({message:mapApiError(err).message,variant:'danger'}); addBtn.disabled=false; addBtn.textContent='Add URL →'; }
+    };
+    addBtn.addEventListener('click', doAddUrl);
+    input.addEventListener('keydown', e => { if (e.key==='Enter') doAddUrl(); });
+    btnRow.append(cancelBtn, addBtn);
+    dropZone.append(lbl, input, btnRow);
+    requestAnimationFrame(() => input.focus());
+  };
 
-  Object.values(tabPanels).forEach(p => addBody.appendChild(p));
+  const showDzText = () => {
+    dropZone.innerHTML = '';
+    const lbl = el('div',{style:'font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px'},'Enter text');
+    const nameInput = el('input',{class:'kb-input',placeholder:'Source name (e.g. Company FAQ)',style:'margin-bottom:8px'});
+    const textarea  = el('textarea',{class:'kb-input kb-textarea',placeholder:'Paste or type your content…',style:'min-height:120px;margin-bottom:10px'});
+    const btnRow = el('div',{style:'display:flex;gap:8px;justify-content:flex-end'});
+    const cancelBtn = el('button',{class:'kb-btn kb-btn-outline kb-btn-sm'},'Cancel');
+    const addBtn    = el('button',{class:'kb-btn kb-btn-primary kb-btn-sm'},'Add text →');
+    cancelBtn.addEventListener('click', showDzEmpty);
+    addBtn.addEventListener('click', async () => {
+      const text = textarea.value.trim();
+      if (!text) { notifier.show({message:'Content is required.',variant:'warning'}); return; }
+      if (!state.siteId) { notifier.show({message:'Select a site first.',variant:'warning'}); return; }
+      addBtn.disabled=true; addBtn.textContent='⏳ Adding…';
+      try {
+        await client.knowledge.createSource({siteId:state.siteId,type:'TEXT',name:nameInput.value.trim()||'Text source',text});
+        notifier.show({message:'Text source added.',variant:'success'});
+        showDzEmpty(); await loadSources();
+      } catch(err){ notifier.show({message:mapApiError(err).message,variant:'danger'}); addBtn.disabled=false; addBtn.textContent='Add text →'; }
+    });
+    btnRow.append(cancelBtn, addBtn);
+    dropZone.append(lbl, nameInput, textarea, btnRow);
+    requestAnimationFrame(() => textarea.focus());
+  };
+
+  const handlePdfDz = async (file) => {
+    if (!state.siteId) { notifier.show({message:'Select a site first.',variant:'warning'}); return; }
+    dropZone.innerHTML = '';
+    const progWrap  = el('div',{style:'width:100%;max-width:320px;margin:0 auto'});
+    const progLabel = el('div',{style:'font-size:13px;color:#475569;margin-bottom:10px;font-weight:500'},`📄 Uploading ${file.name}…`);
+    const progTrack = el('div',{style:'height:6px;background:#e2e8f0;border-radius:999px;overflow:hidden'});
+    const progFill  = el('div',{style:'height:100%;background:#6366f1;border-radius:999px;width:0;transition:width .3s ease'});
+    progTrack.appendChild(progFill); progWrap.append(progLabel, progTrack);
+    dropZone.appendChild(progWrap);
+    let pct = 0;
+    const ticker = setInterval(() => {
+      pct = Math.min(pct + (85/80), 85);
+      progFill.style.width = pct.toFixed(1) + '%';
+      if (pct >= 85) clearInterval(ticker);
+    }, 100);
+    try {
+      const created = await client.knowledge.createSource({siteId:state.siteId,type:'PDF',name:file.name});
+      await client.knowledge.uploadPdf(created.sourceId, file);
+      clearInterval(ticker);
+      progFill.style.width='100%'; progFill.style.background='#10b981';
+      setTimeout(async () => {
+        notifier.show({message:'PDF uploaded. Indexing starts shortly.',variant:'success'});
+        showDzEmpty(); await loadSources();
+      }, 600);
+    } catch(err) { clearInterval(ticker); notifier.show({message:mapApiError(err).message,variant:'danger'}); showDzEmpty(); }
+  };
+
+  showDzEmpty();
+
+  // (legacy tab vars removed — using drag-drop zone above)
+
 
   // ─── LEFT: Sources list panel ───────────────────────────────────────────
   const { panel: srcPanel, body: srcBody, hd: srcHd } = mkPanel('📚 Sources', '');
@@ -317,7 +351,7 @@ export const renderKnowledgeView = (container, { apiClient, toast } = {}) => {
   const srcMeta = el('div', { class: 'kb-panel-meta' });
   srcHd.appendChild(srcMeta);
 
-  const srcList = el('div', { style: 'display:flex;flex-direction:column;gap:8px' });
+  const srcList = el('div', { class: 'kb-source-grid' });
   srcBody.appendChild(srcList);
 
   const loadSources = async () => {
@@ -332,9 +366,10 @@ export const renderKnowledgeView = (container, { apiClient, toast } = {}) => {
   const renderSources = () => {
     srcList.replaceChildren();
     const indexed = state.sources.filter(s => String(s?.status||'').toUpperCase() === 'INDEXED').length;
+    const totalChunks = state.sources.reduce((sum, s) => sum + (s.chunkCount || 0), 0);
     hSources.textContent = String(state.sources.length);
     hFresh.textContent   = String(indexed);
-    srcMeta.textContent  = `${state.sources.length} source${state.sources.length!==1?'s':''}`;
+    srcMeta.textContent  = `${state.sources.length} source${state.sources.length!==1?'s':''} · ${totalChunks} chunks indexed`;
 
     if (state.loadingSources) {
       srcList.append(el('div',{class:'kb-skel'}), el('div',{class:'kb-skel'}));
@@ -380,6 +415,17 @@ export const renderKnowledgeView = (container, { apiClient, toast } = {}) => {
 
       if (isFailed && source.failureReason) {
         body2.appendChild(el('div',{style:'font-size:11px;color:#ef4444;margin-top:4px;line-height:1.4'},source.failureReason));
+      }
+
+      // Progress bar
+      if (isIndexed) {
+        const pw = el('div',{class:'kb-prog-wrap'});
+        pw.appendChild(el('div',{class:'kb-prog-fill kb-prog-done'}));
+        body2.appendChild(pw);
+      } else if (isIndexing || isQueued) {
+        const pw = el('div',{class:'kb-prog-wrap'});
+        pw.appendChild(el('div',{class:'kb-prog-fill kb-prog-animate'}));
+        body2.appendChild(pw);
       }
 
       const acts = el('div',{class:'kb-source-acts'});
