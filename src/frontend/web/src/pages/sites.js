@@ -249,27 +249,75 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
         {
           label: 'HTML',
           code: `<script src="${sdkUrl}" data-site-id="${snippetId}"></script>`,
-          instruction: 'Paste this inside the <head> tag of your HTML.',
+          steps: [
+            'Open the HTML file for every page you want to track',
+            'Find the closing </head> tag',
+            'Paste the snippet on the line above </head>',
+            'Save and publish your file',
+          ],
         },
         {
           label: 'WordPress',
-          code: `add_action('wp_head', function() { ?>\n<script src="${sdkUrl}" data-site-id="${snippetId}"></script>\n<?php });`,
-          instruction: "Add to your theme's functions.php file.",
+          code: `<script src="${sdkUrl}" data-site-id="${snippetId}"></script>`,
+          steps: [
+            'Log in to your WordPress dashboard',
+            'Go to Appearance → Theme Editor (or Appearance → Customize → Additional CSS for script-friendly themes)',
+            "Select your active theme's header.php file",
+            'Find </head> and paste the snippet above it',
+            'Click Update File',
+          ],
         },
         {
           label: 'Shopify',
           code: `<script src="${sdkUrl}" data-site-id="${snippetId}"></script>`,
-          instruction: 'Paste in Online Store → Themes → Edit Code → theme.liquid, inside <head>.',
+          steps: [
+            'In your Shopify admin, go to Online Store → Themes',
+            'Click Actions → Edit Code on your active theme',
+            'Open the layout/theme.liquid file',
+            'Find </head> and paste the snippet just above it',
+            'Click Save',
+          ],
         },
         {
           label: 'Webflow',
           code: `<script src="${sdkUrl}" data-site-id="${snippetId}"></script>`,
-          instruction: 'Paste in Site Settings → Custom Code → Head Code.',
+          steps: [
+            'Open your Webflow project',
+            'Go to Project Settings → Custom Code',
+            'In the Head Code section, paste the snippet',
+            'Click Save, then Publish your site',
+          ],
+        },
+        {
+          label: 'Wix',
+          code: `<script src="${sdkUrl}" data-site-id="${snippetId}"></script>`,
+          steps: [
+            'In your Wix Editor, click Settings in the top menu',
+            'Select Custom Code',
+            'Click + Add Custom Code',
+            'Paste the snippet, set it to load in the <head>, apply to All Pages',
+            'Click Apply',
+          ],
+        },
+        {
+          label: 'GoDaddy',
+          code: `<script src="${sdkUrl}" data-site-id="${snippetId}"></script>`,
+          steps: [
+            'Log in to your GoDaddy account and open your website builder',
+            'Go to Settings → SEO → Header Code',
+            'Paste the snippet in the header code field',
+            'Save and publish',
+          ],
         },
         {
           label: 'Next.js',
           code: `<Script src="${sdkUrl}" data-site-id="${snippetId}" strategy="afterInteractive" />`,
-          instruction: 'Add to your app/layout.tsx or pages/_app.js.',
+          steps: [
+            'Open your app/layout.tsx (or pages/_app.js for Pages Router)',
+            "Import Script from 'next/script'",
+            `Add the snippet as: <Script src="${sdkUrl}" data-site-id="${snippetId}" strategy="afterInteractive" />`,
+            'The script will load automatically on all pages',
+          ],
         },
       ];
 
@@ -287,7 +335,8 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
         });
         const tab = SNIPPET_TABS[idx];
         codeArea.replaceChildren();
-        codeArea.appendChild(el('div', { style: 'font-size:11.5px;color:#64748b;margin-bottom:6px' }, tab.instruction));
+
+        // Code block (click to copy)
         const pre = el('pre', {
           style: 'background:#0f172a;border-radius:8px;padding:12px 14px;font-size:11.5px;color:#a5f3fc;overflow-x:auto;margin:0;white-space:pre-wrap;word-break:break-all;cursor:pointer;line-height:1.6;font-family:"JetBrains Mono",monospace',
           title: 'Click to copy',
@@ -302,6 +351,64 @@ export const renderSitesView = (container, { apiClient, toast } = {}) => {
           } catch { notifier.show({ message: 'Unable to copy.', variant: 'danger' }); }
         });
         codeArea.appendChild(pre);
+
+        // Prominent copy button
+        const copySnippetBtn = el('button', {
+          style: 'margin-top:8px;font-family:system-ui,sans-serif;font-size:13px;font-weight:600;color:#fff;background:#6366f1;border:none;border-radius:8px;padding:9px 20px;cursor:pointer;transition:all .14s;display:inline-flex;align-items:center;gap:6px',
+        }, '📋 Copy snippet');
+        copySnippetBtn.addEventListener('click', async () => {
+          try {
+            await copyToClipboard(tab.code);
+            copySnippetBtn.textContent = '✓ Copied!';
+            copySnippetBtn.style.background = '#10b981';
+            setTimeout(() => { copySnippetBtn.textContent = '📋 Copy snippet'; copySnippetBtn.style.background = '#6366f1'; }, 1800);
+          } catch { notifier.show({ message: 'Unable to copy.', variant: 'danger' }); }
+        });
+        codeArea.appendChild(copySnippetBtn);
+
+        // Numbered installation steps
+        if (tab.steps?.length) {
+          const stepsWrap = el('div', { style: 'margin-top:14px;display:flex;flex-direction:column;gap:8px' });
+          stepsWrap.appendChild(el('div', { style: 'font-size:11.5px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.05em' }, 'Installation steps'));
+          tab.steps.forEach((step, i) => {
+            const row = el('div', { style: 'display:flex;align-items:flex-start;gap:10px' });
+            const num = el('div', { style: 'flex-shrink:0;width:22px;height:22px;border-radius:50%;background:#6366f1;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center' }, String(i + 1));
+            const txt = el('div', { style: 'font-size:12px;color:#334155;line-height:1.5;padding-top:2px' }, step);
+            row.append(num, txt);
+            stepsWrap.appendChild(row);
+          });
+          codeArea.appendChild(stepsWrap);
+        }
+
+        // Test installation button + result banner
+        const testResultBanner = el('div', { style: 'display:none;margin-top:10px;padding:10px 14px;border-radius:8px;font-size:12.5px;font-weight:500;line-height:1.4' });
+        const testInstallBtn = el('button', {
+          style: 'margin-top:12px;font-family:system-ui,sans-serif;font-size:12.5px;font-weight:600;color:#0f172a;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:8px;padding:8px 18px;cursor:pointer;transition:all .14s;display:inline-flex;align-items:center;gap:6px',
+        }, '🔍 Test installation');
+        testInstallBtn.addEventListener('click', async () => {
+          testInstallBtn.disabled = true;
+          testInstallBtn.textContent = '⏳ Checking…';
+          testResultBanner.style.display = 'none';
+          try {
+            const result = await client.request(`/sites/${siteId}/installation-status`);
+            const detected = result?.isInstalled || result?.firstEventReceivedAtUtc;
+            testResultBanner.style.display = 'block';
+            if (detected) {
+              testResultBanner.style.cssText = 'display:block;margin-top:10px;padding:10px 14px;border-radius:8px;font-size:12.5px;font-weight:500;line-height:1.4;background:#f0fdf4;border:1px solid #bbf7d0;color:#15803d';
+              testResultBanner.textContent = '✓ Snippet detected — Hven is tracking this site';
+            } else {
+              testResultBanner.style.cssText = 'display:block;margin-top:10px;padding:10px 14px;border-radius:8px;font-size:12.5px;font-weight:500;line-height:1.4;background:#fffbeb;border:1px solid #fde68a;color:#92400e';
+              testResultBanner.textContent = "✗ Snippet not yet detected — make sure you've saved and published";
+            }
+          } catch {
+            testResultBanner.style.cssText = 'display:block;margin-top:10px;padding:10px 14px;border-radius:8px;font-size:12.5px;font-weight:500;line-height:1.4;background:#fffbeb;border:1px solid #fde68a;color:#92400e';
+            testResultBanner.textContent = "✗ Snippet not yet detected — make sure you've saved and published";
+          } finally {
+            testInstallBtn.disabled = false;
+            testInstallBtn.textContent = '🔍 Test installation';
+          }
+        });
+        codeArea.append(testInstallBtn, testResultBanner);
       };
 
       SNIPPET_TABS.forEach((tab, idx) => {

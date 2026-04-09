@@ -525,6 +525,34 @@ export const renderInstallView = (container, { apiClient, toast, query } = {}) =
   const statusError = document.createElement('div');
   statusError.style.color = '#dc2626';
 
+  const testNowBtn = createButton({ label: 'Test now', variant: 'primary' });
+  const testNowResult = document.createElement('div');
+  testNowResult.style.cssText = 'display:none;padding:10px 14px;border-radius:8px;font-size:13px;font-weight:500;line-height:1.4';
+
+  testNowBtn.addEventListener('click', async () => {
+    testNowBtn.disabled = true;
+    testNowBtn.textContent = '⏳ Checking…';
+    testNowResult.style.display = 'none';
+    try {
+      const result = await client.request(`/sites/${siteId}/installation-status`);
+      const detected = result?.isInstalled || result?.firstEventReceivedAtUtc;
+      testNowResult.style.display = 'block';
+      if (detected) {
+        testNowResult.style.cssText = 'display:block;padding:10px 14px;border-radius:8px;font-size:13px;font-weight:500;line-height:1.4;background:#f0fdf4;border:1px solid #bbf7d0;color:#15803d';
+        testNowResult.textContent = '✓ Installation confirmed — Hven is tracking this site';
+      } else {
+        testNowResult.style.cssText = 'display:block;padding:10px 14px;border-radius:8px;font-size:13px;font-weight:500;line-height:1.4;background:#fffbeb;border:1px solid #fde68a;color:#92400e';
+        testNowResult.textContent = 'Not yet detected — have you saved and published the snippet? Try again in 30 seconds.';
+      }
+    } catch {
+      testNowResult.style.cssText = 'display:block;padding:10px 14px;border-radius:8px;font-size:13px;font-weight:500;line-height:1.4;background:#fffbeb;border:1px solid #fde68a;color:#92400e';
+      testNowResult.textContent = 'Not yet detected — have you saved and published the snippet? Try again in 30 seconds.';
+    } finally {
+      testNowBtn.disabled = false;
+      testNowBtn.textContent = 'Test now';
+    }
+  });
+
   const refreshStatusButton = createButton({ label: 'Refresh status', variant: 'primary' });
   const sendTestEventButton = createButton({ label: 'Send test event' });
   const verifyErrorText = document.createElement('div');
@@ -639,7 +667,7 @@ export const renderInstallView = (container, { apiClient, toast, query } = {}) =
   refreshStatusButton.addEventListener('click', loadInstallationStatus);
   sendTestEventButton.addEventListener('click', sendTestEvent);
 
-  step3Body.append(refreshStatusButton, sendTestEventButton, statusRow, verifyErrorText);
+  step3Body.append(testNowBtn, testNowResult, refreshStatusButton, sendTestEventButton, statusRow, verifyErrorText);
 
   const card = createCard({
     title: 'Installation flow',
