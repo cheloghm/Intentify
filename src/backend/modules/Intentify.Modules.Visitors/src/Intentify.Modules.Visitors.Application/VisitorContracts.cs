@@ -199,7 +199,7 @@ public sealed class CollectorVisitorEventObserver : ICollectorEventObserver
             notification.SessionId,
             notification.Url,
             notification.Referrer,
-            notification.FirstPartyId,
+            notification.VisitorId,
             notification.UserAgent,
             notification.Language,
             notification.Platform), cancellationToken);

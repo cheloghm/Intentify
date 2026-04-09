@@ -11,7 +11,16 @@
     var widgetSrc = new URL(scriptTag.src, window.location.href).href;
     var apiMarker = '/api/engage/widget.js';
     var markerIdx = widgetSrc.indexOf(apiMarker);
-    baseUrl = markerIdx !== -1 ? widgetSrc.substring(0, markerIdx) : new URL(widgetSrc).origin;
+    if (markerIdx !== -1) {
+      baseUrl = widgetSrc.substring(0, markerIdx);
+    } else {
+      var allScripts = document.querySelectorAll('script[src]');
+      for (var si = 0; si < allScripts.length; si++) {
+        var ss = allScripts[si].src || '';
+        var sidx = ss.indexOf('/api/engage/widget.js');
+        if (sidx !== -1) { baseUrl = ss.substring(0, sidx); break; }
+      }
+    }
   } catch (e) {
     baseUrl = window.location.origin;
   }
