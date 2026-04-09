@@ -36,7 +36,9 @@ public sealed class GetEngageBotHandler
             bot.PersonalityDescriptor,
             bot.DigestEmailEnabled,
             bot.DigestEmailRecipients,
-            bot.DigestEmailFrequency));
+            bot.DigestEmailFrequency,
+            HideBranding: bot.HideBranding,
+            CustomBrandingText: bot.CustomBrandingText));
     }
 }
 
@@ -79,6 +81,8 @@ public sealed class UpdateEngageBotHandler
             command.DigestEmailEnabled,
             command.DigestEmailRecipients,
             command.DigestEmailFrequency,
+            command.HideBranding,
+            command.CustomBrandingText,
             cancellationToken);
 
         if (updated is null)
@@ -103,6 +107,8 @@ public sealed class UpdateEngageBotHandler
             updated.PersonalityDescriptor,
             updated.DigestEmailEnabled,
             updated.DigestEmailRecipients,
-            updated.DigestEmailFrequency));
+            updated.DigestEmailFrequency,
+            HideBranding: updated.HideBranding,
+            CustomBrandingText: updated.CustomBrandingText));
     }
 }

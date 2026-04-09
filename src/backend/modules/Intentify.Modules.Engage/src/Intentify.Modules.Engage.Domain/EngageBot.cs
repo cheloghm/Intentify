@@ -50,4 +50,10 @@ public sealed class EngageBot
 
     /// <summary>JSON array of auto-trigger rules, e.g. [{"type":"page_view","urlPattern":"/pricing","message":"..."}]</summary>
     public string? AutoTriggerRulesJson { get; set; }
+
+    /// <summary>When true, the 'Powered by Hven' footer is hidden from the widget.</summary>
+    public bool HideBranding { get; set; }
+
+    /// <summary>Replaces the default 'Powered by Hven' text when set (e.g. "Powered by Acme AI"). Only shown when HideBranding is false.</summary>
+    public string? CustomBrandingText { get; set; }
 }

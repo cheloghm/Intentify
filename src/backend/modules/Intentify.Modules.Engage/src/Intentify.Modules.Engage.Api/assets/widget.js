@@ -35,6 +35,8 @@
   var assistantName = 'Assistant';
   var primaryColor = '#2563eb';
   var launcherVisible = true;
+  var hideBranding = false;
+  var customBrandingText = null;
   var isSending = false;
   var isHydrating = false;
   var typingIndicatorRow = null;
@@ -134,8 +136,28 @@
 
   composer.appendChild(input);
   composer.appendChild(sendButton);
+  var brandingFooter = document.createElement('div');
+  brandingFooter.style.cssText = 'display:none;text-align:center;padding:5px 0 4px;border-top:1px solid rgba(0,0,0,0.07);font-size:10px;color:rgba(0,0,0,0.32);background:#f8fafc;line-height:1.4;flex-shrink:0;';
+
+  function applyBranding() {
+    var show = !hideBranding || !!customBrandingText;
+    if (!show) {
+      brandingFooter.style.display = 'none';
+      messages.style.height = '320px';
+      return;
+    }
+    if (customBrandingText) {
+      brandingFooter.textContent = customBrandingText;
+    } else {
+      brandingFooter.innerHTML = 'Powered by <a href="https://hven.io" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:underline;">Hven</a>';
+    }
+    brandingFooter.style.display = 'block';
+    messages.style.height = '298px';
+  }
+
   panel.appendChild(messages);
   panel.appendChild(composer);
+  panel.appendChild(brandingFooter);
   document.body.appendChild(toggleButton);
   document.body.appendChild(panel);
 
@@ -662,7 +684,14 @@
       if (payload && typeof payload.launcherVisible === 'boolean') {
         launcherVisible = payload.launcherVisible;
       }
+      if (payload && typeof payload.hideBranding === 'boolean') {
+        hideBranding = payload.hideBranding;
+      }
+      if (payload && typeof payload.customBrandingText === 'string' && payload.customBrandingText) {
+        customBrandingText = payload.customBrandingText;
+      }
       applyTheme();
+      applyBranding();
 
       // Auto-trigger: check page_view rules after bootstrap resolves
       tryAutoTrigger(payload && payload.autoTriggerRulesJson);

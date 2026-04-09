@@ -282,6 +282,31 @@ const injectStyles = () => {
 .i-cs-ai-lbl{font-size:10px;font-weight:700;color:#6366f1;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px}
 .i-cs-ai-text{font-size:12.5px;color:#334155;line-height:1.6}
 .i-cs-prompt{text-align:center;padding:40px 24px;color:#94a3b8;font-size:12.5px;display:flex;flex-direction:column;align-items:center;gap:8px}
+/* Keyword Map */
+.i-km-wrap{position:relative;width:100%}
+.i-km-controls{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+.i-km-mode-grp{display:flex;gap:3px;background:#f1f5f9;border-radius:8px;padding:3px}
+.i-km-mode-btn{padding:5px 12px;border-radius:6px;border:none;font-family:'Plus Jakarta Sans',system-ui,sans-serif;font-size:11.5px;font-weight:600;color:#64748b;background:transparent;cursor:pointer;transition:all .14s}
+.i-km-mode-btn.active{background:#fff;color:#1e293b;box-shadow:0 1px 4px rgba(0,0,0,.1)}
+.i-km-legend{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-left:auto}
+.i-km-legend-item{display:flex;align-items:center;gap:4px;font-size:10.5px;font-weight:600;color:#64748b}
+.i-km-legend-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.i-km-svg-wrap{width:100%;background:#fafbff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;min-height:300px}
+.i-km-svg-wrap svg{display:block;width:100%;height:auto}
+.i-km-tooltip{position:fixed;background:#0f172a;color:#f1f5f9;border-radius:9px;padding:9px 13px;font-size:12px;pointer-events:none;z-index:9999;max-width:220px;box-shadow:0 8px 24px rgba(0,0,0,.22);transition:opacity .1s;opacity:0;line-height:1.5}
+.i-km-tooltip.visible{opacity:1}
+.i-km-tooltip-kw{font-weight:700;margin-bottom:3px}
+.i-km-tooltip-meta{font-size:10.5px;color:#94a3b8;font-family:'JetBrains Mono',monospace}
+.i-km-side{position:absolute;top:0;right:0;width:252px;background:#fff;border:1px solid #e2e8f0;border-radius:12px;box-shadow:0 8px 28px rgba(0,0,0,.1);padding:18px 18px;z-index:10;display:none}
+.i-km-side.open{display:block}
+.i-km-side-close{position:absolute;top:10px;right:12px;background:none;border:none;cursor:pointer;font-size:15px;color:#94a3b8;line-height:1}
+.i-km-side-kw{font-size:14px;font-weight:700;color:#0f172a;margin-bottom:5px;padding-right:22px;line-height:1.3}
+.i-km-side-meta{font-size:11px;color:#94a3b8;font-family:'JetBrains Mono',monospace;margin-bottom:12px}
+.i-km-side-rel-lbl{font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.07em;margin-bottom:7px}
+.i-km-side-tags{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:14px}
+.i-km-side-tag{font-size:10.5px;font-weight:600;padding:3px 9px;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:999px;color:#475569;cursor:pointer;transition:background .12s}
+.i-km-side-tag:hover{background:#eef2ff;color:#6366f1;border-color:#c7d2fe}
+.i-km-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:300px;gap:9px;padding:32px}
   `;
   document.head.appendChild(s);
 };
@@ -427,6 +452,7 @@ export const renderIntelligenceView = (container, { apiClient, toast } = {}) => 
     { key: 'rising',        label: '🚀 Rising'        },
     { key: 'related',       label: '🔗 Related'       },
     { key: 'opportunities', label: '💡 Opportunities' },
+    { key: 'keymap',        label: '🗺 Keyword Map'   },
     { key: 'network',       label: '🌐 Network'       },
     { key: 'competitors',   label: '🥊 Competitors'   },
     { key: 'profile',       label: '⚙️ Profile'       },
@@ -912,6 +938,217 @@ export const renderIntelligenceView = (container, { apiClient, toast } = {}) => 
     el('div', {}, 'Type your industry keyword and click Analyse to see competitor signals.')));
 
   // ─────────────────────────────────────────────────────────────────────────
+  // TAB: KEYWORD MAP
+  // ─────────────────────────────────────────────────────────────────────────
+  const keymapPanel = panelEls.keymap;
+  const kmState = { mode: 'site', rendered: false };
+
+  const KM_COLORS = {
+    Transactional: '#10b981',
+    Commercial:    '#6366f1',
+    Informational: '#f59e0b',
+    Network:       '#0ea5e9',
+  };
+
+  const layoutBubbles = (items, svgW = 800, svgH = 480) => {
+    if (!items.length) return [];
+    const goldenAngle = 2.399;
+    const spacing     = 68;
+    const cx = svgW / 2, cy = svgH / 2;
+    const padX = 64, padY = 52;
+    const sorted = [...items].sort((a, b) => b.r - a.r);
+    return sorted.map((item, i) => {
+      if (i === 0) return { ...item, x: cx, y: cy };
+      const angle = i * goldenAngle;
+      const dist  = Math.sqrt(i) * spacing;
+      const rawX  = cx + Math.cos(angle) * dist;
+      const rawY  = cy + Math.sin(angle) * dist;
+      const x = Math.max(padX + item.r, Math.min(svgW - padX - item.r, rawX));
+      const y = Math.max(padY + item.r, Math.min(svgH - padY - item.r, rawY));
+      return { ...item, x, y };
+    });
+  };
+
+  const buildBubbleItems = mode => {
+    const items = [];
+    const seen  = new Set();
+    if (mode === 'site' || mode === 'both') {
+      const all = [...(state.dashboard?.topItems || []), ...(state.dashboard?.risingQueries || [])];
+      all.forEach(item => {
+        const key = (item.queryOrTopic || '').toLowerCase();
+        if (seen.has(key)) return; seen.add(key);
+        const score = Number(item.score) || 0;
+        items.push({ keyword: item.queryOrTopic, score, intent: inferIntent(item.queryOrTopic),
+          r: 20 + (score / 100) * 40, source: 'site', isRising: !!item.isRising });
+      });
+    }
+    if (mode === 'network' || mode === 'both') {
+      (nsState.data?.topSearches || []).forEach(item => {
+        const key = (item.term || '').toLowerCase();
+        if (seen.has(key)) return; seen.add(key);
+        const score = Number(item.trendScore) || Number(item.score) || 50;
+        items.push({ keyword: item.term, score, intent: 'Network',
+          r: 20 + (score / 100) * 40, source: 'network', isRising: false });
+      });
+    }
+    return items;
+  };
+
+  // Shared tooltip appended to body
+  const kmTooltip = el('div', { class: 'i-km-tooltip' });
+  document.body.appendChild(kmTooltip);
+  const kmShowTip  = (e, item) => {
+    kmTooltip.replaceChildren(
+      el('div', { class: 'i-km-tooltip-kw' }, item.keyword),
+      el('div', { class: 'i-km-tooltip-meta' }, `Score: ${item.score}  ·  ${item.intent}${item.isRising ? '  · ↑ Rising' : ''}`));
+    kmTooltip.classList.add('visible');
+    kmMoveTip(e);
+  };
+  const kmMoveTip  = e => {
+    kmTooltip.style.left = `${e.clientX + 14}px`;
+    kmTooltip.style.top  = `${e.clientY - 28}px`;
+  };
+  const kmHideTip  = () => kmTooltip.classList.remove('visible');
+
+  // Side panel
+  const kmSide      = el('div', { class: 'i-km-side' });
+  const kmSideClose = el('button', { class: 'i-km-side-close' }, '✕');
+  const kmSideKw    = el('div', { class: 'i-km-side-kw' });
+  const kmSideMeta  = el('div', { class: 'i-km-side-meta' });
+  const kmSideRelLbl = el('div', { class: 'i-km-side-rel-lbl' }, 'Related Searches');
+  const kmSideTags  = el('div', { class: 'i-km-side-tags' });
+  const kmSideBtn   = el('button', { class: 'i-btn i-btn-primary i-btn-sm', style: 'width:100%' }, '🔍 Search this trend');
+  kmSideClose.addEventListener('click', () => kmSide.classList.remove('open'));
+  kmSide.append(kmSideClose, kmSideKw, kmSideMeta, kmSideRelLbl, kmSideTags, kmSideBtn);
+
+  const kmShowSide = item => {
+    kmSideKw.textContent   = item.keyword;
+    kmSideMeta.textContent = `Score ${item.score}/100  ·  ${item.intent}${item.isRising ? '  ·  ↑ Rising' : ''}`;
+    kmSideTags.replaceChildren();
+    const related = [
+      ...(state.dashboard?.relatedQueries || []),
+      ...(state.dashboard?.topItems || []),
+    ].filter(r => r.queryOrTopic && r.queryOrTopic.toLowerCase() !== item.keyword.toLowerCase()).slice(0, 8);
+    if (related.length) {
+      related.forEach(r => {
+        const tag = el('span', { class: 'i-km-side-tag' }, r.queryOrTopic);
+        tag.addEventListener('click', () => {
+          kmSideKw.textContent   = r.queryOrTopic;
+          kmSideMeta.textContent = `Score ${Number(r.score) || 0}/100  ·  ${inferIntent(r.queryOrTopic)}`;
+        });
+        kmSideTags.appendChild(tag);
+      });
+    } else {
+      kmSideTags.appendChild(el('span', { style: 'color:#94a3b8;font-size:11px' }, 'No related searches loaded yet.'));
+    }
+    kmSideBtn.onclick = () => {
+      kwEl.value = item.keyword;
+      switchTab('signals');
+      loadDashboard();
+    };
+    kmSide.classList.add('open');
+  };
+
+  const svgNS = 'http://www.w3.org/2000/svg';
+  const svgEl = (tag, attrs = {}) => {
+    const e = document.createElementNS(svgNS, tag);
+    Object.entries(attrs).forEach(([k, v]) => e.setAttribute(k, String(v)));
+    return e;
+  };
+
+  const SVG_W = 800, SVG_H = 480;
+  const kmSvgWrap = el('div', { class: 'i-km-svg-wrap' });
+
+  const renderKeymap = () => {
+    kmSide.classList.remove('open');
+    const items = buildBubbleItems(kmState.mode);
+    kmSvgWrap.replaceChildren();
+
+    if (!items.length) {
+      kmSvgWrap.appendChild(el('div', { class: 'i-km-empty' },
+        el('div', { style: 'font-size:40px;opacity:.3' }, '🗺'),
+        el('div', { style: 'font-size:14px;font-weight:700;color:#334155' }, 'No keyword data yet'),
+        el('div', { style: 'font-size:12px;color:#94a3b8;max-width:260px;text-align:center;line-height:1.6' },
+          'Run a Trends search first, or switch to Network mode to see market-wide signals.')));
+      return;
+    }
+
+    const svg  = svgEl('svg', { viewBox: `0 0 ${SVG_W} ${SVG_H}`, xmlns: svgNS });
+    // Subtle background dots
+    for (let gx = 40; gx < SVG_W; gx += 60) {
+      for (let gy = 30; gy < SVG_H; gy += 55) {
+        svg.appendChild(svgEl('circle', { cx: gx, cy: gy, r: 1.2, fill: '#e2e8f0' }));
+      }
+    }
+
+    const laid = layoutBubbles(items, SVG_W, SVG_H);
+    laid.forEach(item => {
+      const color  = KM_COLORS[item.intent] || '#6366f1';
+      const g      = svgEl('g', { style: 'cursor:pointer' });
+      g.appendChild(svgEl('circle', {
+        cx: item.x, cy: item.y, r: item.r,
+        fill: color, 'fill-opacity': 0.18,
+        stroke: color, 'stroke-width': item.isRising ? 2.5 : 1.5,
+      }));
+      if (item.r >= 28) {
+        const maxChars = Math.floor(item.r / 4.2);
+        const lbl      = item.keyword.length > maxChars ? item.keyword.slice(0, maxChars) + '…' : item.keyword;
+        const t = svgEl('text', {
+          x: item.x, y: item.y + 1,
+          'text-anchor': 'middle', 'dominant-baseline': 'middle',
+          fill: color, 'font-size': Math.max(9, Math.min(12, item.r / 3.5)),
+          'font-weight': 600, 'font-family': 'Plus Jakarta Sans, system-ui, sans-serif',
+        });
+        t.textContent = lbl;
+        g.appendChild(t);
+      }
+      if (item.isRising) {
+        const arrow = svgEl('text', { x: item.x + item.r - 4, y: item.y - item.r + 6, 'font-size': 10, fill: color, 'font-weight': 700 });
+        arrow.textContent = '↑';
+        g.appendChild(arrow);
+      }
+      g.addEventListener('mouseenter', e => kmShowTip(e, item));
+      g.addEventListener('mousemove', kmMoveTip);
+      g.addEventListener('mouseleave', kmHideTip);
+      g.addEventListener('click', () => { kmHideTip(); kmShowSide(item); });
+      svg.appendChild(g);
+    });
+    kmSvgWrap.appendChild(svg);
+  };
+
+  // Mode controls
+  const kmControls = el('div', { class: 'i-km-controls' });
+  const kmModeGrp  = el('div', { class: 'i-km-mode-grp' });
+  [{ key: 'site', label: '📊 Your Site' }, { key: 'network', label: '🌐 Network' }, { key: 'both', label: '✦ Both' }].forEach(({ key, label }) => {
+    const btn = el('button', { class: 'i-km-mode-btn' + (key === kmState.mode ? ' active' : '') }, label);
+    btn.addEventListener('click', () => {
+      kmState.mode = key;
+      kmModeGrp.querySelectorAll('.i-km-mode-btn').forEach(b => b.classList.toggle('active', b === btn));
+      renderKeymap();
+    });
+    kmModeGrp.appendChild(btn);
+  });
+  const kmRefreshBtn = el('button', { class: 'i-btn i-btn-outline i-btn-sm' }, '↻ Refresh');
+  kmRefreshBtn.addEventListener('click', renderKeymap);
+  const kmLegend = el('div', { class: 'i-km-legend' });
+  [['#10b981', 'Transactional'], ['#6366f1', 'Commercial'], ['#f59e0b', 'Informational'], ['#0ea5e9', 'Network']].forEach(([color, lbl]) => {
+    const li = el('div', { class: 'i-km-legend-item' });
+    li.append(el('div', { class: 'i-km-legend-dot', style: `background:${color}` }), lbl);
+    kmLegend.appendChild(li);
+  });
+  kmControls.append(kmModeGrp, kmRefreshBtn, kmLegend);
+
+  const kmWrap = el('div', { class: 'i-km-wrap' });
+  kmWrap.append(kmSvgWrap, kmSide);
+
+  const { wrap: keymapWrap, body: keymapBody } = mkCanvas({ title: '🗺 Keyword Cluster Map', noPad: true });
+  keymapBody.style.padding = '16px 18px';
+  keymapBody.append(kmControls, kmWrap);
+  keymapPanel.appendChild(keymapWrap);
+
+  const loadKeymap = () => { if (!kmState.rendered) { kmState.rendered = true; renderKeymap(); } };
+
+  // ─────────────────────────────────────────────────────────────────────────
   // TAB: PROFILE
   // ─────────────────────────────────────────────────────────────────────────
   const profilePanel = panelEls.profile;
@@ -1197,6 +1434,9 @@ export const renderIntelligenceView = (container, { apiClient, toast } = {}) => 
         csIndustryEl.value = pInduEl.value;
         csState.industry = pInduEl.value.trim();
       }
+    }
+    if (key === 'keymap') {
+      loadKeymap();
     }
   };
   // Rewire tab buttons to use wrapped switch

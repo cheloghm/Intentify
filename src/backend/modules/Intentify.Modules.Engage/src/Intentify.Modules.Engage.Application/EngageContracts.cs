@@ -85,7 +85,9 @@ public sealed record EngageBotResult(
     string? WidgetPosition = null,
     string? GreetingMessage = null,
     string? LauncherIcon = null,
-    string? AutoTriggerRulesJson = null);
+    string? AutoTriggerRulesJson = null,
+    bool HideBranding = false,
+    string? CustomBrandingText = null);
 
 public sealed record UpdateEngageBotCommand(
     Guid TenantId,
@@ -107,7 +109,9 @@ public sealed record UpdateEngageBotCommand(
     string? WidgetPosition = null,
     string? GreetingMessage = null,
     string? LauncherIcon = null,
-    string? AutoTriggerRulesJson = null);
+    string? AutoTriggerRulesJson = null,
+    bool HideBranding = false,
+    string? CustomBrandingText = null);
 
 public sealed record GenerateDigestQuery(Guid TenantId, Guid SiteId);
 

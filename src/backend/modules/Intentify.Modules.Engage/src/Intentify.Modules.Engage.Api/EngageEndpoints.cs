@@ -59,6 +59,8 @@ internal static class EngageEndpoints
         string? primaryColor = null;
         bool? launcherVisible = null;
         string? autoTriggerRulesJson = null;
+        var hideBranding = false;
+        string? customBrandingText = null;
 
         if (site is not null)
         {
@@ -73,9 +75,11 @@ internal static class EngageEndpoints
             primaryColor = bot.PrimaryColor;
             launcherVisible = bot.LauncherVisible;
             autoTriggerRulesJson = bot.AutoTriggerRulesJson;
+            hideBranding = bot.HideBranding;
+            customBrandingText = bot.CustomBrandingText;
         }
 
-        return Results.Ok(new WidgetBootstrapResponse(result.SiteId.ToString("N"), result.Domain, displayName, botName, primaryColor, launcherVisible, autoTriggerRulesJson));
+        return Results.Ok(new WidgetBootstrapResponse(result.SiteId.ToString("N"), result.Domain, displayName, botName, primaryColor, launcherVisible, autoTriggerRulesJson, hideBranding, customBrandingText));
     }
 
     public static async Task<IResult> ChatSendAsync(
@@ -201,7 +205,7 @@ internal static class EngageEndpoints
         return result.Status switch
         {
             OperationStatus.NotFound => Results.NotFound(),
-            _ => Results.Ok(new EngageBotResponse(result.Value!.BotId.ToString("N"), result.Value.Name, result.Value.PrimaryColor, result.Value.LauncherVisible, result.Value.Tone, result.Value.Verbosity, result.Value.FallbackStyle, result.Value.BusinessDescription, result.Value.Industry, result.Value.ServicesDescription, result.Value.GeoFocus, result.Value.PersonalityDescriptor, result.Value.DigestEmailEnabled, result.Value.DigestEmailRecipients, result.Value.DigestEmailFrequency))
+            _ => Results.Ok(new EngageBotResponse(result.Value!.BotId.ToString("N"), result.Value.Name, result.Value.PrimaryColor, result.Value.LauncherVisible, result.Value.Tone, result.Value.Verbosity, result.Value.FallbackStyle, result.Value.BusinessDescription, result.Value.Industry, result.Value.ServicesDescription, result.Value.GeoFocus, result.Value.PersonalityDescriptor, result.Value.DigestEmailEnabled, result.Value.DigestEmailRecipients, result.Value.DigestEmailFrequency, result.Value.HideBranding, result.Value.CustomBrandingText))
         };
     }
 
@@ -229,12 +233,12 @@ internal static class EngageEndpoints
             return Results.Unauthorized();
         }
 
-        var result = await handler.HandleAsync(new UpdateEngageBotCommand(tenantId.Value, parsedSiteId, request.Name, request.PrimaryColor, request.LauncherVisible, request.Tone, request.Verbosity, request.FallbackStyle, request.BusinessDescription, request.Industry, request.ServicesDescription, request.GeoFocus, request.PersonalityDescriptor, request.DigestEmailEnabled, request.DigestEmailRecipients, request.DigestEmailFrequency), context.RequestAborted);
+        var result = await handler.HandleAsync(new UpdateEngageBotCommand(tenantId.Value, parsedSiteId, request.Name, request.PrimaryColor, request.LauncherVisible, request.Tone, request.Verbosity, request.FallbackStyle, request.BusinessDescription, request.Industry, request.ServicesDescription, request.GeoFocus, request.PersonalityDescriptor, request.DigestEmailEnabled, request.DigestEmailRecipients, request.DigestEmailFrequency, HideBranding: request.HideBranding, CustomBrandingText: request.CustomBrandingText), context.RequestAborted);
         return result.Status switch
         {
             OperationStatus.ValidationFailed => Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(result.Errors!.Errors)),
             OperationStatus.NotFound => Results.NotFound(),
-            _ => Results.Ok(new EngageBotResponse(result.Value!.BotId.ToString("N"), result.Value.Name, result.Value.PrimaryColor, result.Value.LauncherVisible, result.Value.Tone, result.Value.Verbosity, result.Value.FallbackStyle, result.Value.BusinessDescription, result.Value.Industry, result.Value.ServicesDescription, result.Value.GeoFocus, result.Value.PersonalityDescriptor, result.Value.DigestEmailEnabled, result.Value.DigestEmailRecipients, result.Value.DigestEmailFrequency))
+            _ => Results.Ok(new EngageBotResponse(result.Value!.BotId.ToString("N"), result.Value.Name, result.Value.PrimaryColor, result.Value.LauncherVisible, result.Value.Tone, result.Value.Verbosity, result.Value.FallbackStyle, result.Value.BusinessDescription, result.Value.Industry, result.Value.ServicesDescription, result.Value.GeoFocus, result.Value.PersonalityDescriptor, result.Value.DigestEmailEnabled, result.Value.DigestEmailRecipients, result.Value.DigestEmailFrequency, result.Value.HideBranding, result.Value.CustomBrandingText))
         };
     }
 

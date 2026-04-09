@@ -323,6 +323,24 @@ export const renderEngageView = async (container, { apiClient, toast } = {}) => 
   wForm.append(botNameWrap, colorWrap, posWrap, iconWrap, greetWrap, launchVisWrap);
   widgetBody.appendChild(wForm);
 
+  // Branding section
+  widgetBody.appendChild(el('div', { style: 'font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;margin:18px 0 8px' }, 'Branding'));
+  const brandingWrap = el('div', { class: 'e-form-grid' });
+  const hideBrandingWrap = el('div', { class: 'e-field' });
+  hideBrandingWrap.appendChild(el('div', { class: 'e-field-label' }, "Hide 'Powered by Hven' footer"));
+  const hideBrandingToggle = el('label', { class: 'e-toggle' });
+  const hideBrandingCb = el('input', { type: 'checkbox' });
+  hideBrandingToggle.append(hideBrandingCb, el('span', { class: 'e-toggle-slider' }));
+  hideBrandingWrap.appendChild(hideBrandingToggle);
+  hideBrandingWrap.appendChild(el('div', { class: 'e-field-hint' }, 'Remove the Hven attribution from the chat widget footer.'));
+  const { wrap: customBrandWrap, input: customBrandInput } = mkField('Custom branding text (optional)', 'e.g. Powered by Acme AI — leave blank to hide footer entirely');
+  customBrandWrap.style.display = 'none';
+  hideBrandingCb.addEventListener('change', () => {
+    customBrandWrap.style.display = hideBrandingCb.checked ? '' : 'none';
+  });
+  brandingWrap.append(hideBrandingWrap, customBrandWrap);
+  widgetBody.appendChild(brandingWrap);
+
   // Live preview
   widgetBody.appendChild(el('div', { style: 'font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;margin:20px 0 8px' }, 'Live Preview'));
   const previewWrap = el('div', { class: 'e-preview-wrap' });
@@ -542,7 +560,10 @@ export const renderEngageView = async (container, { apiClient, toast } = {}) => 
     posInput.value      = bot.widgetPosition || 'bottom-right';
     iconInput.value     = bot.launcherIcon || '';
     greetInput.value    = bot.greetingMessage || '';
-    launchVisCb.checked = bot.launcherVisible !== false;
+    launchVisCb.checked     = bot.launcherVisible !== false;
+    hideBrandingCb.checked  = bot.hideBranding || false;
+    customBrandInput.value  = bot.customBrandingText || '';
+    customBrandWrap.style.display = hideBrandingCb.checked ? '' : 'none';
     bDescInput.value    = bot.businessDescription || '';
     bInduInput.value    = bot.industry || '';
     bSvcInput.value     = bot.servicesDescription || '';
@@ -566,6 +587,8 @@ export const renderEngageView = async (container, { apiClient, toast } = {}) => 
     launcherIcon:          iconInput.value.trim(),
     greetingMessage:       greetInput.value.trim(),
     launcherVisible:       launchVisCb.checked,
+    hideBranding:          hideBrandingCb.checked,
+    customBrandingText:    customBrandInput.value.trim() || undefined,
     businessDescription:   bDescInput.value.trim(),
     industry:              bInduInput.value.trim(),
     servicesDescription:   bSvcInput.value.trim(),

@@ -62,7 +62,7 @@ public sealed class EngageBotRepository : IEngageBotRepository
             .FirstOrDefaultAsync(cancellationToken);
     }
 
-    public async Task<EngageBot?> UpdateSettingsAsync(Guid tenantId, Guid siteId, string name, string? primaryColor, bool? launcherVisible, string? tone, string? verbosity, string? fallbackStyle, string? businessDescription, string? industry, string? servicesDescription, string? geoFocus, string? personalityDescriptor, bool digestEmailEnabled, string? digestEmailRecipients, string? digestEmailFrequency, CancellationToken cancellationToken = default)
+    public async Task<EngageBot?> UpdateSettingsAsync(Guid tenantId, Guid siteId, string name, string? primaryColor, bool? launcherVisible, string? tone, string? verbosity, string? fallbackStyle, string? businessDescription, string? industry, string? servicesDescription, string? geoFocus, string? personalityDescriptor, bool digestEmailEnabled, string? digestEmailRecipients, string? digestEmailFrequency, bool hideBranding = false, string? customBrandingText = null, CancellationToken cancellationToken = default)
     {
         await _ensureIndexes;
 
@@ -181,6 +181,17 @@ public sealed class EngageBotRepository : IEngageBotRepository
         else
         {
             updates.Add(Builders<EngageBot>.Update.Set(item => item.DigestEmailFrequency, digestEmailFrequency.Trim().ToLowerInvariant()));
+        }
+
+        updates.Add(Builders<EngageBot>.Update.Set(item => item.HideBranding, hideBranding));
+
+        if (string.IsNullOrWhiteSpace(customBrandingText))
+        {
+            updates.Add(Builders<EngageBot>.Update.Unset(item => item.CustomBrandingText));
+        }
+        else
+        {
+            updates.Add(Builders<EngageBot>.Update.Set(item => item.CustomBrandingText, customBrandingText.Trim()));
         }
 
         var update = Builders<EngageBot>.Update.Combine(updates);

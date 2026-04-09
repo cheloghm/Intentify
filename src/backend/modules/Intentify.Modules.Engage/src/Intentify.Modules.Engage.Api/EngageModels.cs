@@ -1,6 +1,6 @@
 namespace Intentify.Modules.Engage.Api;
 
-public sealed record WidgetBootstrapResponse(string SiteId, string Domain, string DisplayName, string BotName, string? PrimaryColor = null, bool? LauncherVisible = null, string? AutoTriggerRulesJson = null);
+public sealed record WidgetBootstrapResponse(string SiteId, string Domain, string DisplayName, string BotName, string? PrimaryColor = null, bool? LauncherVisible = null, string? AutoTriggerRulesJson = null, bool HideBranding = false, string? CustomBrandingText = null);
 
 public sealed record EngageChatSendRequest(
     string WidgetKey,
@@ -113,7 +113,9 @@ public sealed record EngageBotResponse(
     string? PersonalityDescriptor = null,
     bool DigestEmailEnabled = false,
     string? DigestEmailRecipients = null,
-    string? DigestEmailFrequency = null);
+    string? DigestEmailFrequency = null,
+    bool HideBranding = false,
+    string? CustomBrandingText = null);
 
 public sealed record UpdateEngageBotRequest(
     string Name,
@@ -129,6 +131,8 @@ public sealed record UpdateEngageBotRequest(
     string? PersonalityDescriptor = null,
     bool DigestEmailEnabled = false,
     string? DigestEmailRecipients = null,
-    string? DigestEmailFrequency = null);
+    string? DigestEmailFrequency = null,
+    bool HideBranding = false,
+    string? CustomBrandingText = null);
 
 public sealed record DigestSendRequest(string SiteId);
