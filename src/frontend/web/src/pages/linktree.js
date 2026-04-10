@@ -51,7 +51,7 @@ export function renderLinkTreeView(container) {
   hero.className = 'lt-hero';
   hero.innerHTML = `
     <div class="lt-icon">🔗</div>
-    <div class="lt-title">Link Tree</div>
+    <div class="lt-title">Link Hub</div>
     <div class="lt-sub">Create a branded link page for your social bio — one link that does everything.</div>
     <span class="lt-badge">✦ Coming Soon</span>
   `;
@@ -108,7 +108,7 @@ export function renderLinkTreeView(container) {
   // CTA
   const cta = document.createElement('div');
   cta.className = 'lt-cta';
-  cta.innerHTML = `<div class="lt-cta-title">Get notified when this launches</div><div class="lt-cta-sub">Be the first to know when Link Tree goes live.</div>`;
+  cta.innerHTML = `<div class="lt-cta-title">Get notified when this launches</div><div class="lt-cta-sub">Be the first to know when Link Hub goes live.</div>`;
 
   const ctaRow = document.createElement('div');
   ctaRow.className = 'lt-cta-row';
