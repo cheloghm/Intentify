@@ -176,6 +176,40 @@ internal static class PlatformAdminEndpoints
         return updated is null ? Results.NotFound() : Results.Ok(updated);
     }
 
+    // ── Feature interest endpoints ────────────────────────────────────────────────
+
+    public static IResult RegisterFeatureInterestAsync(
+        RegisterFeatureInterestRequest request,
+        FeatureInterestStore store,
+        HttpContext context)
+    {
+        if (string.IsNullOrWhiteSpace(request.Feature))
+            return Results.BadRequest();
+
+        var tenantId = context.User.FindFirst("tenantId")?.Value
+            ?? context.User.FindFirst("tenant_id")?.Value
+            ?? "";
+        var email = context.User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value
+            ?? context.User.FindFirst("email")?.Value
+            ?? "";
+
+        var entry = new FeatureInterestEntry(tenantId, email, request.Feature.Trim().ToLowerInvariant(), DateTime.UtcNow);
+        var (_, alreadyRegistered) = store.Register(entry);
+
+        return Results.Ok(new { registered = true, alreadyRegistered });
+    }
+
+    public static IResult ListFeatureInterestAsync(FeatureInterestStore store, string? feature = null)
+    {
+        var items = feature is not null ? store.GetByFeature(feature) : store.GetAll();
+        var grouped = items
+            .GroupBy(e => e.Feature)
+            .ToDictionary(
+                g => g.Key,
+                g => g.Select(e => new { e.TenantId, e.Email, e.RegisteredAtUtc }).ToArray());
+        return Results.Ok(grouped);
+    }
+
     private static PlatformTenantUsageResponse ToUsageResponse(PlatformTenantUsageResult usage)
         => new(
             usage.SiteCount,

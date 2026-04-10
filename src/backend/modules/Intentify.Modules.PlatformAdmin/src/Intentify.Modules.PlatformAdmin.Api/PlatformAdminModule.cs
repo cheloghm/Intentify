@@ -26,6 +26,7 @@ public sealed class PlatformAdminModule : IAppModule
         services.AddSingleton<GetPlatformOperationalSummaryHandler>();
         services.AddSingleton<GetPlatformDashboardHandler>();
         services.AddSingleton<FeedbackStore>();
+        services.AddSingleton<FeatureInterestStore>();
     }
 
     public void MapEndpoints(IEndpointRouteBuilder endpoints)
@@ -46,5 +47,12 @@ public sealed class PlatformAdminModule : IAppModule
         var feedbackGroup = endpoints.MapGroup("/feedback")
             .RequireAuthorization();
         feedbackGroup.MapPost("", PlatformAdminEndpoints.SubmitFeedbackAsync);
+
+        var notifyGroup = endpoints.MapGroup("/notify")
+            .RequireAuthorization();
+        notifyGroup.MapPost("/feature", PlatformAdminEndpoints.RegisterFeatureInterestAsync);
+
+        endpoints.MapGet("/notify/feature/admin", PlatformAdminEndpoints.ListFeatureInterestAsync)
+            .RequireAuthorization(PolicyName);
     }
 }

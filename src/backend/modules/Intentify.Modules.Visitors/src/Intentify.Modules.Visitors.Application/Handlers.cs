@@ -74,7 +74,10 @@ public sealed class GetVisitorDetailHandler(IVisitorRepository repository)
                 s.SessionId, s.FirstSeenAtUtc, s.LastSeenAtUtc,
                 s.PagesVisited, s.TimeOnSiteSeconds, s.EngagementScore,
                 s.LastPath, s.LastReferrer,
-                new Dictionary<string, int>(s.TopActions, StringComparer.OrdinalIgnoreCase)))
+                new Dictionary<string, int>(s.TopActions, StringComparer.OrdinalIgnoreCase),
+                s.PagePath.Count > 0
+                    ? s.PagePath.Select(p => new PageVisitEntryDto(p.Path, p.Title, p.ScrollDepthPct, p.TimeOnPageSeconds, p.VisitedAtUtc)).ToArray()
+                    : null))
             .ToArray();
 
         return new VisitorDetailResult(

@@ -18,8 +18,8 @@ namespace Intentify.Modules.Engage.Api;
 ///
 /// Required .env keys for email:
 ///   Intentify__Email__Resend__ApiKey=re_YOUR_KEY
-///   Intentify__Email__Resend__FromAddress=notify@yourdomain.com
-///   Intentify__Email__Resend__FromName=Intentify
+///   Intentify__Email__Resend__FromAddress=hello@hven.io
+///   Intentify__Email__Resend__FromName=Hven
 /// </summary>
 internal sealed class DigestSchedulerService(
     IServiceProvider serviceProvider,
@@ -126,7 +126,7 @@ internal sealed class DigestSchedulerService(
                 return;
             }
 
-            var subject = $"📊 Your Weekly Intentify Report — {DateTime.UtcNow:MMMM d, yyyy}";
+            var subject = $"📊 Your Weekly Hven Report — {DateTime.UtcNow:MMMM d, yyyy}";
             var html    = BuildDigestHtml(bot.Name ?? bot.DisplayName ?? "Intentify", result);
 
             foreach (var recipient in recipients)
@@ -196,10 +196,10 @@ internal sealed class DigestSchedulerService(
                 </table>
               </div>
               <div style="text-align:center;margin-bottom:24px">
-                <a href="https://app.intentify.io/dashboard" style="display:inline-block;background:#6366f1;color:#fff;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:13px;font-weight:600">View Full Dashboard →</a>
+                <a href="https://www.hven.io/#/dashboard" style="display:inline-block;background:#6366f1;color:#fff;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:13px;font-weight:600">View Full Dashboard →</a>
               </div>
               <p style="font-size:11px;color:#94a3b8;text-align:center;margin:0;line-height:1.6">
-                You're receiving this because digest email is enabled for your Intentify site.<br>
+                You're receiving this because digest email is enabled for your Hven site.<br>
                 Manage in <strong>Engage → Bot Config → Digest Email</strong>.
               </p>
             </body></html>

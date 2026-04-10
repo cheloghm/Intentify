@@ -1,298 +1,364 @@
 /**
- * integrations.js — Intentify Webhooks & Integrations
+ * integrations.js — Hven Webhooks & Integrations
  * Manage outgoing webhooks for lead.created and visitor.identified events.
- * Supports generic JSON webhooks and Slack Incoming Webhooks.
  */
 
 import { createToastManager } from '../shared/ui/index.js';
 import { createApiClient, mapApiError } from '../shared/apiClient.js';
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
+const injectStyles = () => {
+  if (document.getElementById('_int_css')) return;
+  const s = document.createElement('style');
+  s.id = '_int_css';
+  s.textContent = `
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+.int-root{font-family:'Plus Jakarta Sans',system-ui,sans-serif;display:flex;flex-direction:column;gap:24px;width:100%;max-width:860px}
+.int-hero{background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%);border-radius:16px;padding:28px 32px;color:#fff;display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.int-hero-title{font-size:22px;font-weight:800;letter-spacing:-.02em;margin-bottom:4px}
+.int-hero-sub{font-size:13px;color:#94a3b8;line-height:1.5;max-width:480px}
+.int-hero-badge{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:10px 16px;text-align:center;flex-shrink:0}
+.int-hero-badge-num{font-size:28px;font-weight:800;color:#fff;line-height:1}
+.int-hero-badge-lbl{font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.07em;margin-top:2px}
+.int-panel{background:#fff;border:1px solid #e2e8f0;border-radius:14px;overflow:hidden}
+.int-panel-hd{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid #f1f5f9}
+.int-panel-title{font-size:13px;font-weight:700;color:#0f172a;letter-spacing:-.01em}
+.int-panel-meta{font-size:11px;color:#94a3b8}
+.int-panel-body{padding:20px}
+.int-section-label{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#94a3b8;margin-bottom:10px}
+.int-form-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+.int-form-full{margin-bottom:10px}
+@media(max-width:600px){.int-form-row{grid-template-columns:1fr}}
+.int-field{display:flex;flex-direction:column;gap:4px}
+.int-field label{font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.04em}
+.int-input{padding:8px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;font-family:inherit;outline:none;transition:border-color .14s;background:#fff;color:#0f172a;width:100%}
+.int-input:focus{border-color:#6366f1}
+.int-input::placeholder{color:#94a3b8}
+.int-checkbox-group{display:flex;flex-direction:column;gap:6px}
+.int-checkbox-row{display:flex;align-items:center;gap:8px;font-size:13px;color:#334155;cursor:pointer;user-select:none}
+.int-checkbox-row input{width:14px;height:14px;accent-color:#6366f1;cursor:pointer;flex-shrink:0}
+.int-btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:8px;border:none;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .14s;white-space:nowrap}
+.int-btn-primary{background:#6366f1;color:#fff}.int-btn-primary:hover{background:#4f46e5}
+.int-btn-primary:disabled{opacity:.6;cursor:default}
+.int-btn-outline{background:#fff;color:#475569;border:1.5px solid #e2e8f0}.int-btn-outline:hover{background:#f8fafc}
+.int-btn-danger{background:#fff;color:#ef4444;border:1.5px solid #fecaca}.int-btn-danger:hover{background:#fef2f2}
+.int-btn-sm{padding:5px 10px;font-size:11.5px}
+.int-webhook-list{display:flex;flex-direction:column;gap:8px}
+.int-webhook-card{border:1px solid #e2e8f0;border-radius:10px;padding:12px 16px;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;background:#fafbff}
+.int-webhook-info{flex:1;min-width:0}
+.int-webhook-label{font-size:13px;font-weight:600;color:#0f172a;margin-bottom:2px}
+.int-webhook-url{font-size:11px;color:#64748b;font-family:'JetBrains Mono',monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:400px}
+.int-webhook-pills{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.int-pill{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700}
+.int-pill-slack{background:#4a154b;color:#fff}
+.int-pill-generic{background:#eef2ff;color:#4f46e5}
+.int-pill-event{background:#f1f5f9;color:#475569}
+.int-webhook-actions{display:flex;gap:6px;flex-shrink:0;align-items:flex-start;padding-top:2px}
+.int-empty{padding:40px 20px;text-align:center;color:#94a3b8;font-size:13px;display:flex;flex-direction:column;align-items:center;gap:8px}
+.int-empty-icon{font-size:32px;opacity:.4}
+.int-guide{background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:16px 20px}
+.int-guide-hd{display:flex;align-items:center;justify-content:space-between;cursor:pointer;margin-bottom:0}
+.int-guide-title{font-size:12px;font-weight:700;color:#0f172a}
+.int-guide-toggle{font-size:11px;color:#6366f1;font-weight:600}
+.int-guide-body{margin-top:12px;display:none}
+.int-guide-body.open{display:block}
+.int-guide-steps{font-size:12.5px;color:#475569;line-height:1.8;padding-left:18px;margin-bottom:10px}
+.int-guide-steps li{margin-bottom:2px}
+.int-guide-link{font-size:12px;color:#6366f1;font-weight:600;text-decoration:none}
+.int-guide-link:hover{text-decoration:underline}
+.int-select{padding:8px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;font-family:inherit;outline:none;background:#fff;color:#0f172a;cursor:pointer;width:100%}
+.int-select:focus{border-color:#6366f1}
+.int-divider{border:none;border-top:1px solid #f1f5f9;margin:16px 0}
+.int-site-row{display:flex;align-items:center;gap:10px;margin-bottom:0}
+.int-site-row label{font-size:12px;font-weight:600;color:#64748b;white-space:nowrap}
+`;
+  document.head.appendChild(s);
+};
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const el = (tag, attrs = {}, ...kids) => {
   const e = document.createElement(tag);
   Object.entries(attrs).forEach(([k, v]) => {
-    if (k === 'class')          e.className = v;
-    else if (k === 'html')      e.innerHTML = v;
-    else if (k === 'style')     Object.assign(e.style, v);
-    else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
-    else                        e.setAttribute(k, v);
+    if (k === 'class')           e.className = v;
+    else if (k === 'html')       e.innerHTML = v;
+    else if (k === 'style')      typeof v === 'string' ? (e.style.cssText = v) : Object.assign(e.style, v);
+    else if (k.startsWith('@'))  e.addEventListener(k.slice(1), v);
+    else                         e.setAttribute(k, v);
   });
-  kids.flat().forEach(c => c != null && e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c));
+  kids.flat(Infinity).forEach(c => c != null && e.append(typeof c === 'string' ? document.createTextNode(c) : c));
   return e;
 };
 
 const getSiteId = s => s?.siteId || s?.id || '';
 
 const EVENT_OPTIONS = [
-  { value: 'lead.created',       label: '⭐ Lead Created'       },
-  { value: 'visitor.identified', label: '👁 Visitor Identified' },
+  { value: 'lead.created',       label: '⭐ Lead captured'        },
+  { value: 'visitor.identified', label: '👁 Visitor identified'  },
 ];
 
-// ─── Main render ─────────────────────────────────────────────────────────────
+// ─── Main export ──────────────────────────────────────────────────────────────
 
-export async function renderIntegrationsView(container) {
-  const toast    = createToastManager();
-  const api      = createApiClient();
-  const state    = {};
+export async function renderIntegrationsView(container, { apiClient: clientArg, toast: toastArg } = {}) {
+  injectStyles();
+  const toast = toastArg || createToastManager();
+  const api   = clientArg || createApiClient();
 
-  let currentSite = null;
+  let currentSite  = null;
+  let webhookCount = 0;
+
+  // ── Root ───────────────────────────────────────────────────────────────────
+  container.innerHTML = '';
+  if (toast.element) container.appendChild(toast.element);
+
+  const root = el('div', { class: 'int-root' });
+  container.appendChild(root);
+
+  // ── Hero ───────────────────────────────────────────────────────────────────
+  const badgeNum = el('div', { class: 'int-hero-badge-num' }, '0');
+  const hero = el('div', { class: 'int-hero' },
+    el('div', {},
+      el('div', { class: 'int-hero-title' }, '🔗 Integrations'),
+      el('div', { class: 'int-hero-sub' }, 'Connect Hven to your existing tools. Send leads and visitor events to Slack, HubSpot, Zapier, or any webhook endpoint.')
+    ),
+    el('div', { class: 'int-hero-badge' },
+      badgeNum,
+      el('div', { class: 'int-hero-badge-lbl' }, 'active webhooks')
+    )
+  );
+  root.appendChild(hero);
 
   // ── Site selector ──────────────────────────────────────────────────────────
-  const siteSelector = el('select', { class: 'form-control', style: { maxWidth: '260px', marginBottom: '20px' } });
-  const siteWrap = el('div', { class: 'card mb-4' },
-    el('div', { class: 'card-body' },
-      el('div', { class: 'flex items-center gap-2' },
-        el('label', { class: 'form-label mb-0', style: { whiteSpace: 'nowrap' } }, 'Select site:'),
-        siteSelector
+  const siteSelect = el('select', { class: 'int-select', style: 'max-width:260px' });
+  const sitePanel = el('div', { class: 'int-panel' },
+    el('div', { class: 'int-panel-hd' }, el('div', { class: 'int-panel-title' }, 'Site')),
+    el('div', { class: 'int-panel-body' },
+      el('div', { class: 'int-site-row' },
+        el('label', {}, 'Showing webhooks for:'),
+        siteSelect
       )
     )
   );
+  root.appendChild(sitePanel);
 
-  // ── Webhook list ───────────────────────────────────────────────────────────
-  const webhookList = el('div', { class: 'webhook-list' });
+  // ── Add Webhook panel ──────────────────────────────────────────────────────
+  const urlInput   = el('input',  { class: 'int-input', type: 'url',  placeholder: 'https://hooks.slack.com/services/…' });
+  const labelInput = el('input',  { class: 'int-input', type: 'text', placeholder: 'e.g. Slack #leads' });
+  const typeSelect = el('select', { class: 'int-select' });
+  [['generic', 'Generic JSON'], ['slack', 'Slack']].forEach(([v, l]) =>
+    typeSelect.appendChild(el('option', { value: v }, l)));
 
-  // ── Add-webhook form ───────────────────────────────────────────────────────
-  const urlInput   = el('input',  { type: 'url',  class: 'form-control', placeholder: 'https://hooks.slack.com/…  or  https://your-endpoint.com/hook' });
-  const labelInput = el('input',  { type: 'text', class: 'form-control', placeholder: 'e.g. Slack #leads' });
-  const typeSelect = el('select', { class: 'form-control' });
-  ['generic', 'slack'].forEach(t => typeSelect.appendChild(el('option', { value: t }, t === 'slack' ? 'Slack' : 'Generic JSON')));
-
-  const eventCheckboxes = EVENT_OPTIONS.map(opt => {
-    const cb = el('input', { type: 'checkbox', id: `evt-${opt.value}`, value: opt.value, style: { marginRight: '6px' } });
-    const lbl = el('label', { for: `evt-${opt.value}`, style: { marginRight: '16px', cursor: 'pointer' } }, cb, opt.label);
+  const eventCbs = EVENT_OPTIONS.map(opt => {
+    const cb  = el('input',  { type: 'checkbox', value: opt.value });
+    const lbl = el('label',  { class: 'int-checkbox-row' }, cb, ` ${opt.label}`);
     return { cb, lbl };
   });
 
-  const eventsRow = el('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '4px', paddingTop: '4px' } },
-    ...eventCheckboxes.map(x => x.lbl));
+  const saveBtn = el('button', { class: 'int-btn int-btn-primary', type: 'button' }, '＋ Add Webhook');
 
-  const addBtn = el('button', { class: 'btn btn-primary', type: 'button' }, 'Add Webhook');
-
-  const addForm = el('div', { class: 'card mb-4' },
-    el('div', { class: 'card-header' }, el('h3', { class: 'card-title' }, '+ Add Webhook')),
-    el('div', { class: 'card-body', style: { display: 'grid', gap: '12px' } },
-      el('div', {},
-        el('label', { class: 'form-label' }, 'Endpoint URL'),
-        urlInput
+  const addPanel = el('div', { class: 'int-panel' },
+    el('div', { class: 'int-panel-hd' },
+      el('div', { class: 'int-panel-title' }, 'Add Webhook')
+    ),
+    el('div', { class: 'int-panel-body' },
+      el('div', { class: 'int-form-full' },
+        el('div', { class: 'int-field' },
+          el('label', {}, 'Endpoint URL'),
+          urlInput
+        )
       ),
-      el('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' } },
-        el('div', {},
-          el('label', { class: 'form-label' }, 'Label'),
+      el('div', { class: 'int-form-row' },
+        el('div', { class: 'int-field' },
+          el('label', {}, 'Friendly name'),
           labelInput
         ),
-        el('div', {},
-          el('label', { class: 'form-label' }, 'Type'),
+        el('div', { class: 'int-field' },
+          el('label', {}, 'Type'),
           typeSelect
         )
       ),
-      el('div', {},
-        el('label', { class: 'form-label' }, 'Subscribe to events'),
-        eventsRow
+      el('div', { style: 'margin-bottom:16px' },
+        el('div', { class: 'int-section-label' }, 'Subscribe to events'),
+        el('div', { class: 'int-checkbox-group' }, ...eventCbs.map(x => x.lbl))
       ),
-      el('div', {}, addBtn)
+      saveBtn
     )
   );
+  root.appendChild(addPanel);
 
-  // ── Slack guide (collapsible) ─────────────────────────────────────────────
-  const guideBody = el('div', {
-    style: { display: 'none', padding: '16px 20px' },
-    html: `
-      <ol style="margin:0;padding-left:18px;line-height:1.9;font-size:14px">
-        <li>Open Slack and go to <strong>Apps → Manage → Custom Integrations → Incoming WebHooks</strong>.</li>
-        <li>Click <strong>Add to Slack</strong>, choose a channel (e.g. <code>#leads</code>), then click <strong>Add Incoming WebHooks Integration</strong>.</li>
-        <li>Copy the <strong>Webhook URL</strong> (starts with <code>https://hooks.slack.com/services/…</code>).</li>
-        <li>Paste it in the <em>Endpoint URL</em> field above, set <strong>Type → Slack</strong>, pick your events, and click <strong>Add Webhook</strong>.</li>
-      </ol>
-      <p style="margin:12px 0 0;font-size:13px;color:#64748b">
-        Intentify will format messages with bold headings and relevant lead/visitor data for each event type.
-      </p>
-    `
+  // ── Active Webhooks panel ──────────────────────────────────────────────────
+  const webhookCountBadge = el('div', { class: 'int-panel-meta' }, '0 webhooks');
+  const webhookListEl = el('div', {});
+  const activePanel = el('div', { class: 'int-panel' },
+    el('div', { class: 'int-panel-hd' },
+      el('div', { class: 'int-panel-title' }, 'Active Webhooks'),
+      webhookCountBadge
+    ),
+    el('div', { class: 'int-panel-body', style: 'padding-top:4px' }, webhookListEl)
+  );
+  root.appendChild(activePanel);
+
+  // ── Slack Setup Guide panel ────────────────────────────────────────────────
+  const guideBody = el('div', { class: 'int-guide-body' },
+    el('ol', { class: 'int-guide-steps' },
+      el('li', {}, 'Go to ', el('a', { href: 'https://api.slack.com/apps', target: '_blank', rel: 'noopener', class: 'int-guide-link' }, 'api.slack.com/apps'), ' and click "Create New App"'),
+      el('li', {}, 'Choose "From scratch", name it "Hven Alerts"'),
+      el('li', {}, 'Under "Incoming Webhooks", activate it and click "Add New Webhook to Workspace"'),
+      el('li', {}, 'Select a channel (e.g. #leads), copy the Webhook URL'),
+      el('li', {}, 'Paste the URL above, select type "Slack", check your events, click Add')
+    ),
+    el('a', { href: 'https://api.slack.com/apps', target: '_blank', rel: 'noopener', class: 'int-guide-link' }, 'Open Slack API →')
+  );
+  const guideToggleBtn = el('span', { class: 'int-guide-toggle' }, '▸ Show');
+  const guideHd = el('div', { class: 'int-guide-hd' },
+    el('div', { class: 'int-guide-title' }, '🔔 How to connect Slack'),
+    guideToggleBtn
+  );
+  guideHd.addEventListener('click', () => {
+    const open = guideBody.classList.toggle('open');
+    guideToggleBtn.textContent = open ? '▾ Hide' : '▸ Show';
   });
-
-  const guideToggle = el('button', {
-    class: 'btn btn-secondary btn-sm',
-    type: 'button',
-    onclick: () => {
-      const open = guideBody.style.display !== 'none';
-      guideBody.style.display = open ? 'none' : 'block';
-      guideToggle.textContent = open ? '▸ How to set up Slack' : '▾ How to set up Slack';
-    }
-  }, '▸ How to set up Slack');
-
-  const slackGuide = el('div', { class: 'card mb-4' },
-    el('div', { class: 'card-header', style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between' } },
-      el('h3', { class: 'card-title', style: { margin: 0 } }, '🔔 Slack Integration'),
-      guideToggle
-    ),
-    guideBody
+  const slackPanel = el('div', { class: 'int-panel' },
+    el('div', { class: 'int-panel-hd' }, el('div', { class: 'int-panel-title' }, 'Slack Setup Guide')),
+    el('div', { class: 'int-panel-body' },
+      el('div', { class: 'int-guide' }, guideHd, guideBody)
+    )
   );
-
-  // ── Page layout ────────────────────────────────────────────────────────────
-  container.innerHTML = '';
-  container.appendChild(toast.element || document.createComment('toast'));
-
-  const heading = el('div', { style: { marginBottom: '24px' } },
-    el('h1', { style: { margin: '0 0 4px', fontSize: '22px', fontWeight: '700' } }, '🔗 Integrations'),
-    el('p',  { style: { margin: 0, color: '#64748b', fontSize: '14px' } },
-      'Send real-time webhook notifications to Slack or any HTTP endpoint when leads are captured or visitors are identified.')
-  );
-
-  const webhookSection = el('div', { class: 'card mb-4' },
-    el('div', { class: 'card-header' },
-      el('h3', { class: 'card-title' }, 'Active Webhooks')
-    ),
-    el('div', { class: 'card-body p-0' }, webhookList)
-  );
-
-  container.append(heading, siteWrap, slackGuide, addForm, webhookSection);
+  root.appendChild(slackPanel);
 
   // ── Load sites ─────────────────────────────────────────────────────────────
   try {
     const sites = await api.sites.list();
     if (!sites?.length) {
-      siteSelector.appendChild(el('option', {}, 'No sites found'));
-      return;
+      siteSelect.appendChild(el('option', {}, 'No sites found'));
+    } else {
+      sites.forEach(s => {
+        siteSelect.appendChild(el('option', { value: getSiteId(s) }, s.domain || getSiteId(s)));
+      });
+      currentSite = sites[0];
+      await loadWebhooks();
     }
-    sites.forEach(s => {
-      const opt = el('option', { value: getSiteId(s) }, s.domain || getSiteId(s));
-      siteSelector.appendChild(opt);
-    });
-    currentSite = sites[0];
-    await loadWebhooks();
   } catch (err) {
-    toast.show(mapApiError(err) || 'Failed to load sites.', 'error');
+    toast.show(mapApiError(err)?.message || 'Failed to load sites.', 'error');
   }
 
-  siteSelector.addEventListener('change', async () => {
+  siteSelect.addEventListener('change', async () => {
     const sites = await api.sites.list().catch(() => []);
-    currentSite = sites.find(s => getSiteId(s) === siteSelector.value) || null;
+    currentSite = sites.find(s => getSiteId(s) === siteSelect.value) || null;
     await loadWebhooks();
   });
 
-  // ── Load webhook list ──────────────────────────────────────────────────────
+  // ── Load webhooks ──────────────────────────────────────────────────────────
   async function loadWebhooks() {
     if (!currentSite) return;
-    webhookList.innerHTML = '<div style="padding:16px;color:#64748b;font-size:13px">Loading…</div>';
+    webhookListEl.innerHTML = '<div style="padding:16px;font-size:13px;color:#94a3b8">Loading…</div>';
     try {
       const items = await api.integrations.listWebhooks(getSiteId(currentSite));
       renderWebhooks(items || []);
     } catch (err) {
-      webhookList.innerHTML = `<div style="padding:16px;color:#ef4444;font-size:13px">${mapApiError(err) || 'Failed to load webhooks.'}</div>`;
+      webhookListEl.innerHTML = `<div style="padding:16px;font-size:13px;color:#ef4444">${mapApiError(err)?.message || 'Failed to load webhooks.'}</div>`;
     }
   }
 
   function renderWebhooks(items) {
-    webhookList.innerHTML = '';
+    webhookCount = items.length;
+    badgeNum.textContent = String(webhookCount);
+    webhookCountBadge.textContent = `${webhookCount} webhook${webhookCount !== 1 ? 's' : ''}`;
+    webhookListEl.innerHTML = '';
+
     if (!items.length) {
-      webhookList.appendChild(el('div', { style: { padding: '20px', textAlign: 'center', color: '#94a3b8', fontSize: '13px', fontStyle: 'italic' } },
-        'No webhooks configured yet. Add one above.'));
+      webhookListEl.appendChild(
+        el('div', { class: 'int-empty' },
+          el('div', { class: 'int-empty-icon' }, '🔗'),
+          el('div', {}, 'No webhooks yet. Add one above to start receiving events.')
+        )
+      );
       return;
     }
 
+    const list = el('div', { class: 'int-webhook-list' });
     items.forEach(item => {
-      const events = Array.isArray(item.events) ? item.events : (item.events || '').split(',').filter(Boolean);
-      const typeTag = el('span', {
-        style: {
-          display: 'inline-block', padding: '2px 8px', borderRadius: '12px', fontSize: '11px',
-          fontWeight: '700', background: item.type === 'slack' ? '#E01E5A22' : '#6366f122',
-          color: item.type === 'slack' ? '#E01E5A' : '#6366f1', marginLeft: '8px'
-        }
-      }, item.type === 'slack' ? 'Slack' : 'Generic');
+      const events = Array.isArray(item.events)
+        ? item.events
+        : (item.events || '').split(',').filter(Boolean);
 
-      const testBtn = el('button', {
-        class: 'btn btn-secondary btn-sm',
-        type: 'button',
-        onclick: async () => {
-          testBtn.disabled = true;
-          testBtn.textContent = 'Sending…';
-          try {
-            await api.integrations.testWebhook(item.id);
-            toast.show('Test payload sent.', 'success');
-          } catch (err) {
-            toast.show(mapApiError(err) || 'Test failed.', 'error');
-          } finally {
-            testBtn.disabled = false;
-            testBtn.textContent = 'Test';
-          }
+      const testBtn = el('button', { class: 'int-btn int-btn-outline int-btn-sm', type: 'button' }, 'Test');
+      testBtn.addEventListener('click', async () => {
+        testBtn.disabled = true;
+        testBtn.textContent = '…';
+        try {
+          await api.integrations.testWebhook(item.id);
+          toast.show('✓ Test payload sent', 'success');
+        } catch (err) {
+          toast.show('✗ Test failed — ' + (mapApiError(err)?.message || 'unknown error'), 'error');
+        } finally {
+          testBtn.disabled = false;
+          testBtn.textContent = 'Test';
         }
-      }, 'Test');
+      });
 
-      const deleteBtn = el('button', {
-        class: 'btn btn-danger btn-sm',
-        type: 'button',
-        onclick: async () => {
-          if (!confirm(`Delete webhook "${item.label}"?`)) return;
-          try {
-            await api.integrations.deleteWebhook(item.id);
-            toast.show('Webhook deleted.', 'success');
-            await loadWebhooks();
-          } catch (err) {
-            toast.show(mapApiError(err) || 'Delete failed.', 'error');
-          }
+      const delBtn = el('button', { class: 'int-btn int-btn-danger int-btn-sm', type: 'button' }, 'Delete');
+      delBtn.addEventListener('click', async () => {
+        if (!confirm(`Delete webhook "${item.label}"?`)) return;
+        try {
+          await api.integrations.deleteWebhook(item.id);
+          toast.show('Webhook deleted.', 'success');
+          await loadWebhooks();
+        } catch (err) {
+          toast.show(mapApiError(err)?.message || 'Delete failed.', 'error');
         }
-      }, 'Delete');
+      });
 
-      const row = el('div', {
-        style: {
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '12px 16px', borderBottom: '1px solid #f1f5f9', flexWrap: 'wrap', gap: '8px'
-        }
-      },
-        el('div', { style: { flex: 1, minWidth: 0 } },
-          el('div', { style: { display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px', marginBottom: '4px' } },
-            el('span', { style: { fontWeight: '600', fontSize: '14px', color: '#1e293b' } }, item.label),
-            typeTag,
-            ...events.map(ev => el('span', {
-              style: {
-                display: 'inline-block', padding: '1px 7px', borderRadius: '10px',
-                fontSize: '10px', fontWeight: '600', background: '#f1f5f9', color: '#475569'
-              }
-            }, ev))
-          ),
-          el('div', { style: { fontSize: '12px', color: '#94a3b8', fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, item.url)
-        ),
-        el('div', { style: { display: 'flex', gap: '8px', flexShrink: 0 } }, testBtn, deleteBtn)
+      const typePill = el('span', { class: `int-pill ${item.type === 'slack' ? 'int-pill-slack' : 'int-pill-generic'}` },
+        item.type === 'slack' ? 'Slack' : 'Generic');
+
+      const pills = el('div', { class: 'int-webhook-pills' },
+        typePill,
+        ...events.map(ev => el('span', { class: 'int-pill int-pill-event' }, ev))
       );
 
-      webhookList.appendChild(row);
+      list.appendChild(
+        el('div', { class: 'int-webhook-card' },
+          el('div', { class: 'int-webhook-info' },
+            el('div', { class: 'int-webhook-label' }, item.label),
+            el('div', { class: 'int-webhook-url', title: item.url }, item.url),
+            pills
+          ),
+          el('div', { class: 'int-webhook-actions' }, testBtn, delBtn)
+        )
+      );
     });
+    webhookListEl.appendChild(list);
   }
 
-  // ── Add webhook ────────────────────────────────────────────────────────────
-  addBtn.addEventListener('click', async () => {
+  // ── Save webhook ───────────────────────────────────────────────────────────
+  saveBtn.addEventListener('click', async () => {
     if (!currentSite) { toast.show('Select a site first.', 'error'); return; }
 
     const url    = urlInput.value.trim();
     const label  = labelInput.value.trim();
     const type   = typeSelect.value;
-    const events = eventCheckboxes.filter(x => x.cb.checked).map(x => x.cb.value);
+    const events = eventCbs.filter(x => x.cb.checked).map(x => x.cb.value);
 
-    if (!url)         { toast.show('URL is required.', 'error'); return; }
-    if (!label)       { toast.show('Label is required.', 'error'); return; }
+    if (!url)           { toast.show('URL is required.', 'error'); return; }
+    if (!label)         { toast.show('Label is required.', 'error'); return; }
     if (!events.length) { toast.show('Select at least one event.', 'error'); return; }
 
-    addBtn.disabled = true;
-    addBtn.textContent = 'Adding…';
-
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Adding…';
     try {
-      await api.integrations.createWebhook({
-        siteId: getSiteId(currentSite),
-        url,
-        label,
-        type,
-        events,
-      });
-      urlInput.value  = '';
+      await api.integrations.createWebhook({ siteId: getSiteId(currentSite), url, label, type, events });
+      urlInput.value = '';
       labelInput.value = '';
-      eventCheckboxes.forEach(x => { x.cb.checked = false; });
+      eventCbs.forEach(x => { x.cb.checked = false; });
       toast.show('Webhook added.', 'success');
       await loadWebhooks();
     } catch (err) {
-      toast.show(mapApiError(err) || 'Failed to add webhook.', 'error');
+      toast.show(mapApiError(err)?.message || 'Failed to add webhook.', 'error');
     } finally {
-      addBtn.disabled = false;
-      addBtn.textContent = 'Add Webhook';
+      saveBtn.disabled = false;
+      saveBtn.textContent = '＋ Add Webhook';
     }
   });
 }

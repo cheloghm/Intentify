@@ -211,6 +211,22 @@ public sealed class VisitorRepository : IVisitorRepository
         {
             session.PagesVisited += 1;
             session.PageViewCount += 1;
+
+            var path = ExtractPath(command.Url);
+            if (!string.IsNullOrWhiteSpace(path))
+            {
+                session.PagePath.Add(new PageVisitEntry(
+                    Path: path,
+                    Title: null,
+                    ScrollDepthPct: command.ScrollDepthPct,
+                    TimeOnPageSeconds: command.TimeOnPageSeconds,
+                    VisitedAtUtc: command.OccurredAtUtc));
+
+                if (session.PagePath.Count > 50)
+                {
+                    session.PagePath.RemoveAt(0);
+                }
+            }
         }
 
         if (string.Equals(command.EventType, "time_on_page", StringComparison.OrdinalIgnoreCase)
@@ -238,6 +254,15 @@ public sealed class VisitorRepository : IVisitorRepository
 
         IncrementCounter(session.TopActions, command.EventType);
         session.EngagementScore += GetEngagementWeight(command.EventType);
+    }
+
+    private static string? ExtractPath(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return null;
+        if (!Uri.TryCreate(url.Trim(), UriKind.Absolute, out var uri)) return url.Trim();
+        var path = uri.AbsolutePath;
+        if (!string.IsNullOrEmpty(uri.Query)) path += uri.Query;
+        return string.IsNullOrEmpty(path) ? "/" : path;
     }
 
     private static bool IsPageView(string eventType)

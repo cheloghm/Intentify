@@ -160,8 +160,113 @@ const injectStyles = () => {
 .vp-empty-icon{font-size:30px;opacity:.3}
 .vp-empty-title{font-size:13px;font-weight:600;color:#334155}
 .vp-empty-desc{font-size:11.5px;color:#94a3b8;max-width:240px;line-height:1.6}
+/* Page journey */
+.vp-journey-scroll{overflow-x:auto;padding-bottom:8px}
+.vp-journey-nodes{display:flex;align-items:flex-start;gap:0;min-width:max-content}
+.vp-journey-node{display:flex;flex-direction:column;align-items:center;position:relative}
+.vp-journey-card{background:#fff;border:1.5px solid #e2e8f0;border-radius:10px;padding:8px 10px;width:130px;min-height:80px;display:flex;flex-direction:column;gap:4px;transition:box-shadow .15s}
+.vp-journey-card:hover{box-shadow:0 2px 12px rgba(0,0,0,.08)}
+.vp-journey-card.depth-high{border-color:#86efac;background:#f0fdf4}
+.vp-journey-card.depth-mid{border-color:#fde68a;background:#fffbeb}
+.vp-journey-card.depth-low{border-color:#fca5a5;background:#fef2f2}
+.vp-journey-path{font-size:10.5px;font-weight:600;color:#1e293b;font-family:'JetBrains Mono',monospace;word-break:break-all;line-height:1.35;max-height:36px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.vp-journey-badge{display:flex;gap:4px;flex-wrap:wrap;margin-top:auto}
+.vp-journey-pill{font-size:9px;font-weight:700;padding:1px 5px;border-radius:999px;white-space:nowrap}
+.vp-journey-scroll-bar{height:3px;width:100%;margin-top:4px;border-radius:2px;background:#e2e8f0;overflow:hidden}
+.vp-journey-scroll-fill{height:100%;border-radius:2px;transition:width .4s}
+.vp-journey-arrow{display:flex;align-items:center;padding:0 2px;padding-top:30px;color:#94a3b8;font-size:14px;user-select:none}
+.vp-journey-idx{font-size:9px;color:#94a3b8;font-family:'JetBrains Mono',monospace;margin-top:3px}
+/* Journey heat map */
+.vp-journey-heatmap{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.vp-journey-hm-card{flex:1;min-width:90px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 10px}
+.vp-journey-hm-lbl{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#94a3b8;margin-bottom:3px}
+.vp-journey-hm-val{font-size:11px;font-weight:600;color:#1e293b;font-family:'JetBrains Mono',monospace;word-break:break-all}
   `;
   document.head.appendChild(s);
+};
+
+// ─── Page journey builder ─────────────────────────────────────────────────────
+const buildPageJourney = (pagePath) => {
+  if (!pagePath?.length) return null;
+  const entries = pagePath.slice(-10); // last 10 pages
+
+  const depthClass = pct => {
+    if (pct == null) return '';
+    if (pct >= 70)  return 'depth-high';
+    if (pct >= 30)  return 'depth-mid';
+    return 'depth-low';
+  };
+  const depthColor = pct => {
+    if (pct == null) return '#94a3b8';
+    if (pct >= 70)  return '#16a34a';
+    if (pct >= 30)  return '#d97706';
+    return '#dc2626';
+  };
+  const isProduct = path => /\/(product|item|shop|p\/|pd\/|buy|cart)/i.test(path);
+
+  const wrap  = el('div', { class: 'vp-journey-scroll' });
+  const nodes = el('div', { class: 'vp-journey-nodes' });
+
+  entries.forEach((p, i) => {
+    const card = el('div', { class: `vp-journey-card ${depthClass(p.scrollDepthPct)}` });
+
+    // Path line
+    const pathLabel = (p.path === '/' ? '/ (Home)' : p.path) + (isProduct(p.path) ? ' 🛒' : '');
+    card.appendChild(el('div', { class: 'vp-journey-path', title: p.path }, pathLabel));
+
+    // Scroll depth bar
+    if (p.scrollDepthPct != null) {
+      const bar = el('div', { class: 'vp-journey-scroll-bar' });
+      const fill = el('div', { class: 'vp-journey-scroll-fill', style: `background:${depthColor(p.scrollDepthPct)};width:0%` });
+      bar.appendChild(fill);
+      card.appendChild(bar);
+      setTimeout(() => { fill.style.width = `${p.scrollDepthPct}%`; }, 150 + i * 40);
+    }
+
+    // Badges
+    const badges = el('div', { class: 'vp-journey-badge' });
+    if (p.scrollDepthPct != null) {
+      badges.appendChild(el('span', { class: 'vp-journey-pill', style: `background:${depthColor(p.scrollDepthPct)}22;color:${depthColor(p.scrollDepthPct)}` }, `↕ ${p.scrollDepthPct}%`));
+    }
+    if (p.timeOnPageSeconds != null && p.timeOnPageSeconds > 0) {
+      badges.appendChild(el('span', { class: 'vp-journey-pill', style: 'background:#e0f2fe;color:#0369a1' }, `⏱ ${fmtDur(p.timeOnPageSeconds)}`));
+    }
+    if (badges.children.length) card.appendChild(badges);
+
+    const nodeWrap = el('div', { class: 'vp-journey-node' });
+    nodeWrap.appendChild(card);
+    nodeWrap.appendChild(el('div', { class: 'vp-journey-idx' }, `#${i + 1}`));
+    nodes.appendChild(nodeWrap);
+
+    if (i < entries.length - 1) {
+      nodes.appendChild(el('div', { class: 'vp-journey-arrow' }, '→'));
+    }
+  });
+  wrap.appendChild(nodes);
+
+  // Heat map summary
+  const allPaths = entries.map(p => p.path);
+  const entryPage = allPaths[0];
+  const exitPage  = allPaths[allPaths.length - 1];
+  const mostEngaged = entries.reduce((best, p) => {
+    const score = (p.scrollDepthPct || 0) + (p.timeOnPageSeconds || 0) / 10;
+    return score > best.score ? { path: p.path, score } : best;
+  }, { path: null, score: -1 }).path;
+
+  const heatmap = el('div', { class: 'vp-journey-heatmap' });
+  [
+    ['Entry Page',     entryPage || '—'],
+    ['Exit Page',      exitPage  || '—'],
+    ['Most Engaged',   mostEngaged || '—'],
+  ].forEach(([lbl, val]) => {
+    const card = el('div', { class: 'vp-journey-hm-card' });
+    card.appendChild(el('div', { class: 'vp-journey-hm-lbl' }, lbl));
+    card.appendChild(el('div', { class: 'vp-journey-hm-val', title: val }, val));
+    heatmap.appendChild(card);
+  });
+  wrap.appendChild(heatmap);
+
+  return wrap;
 };
 
 // ─── Panel helper ─────────────────────────────────────────────────────────────
@@ -462,6 +567,15 @@ export const renderVisitorProfileView = async (container, { apiClient, toast, vi
       sessBody.appendChild(card);
     });
     left.appendChild(sessPanel);
+  }
+
+  // Page Journey — uses pagePath from the most recent session
+  const mostRecentPagePath = visitor.recentSessions?.find(s => s.pagePath?.length)?.pagePath;
+  if (mostRecentPagePath?.length) {
+    const { panel: journeyPanel, body: journeyBody } = mkPanel('🗺️ Page Journey', `last ${Math.min(mostRecentPagePath.length, 10)} pages`);
+    const journeyEl = buildPageJourney(mostRecentPagePath);
+    if (journeyEl) journeyBody.appendChild(journeyEl);
+    left.appendChild(journeyPanel);
   }
 
   grid.appendChild(left);

@@ -778,5 +778,12 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
       deleteWebhook,
       testWebhook,
     },
+    notify: {
+      registerFeatureInterest: (feature) => request('/notify/feature', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ feature }),
+      }),
+    },
   };
 };

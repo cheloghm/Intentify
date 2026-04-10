@@ -64,6 +64,13 @@ public sealed record VisitorTimelineItem(
 
 public sealed record GetVisitorDetailQuery(Guid TenantId, Guid SiteId, Guid VisitorId);
 
+public sealed record PageVisitEntryDto(
+    string Path,
+    string? Title,
+    int? ScrollDepthPct,
+    int? TimeOnPageSeconds,
+    DateTime VisitedAtUtc);
+
 public sealed record VisitorRecentSessionItem(
     string SessionId,
     DateTime FirstSeenAtUtc,
@@ -73,7 +80,8 @@ public sealed record VisitorRecentSessionItem(
     int EngagementScore,
     string? LastPath,
     string? LastReferrer,
-    IReadOnlyDictionary<string, int> TopActions);
+    IReadOnlyDictionary<string, int> TopActions,
+    IReadOnlyList<PageVisitEntryDto>? PagePath = null);
 
 public sealed record VisitorIdentificationSummary(
     bool IsIdentified,

@@ -1,8 +1,14 @@
+import { createToastManager } from '../shared/ui/index.js';
+import { createApiClient, mapApiError } from '../shared/apiClient.js';
+
+const LS_KEY = 'hven_notify_linkhub_registered';
+
 const injectStyles = () => {
   if (document.getElementById('_lt_css')) return;
   const s = document.createElement('style');
   s.id = '_lt_css';
   s.textContent = `
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 .lt-root{font-family:'Plus Jakarta Sans',system-ui,sans-serif;display:flex;flex-direction:column;align-items:center;gap:32px;width:100%;max-width:960px;padding:40px 20px 60px}
 .lt-hero{text-align:center;max-width:600px}
 .lt-icon{font-size:48px;line-height:1;margin-bottom:12px}
@@ -30,18 +36,18 @@ const injectStyles = () => {
 .lt-cta{background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:24px 28px;width:100%;max-width:480px;text-align:center}
 .lt-cta-title{font-size:15px;font-weight:700;color:#0f172a;margin-bottom:6px}
 .lt-cta-sub{font-size:13px;color:#64748b;margin-bottom:16px}
-.lt-cta-row{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
-.lt-cta-input{flex:1;min-width:180px;padding:9px 13px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;font-family:inherit;outline:none}
-.lt-cta-input:focus{border-color:#6366f1;box-shadow:0 0 0 3px rgba(99,102,241,.1)}
-.lt-cta-btn{padding:9px 18px;background:#6366f1;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .14s}
-.lt-cta-btn:hover{background:#4f46e5}
-.lt-cta-success{font-size:13px;color:#10b981;font-weight:600;margin-top:10px;display:none}
+.lt-notify-btn{display:inline-flex;align-items:center;gap:8px;padding:11px 22px;background:#6366f1;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .14s,transform .14s}
+.lt-notify-btn:hover:not(:disabled){background:#4f46e5;transform:translateY(-1px)}
+.lt-notify-btn:disabled{opacity:.7;cursor:default}
+.lt-notify-btn.success{background:#10b981}
 `;
   document.head.appendChild(s);
 };
 
 export function renderLinkTreeView(container) {
   injectStyles();
+  const toast = createToastManager();
+  const api = createApiClient();
 
   const root = document.createElement('div');
   root.className = 'lt-root';
@@ -66,7 +72,7 @@ export function renderLinkTreeView(container) {
   features.className = 'lt-features';
   const featTitle = document.createElement('div');
   featTitle.className = 'lt-features-title';
-  featTitle.textContent = 'What you\'ll be able to do';
+  featTitle.textContent = "What you'll be able to do";
   features.appendChild(featTitle);
 
   const items = [
@@ -102,7 +108,6 @@ export function renderLinkTreeView(container) {
   `;
   phoneWrap.appendChild(phone);
   body.appendChild(phoneWrap);
-
   root.appendChild(body);
 
   // CTA
@@ -110,36 +115,32 @@ export function renderLinkTreeView(container) {
   cta.className = 'lt-cta';
   cta.innerHTML = `<div class="lt-cta-title">Get notified when this launches</div><div class="lt-cta-sub">Be the first to know when Link Hub goes live.</div>`;
 
-  const ctaRow = document.createElement('div');
-  ctaRow.className = 'lt-cta-row';
-  const emailInput = document.createElement('input');
-  emailInput.type = 'email';
-  emailInput.placeholder = 'you@example.com';
-  emailInput.className = 'lt-cta-input';
+  const alreadyRegistered = (() => { try { return !!localStorage.getItem(LS_KEY); } catch { return false; } })();
 
   const notifyBtn = document.createElement('button');
-  notifyBtn.className = 'lt-cta-btn';
-  notifyBtn.textContent = 'Notify me';
+  notifyBtn.className = 'lt-notify-btn' + (alreadyRegistered ? ' success' : '');
+  notifyBtn.textContent = alreadyRegistered ? "✓ You're on the list!" : '🔔 Get notified when this launches';
+  notifyBtn.disabled = alreadyRegistered;
 
-  const successMsg = document.createElement('div');
-  successMsg.className = 'lt-cta-success';
-  successMsg.textContent = "You'll be the first to know! 🎉";
-
-  notifyBtn.addEventListener('click', () => {
-    const email = emailInput.value.trim();
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      emailInput.style.borderColor = '#ef4444';
-      return;
+  notifyBtn.addEventListener('click', async () => {
+    notifyBtn.disabled = true;
+    notifyBtn.textContent = 'Registering…';
+    try {
+      await api.notify.registerFeatureInterest('linkhub');
+      try { localStorage.setItem(LS_KEY, '1'); } catch {}
+      notifyBtn.className = 'lt-notify-btn success';
+      notifyBtn.textContent = "✓ You're on the list!";
+    } catch (err) {
+      notifyBtn.disabled = false;
+      notifyBtn.textContent = '🔔 Get notified when this launches';
+      toast.show(mapApiError(err)?.message || 'Could not register — try again', 'error');
     }
-    emailInput.style.borderColor = '';
-    try { localStorage.setItem('hven_notify_linktree', email); } catch {}
-    ctaRow.style.display = 'none';
-    successMsg.style.display = 'block';
   });
 
-  ctaRow.append(emailInput, notifyBtn);
-  cta.append(ctaRow, successMsg);
+  cta.appendChild(notifyBtn);
   root.appendChild(cta);
 
+  container.innerHTML = '';
+  if (toast.element) container.appendChild(toast.element);
   container.appendChild(root);
 }

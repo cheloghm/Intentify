@@ -3,6 +3,13 @@ using Intentify.Modules.Flows.Application;
 
 namespace Intentify.Modules.Engage.Api;
 
+// REQUIRED Railway environment variables for email to work:
+// Intentify__Email__Provider=Resend
+// Intentify__Email__Resend__ApiKey=re_xxxx
+// Intentify__Email__Resend__FromAddress=hello@hven.io
+// Intentify__Email__Resend__FromName=Hven
+// Without these, all emails are silently skipped (IsConfigured = false)
+
 /// <summary>
 /// Sends a real-time "hot lead" alert email via Resend when a lead is
 /// captured through the Engage widget.
@@ -80,7 +87,7 @@ internal sealed class ResendLeadNotificationService(
                 <strong style="display:block;margin-bottom:6px">What they asked:</strong>
                 {Esc(asked)}
               </div>
-              <a href="https://app.hven.io/leads" style="display:inline-block;background:#6366f1;color:#fff;text-decoration:none;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:600">View lead in Hven →</a>
+              <a href="https://www.hven.io/#/leads" style="display:inline-block;background:#6366f1;color:#fff;text-decoration:none;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:600">View lead in Hven →</a>
               <p style="font-size:11px;color:#94a3b8;margin-top:24px">Hven · Visitor Intelligence Platform</p>
             </body>
             </html>

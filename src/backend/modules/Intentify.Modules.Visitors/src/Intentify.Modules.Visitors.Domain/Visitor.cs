@@ -94,4 +94,14 @@ public sealed class VisitorSession
     public int MaxScrollDepthPct { get; set; }
     public int PageViewCount { get; set; }
     public int ChatEngagementCount { get; set; }
+
+    // ── Page journey (max 50 entries, oldest trimmed first) ───────────────
+    public List<PageVisitEntry> PagePath { get; set; } = [];
 }
+
+public sealed record PageVisitEntry(
+    string Path,
+    string? Title,
+    int? ScrollDepthPct,
+    int? TimeOnPageSeconds,
+    DateTime VisitedAtUtc);
