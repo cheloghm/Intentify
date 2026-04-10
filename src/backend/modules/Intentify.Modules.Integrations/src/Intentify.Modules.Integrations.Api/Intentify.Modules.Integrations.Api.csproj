@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Swashbuckle.AspNetCore" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Intentify.Modules.Integrations.Domain\Intentify.Modules.Integrations.Domain.csproj" />
+    <ProjectReference Include="..\Intentify.Modules.Integrations.Application\Intentify.Modules.Integrations.Application.csproj" />
+    <ProjectReference Include="..\Intentify.Modules.Integrations.Infrastructure\Intentify.Modules.Integrations.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\..\..\modules\Intentify.Modules.Auth\src\Intentify.Modules.Auth.Api\Intentify.Modules.Auth.Api.csproj" />
+    <ProjectReference Include="..\..\..\..\modules\Intentify.Modules.Leads\src\Intentify.Modules.Leads.Application\Intentify.Modules.Leads.Application.csproj" />
+    <ProjectReference Include="..\..\..\..\modules\Intentify.Modules.Visitors\src\Intentify.Modules.Visitors.Application\Intentify.Modules.Visitors.Application.csproj" />
+    <ProjectReference Include="..\..\..\..\shared\Intentify.Shared.Web\src\Intentify.Shared.Web\Intentify.Shared.Web.csproj" />
+  </ItemGroup>
+</Project>

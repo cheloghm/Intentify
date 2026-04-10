@@ -76,6 +76,14 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Flows.Tes
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Engage.Tests", "modules/Intentify.Modules.Engage/tests/Intentify.Modules.Engage.Tests/Intentify.Modules.Engage.Tests.csproj", "{C3D4E5F6-A7B8-9012-CDEF-123456789012}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Integrations.Domain", "modules/Intentify.Modules.Integrations/src/Intentify.Modules.Integrations.Domain/Intentify.Modules.Integrations.Domain.csproj", "{D1E2F3A4-B5C6-7890-1234-567890ABCDEF}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Integrations.Application", "modules/Intentify.Modules.Integrations/src/Intentify.Modules.Integrations.Application/Intentify.Modules.Integrations.Application.csproj", "{E2F3A4B5-C6D7-8901-2345-678901BCDEF0}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Integrations.Infrastructure", "modules/Intentify.Modules.Integrations/src/Intentify.Modules.Integrations.Infrastructure/Intentify.Modules.Integrations.Infrastructure.csproj", "{F3A4B5C6-D7E8-9012-3456-789012CDEF01}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Intentify.Modules.Integrations.Api", "modules/Intentify.Modules.Integrations/src/Intentify.Modules.Integrations.Api/Intentify.Modules.Integrations.Api.csproj", "{A4B5C6D7-E8F9-0123-4567-890123DEF012}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -298,6 +306,22 @@ Global
 		{C3D4E5F6-A7B8-9012-CDEF-123456789012}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{C3D4E5F6-A7B8-9012-CDEF-123456789012}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{C3D4E5F6-A7B8-9012-CDEF-123456789012}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D1E2F3A4-B5C6-7890-1234-567890ABCDEF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D1E2F3A4-B5C6-7890-1234-567890ABCDEF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D1E2F3A4-B5C6-7890-1234-567890ABCDEF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D1E2F3A4-B5C6-7890-1234-567890ABCDEF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E2F3A4B5-C6D7-8901-2345-678901BCDEF0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E2F3A4B5-C6D7-8901-2345-678901BCDEF0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E2F3A4B5-C6D7-8901-2345-678901BCDEF0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E2F3A4B5-C6D7-8901-2345-678901BCDEF0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F3A4B5C6-D7E8-9012-3456-789012CDEF01}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F3A4B5C6-D7E8-9012-3456-789012CDEF01}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F3A4B5C6-D7E8-9012-3456-789012CDEF01}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F3A4B5C6-D7E8-9012-3456-789012CDEF01}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A4B5C6D7-E8F9-0123-4567-890123DEF012}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A4B5C6D7-E8F9-0123-4567-890123DEF012}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A4B5C6D7-E8F9-0123-4567-890123DEF012}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A4B5C6D7-E8F9-0123-4567-890123DEF012}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

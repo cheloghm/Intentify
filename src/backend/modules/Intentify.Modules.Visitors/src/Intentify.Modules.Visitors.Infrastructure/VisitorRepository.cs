@@ -9,11 +9,13 @@ public sealed class VisitorRepository : IVisitorRepository
 {
     private const string PageViewEventType = "page_view";
     private readonly IMongoCollection<Visitor> _visitors;
+    private readonly IFirmographicEnrichmentService _firmographicService;
     private readonly Task _ensureIndexes;
 
-    public VisitorRepository(IMongoDatabase database)
+    public VisitorRepository(IMongoDatabase database, IFirmographicEnrichmentService firmographicService)
     {
         _visitors = database.GetCollection<Visitor>(VisitorsMongoCollections.Visitors);
+        _firmographicService = firmographicService;
         _ensureIndexes = EnsureIndexesAsync();
     }
 
@@ -48,6 +50,7 @@ public sealed class VisitorRepository : IVisitorRepository
                 Sessions = CreateInitialSessions(command, resolvedSessionId)
             };
             UpdateProductMeta(visitor, command);
+            await TryEnrichFirmographicsAsync(visitor, command.IpAddress, cancellationToken);
             visitor.IntentScore = VisitorIntentScorer.ComputeScore(visitor);
 
             await _visitors.InsertOneAsync(visitor, cancellationToken: cancellationToken);
@@ -63,6 +66,7 @@ public sealed class VisitorRepository : IVisitorRepository
         visitor.City ??= Truncate(command.City, 64);
         visitor.Region ??= Truncate(command.Region, 64);
         UpdateProductMeta(visitor, command);
+        await TryEnrichFirmographicsAsync(visitor, command.IpAddress, cancellationToken);
 
         VisitorSession session;
         if (resolvedSessionId is null)
@@ -109,7 +113,8 @@ public sealed class VisitorRepository : IVisitorRepository
                 latestSession?.EngagementScore ?? 0,
                 latestSession?.LastPath,
                 latestSession?.LastReferrer,
-                IntentScore: visitor.IntentScore);
+                IntentScore: visitor.IntentScore,
+                CompanyName: visitor.CompanyName);
         }).ToArray();
     }
 
@@ -297,6 +302,28 @@ public sealed class VisitorRepository : IVisitorRepository
 
         var trimmed = value.Trim();
         return trimmed.Length <= maxLength ? trimmed : trimmed[..maxLength];
+    }
+
+    private async Task TryEnrichFirmographicsAsync(Visitor visitor, string? ip, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(ip)) return;
+
+        // Skip if already enriched within 7 days
+        var needsEnrichment = string.IsNullOrWhiteSpace(visitor.CompanyName)
+            || (visitor.FirmographicEnrichedAtUtc.HasValue
+                && DateTime.UtcNow - visitor.FirmographicEnrichedAtUtc.Value > TimeSpan.FromDays(7));
+
+        if (!needsEnrichment) return;
+
+        var firm = await _firmographicService.EnrichAsync(ip, ct);
+        if (firm is null) return;
+
+        visitor.CompanyName     = firm.CompanyName;
+        visitor.CompanyDomain   = firm.CompanyDomain;
+        visitor.CompanyIndustry = firm.CompanyIndustry;
+        visitor.CompanySize     = firm.CompanySize;
+        visitor.CompanyLinkedIn = firm.CompanyLinkedIn;
+        visitor.FirmographicEnrichedAtUtc = DateTime.UtcNow;
     }
 
     private Task EnsureIndexesAsync()

@@ -477,6 +477,22 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
   const getEngageSurveyResults = async (siteId) =>
     request(`/engage/survey-results${buildQueryString({ siteId })}`);
 
+  const listWebhooks = async (siteId) =>
+    request(`/integrations/webhooks${buildQueryString({ siteId })}`);
+
+  const createWebhook = async (payload) =>
+    request('/integrations/webhooks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+  const deleteWebhook = async (id) =>
+    request(`/integrations/webhooks/${encodeURIComponent(id)}`, { method: 'DELETE' });
+
+  const testWebhook = async (id) =>
+    request(`/integrations/webhooks/${encodeURIComponent(id)}/test`, { method: 'POST' });
+
   const resetEngageAbTest = async (siteId) =>
     request(`/engage/ab-test/reset${buildQueryString({ siteId })}`, {
       method: 'POST',
@@ -755,6 +771,12 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
       submit: (payload) => request('/feedback', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }),
       listAdmin: () => request('/platform-admin/feedback'),
       updateStatus: (id, status) => request(`/platform-admin/feedback/${encodeURIComponent(id)}/status`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) }),
+    },
+    integrations: {
+      listWebhooks,
+      createWebhook,
+      deleteWebhook,
+      testWebhook,
     },
   };
 };

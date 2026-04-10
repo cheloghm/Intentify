@@ -368,6 +368,9 @@ export const renderVisitorsView = async (container, { apiClient, toast, query } 
       );
       visCell.appendChild(nameRow);
       visCell.appendChild(el('div', { class: 'v-visitor-sub' }, shortId(v.visitorId?.toString?.() || v.visitorId)));
+      if (v.companyName) {
+        visCell.appendChild(el('div', { style: 'font-size:11px;color:#64748b;margin-top:2px' }, '🏢 ', v.companyName));
+      }
       tr.appendChild(visCell);
 
       tr.appendChild(el('td', {}, fmtTimeAgo(v.lastSeenAtUtc)));

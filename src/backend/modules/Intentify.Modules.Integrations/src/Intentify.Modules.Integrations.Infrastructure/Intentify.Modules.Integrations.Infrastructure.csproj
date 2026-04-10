@@ -8,13 +8,11 @@
   <ItemGroup>
     <PackageReference Include="MongoDB.Driver" />
     <PackageReference Include="Microsoft.Extensions.Http" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Intentify.Modules.Visitors.Domain\Intentify.Modules.Visitors.Domain.csproj" />
-    <ProjectReference Include="..\Intentify.Modules.Visitors.Application\Intentify.Modules.Visitors.Application.csproj" />
-    <ProjectReference Include="..\..\..\Intentify.Modules.Collector\src\Intentify.Modules.Collector.Domain\Intentify.Modules.Collector.Domain.csproj" />
+    <ProjectReference Include="..\Intentify.Modules.Integrations.Domain\Intentify.Modules.Integrations.Domain.csproj" />
+    <ProjectReference Include="..\Intentify.Modules.Integrations.Application\Intentify.Modules.Integrations.Application.csproj" />
     <ProjectReference Include="..\..\..\..\shared\Intentify.Shared.Data.Mongo\src\Intentify.Shared.Data.Mongo\Intentify.Shared.Data.Mongo.csproj" />
   </ItemGroup>
 </Project>

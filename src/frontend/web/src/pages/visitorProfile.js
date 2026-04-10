@@ -288,6 +288,39 @@ export const renderVisitorProfileView = async (container, { apiClient, toast, vi
 
   heroBody.appendChild(heroStats);
 
+  // ── Company card (firmographic enrichment) ────────────────────────────────
+  if (visitor.companyName) {
+    const companyWrap = el('div', {
+      style: 'margin-top:12px;padding:10px 14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;display:flex;align-items:flex-start;gap:10px'
+    });
+    const companyIcon = el('div', { style: 'font-size:18px;flex-shrink:0;margin-top:1px' }, '🏢');
+    const companyInfo = el('div', { style: 'flex:1;min-width:0' });
+
+    const nameEl = visitor.companyDomain
+      ? el('a', {
+          href: `https://${visitor.companyDomain}`, target: '_blank', rel: 'noopener noreferrer',
+          style: 'font-size:14px;font-weight:600;color:#0f172a;text-decoration:none;border-bottom:1px dashed #94a3b8'
+        }, visitor.companyName)
+      : el('span', { style: 'font-size:14px;font-weight:600;color:#0f172a' }, visitor.companyName);
+    companyInfo.appendChild(nameEl);
+
+    const pills = el('div', { style: 'display:flex;flex-wrap:wrap;gap:4px;margin-top:4px' });
+    if (visitor.companyIndustry) {
+      pills.appendChild(el('span', {
+        style: 'font-size:10px;font-weight:600;background:#e0e7ff;color:#4f46e5;padding:2px 7px;border-radius:10px'
+      }, visitor.companyIndustry));
+    }
+    if (visitor.companySize) {
+      pills.appendChild(el('span', {
+        style: 'font-size:10px;font-weight:600;background:#f1f5f9;color:#475569;padding:2px 7px;border-radius:10px'
+      }, visitor.companySize + ' employees'));
+    }
+    if (pills.children.length) companyInfo.appendChild(pills);
+
+    companyWrap.append(companyIcon, companyInfo);
+    heroBody.appendChild(companyWrap);
+  }
+
   heroTop.appendChild(heroBody);
   hero.appendChild(heroTop);
   root.appendChild(hero);

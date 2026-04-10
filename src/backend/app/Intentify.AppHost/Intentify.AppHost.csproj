@@ -38,6 +38,7 @@
     <ProjectReference Include="../../modules/Intentify.Modules.Visitors/src/Intentify.Modules.Visitors.Api/Intentify.Modules.Visitors.Api.csproj" />
     <ProjectReference Include="../../modules/Intentify.Modules.Tickets/src/Intentify.Modules.Tickets.Api/Intentify.Modules.Tickets.Api.csproj" />
     <ProjectReference Include="../../modules/Intentify.Modules.PlatformAdmin/src/Intentify.Modules.PlatformAdmin.Api/Intentify.Modules.PlatformAdmin.Api.csproj" />
+    <ProjectReference Include="../../modules/Intentify.Modules.Integrations/src/Intentify.Modules.Integrations.Api/Intentify.Modules.Integrations.Api.csproj" />
     <ProjectReference Include="../../shared/Intentify.Shared.Web/src/Intentify.Shared.Web/Intentify.Shared.Web.csproj" />
   </ItemGroup>
 

@@ -15,6 +15,7 @@ import { renderIntelligenceView } from '../pages/intelligence.js';
 import { renderAdsView } from '../pages/ads.js';
 import { renderTeamView } from '../pages/team.js';
 import { renderDashboardView } from '../pages/dashboard.js';
+import { renderIntegrationsView } from '../pages/integrations.js';
 import { renderPlatformAdminTenantDetailView, renderPlatformAdminView } from '../pages/platformAdmin.js';
 import { renderMultiSiteAnalyticsView } from '../pages/multiSiteAnalytics.js';
 import { renderLinkTreeView } from '../pages/linktree.js';
@@ -450,11 +451,12 @@ const createAuthenticatedShell = ({ route, canAccessPlatformAdmin, canAccessTeam
   ]);
 
   addNavSection('ENGAGE', [
-    { label: 'Knowledge', href: '#/knowledge' },
-    { label: 'Flows',     href: '#/flows' },
-    { label: 'Engage',    href: '#/engage' },
-    { label: 'Leads',     href: '#/leads' },
-    { label: 'Tickets',   href: '#/tickets' },
+    { label: 'Knowledge',       href: '#/knowledge'     },
+    { label: 'Flows',           href: '#/flows'         },
+    { label: 'Engage',          href: '#/engage'        },
+    { label: 'Leads',           href: '#/leads'         },
+    { label: 'Tickets',         href: '#/tickets'       },
+    { label: '🔗 Integrations', href: '#/integrations'  },
   ]);
 
   addNavSection('MARKETING', [
@@ -1115,6 +1117,7 @@ const routes = {
   '/analytics':                           renderMultiSiteAnalyticsView,
   '/linktree':                            renderLinkTreeView,
   '/microsite':                           renderMicroSiteView,
+  '/integrations':                        renderIntegrationsView,
   '/feedback':                            renderFeedbackView,
   '/platform-admin':                      renderPlatformAdminView,
   '/platform-admin/tenant/:tenantId':     renderPlatformAdminTenantDetailView,

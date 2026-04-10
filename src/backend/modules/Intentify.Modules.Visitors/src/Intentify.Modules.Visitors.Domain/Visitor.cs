@@ -45,6 +45,14 @@ public sealed class Visitor
     public string? LastProductPrice { get; set; }
     public List<string> RecentProductViews { get; set; } = [];
 
+    // ── Firmographic enrichment (from IP lookup) ──────────────────────────
+    public string? CompanyName { get; set; }
+    public string? CompanyDomain { get; set; }
+    public string? CompanyIndustry { get; set; }
+    public string? CompanySize { get; set; }    // e.g. "11-50", "51-200"
+    public string? CompanyLinkedIn { get; set; }
+    public DateTime? FirmographicEnrichedAtUtc { get; set; }
+
     // ── GDPR Consent (Phase 6) ─────────────────────────────────────────────
     public List<VisitorConsentDecision> ConsentDecisions { get; set; } = [];
     public bool? LatestConsentGiven { get; set; }

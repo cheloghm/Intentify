@@ -25,6 +25,8 @@ public sealed class VisitorsModule : IAppModule
             RetentionDays = configuration.GetValue<int?>("Intentify:Visitors:RetentionDays")
         });
 
+        services.AddHttpClient();
+        services.AddSingleton<IFirmographicEnrichmentService, FirmographicEnrichmentService>();
         services.AddSingleton<IVisitorRepository, VisitorRepository>();
         services.AddSingleton<IVisitorTimelineReader, VisitorTimelineReader>();
         services.AddSingleton<IVisitorAnalyticsReader, VisitorAnalyticsReader>();

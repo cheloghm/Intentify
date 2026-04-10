@@ -157,7 +157,8 @@ public sealed class IngestCollectorEventHandler
             collectorEvent.ProductPrice,
             collectorEvent.ProductBrand,
             collectorEvent.ScrollDepthPct,
-            collectorEvent.TimeOnPageSeconds);
+            collectorEvent.TimeOnPageSeconds,
+            IpAddress: command.IpAddress);
 
         foreach (var observer in _observers)
         {
@@ -331,6 +332,8 @@ public sealed class IngestCollectorEventHandler
         catch { return null; }
     }
 
+    // IPInfo token: set Intentify__Enrichment__IPInfoToken in Railway environment variables
+    // Free tier: 50,000 lookups/month — https://ipinfo.io/signup
     private async Task<(string? Country, string? City, string? Region)> TryResolveGeoAsync(string? ip)
     {
         if (string.IsNullOrWhiteSpace(ip))
