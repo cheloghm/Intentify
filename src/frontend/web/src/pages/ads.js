@@ -296,7 +296,12 @@ export const renderAdsView = (container, { apiClient, toast } = {}) => {
 
   const renderCampaignList = () => {
     campaignList.replaceChildren();
-    if (!state.campaigns.length) { campaignList.appendChild(el('div',{class:'ad-empty'},'No campaigns yet.')); return; }
+    if (!state.campaigns.length) {
+      const empty = el('div',{class:'ad-empty'});
+      empty.innerHTML = '<div style="font-size:28px;margin-bottom:8px">📢</div><div style="font-weight:600;color:#475569;margin-bottom:4px">No campaigns yet</div><div>Create your first ad campaign to start driving targeted traffic.</div>';
+      campaignList.appendChild(empty);
+      return;
+    }
     state.campaigns.forEach(c=>{
       const cid=getCampaignId(c);
       const card=el('div',{class:`ad-campaign-card${state.selectedId===cid?' active':''}`});

@@ -611,6 +611,12 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
     request(`/platform-admin/tenants/${encodeURIComponent(tenantId)}`);
 
   const getPlatformOperationalSummary = async () => request('/platform-admin/operations/summary');
+  const getPlatformDashboard = async () => request('/platform-admin/dashboard');
+  const promoteSelf = async (token) => request('/auth/admin/promote-self', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: '{}',
+  });
 
   const transitionTicketStatus = async (ticketId, status) =>
     request(`/tickets/${encodeURIComponent(ticketId)}/status`, {
@@ -738,6 +744,13 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
       listTenants: listPlatformTenants,
       getTenantDetail: getPlatformTenantDetail,
       getOperationalSummary: getPlatformOperationalSummary,
+      getDashboard: getPlatformDashboard,
+      promoteSelf,
+    },
+    feedback: {
+      submit: (payload) => request('/feedback', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }),
+      listAdmin: () => request('/platform-admin/feedback'),
+      updateStatus: (id, status) => request(`/platform-admin/feedback/${encodeURIComponent(id)}/status`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) }),
     },
   };
 };

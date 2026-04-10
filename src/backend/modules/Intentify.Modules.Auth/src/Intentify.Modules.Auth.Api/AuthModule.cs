@@ -81,5 +81,7 @@ public sealed class AuthModule : IAppModule
             .AddEndpointFilter<RequireAuthFilter>();
         group.MapDelete("/invites/{inviteId}", AuthEndpoints.RevokeTenantInviteAsync)
             .AddEndpointFilter<RequireAuthFilter>();
+        group.MapPost("/admin/promote-self", AuthEndpoints.PromoteSelfAsync)
+            .AddEndpointFilter<RequireAuthFilter>();
     }
 }

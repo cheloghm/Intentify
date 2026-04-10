@@ -124,6 +124,58 @@ internal static class PlatformAdminEndpoints
                 item.UpdatedAtUtc,
                 item.FirstEventReceivedAtUtc)).ToArray());
 
+    public static async Task<IResult> GetDashboardAsync(GetPlatformDashboardHandler handler, HttpContext context)
+    {
+        var result = await handler.HandleAsync(context.RequestAborted);
+        return Results.Ok(new PlatformDashboardResponse(
+            result.TotalTenants,
+            result.TenantsThisWeek,
+            result.TenantsThisMonth,
+            result.TotalSites,
+            result.ActiveSitesThisWeek,
+            result.HealthySites,
+            result.TotalVisitors,
+            result.TotalLeads,
+            result.TotalConversations,
+            new PlanBreakdownResponse(result.PlanBreakdown.Starter, result.PlanBreakdown.Growth, result.PlanBreakdown.Agency, result.PlanBreakdown.Other),
+            result.RecentSignups.Select(s => new RecentSignupResponse(s.TenantId, s.Name, s.Email, s.Plan, s.CreatedAt)).ToArray()));
+    }
+
+    // ── Feedback endpoints ───────────────────────────────────────────────────────
+
+    public static IResult SubmitFeedbackAsync(SubmitFeedbackRequest request, FeedbackStore store, HttpContext context)
+    {
+        if (string.IsNullOrWhiteSpace(request.Title))
+        {
+            return Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(
+                new Dictionary<string, string[]> { ["title"] = ["Title is required."] }));
+        }
+
+        var userId = context.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+            ?? context.User.FindFirst("sub")?.Value;
+
+        var item = store.Add(new FeedbackSubmission(
+            Id: Guid.NewGuid().ToString(),
+            Type: request.Type ?? "general",
+            Title: request.Title.Trim(),
+            Description: request.Description?.Trim(),
+            Priority: request.Priority,
+            SubmittedAt: DateTime.UtcNow.ToString("o"),
+            Status: "pending",
+            SubmittedByUserId: userId));
+
+        return Results.Ok(item);
+    }
+
+    public static IResult ListFeedbackAsync(FeedbackStore store)
+        => Results.Ok(store.GetAll());
+
+    public static IResult UpdateFeedbackStatusAsync(string id, UpdateFeedbackStatusRequest request, FeedbackStore store)
+    {
+        var updated = store.UpdateStatus(id, request.Status ?? "pending");
+        return updated is null ? Results.NotFound() : Results.Ok(updated);
+    }
+
     private static PlatformTenantUsageResponse ToUsageResponse(PlatformTenantUsageResult usage)
         => new(
             usage.SiteCount,

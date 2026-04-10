@@ -92,10 +92,28 @@ public sealed record PlatformOperationalSummaryResult(
 
 public sealed record ListPlatformTenantsQuery(int Page, int PageSize, string? Search);
 
+public sealed record PlanBreakdownResult(int Starter, int Growth, int Agency, int Other);
+
+public sealed record RecentSignupResult(string TenantId, string Name, string Email, string Plan, DateTime CreatedAt);
+
+public sealed record PlatformDashboardResult(
+    int TotalTenants,
+    int TenantsThisWeek,
+    int TenantsThisMonth,
+    int TotalSites,
+    int ActiveSitesThisWeek,
+    int HealthySites,
+    int TotalVisitors,
+    int TotalLeads,
+    int TotalConversations,
+    PlanBreakdownResult PlanBreakdown,
+    IReadOnlyCollection<RecentSignupResult> RecentSignups);
+
 public interface IPlatformAdminReadRepository
 {
     Task<PlatformSummaryResult> GetPlatformSummaryAsync(CancellationToken cancellationToken = default);
     Task<PlatformTenantListResult> ListTenantsAsync(ListPlatformTenantsQuery query, CancellationToken cancellationToken = default);
     Task<PlatformTenantDetailResult?> GetTenantDetailAsync(Guid tenantId, CancellationToken cancellationToken = default);
     Task<PlatformOperationalSummaryResult> GetOperationalSummaryAsync(CancellationToken cancellationToken = default);
+    Task<PlatformDashboardResult> GetPlatformDashboardAsync(CancellationToken cancellationToken = default);
 }

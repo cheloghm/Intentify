@@ -88,5 +88,6 @@ public sealed class UpdateSiteProfileHandlerTests
         public Task<bool> DeleteAsync(Guid tenantId, Guid siteId, CancellationToken cancellationToken = default) => Task.FromResult(false);
         public Task AddApiKeyAsync(Guid tenantId, Guid siteId, SiteApiKey apiKey, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task RevokeApiKeyAsync(Guid tenantId, Guid siteId, string keyId, DateTime revokedAtUtc, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task<int> CountByTenantAsync(Guid tenantId, CancellationToken cancellationToken = default) => Task.FromResult(1);
     }
 }

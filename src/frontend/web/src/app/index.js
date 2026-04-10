@@ -19,6 +19,7 @@ import { renderPlatformAdminTenantDetailView, renderPlatformAdminView } from '..
 import { renderMultiSiteAnalyticsView } from '../pages/multiSiteAnalytics.js';
 import { renderLinkTreeView } from '../pages/linktree.js';
 import { renderMicroSiteView } from '../pages/microsite.js';
+import { renderFeedbackView } from '../pages/feedback.js';
 import { showBotWizard } from '../pages/botWizard.js';
 
 const app = document.getElementById('app');
@@ -117,7 +118,7 @@ const createNavbar = ({ isAuthenticated, canAccessPlatformAdmin, canAccessTeam }
     logoutButton.type = 'button';
     logoutButton.textContent = 'Logout';
     logoutButton.style.cssText = 'padding:6px 10px;border-radius:6px;border:1px solid #e2e8f0;background:#fff;cursor:pointer';
-    logoutButton.addEventListener('click', () => { clearToken(); window.location.hash = '#/login'; });
+    logoutButton.addEventListener('click', () => { clearToken(); window.location.replace('/public/login.html'); });
     links.appendChild(logoutButton);
   }
 
@@ -383,6 +384,8 @@ const getTheme = () => localStorage.getItem('hven_theme') || 'light';
 const applyTheme = (theme) => {
   document.documentElement.setAttribute('data-theme', theme);
   localStorage.setItem('hven_theme', theme);
+  document.body.style.background = theme === 'dark' ? '#0f172a' : '';
+  document.body.style.color = theme === 'dark' ? '#f1f5f9' : '';
 };
 
 // ── Authenticated shell (sidebar + topbar) ─────────────────────────────────────
@@ -459,6 +462,10 @@ const createAuthenticatedShell = ({ route, canAccessPlatformAdmin, canAccessTeam
     { label: 'Promos',     href: '#/promos' },
     { label: '🔗 Link Tree',  href: '#/linktree' },
     { label: '🌐 Micro-Site', href: '#/microsite' },
+  ]);
+
+  addNavSection('HELP', [
+    { label: '💡 Feedback', href: '#/feedback' },
   ]);
 
   if (canAccessTeam || canAccessPlatformAdmin) {
@@ -1027,123 +1034,9 @@ const renderHomeView = (container) => {
   requestAnimationFrame(() => runProgressCheck(false));
 };
 
-const renderLoginView = (container) => {
-  const emailField    = createField({ label: 'Email',    type: 'email',    placeholder: 'you@example.com' });
-  const passwordField = createField({ label: 'Password', type: 'password', placeholder: 'At least 10 characters' });
+const renderLoginView = () => { window.location.replace('/public/login.html'); };
 
-  const submitButton = document.createElement('button');
-  submitButton.type = 'submit';
-  submitButton.textContent = 'Login';
-  submitButton.style.cssText = 'margin-top:12px;padding:10px 14px;border-radius:6px;border:none;background:#2563eb;color:#fff;cursor:pointer';
-
-  const switchLink = document.createElement('a');
-  switchLink.href = '#/register';
-  switchLink.textContent = 'Need an account? Register';
-  switchLink.style.cssText = 'display:inline-block;margin-top:12px;color:#2563eb';
-
-  const form = document.createElement('form');
-  form.style.cssText = 'display:flex;flex-direction:column;gap:12px';
-  form.append(emailField.wrapper, passwordField.wrapper, submitButton, switchLink);
-
-  form.addEventListener('submit', async (event) => {
-    event.preventDefault();
-    emailField.error.textContent = '';
-    passwordField.error.textContent = '';
-    const email    = emailField.input.value.trim();
-    const password = passwordField.input.value;
-    const emailError    = validateEmail(email);
-    const passwordError = validatePassword(password);
-    if (emailError)    emailField.error.textContent    = emailError;
-    if (passwordError) passwordField.error.textContent = passwordError;
-    if (emailError || passwordError) { toast.show({ message: 'Please fix the highlighted fields.', variant: 'warning' }); return; }
-
-    submitButton.disabled = true; submitButton.textContent = 'Signing in...';
-    try {
-      const response = await apiClient.request('/auth/login', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
-      setToken(response.accessToken);
-      window.location.hash = '#/dashboard';
-    } catch (error) {
-      const uiError = mapApiError(error);
-      const applied = applyFieldErrors(uiError.details?.errors, { email: emailField, password: passwordField });
-      toast.show({ message: applied ? 'Please review the highlighted errors.' : uiError.message, variant: 'danger' });
-    } finally {
-      submitButton.disabled = false; submitButton.textContent = 'Login';
-    }
-  });
-
-  const card = createCard({ title: 'Login', body: form });
-  card.style.cssText = 'width:100%;max-width:420px';
-  container.appendChild(card);
-};
-
-const renderRegisterView = (container) => {
-  const displayNameField      = createField({ label: 'Display name',      type: 'text',     placeholder: 'Jane Doe' });
-  const organizationNameField = createField({ label: 'Organization name', type: 'text',     placeholder: 'Acme Inc' });
-  const emailField            = createField({ label: 'Email',             type: 'email',    placeholder: 'you@example.com' });
-  const passwordField         = createField({ label: 'Password',          type: 'password', placeholder: 'At least 10 characters' });
-
-  const submitButton = document.createElement('button');
-  submitButton.type = 'submit';
-  submitButton.textContent = 'Create account';
-  submitButton.style.cssText = 'margin-top:12px;padding:10px 14px;border-radius:6px;border:none;background:#2563eb;color:#fff;cursor:pointer';
-
-  const switchLink = document.createElement('a');
-  switchLink.href = '#/login';
-  switchLink.textContent = 'Already have an account? Login';
-  switchLink.style.cssText = 'display:inline-block;margin-top:12px;color:#2563eb';
-
-  const form = document.createElement('form');
-  form.style.cssText = 'display:flex;flex-direction:column;gap:12px';
-  form.append(displayNameField.wrapper, organizationNameField.wrapper, emailField.wrapper, passwordField.wrapper, submitButton, switchLink);
-
-  form.addEventListener('submit', async (event) => {
-    event.preventDefault();
-    displayNameField.error.textContent = '';
-    organizationNameField.error.textContent = '';
-    emailField.error.textContent = '';
-    passwordField.error.textContent = '';
-
-    const displayName    = displayNameField.input.value.trim();
-    const organizationName = organizationNameField.input.value.trim();
-    const email          = emailField.input.value.trim();
-    const password       = passwordField.input.value;
-
-    let hasError = false;
-    if (!displayName)      { displayNameField.error.textContent = 'Display name is required.';      hasError = true; }
-    if (!organizationName) { organizationNameField.error.textContent = 'Organization name is required.'; hasError = true; }
-    const emailError = validateEmail(email);
-    if (emailError)        { emailField.error.textContent = emailError;                              hasError = true; }
-    const passwordError = validatePassword(password);
-    if (passwordError)     { passwordField.error.textContent = passwordError;                        hasError = true; }
-    if (hasError)          { toast.show({ message: 'Please fix the highlighted fields.', variant: 'warning' }); return; }
-
-    submitButton.disabled = true; submitButton.textContent = 'Creating account...';
-    try {
-      const response = await apiClient.request('/auth/register', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ displayName, organizationName, email, password }),
-      });
-      setToken(response.accessToken);
-      window.location.hash = '#/dashboard';
-    } catch (error) {
-      const uiError = mapApiError(error);
-      const applied = applyFieldErrors(uiError.details?.errors, {
-        displayName: displayNameField, organizationName: organizationNameField,
-        email: emailField, password: passwordField,
-      });
-      toast.show({ message: applied ? 'Please review the highlighted errors.' : uiError.message, variant: 'danger' });
-    } finally {
-      submitButton.disabled = false; submitButton.textContent = 'Create account';
-    }
-  });
-
-  const card = createCard({ title: 'Register', body: form });
-  card.style.cssText = 'width:100%;max-width:460px';
-  container.appendChild(card);
-};
+const renderRegisterView = () => { window.location.replace('/public/register.html'); };
 
 const renderAcceptInviteView = (container, { query } = {}) => {
   const tokenField       = createField({ label: 'Invitation token', type: 'text',     placeholder: 'Paste invitation token' });
@@ -1222,6 +1115,7 @@ const routes = {
   '/analytics':                           renderMultiSiteAnalyticsView,
   '/linktree':                            renderLinkTreeView,
   '/microsite':                           renderMicroSiteView,
+  '/feedback':                            renderFeedbackView,
   '/platform-admin':                      renderPlatformAdminView,
   '/platform-admin/tenant/:tenantId':     renderPlatformAdminTenantDetailView,
 };
@@ -1318,7 +1212,7 @@ const renderApp = () => {
   ];
 
   if (protectedRoutes.includes(route) && !isAuthenticated) {
-    window.location.hash = '#/login';
+    window.location.replace('/public/login.html');
     return;
   }
 
@@ -1344,7 +1238,7 @@ const renderApp = () => {
       firstName: getFirstName(authState.profile?.displayName),
       plan: authState.profile?.isAdmin ? 'admin' : authState.profile?.plan,
       onOpenProfile: () => { authState.profileModalOpen = true; renderApp(); },
-      onLogout: () => { clearToken(); window.location.hash = '#/login'; },
+      onLogout: () => { clearToken(); window.location.replace('/public/login.html'); },
     });
     const loading = document.createElement('div');
     loading.style.color = '#475569';
@@ -1385,7 +1279,7 @@ const renderApp = () => {
       firstName: getFirstName(authState.profile?.displayName),
       plan: authState.profile?.isAdmin ? 'admin' : authState.profile?.plan,
       onOpenProfile: () => { authState.profileModalOpen = true; renderApp(); },
-      onLogout: () => { clearToken(); window.location.hash = '#/login'; },
+      onLogout: () => { clearToken(); window.location.replace('/public/login.html'); },
     });
     main = shellMain;
     app.append(shell, overlay);

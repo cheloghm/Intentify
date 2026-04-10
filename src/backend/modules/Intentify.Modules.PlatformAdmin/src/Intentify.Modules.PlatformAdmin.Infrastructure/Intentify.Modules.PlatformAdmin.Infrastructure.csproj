@@ -22,5 +22,6 @@
     <ProjectReference Include="..\..\..\Intentify.Modules.Ads\src\Intentify.Modules.Ads.Domain\Intentify.Modules.Ads.Domain.csproj" />
     <ProjectReference Include="..\..\..\Intentify.Modules.Knowledge\src\Intentify.Modules.Knowledge.Domain\Intentify.Modules.Knowledge.Domain.csproj" />
     <ProjectReference Include="..\..\..\Intentify.Modules.Knowledge\src\Intentify.Modules.Knowledge.Infrastructure\Intentify.Modules.Knowledge.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\..\Intentify.Modules.Leads\src\Intentify.Modules.Leads.Domain\Intentify.Modules.Leads.Domain.csproj" />
   </ItemGroup>
 </Project>

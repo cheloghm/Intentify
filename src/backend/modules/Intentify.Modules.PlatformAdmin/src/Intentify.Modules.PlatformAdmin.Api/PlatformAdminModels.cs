@@ -89,3 +89,21 @@ public sealed record PlatformOperationalSummaryResponse(
     bool OpenSearchEnabled,
     bool OpenSearchConfigured,
     DateTime GeneratedAtUtc);
+
+public sealed record SubmitFeedbackRequest(string? Type, string Title, string? Description, string? Priority);
+public sealed record UpdateFeedbackStatusRequest(string? Status);
+
+public sealed record PlanBreakdownResponse(int Starter, int Growth, int Agency, int Other);
+public sealed record RecentSignupResponse(string TenantId, string Name, string Email, string Plan, DateTime CreatedAt);
+public sealed record PlatformDashboardResponse(
+    int TotalTenants,
+    int TenantsThisWeek,
+    int TenantsThisMonth,
+    int TotalSites,
+    int ActiveSitesThisWeek,
+    int HealthySites,
+    int TotalVisitors,
+    int TotalLeads,
+    int TotalConversations,
+    PlanBreakdownResponse PlanBreakdown,
+    IReadOnlyCollection<RecentSignupResponse> RecentSignups);

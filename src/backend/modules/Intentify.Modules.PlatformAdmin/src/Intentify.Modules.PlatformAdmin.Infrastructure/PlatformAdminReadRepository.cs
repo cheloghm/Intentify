@@ -4,6 +4,7 @@ using Intentify.Modules.Engage.Domain;
 using Intentify.Modules.Intelligence.Domain;
 using Intentify.Modules.Knowledge.Domain;
 using Intentify.Modules.Knowledge.Infrastructure;
+using Intentify.Modules.Leads.Domain;
 using Intentify.Modules.PlatformAdmin.Application;
 using Intentify.Modules.Promos.Domain;
 using Intentify.Modules.Sites.Domain;
@@ -27,6 +28,8 @@ public sealed class PlatformAdminReadRepository : IPlatformAdminReadRepository
     private readonly IMongoCollection<IntelligenceTrendRecord> _intelligenceRecords;
     private readonly IMongoCollection<AdCampaign> _adsCampaigns;
     private readonly IMongoCollection<KnowledgeSource> _knowledgeSources;
+    private readonly IMongoCollection<Lead> _leads;
+    private readonly IMongoCollection<User> _users;
     private readonly OpenSearchOptions _openSearchOptions;
 
     public PlatformAdminReadRepository(IMongoDatabase database, OpenSearchOptions openSearchOptions)
@@ -42,6 +45,8 @@ public sealed class PlatformAdminReadRepository : IPlatformAdminReadRepository
         _intelligenceRecords = database.GetCollection<IntelligenceTrendRecord>(IntelligenceMongoCollections.Trends);
         _adsCampaigns = database.GetCollection<AdCampaign>(AdsMongoCollections.Campaigns);
         _knowledgeSources = database.GetCollection<KnowledgeSource>(KnowledgeMongoCollections.Sources);
+        _leads = database.GetCollection<Lead>(LeadsMongoCollections.Leads);
+        _users = database.GetCollection<User>(AuthMongoCollections.Users);
         _openSearchOptions = openSearchOptions;
     }
 
@@ -183,6 +188,76 @@ public sealed class PlatformAdminReadRepository : IPlatformAdminReadRepository
             _openSearchOptions.Enabled,
             openSearchConfigured,
             DateTime.UtcNow);
+    }
+
+    public async Task<PlatformDashboardResult> GetPlatformDashboardAsync(CancellationToken cancellationToken = default)
+    {
+        var now = DateTime.UtcNow;
+        var weekAgo = now.AddDays(-7);
+        var monthAgo = now.AddDays(-30);
+
+        var totalTenants = (int)await _tenants.CountDocumentsAsync(FilterDefinition<Tenant>.Empty, cancellationToken: cancellationToken);
+        var tenantsThisWeek = (int)await _tenants.CountDocumentsAsync(t => t.CreatedAt >= weekAgo, cancellationToken: cancellationToken);
+        var tenantsThisMonth = (int)await _tenants.CountDocumentsAsync(t => t.CreatedAt >= monthAgo, cancellationToken: cancellationToken);
+
+        var totalSites = (int)await _sites.CountDocumentsAsync(FilterDefinition<Site>.Empty, cancellationToken: cancellationToken);
+        var activeSitesThisWeek = (int)await _sites.CountDocumentsAsync(s => s.UpdatedAtUtc >= weekAgo, cancellationToken: cancellationToken);
+        var healthySites = (int)await _sites.CountDocumentsAsync(
+            Builders<Site>.Filter.Ne(s => s.FirstEventReceivedAtUtc, null),
+            cancellationToken: cancellationToken);
+
+        var totalVisitors = (int)await _visitors.CountDocumentsAsync(FilterDefinition<Visitor>.Empty, cancellationToken: cancellationToken);
+        var totalLeads = (int)await _leads.CountDocumentsAsync(FilterDefinition<Lead>.Empty, cancellationToken: cancellationToken);
+        var totalConversations = (int)await _engageSessions.CountDocumentsAsync(FilterDefinition<EngageChatSession>.Empty, cancellationToken: cancellationToken);
+
+        // Plan breakdown
+        var allTenants = await _tenants.Find(FilterDefinition<Tenant>.Empty)
+            .Project(t => t.Plan)
+            .ToListAsync(cancellationToken);
+
+        var planBreakdown = new PlanBreakdownResult(
+            Starter: allTenants.Count(p => string.IsNullOrEmpty(p) || p.Equals("starter", StringComparison.OrdinalIgnoreCase)),
+            Growth: allTenants.Count(p => p.Equals("growth", StringComparison.OrdinalIgnoreCase)),
+            Agency: allTenants.Count(p => p.Equals("agency", StringComparison.OrdinalIgnoreCase)),
+            Other: allTenants.Count(p => !string.IsNullOrEmpty(p)
+                && !p.Equals("starter", StringComparison.OrdinalIgnoreCase)
+                && !p.Equals("growth", StringComparison.OrdinalIgnoreCase)
+                && !p.Equals("agency", StringComparison.OrdinalIgnoreCase)));
+
+        // Recent signups (last 10 tenants)
+        var recentTenants = await _tenants.Find(FilterDefinition<Tenant>.Empty)
+            .SortByDescending(t => t.CreatedAt)
+            .Limit(10)
+            .ToListAsync(cancellationToken);
+
+        var recentTenantIds = recentTenants.Select(t => t.Id).ToList();
+        var firstUsers = await _users.Find(Builders<User>.Filter.In(u => u.TenantId, recentTenantIds))
+            .SortBy(u => u.CreatedAt)
+            .ToListAsync(cancellationToken);
+
+        var emailByTenant = firstUsers
+            .GroupBy(u => u.TenantId)
+            .ToDictionary(g => g.Key, g => g.First().Email);
+
+        var recentSignups = recentTenants.Select(t => new RecentSignupResult(
+            TenantId: t.Id.ToString("N"),
+            Name: t.Name,
+            Email: emailByTenant.TryGetValue(t.Id, out var email) ? email : "",
+            Plan: string.IsNullOrEmpty(t.Plan) ? "starter" : t.Plan,
+            CreatedAt: t.CreatedAt)).ToArray();
+
+        return new PlatformDashboardResult(
+            totalTenants,
+            tenantsThisWeek,
+            tenantsThisMonth,
+            totalSites,
+            activeSitesThisWeek,
+            healthySites,
+            totalVisitors,
+            totalLeads,
+            totalConversations,
+            planBreakdown,
+            recentSignups);
     }
 
     private async Task<Dictionary<Guid, PlatformTenantUsageResult>> BuildUsageByTenantAsync(IReadOnlyCollection<Guid> tenantIds, CancellationToken cancellationToken)

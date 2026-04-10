@@ -167,5 +167,6 @@ public sealed class ApiKeyHandlerTests
         public Task<Site?> RotateKeysAsync(Guid tenantId, Guid siteId, string siteKey, string widgetKey, CancellationToken cancellationToken = default) => Task.FromResult<Site?>(null);
         public Task<Site?> UpdateFirstEventReceivedAsync(Guid siteId, DateTime timestampUtc, CancellationToken cancellationToken = default) => Task.FromResult<Site?>(null);
         public Task<bool> DeleteAsync(Guid tenantId, Guid siteId, CancellationToken cancellationToken = default) => Task.FromResult(false);
+        public Task<int> CountByTenantAsync(Guid tenantId, CancellationToken cancellationToken = default) => Task.FromResult(1);
     }
 }

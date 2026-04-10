@@ -70,7 +70,7 @@ public sealed class UserRepository : IUserRepository
 
         var filter = Builders<User>.Filter.Eq(user => user.Id, id);
         var update = Builders<User>.Update
-            .Set(user => user.Roles, roles)
+            .AddToSetEach(user => user.Roles, roles)
             .Set(user => user.UpdatedAt, updatedAt);
 
         await _users.UpdateOneAsync(filter, update, cancellationToken: cancellationToken);

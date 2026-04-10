@@ -24,6 +24,8 @@ public sealed class PlatformAdminModule : IAppModule
         services.AddSingleton<ListPlatformTenantsHandler>();
         services.AddSingleton<GetPlatformTenantDetailHandler>();
         services.AddSingleton<GetPlatformOperationalSummaryHandler>();
+        services.AddSingleton<GetPlatformDashboardHandler>();
+        services.AddSingleton<FeedbackStore>();
     }
 
     public void MapEndpoints(IEndpointRouteBuilder endpoints)
@@ -37,5 +39,12 @@ public sealed class PlatformAdminModule : IAppModule
         group.MapGet("/tenants", PlatformAdminEndpoints.ListTenantsAsync);
         group.MapGet("/tenants/{tenantId}", PlatformAdminEndpoints.GetTenantDetailAsync);
         group.MapGet("/operations/summary", PlatformAdminEndpoints.GetOperationalSummaryAsync);
+        group.MapGet("/dashboard", PlatformAdminEndpoints.GetDashboardAsync);
+        group.MapGet("/feedback", PlatformAdminEndpoints.ListFeedbackAsync);
+        group.MapPatch("/feedback/{id}/status", PlatformAdminEndpoints.UpdateFeedbackStatusAsync);
+
+        var feedbackGroup = endpoints.MapGroup("/feedback")
+            .RequireAuthorization();
+        feedbackGroup.MapPost("", PlatformAdminEndpoints.SubmitFeedbackAsync);
     }
 }

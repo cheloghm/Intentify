@@ -61,8 +61,24 @@
 
 [data-theme="dark"] .si-card,
 [data-theme="dark"] .kb-panel,
-[data-theme="dark"] .e-panel {
+[data-theme="dark"] .e-panel,
+[data-theme="dark"] .l-panel,
+[data-theme="dark"] .i-panel,
+[data-theme="dark"] .msa-card,
+[data-theme="dark"] .msa-agg-card {
   background: var(--color-surface);
+  border-color: var(--color-border);
+  color: var(--color-text-primary);
+}
+
+[data-theme="dark"] .v-table,
+[data-theme="dark"] .vp-section {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+}
+
+[data-theme="dark"] .vp-hero {
+  background: var(--color-bg-secondary);
   border-color: var(--color-border);
 }
 

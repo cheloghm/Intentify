@@ -536,7 +536,7 @@ export const renderEngageView = async (container, { apiClient, toast } = {}) => 
     ['Real Estate','Real Estate'],['Education','Education'],['Consulting','Consulting'],['Other','Other'],
   ]);
   const { wrap: bSvcWrap,  input: bSvcInput  } = mkBotField('Services', 'Core services offered');
-  const { wrap: bGeoWrap,  input: bGeoInput  } = mkBotField('Geographic Focus', 'e.g. Belfast, Ireland');
+  const { wrap: bGeoWrap,  input: bGeoInput  } = mkBotField('Target Region', 'e.g. United Kingdom — where most of your customers are');
   const { wrap: bPersWrap, input: bPersInput } = mkSelect('Personality', [
     ['','— Select personality —'],['Friendly','Friendly'],['Premium','Premium'],
     ['Professional','Professional'],['Authoritative','Authoritative'],['Approachable','Approachable'],

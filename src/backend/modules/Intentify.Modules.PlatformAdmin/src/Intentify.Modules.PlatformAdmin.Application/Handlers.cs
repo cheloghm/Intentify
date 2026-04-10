@@ -23,3 +23,9 @@ public sealed class GetPlatformOperationalSummaryHandler(IPlatformAdminReadRepos
     public Task<PlatformOperationalSummaryResult> HandleAsync(CancellationToken cancellationToken = default)
         => repository.GetOperationalSummaryAsync(cancellationToken);
 }
+
+public sealed class GetPlatformDashboardHandler(IPlatformAdminReadRepository repository)
+{
+    public Task<PlatformDashboardResult> HandleAsync(CancellationToken cancellationToken = default)
+        => repository.GetPlatformDashboardAsync(cancellationToken);
+}

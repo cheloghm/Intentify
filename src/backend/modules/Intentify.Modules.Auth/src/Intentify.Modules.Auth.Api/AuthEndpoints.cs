@@ -8,6 +8,7 @@ using Intentify.Modules.Auth.Application;
 using Intentify.Modules.Auth.Domain;
 using Intentify.Shared.Security;
 using Intentify.Shared.Web;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Options;
 
@@ -480,6 +481,21 @@ internal static class AuthEndpoints
         {
             return Results.Redirect("/public/login.html?error=google_auth_failed");
         }
+    }
+
+    public static async Task<IResult> PromoteSelfAsync(
+        HttpContext context,
+        IUserRepository userRepository,
+        IWebHostEnvironment? env = null)
+    {
+        var isDev = env is null || env.EnvironmentName == "Development";
+        if (!isDev) return Results.Forbid();
+
+        var userId = TryGetUserId(context.User);
+        if (userId is null) return Results.Unauthorized();
+
+        await userRepository.UpdateRolesAsync(userId.Value, [AuthRoles.SuperAdmin], DateTime.UtcNow, context.RequestAborted);
+        return Results.Ok(new { promoted = true, role = AuthRoles.SuperAdmin });
     }
 
     private static Guid? TryGetUserId(ClaimsPrincipal user)

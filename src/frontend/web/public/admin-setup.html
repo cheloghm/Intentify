@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hven Platform Admin Setup</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0a0f1e;
+      color: #e2e8f0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    .card {
+      background: #111827;
+      border: 1px solid #1e293b;
+      border-radius: 12px;
+      padding: 40px;
+      width: 100%;
+      max-width: 420px;
+    }
+
+    .logo {
+      font-size: 22px;
+      font-weight: 700;
+      color: #6366f1;
+      letter-spacing: -0.5px;
+      margin-bottom: 4px;
+    }
+
+    .subtitle {
+      font-size: 13px;
+      color: #64748b;
+      margin-bottom: 28px;
+    }
+
+    .warning {
+      background: #1e1208;
+      border: 1px solid #78350f;
+      border-radius: 8px;
+      padding: 12px 14px;
+      font-size: 12px;
+      color: #fbbf24;
+      margin-bottom: 24px;
+      line-height: 1.5;
+    }
+
+    .warning strong { display: block; margin-bottom: 2px; }
+
+    label {
+      display: block;
+      font-size: 12px;
+      font-weight: 500;
+      color: #94a3b8;
+      margin-bottom: 6px;
+      margin-top: 16px;
+    }
+
+    input {
+      width: 100%;
+      background: #0f172a;
+      border: 1px solid #1e293b;
+      border-radius: 8px;
+      padding: 10px 12px;
+      color: #e2e8f0;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    input:focus { border-color: #6366f1; }
+    input::placeholder { color: #475569; }
+
+    button[type="submit"] {
+      width: 100%;
+      margin-top: 24px;
+      padding: 11px;
+      background: #6366f1;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s, opacity 0.15s;
+    }
+
+    button[type="submit"]:hover { background: #4f46e5; }
+    button[type="submit"]:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .status {
+      margin-top: 20px;
+      padding: 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      line-height: 1.5;
+      display: none;
+    }
+
+    .status.success {
+      background: #052e16;
+      border: 1px solid #166534;
+      color: #86efac;
+      display: block;
+    }
+
+    .status.error {
+      background: #1f0707;
+      border: 1px solid #7f1d1d;
+      color: #fca5a5;
+      display: block;
+    }
+
+    .status a {
+      color: #818cf8;
+      text-decoration: none;
+      font-weight: 600;
+    }
+
+    .status a:hover { text-decoration: underline; }
+
+    .spinner {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+      vertical-align: middle;
+      margin-right: 6px;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">Hven</div>
+    <div class="subtitle">Platform Admin Setup</div>
+
+    <div class="warning">
+      <strong>Development only</strong>
+      This page only works in development mode. It will be removed before production.
+    </div>
+
+    <form id="setupForm">
+      <label for="email">Email</label>
+      <input id="email" type="email" placeholder="your@email.com" required autocomplete="username" />
+
+      <label for="password">Password</label>
+      <input id="password" type="password" placeholder="••••••••" required autocomplete="current-password" />
+
+      <button type="submit" id="submitBtn">Promote to Platform Admin</button>
+    </form>
+
+    <div id="status" class="status"></div>
+  </div>
+
+  <script>
+    const API = '/api';
+
+    const form = document.getElementById('setupForm');
+    const submitBtn = document.getElementById('submitBtn');
+    const statusEl = document.getElementById('status');
+
+    function showStatus(type, html) {
+      statusEl.className = 'status ' + type;
+      statusEl.innerHTML = html;
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value;
+
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<span class="spinner"></span>Authenticating…';
+      statusEl.className = 'status';
+
+      try {
+        // Step 1: Login
+        const loginRes = await fetch(`${API}/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password }),
+        });
+
+        if (!loginRes.ok) {
+          const err = await loginRes.json().catch(() => ({}));
+          throw new Error(err?.title || err?.message || `Login failed (${loginRes.status})`);
+        }
+
+        const { token } = await loginRes.json();
+        if (!token) throw new Error('No token returned from login.');
+
+        submitBtn.innerHTML = '<span class="spinner"></span>Promoting…';
+
+        // Step 2: Promote self
+        const promoteRes = await fetch(`${API}/auth/admin/promote-self`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: '{}',
+        });
+
+        if (promoteRes.status === 403) {
+          throw new Error('Promotion endpoint is disabled. This only works in Development mode.');
+        }
+
+        if (!promoteRes.ok) {
+          const err = await promoteRes.json().catch(() => ({}));
+          throw new Error(err?.title || err?.message || `Promotion failed (${promoteRes.status})`);
+        }
+
+        showStatus('success',
+          '✓ You are now a Platform Admin.<br />' +
+          '<a href="/#/platform-admin">Go to the dashboard →</a>'
+        );
+
+        form.style.display = 'none';
+
+      } catch (err) {
+        showStatus('error', '✗ ' + (err.message || 'Something went wrong.'));
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Promote to Platform Admin';
+      }
+    });
+  </script>
+</body>
+</html>
