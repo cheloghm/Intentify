@@ -18,7 +18,8 @@ public sealed record EngageSessionMemorySnapshot(
     bool LeadReady,
     bool IsSupportCaptureActive,
     bool IsCommercialCaptureActive,
-    bool IsConversationComplete)
+    bool IsConversationComplete,
+    string? SurveyAnswer = null)
 {
     /// <summary>
     /// Builds a session memory snapshot directly from the session entity.
@@ -51,6 +52,7 @@ public sealed record EngageSessionMemorySnapshot(
             IsSupportCaptureActive: string.Equals(session.PendingCaptureMode, "Support", StringComparison.OrdinalIgnoreCase),
             IsCommercialCaptureActive: string.Equals(session.PendingCaptureMode, "Commercial", StringComparison.OrdinalIgnoreCase)
                                       || string.Equals(stage, "CaptureLead", StringComparison.Ordinal),
-            IsConversationComplete: session.IsConversationComplete);
+            IsConversationComplete: session.IsConversationComplete,
+            SurveyAnswer: session.SurveyAnswer);
     }
 }

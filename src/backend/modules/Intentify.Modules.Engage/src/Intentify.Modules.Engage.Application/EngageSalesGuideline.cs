@@ -279,6 +279,14 @@ public static class EngageSalesGuideline
             }
         }
 
+        if (!string.IsNullOrWhiteSpace(memory.SurveyAnswer))
+        {
+            sb.AppendLine();
+            sb.AppendLine($"Visitor declared intent (survey): \"{memory.SurveyAnswer}\"");
+            sb.AppendLine("Use this as a strong signal for their intent. Acknowledge it naturally if relevant — do not repeat it back verbatim.");
+            sb.AppendLine("Let it inform the direction of the conversation (e.g. if 'Ready to buy', prioritise next steps and lead capture).");
+        }
+
         if (memory.IsConversationComplete)
         {
             sb.AppendLine();

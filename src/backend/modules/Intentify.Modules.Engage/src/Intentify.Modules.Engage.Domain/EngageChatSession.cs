@@ -53,4 +53,6 @@ public sealed class EngageChatSession
     public string? ConversationSummary { get; set; }
 
     public string? SuggestedFollowUp { get; set; }
+
+    public string? SurveyAnswer { get; set; }
 }

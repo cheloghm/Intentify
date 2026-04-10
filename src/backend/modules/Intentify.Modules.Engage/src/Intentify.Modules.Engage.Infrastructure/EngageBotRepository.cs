@@ -63,7 +63,7 @@ public sealed class EngageBotRepository : IEngageBotRepository
             .FirstOrDefaultAsync(cancellationToken);
     }
 
-    public async Task<EngageBot?> UpdateSettingsAsync(Guid tenantId, Guid siteId, string name, string? primaryColor, bool? launcherVisible, string? tone, string? verbosity, string? fallbackStyle, string? businessDescription, string? industry, string? servicesDescription, string? geoFocus, string? personalityDescriptor, bool digestEmailEnabled, string? digestEmailRecipients, string? digestEmailFrequency, bool hideBranding = false, string? customBrandingText = null, bool abTestEnabled = false, string? openingMessageA = null, string? openingMessageB = null, CancellationToken cancellationToken = default)
+    public async Task<EngageBot?> UpdateSettingsAsync(Guid tenantId, Guid siteId, string name, string? primaryColor, bool? launcherVisible, string? tone, string? verbosity, string? fallbackStyle, string? businessDescription, string? industry, string? servicesDescription, string? geoFocus, string? personalityDescriptor, bool digestEmailEnabled, string? digestEmailRecipients, string? digestEmailFrequency, bool hideBranding = false, string? customBrandingText = null, bool abTestEnabled = false, string? openingMessageA = null, string? openingMessageB = null, bool surveyEnabled = false, string? surveyQuestion = null, string? surveyOptions = null, bool exitIntentEnabled = false, string? exitIntentMessage = null, CancellationToken cancellationToken = default)
     {
         await _ensureIndexes;
 
@@ -213,6 +213,37 @@ public sealed class EngageBotRepository : IEngageBotRepository
         else
         {
             updates.Add(Builders<EngageBot>.Update.Set(item => item.OpeningMessageB, openingMessageB.Trim()));
+        }
+
+        updates.Add(Builders<EngageBot>.Update.Set(item => item.SurveyEnabled, surveyEnabled));
+
+        if (string.IsNullOrWhiteSpace(surveyQuestion))
+        {
+            updates.Add(Builders<EngageBot>.Update.Unset(item => item.SurveyQuestion));
+        }
+        else
+        {
+            updates.Add(Builders<EngageBot>.Update.Set(item => item.SurveyQuestion, surveyQuestion.Trim()));
+        }
+
+        if (string.IsNullOrWhiteSpace(surveyOptions))
+        {
+            updates.Add(Builders<EngageBot>.Update.Unset(item => item.SurveyOptions));
+        }
+        else
+        {
+            updates.Add(Builders<EngageBot>.Update.Set(item => item.SurveyOptions, surveyOptions.Trim()));
+        }
+
+        updates.Add(Builders<EngageBot>.Update.Set(item => item.ExitIntentEnabled, exitIntentEnabled));
+
+        if (string.IsNullOrWhiteSpace(exitIntentMessage))
+        {
+            updates.Add(Builders<EngageBot>.Update.Unset(item => item.ExitIntentMessage));
+        }
+        else
+        {
+            updates.Add(Builders<EngageBot>.Update.Set(item => item.ExitIntentMessage, exitIntentMessage.Trim()));
         }
 
         var update = Builders<EngageBot>.Update.Combine(updates);

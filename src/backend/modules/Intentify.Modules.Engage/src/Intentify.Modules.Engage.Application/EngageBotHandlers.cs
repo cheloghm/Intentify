@@ -45,7 +45,12 @@ public sealed class GetEngageBotHandler
             AbTestImpressionCountA: bot.AbTestImpressionCountA,
             AbTestImpressionCountB: bot.AbTestImpressionCountB,
             AbTestConversionCountA: bot.AbTestConversionCountA,
-            AbTestConversionCountB: bot.AbTestConversionCountB));
+            AbTestConversionCountB: bot.AbTestConversionCountB,
+            SurveyEnabled: bot.SurveyEnabled,
+            SurveyQuestion: bot.SurveyQuestion,
+            SurveyOptions: bot.SurveyOptions,
+            ExitIntentEnabled: bot.ExitIntentEnabled,
+            ExitIntentMessage: bot.ExitIntentMessage));
     }
 }
 
@@ -93,6 +98,11 @@ public sealed class UpdateEngageBotHandler
             command.AbTestEnabled,
             command.OpeningMessageA,
             command.OpeningMessageB,
+            command.SurveyEnabled,
+            command.SurveyQuestion,
+            command.SurveyOptions,
+            command.ExitIntentEnabled,
+            command.ExitIntentMessage,
             cancellationToken);
 
         if (updated is null)
@@ -126,6 +136,11 @@ public sealed class UpdateEngageBotHandler
             AbTestImpressionCountA: updated.AbTestImpressionCountA,
             AbTestImpressionCountB: updated.AbTestImpressionCountB,
             AbTestConversionCountA: updated.AbTestConversionCountA,
-            AbTestConversionCountB: updated.AbTestConversionCountB));
+            AbTestConversionCountB: updated.AbTestConversionCountB,
+            SurveyEnabled: updated.SurveyEnabled,
+            SurveyQuestion: updated.SurveyQuestion,
+            SurveyOptions: updated.SurveyOptions,
+            ExitIntentEnabled: updated.ExitIntentEnabled,
+            ExitIntentMessage: updated.ExitIntentMessage));
     }
 }

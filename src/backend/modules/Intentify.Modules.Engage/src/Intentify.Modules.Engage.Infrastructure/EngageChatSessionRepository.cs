@@ -63,6 +63,7 @@ public sealed class EngageChatSessionRepository : IEngageChatSessionRepository
             .Set(item => item.IntentScore, session.IntentScore)
             .Set(item => item.ConversationSummary, session.ConversationSummary)
             .Set(item => item.SuggestedFollowUp, session.SuggestedFollowUp)
+            .Set(item => item.SurveyAnswer, session.SurveyAnswer)
             .Set(item => item.UpdatedAtUtc, session.UpdatedAtUtc);
         await _sessions.UpdateOneAsync(item => item.Id == session.Id, update, cancellationToken: cancellationToken);
     }
@@ -98,6 +99,20 @@ public sealed class EngageChatSessionRepository : IEngageChatSessionRepository
 
         var results = await _sessions.Find(filter)
             .SortByDescending(item => item.UpdatedAtUtc)
+            .ToListAsync(cancellationToken);
+        return results;
+    }
+
+    public async Task<IReadOnlyCollection<string>> ListSurveyAnswersAsync(Guid tenantId, Guid siteId, CancellationToken cancellationToken = default)
+    {
+        await _ensureIndexes;
+        var filter = Builders<EngageChatSession>.Filter.Eq(item => item.TenantId, tenantId)
+            & Builders<EngageChatSession>.Filter.Eq(item => item.SiteId, siteId)
+            & Builders<EngageChatSession>.Filter.Ne(item => item.SurveyAnswer, null)
+            & Builders<EngageChatSession>.Filter.Ne(item => item.SurveyAnswer, string.Empty);
+
+        var results = await _sessions.Find(filter)
+            .Project(item => item.SurveyAnswer!)
             .ToListAsync(cancellationToken);
         return results;
     }

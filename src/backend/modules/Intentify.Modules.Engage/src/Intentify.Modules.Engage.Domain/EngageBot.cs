@@ -77,4 +77,19 @@ public sealed class EngageBot
 
     /// <summary>Number of leads created from sessions where variant B was shown.</summary>
     public int AbTestConversionCountB { get; set; }
+
+    /// <summary>When true, a micro-survey is shown to new visitors before the first message.</summary>
+    public bool SurveyEnabled { get; set; }
+
+    /// <summary>The question displayed in the survey, e.g. "What brought you here today?"</summary>
+    public string? SurveyQuestion { get; set; }
+
+    /// <summary>JSON array of survey option strings, e.g. ["Just browsing","Checking prices","Ready to buy","Comparing options"]</summary>
+    public string? SurveyOptions { get; set; }
+
+    /// <summary>When true, the widget fires an exit intent overlay when the visitor moves their cursor to leave the page.</summary>
+    public bool ExitIntentEnabled { get; set; }
+
+    /// <summary>Message shown in the exit intent overlay, e.g. "Before you go — can I help you find what you need?"</summary>
+    public string? ExitIntentMessage { get; set; }
 }

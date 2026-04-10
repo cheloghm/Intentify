@@ -38,6 +38,8 @@
   var hideBranding = false;
   var customBrandingText = null;
   var abTestVariant = null;
+  var surveyAnswer = null;
+  var exitIntentFired = false;
   var isSending = false;
   var isHydrating = false;
   var typingIndicatorRow = null;
@@ -697,9 +699,77 @@
       applyTheme();
       applyBranding();
 
+      // Exit intent — desktop: mouseleave from top of viewport
+      if (payload && payload.exitIntentEnabled && payload.exitIntentMessage) {
+        var exitMessage = payload.exitIntentMessage;
+        document.addEventListener('mouseleave', function handleExitIntent(e) {
+          if (e.clientY > 0) return;
+          if (exitIntentFired) return;
+          if (isPanelOpen) return;
+          exitIntentFired = true;
+          document.removeEventListener('mouseleave', handleExitIntent);
+          persistPanelState(true);
+          renderPanelState();
+          restoreInputFocus();
+          setTimeout(function() { addMessage('bot', exitMessage); }, 300);
+        });
+
+        // Exit intent — mobile fallback: 45s inactivity timer
+        if (/Mobi|Android/i.test(navigator.userAgent)) {
+          var mobileExitTimer = null;
+          function resetMobileTimer() {
+            clearTimeout(mobileExitTimer);
+            mobileExitTimer = setTimeout(function() {
+              if (!exitIntentFired && !isPanelOpen) {
+                exitIntentFired = true;
+                persistPanelState(true);
+                renderPanelState();
+                restoreInputFocus();
+                setTimeout(function() { addMessage('bot', exitMessage); }, 300);
+              }
+            }, 45000);
+          }
+          document.addEventListener('touchstart', resetMobileTimer);
+          resetMobileTimer();
+        }
+      }
+
       // Show opening message if set (and no prior conversation)
       if (!sessionId && payload && typeof payload.openingMessage === 'string' && payload.openingMessage) {
         addMessage('bot', payload.openingMessage);
+
+        // Show micro-survey buttons after opening message (800ms delay)
+        if (payload.surveyEnabled && payload.surveyQuestion && payload.surveyOptions) {
+          var surveyOptions;
+          try { surveyOptions = JSON.parse(payload.surveyOptions); } catch(e) { surveyOptions = null; }
+          if (Array.isArray(surveyOptions) && surveyOptions.length) {
+            setTimeout(function() {
+              if (sessionId) return; // conversation already started
+              var surveyDiv = document.createElement('div');
+              surveyDiv.style.cssText = 'padding:8px 12px 12px;display:flex;flex-direction:column;gap:6px';
+              var qEl = document.createElement('div');
+              qEl.style.cssText = 'font-size:12.5px;color:#64748b;margin-bottom:2px';
+              qEl.textContent = payload.surveyQuestion;
+              surveyDiv.appendChild(qEl);
+              surveyOptions.forEach(function(opt) {
+                var btn = document.createElement('button');
+                btn.style.cssText = 'background:#f1f5f9;border:1px solid #e2e8f0;border-radius:20px;padding:6px 14px;font-size:12.5px;cursor:pointer;text-align:left;transition:background .15s';
+                btn.textContent = opt;
+                btn.onmouseover = function() { btn.style.background = '#e2e8f0'; };
+                btn.onmouseout  = function() { btn.style.background = '#f1f5f9'; };
+                btn.addEventListener('click', function() {
+                  surveyDiv.remove();
+                  surveyAnswer = opt;
+                  addMessage('user', opt);
+                  sendChatMessage(opt);
+                });
+                surveyDiv.appendChild(btn);
+              });
+              var msgWrap = messages;
+              if (msgWrap) msgWrap.appendChild(surveyDiv);
+            }, 800);
+          }
+        }
       }
 
       // Auto-trigger: check page_view rules after bootstrap resolves
@@ -793,7 +863,7 @@
         return fetch(endpoint('/engage/chat/send?widgetKey=' + encodeURIComponent(widgetKey)), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ widgetKey: widgetKey, sessionId: sessionId, message: message, collectorSessionId: collectorSessionId, visitorId: getVisitorId() || null, currentPageUrl: window.location.href, currentPageTitle: document.title || null, productName: pageMeta.productName || null, productPrice: pageMeta.productPrice ? String(pageMeta.productPrice) : null, productBrand: pageMeta.productBrand || null, productCategory: pageMeta.productCategory || null, productCurrency: pageMeta.productCurrency || null, productAvailable: pageMeta.productAvailable || null, abTestVariant: abTestVariant || null })
+          body: JSON.stringify({ widgetKey: widgetKey, sessionId: sessionId, message: message, collectorSessionId: collectorSessionId, visitorId: getVisitorId() || null, currentPageUrl: window.location.href, currentPageTitle: document.title || null, productName: pageMeta.productName || null, productPrice: pageMeta.productPrice ? String(pageMeta.productPrice) : null, productBrand: pageMeta.productBrand || null, productCategory: pageMeta.productCategory || null, productCurrency: pageMeta.productCurrency || null, productAvailable: pageMeta.productAvailable || null, abTestVariant: abTestVariant || null, surveyAnswer: surveyAnswer || null })
         });
       })
       .then(function(response) {
@@ -815,6 +885,7 @@
         if (sessionId) {
           localStorage.setItem(storageKey, sessionId);
         }
+        surveyAnswer = null;
         return renderAssistantPayload(payload).then(function(restoreFocus) {
           shouldRestoreFocusAfterSend = restoreFocus;
         });

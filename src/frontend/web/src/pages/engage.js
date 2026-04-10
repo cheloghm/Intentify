@@ -184,6 +184,7 @@ export const renderEngageView = async (container, { apiClient, toast } = {}) => 
     { key: 'widget',  label: '🎨 Widget'      },
     { key: 'triggers',label: '⚡ Auto-Triggers'},
     { key: 'bot',     label: '🤖 Bot Config'  },
+    { key: 'survey',  label: '📋 Survey'      },
   ];
   const tabEls = {}, panelEls = {};
   TABS.forEach(({ key, label }) => {
@@ -415,6 +416,28 @@ export const renderEngageView = async (container, { apiClient, toast } = {}) => 
   abWrap.append(abEnabledWrap, abInputsWrap, abResultsCard);
   widgetBody.appendChild(abWrap);
 
+  // Exit Intent section
+  widgetBody.appendChild(el('div', { style: 'font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;margin:18px 0 8px' }, 'Exit Intent'));
+  const exitWrap = el('div', { class: 'e-form-grid' });
+
+  const exitEnabledWrap = el('div', { class: 'e-field' });
+  exitEnabledWrap.appendChild(el('div', { class: 'e-field-label' }, 'Enable exit intent trigger'));
+  const exitEnabledToggle = el('label', { class: 'e-toggle' });
+  const exitEnabledCb = el('input', { type: 'checkbox' });
+  exitEnabledToggle.append(exitEnabledCb, el('span', { class: 'e-toggle-slider' }));
+  exitEnabledWrap.appendChild(exitEnabledToggle);
+  exitEnabledWrap.appendChild(el('div', { class: 'e-field-hint' }, 'Fires when a visitor moves their cursor to leave the page. One-time per visit.'));
+
+  const { wrap: exitMsgWrap, input: exitMsgInput } = mkField('Exit intent message', 'e.g. Before you go — can I help you find what you\'re looking for?');
+  exitMsgWrap.style.display = 'none';
+
+  exitEnabledCb.addEventListener('change', () => {
+    exitMsgWrap.style.display = exitEnabledCb.checked ? '' : 'none';
+  });
+
+  exitWrap.append(exitEnabledWrap, exitMsgWrap);
+  widgetBody.appendChild(exitWrap);
+
   // Live preview
   widgetBody.appendChild(el('div', { style: 'font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;margin:20px 0 8px' }, 'Live Preview'));
   const previewWrap = el('div', { class: 'e-preview-wrap' });
@@ -613,6 +636,106 @@ export const renderEngageView = async (container, { apiClient, toast } = {}) => 
   });
   botBody.appendChild(digestBtn);
 
+  // ══════════════════════════════════════════════════════════════════════════
+  // TAB: SURVEY
+  // ══════════════════════════════════════════════════════════════════════════
+
+  const { body: surveyBody } = mkPanel('📋 Micro-Survey', 'Capture visitor intent before the first AI message', panelEls.survey);
+
+  // Enable toggle
+  const surveyEnabledWrap = el('div', { class: 'e-field' });
+  surveyEnabledWrap.appendChild(el('div', { class: 'e-field-label' }, 'Enable micro-survey'));
+  const surveyEnabledToggle = el('label', { class: 'e-toggle' });
+  const surveyEnabledCb = el('input', { type: 'checkbox' });
+  surveyEnabledToggle.append(surveyEnabledCb, el('span', { class: 'e-toggle-slider' }));
+  surveyEnabledWrap.appendChild(surveyEnabledToggle);
+  surveyEnabledWrap.appendChild(el('div', { class: 'e-field-hint' }, 'Show button options below the opening message to capture zero-party intent data before chat begins.'));
+  surveyBody.appendChild(surveyEnabledWrap);
+
+  // Survey inputs (hidden when disabled)
+  const surveyInputsWrap = el('div', { style: 'display:none' });
+
+  const surveyQWrap = el('div', { class: 'e-field', style: 'margin-top:10px' });
+  surveyQWrap.appendChild(el('div', { class: 'e-field-label' }, 'Survey Question'));
+  const surveyQInput = el('input', { class: 'e-input', placeholder: 'e.g. What brings you here today?' });
+  surveyQWrap.appendChild(surveyQInput);
+  surveyQWrap.appendChild(el('div', { class: 'e-field-hint' }, 'Shown above the option buttons. Keep it short.'));
+  surveyInputsWrap.appendChild(surveyQWrap);
+
+  // Options builder (up to 4)
+  const SURVEY_DEFAULTS = ['Just browsing', 'Checking prices', 'Ready to buy', 'Comparing options'];
+  surveyInputsWrap.appendChild(el('div', { style: 'font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;margin:14px 0 8px' }, 'Answer Options'));
+  const surveyOptsContainer = el('div', { style: 'display:flex;flex-direction:column;gap:6px' });
+  const surveyOptInputs = SURVEY_DEFAULTS.map((def, i) => {
+    const row = el('div', { style: 'display:flex;align-items:center;gap:6px' });
+    row.appendChild(el('span', { style: 'font-size:11.5px;color:#94a3b8;min-width:16px' }, `${i + 1}.`));
+    const inp = el('input', { class: 'e-input', placeholder: def, style: 'flex:1' });
+    row.appendChild(inp);
+    surveyOptsContainer.appendChild(row);
+    return inp;
+  });
+  surveyInputsWrap.appendChild(surveyOptsContainer);
+  surveyInputsWrap.appendChild(el('div', { class: 'e-field-hint', style: 'margin-top:4px' }, 'Leave blank to skip that option. Up to 4 options.'));
+
+  const surveySaveBtn = el('button', { class: 'e-btn e-btn-primary', style: 'margin-top:16px' }, '💾 Save Survey Settings');
+  surveyInputsWrap.appendChild(surveySaveBtn);
+  surveyBody.appendChild(surveyInputsWrap);
+
+  surveyEnabledCb.addEventListener('change', () => {
+    surveyInputsWrap.style.display = surveyEnabledCb.checked ? '' : 'none';
+  });
+
+  // Survey results section
+  surveyBody.appendChild(el('hr', { style: 'border:none;border-top:1px solid #f1f5f9;margin:20px 0' }));
+  surveyBody.appendChild(el('div', { style: 'font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#94a3b8;margin-bottom:8px' }, 'Survey Results'));
+
+  const surveyResultsWrap = el('div');
+  surveyBody.appendChild(surveyResultsWrap);
+
+  const renderSurveyResults = results => {
+    surveyResultsWrap.replaceChildren();
+    if (!results || results.totalResponses === 0) {
+      surveyResultsWrap.appendChild(el('div', { style: 'color:#94a3b8;font-size:12.5px;padding:10px 0' }, 'No survey responses yet.'));
+      return;
+    }
+    const totalEl = el('div', { style: 'font-size:12px;color:#64748b;margin-bottom:10px' }, `Based on ${results.totalResponses} response${results.totalResponses === 1 ? '' : 's'}`);
+    surveyResultsWrap.appendChild(totalEl);
+    (results.breakdown || []).forEach(row => {
+      const barWrap = el('div', { style: 'margin-bottom:8px' });
+      const labelRow = el('div', { style: 'display:flex;justify-content:space-between;align-items:center;margin-bottom:3px' });
+      labelRow.appendChild(el('span', { style: 'font-size:12.5px;color:#1e293b;font-weight:500' }, row.option));
+      labelRow.appendChild(el('span', { style: 'font-size:11.5px;color:#64748b' }, `${row.count} · ${row.pct}%`));
+      barWrap.appendChild(labelRow);
+      const track = el('div', { style: 'background:#f1f5f9;border-radius:999px;height:8px;overflow:hidden' });
+      const fill = el('div', { style: `background:#6366f1;height:100%;border-radius:999px;width:${row.pct}%;transition:width .4s ease` });
+      track.appendChild(fill);
+      barWrap.appendChild(track);
+      surveyResultsWrap.appendChild(barWrap);
+    });
+  };
+
+  const loadSurveyResults = async () => {
+    if (!state.siteId) return;
+    surveyResultsWrap.replaceChildren(el('div', { style: 'color:#94a3b8;font-size:12.5px;padding:10px 0' }, '⏳ Loading…'));
+    try {
+      const res = await client.engage.getSurveyResults(state.siteId);
+      renderSurveyResults(res);
+    } catch { surveyResultsWrap.replaceChildren(el('div', { style: 'color:#ef4444;font-size:12.5px' }, 'Failed to load results.')); }
+  };
+
+  surveySaveBtn.addEventListener('click', async () => {
+    const opts = surveyOptInputs.map(i => i.value.trim()).filter(Boolean);
+    await saveBot({
+      surveyEnabled: surveyEnabledCb.checked,
+      surveyQuestion: surveyQInput.value.trim() || undefined,
+      surveyOptions: opts.length ? JSON.stringify(opts) : undefined,
+    });
+    loadSurveyResults();
+  });
+
+  // Load survey results when the survey tab is clicked
+  if (tabEls.survey) tabEls.survey.addEventListener('click', loadSurveyResults);
+
   // ─── Helper ────────────────────────────────────────────────────────────────
   function mkPanel(title, meta, parent) {
     const panel = el('div', { class: 'e-panel' });
@@ -642,6 +765,9 @@ export const renderEngageView = async (container, { apiClient, toast } = {}) => 
     msgAInput.value         = bot.openingMessageA || '';
     msgBInput.value         = bot.openingMessageB || '';
     abInputsWrap.style.display = abEnabledCb.checked ? '' : 'none';
+    exitEnabledCb.checked   = bot.exitIntentEnabled || false;
+    exitMsgInput.value      = bot.exitIntentMessage || '';
+    exitMsgWrap.style.display = exitEnabledCb.checked ? '' : 'none';
     bDescInput.value    = bot.businessDescription || '';
     bInduInput.value    = bot.industry || '';
     bSvcInput.value     = bot.servicesDescription || '';
@@ -656,6 +782,12 @@ export const renderEngageView = async (container, { apiClient, toast } = {}) => 
     try { state.triggers = JSON.parse(bot.autoTriggerRulesJson || '[]'); } catch { state.triggers = []; }
     renderTriggers();
     updatePreview();
+    // Survey fields
+    surveyEnabledCb.checked = bot.surveyEnabled || false;
+    surveyInputsWrap.style.display = surveyEnabledCb.checked ? '' : 'none';
+    surveyQInput.value = bot.surveyQuestion || '';
+    const surveyOpts = (() => { try { return JSON.parse(bot.surveyOptions || '[]'); } catch { return []; } })();
+    surveyOptInputs.forEach((inp, i) => { inp.value = surveyOpts[i] || ''; inp.placeholder = SURVEY_DEFAULTS[i]; });
   };
 
   const buildBotPayload = () => ({
@@ -670,6 +802,8 @@ export const renderEngageView = async (container, { apiClient, toast } = {}) => 
     abTestEnabled:         abEnabledCb.checked,
     openingMessageA:       msgAInput.value.trim() || undefined,
     openingMessageB:       msgBInput.value.trim() || undefined,
+    exitIntentEnabled:     exitEnabledCb.checked,
+    exitIntentMessage:     exitMsgInput.value.trim() || undefined,
     businessDescription:   bDescInput.value.trim(),
     industry:              bInduInput.value.trim(),
     servicesDescription:   bSvcInput.value.trim(),
@@ -712,6 +846,7 @@ export const renderEngageView = async (container, { apiClient, toast } = {}) => 
     if (!state.siteId) return;
     try { state.bot = await client.engage.getBot(state.siteId); applyBot(state.bot); } catch {}
     loadAbResults();
+    if (state.activeTab === 'survey') loadSurveyResults();
   };
 
   const syncSites = sites => {

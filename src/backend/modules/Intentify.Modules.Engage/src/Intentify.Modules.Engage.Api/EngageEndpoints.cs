@@ -65,10 +65,20 @@ internal static class EngageEndpoints
         string? customBrandingText = null;
         string? openingMessage = null;
         string? abTestVariant = null;
+        var surveyEnabled = false;
+        string? surveyQuestion = null;
+        string? surveyOptions = null;
+        var exitIntentEnabled = false;
+        string? exitIntentMessage = null;
 
         if (site is not null)
         {
             var bot = await botRepository.GetOrCreateForSiteAsync(site.TenantId, site.Id, context.RequestAborted);
+            surveyEnabled = bot.SurveyEnabled;
+            surveyQuestion = bot.SurveyQuestion;
+            surveyOptions = bot.SurveyOptions;
+            exitIntentEnabled = bot.ExitIntentEnabled;
+            exitIntentMessage = bot.ExitIntentMessage;
             var resolvedName = string.IsNullOrWhiteSpace(bot.Name) ? bot.DisplayName : bot.Name;
             if (!string.IsNullOrWhiteSpace(resolvedName))
             {
@@ -100,7 +110,7 @@ internal static class EngageEndpoints
             }
         }
 
-        return Results.Ok(new WidgetBootstrapResponse(result.SiteId.ToString("N"), result.Domain, displayName, botName, primaryColor, launcherVisible, autoTriggerRulesJson, hideBranding, customBrandingText, openingMessage, abTestVariant));
+        return Results.Ok(new WidgetBootstrapResponse(result.SiteId.ToString("N"), result.Domain, displayName, botName, primaryColor, launcherVisible, autoTriggerRulesJson, hideBranding, customBrandingText, openingMessage, abTestVariant, SurveyEnabled: surveyEnabled, SurveyQuestion: surveyQuestion, SurveyOptions: surveyOptions, ExitIntentEnabled: exitIntentEnabled, ExitIntentMessage: exitIntentMessage));
     }
 
     public static async Task<IResult> ChatSendAsync(
@@ -171,7 +181,8 @@ internal static class EngageEndpoints
             NormalizeOptional(request.ProductCategory),
             NormalizeOptional(request.ProductCurrency),
             request.ProductAvailable,
-            NormalizeOptional(request.AbTestVariant)), context.RequestAborted);
+            NormalizeOptional(request.AbTestVariant),
+            NormalizeOptional(request.SurveyAnswer)), context.RequestAborted);
         return result.Status switch
         {
             OperationStatus.ValidationFailed => Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(result.Errors!.Errors)),
@@ -227,7 +238,7 @@ internal static class EngageEndpoints
         return result.Status switch
         {
             OperationStatus.NotFound => Results.NotFound(),
-            _ => Results.Ok(new EngageBotResponse(result.Value!.BotId.ToString("N"), result.Value.Name, result.Value.PrimaryColor, result.Value.LauncherVisible, result.Value.Tone, result.Value.Verbosity, result.Value.FallbackStyle, result.Value.BusinessDescription, result.Value.Industry, result.Value.ServicesDescription, result.Value.GeoFocus, result.Value.PersonalityDescriptor, result.Value.DigestEmailEnabled, result.Value.DigestEmailRecipients, result.Value.DigestEmailFrequency, result.Value.HideBranding, result.Value.CustomBrandingText, result.Value.AbTestEnabled, result.Value.OpeningMessageA, result.Value.OpeningMessageB, result.Value.AbTestImpressionCountA, result.Value.AbTestImpressionCountB, result.Value.AbTestConversionCountA, result.Value.AbTestConversionCountB))
+            _ => Results.Ok(new EngageBotResponse(result.Value!.BotId.ToString("N"), result.Value.Name, result.Value.PrimaryColor, result.Value.LauncherVisible, result.Value.Tone, result.Value.Verbosity, result.Value.FallbackStyle, result.Value.BusinessDescription, result.Value.Industry, result.Value.ServicesDescription, result.Value.GeoFocus, result.Value.PersonalityDescriptor, result.Value.DigestEmailEnabled, result.Value.DigestEmailRecipients, result.Value.DigestEmailFrequency, result.Value.HideBranding, result.Value.CustomBrandingText, result.Value.AbTestEnabled, result.Value.OpeningMessageA, result.Value.OpeningMessageB, result.Value.AbTestImpressionCountA, result.Value.AbTestImpressionCountB, result.Value.AbTestConversionCountA, result.Value.AbTestConversionCountB, SurveyEnabled: result.Value.SurveyEnabled, SurveyQuestion: result.Value.SurveyQuestion, SurveyOptions: result.Value.SurveyOptions, ExitIntentEnabled: result.Value.ExitIntentEnabled, ExitIntentMessage: result.Value.ExitIntentMessage))
         };
     }
 
@@ -255,12 +266,12 @@ internal static class EngageEndpoints
             return Results.Unauthorized();
         }
 
-        var result = await handler.HandleAsync(new UpdateEngageBotCommand(tenantId.Value, parsedSiteId, request.Name, request.PrimaryColor, request.LauncherVisible, request.Tone, request.Verbosity, request.FallbackStyle, request.BusinessDescription, request.Industry, request.ServicesDescription, request.GeoFocus, request.PersonalityDescriptor, request.DigestEmailEnabled, request.DigestEmailRecipients, request.DigestEmailFrequency, HideBranding: request.HideBranding, CustomBrandingText: request.CustomBrandingText, AbTestEnabled: request.AbTestEnabled, OpeningMessageA: request.OpeningMessageA, OpeningMessageB: request.OpeningMessageB), context.RequestAborted);
+        var result = await handler.HandleAsync(new UpdateEngageBotCommand(tenantId.Value, parsedSiteId, request.Name, request.PrimaryColor, request.LauncherVisible, request.Tone, request.Verbosity, request.FallbackStyle, request.BusinessDescription, request.Industry, request.ServicesDescription, request.GeoFocus, request.PersonalityDescriptor, request.DigestEmailEnabled, request.DigestEmailRecipients, request.DigestEmailFrequency, HideBranding: request.HideBranding, CustomBrandingText: request.CustomBrandingText, AbTestEnabled: request.AbTestEnabled, OpeningMessageA: request.OpeningMessageA, OpeningMessageB: request.OpeningMessageB, SurveyEnabled: request.SurveyEnabled, SurveyQuestion: request.SurveyQuestion, SurveyOptions: request.SurveyOptions, ExitIntentEnabled: request.ExitIntentEnabled, ExitIntentMessage: request.ExitIntentMessage), context.RequestAborted);
         return result.Status switch
         {
             OperationStatus.ValidationFailed => Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(result.Errors!.Errors)),
             OperationStatus.NotFound => Results.NotFound(),
-            _ => Results.Ok(new EngageBotResponse(result.Value!.BotId.ToString("N"), result.Value.Name, result.Value.PrimaryColor, result.Value.LauncherVisible, result.Value.Tone, result.Value.Verbosity, result.Value.FallbackStyle, result.Value.BusinessDescription, result.Value.Industry, result.Value.ServicesDescription, result.Value.GeoFocus, result.Value.PersonalityDescriptor, result.Value.DigestEmailEnabled, result.Value.DigestEmailRecipients, result.Value.DigestEmailFrequency, result.Value.HideBranding, result.Value.CustomBrandingText, result.Value.AbTestEnabled, result.Value.OpeningMessageA, result.Value.OpeningMessageB, result.Value.AbTestImpressionCountA, result.Value.AbTestImpressionCountB, result.Value.AbTestConversionCountA, result.Value.AbTestConversionCountB))
+            _ => Results.Ok(new EngageBotResponse(result.Value!.BotId.ToString("N"), result.Value.Name, result.Value.PrimaryColor, result.Value.LauncherVisible, result.Value.Tone, result.Value.Verbosity, result.Value.FallbackStyle, result.Value.BusinessDescription, result.Value.Industry, result.Value.ServicesDescription, result.Value.GeoFocus, result.Value.PersonalityDescriptor, result.Value.DigestEmailEnabled, result.Value.DigestEmailRecipients, result.Value.DigestEmailFrequency, result.Value.HideBranding, result.Value.CustomBrandingText, result.Value.AbTestEnabled, result.Value.OpeningMessageA, result.Value.OpeningMessageB, result.Value.AbTestImpressionCountA, result.Value.AbTestImpressionCountB, result.Value.AbTestConversionCountA, result.Value.AbTestConversionCountB, SurveyEnabled: result.Value.SurveyEnabled, SurveyQuestion: result.Value.SurveyQuestion, SurveyOptions: result.Value.SurveyOptions, ExitIntentEnabled: result.Value.ExitIntentEnabled, ExitIntentMessage: result.Value.ExitIntentMessage))
         };
     }
 
@@ -468,6 +479,30 @@ internal static class EngageEndpoints
             conversionRateB = rateB,
             winner
         });
+    }
+
+    public static async Task<IResult> GetSurveyResultsAsync(string? siteId, HttpContext context, IEngageChatSessionRepository sessionRepository)
+    {
+        if (string.IsNullOrWhiteSpace(siteId) || !Guid.TryParse(siteId, out var parsedSiteId))
+        {
+            return Results.BadRequest(ProblemDetailsHelpers.CreateValidationProblemDetails(new Dictionary<string, string[]>
+            {
+                ["siteId"] = ["Site id is required and must be a valid GUID."]
+            }));
+        }
+
+        var tenantId = TryGetTenantId(context.User);
+        if (tenantId is null) return Results.Unauthorized();
+
+        var answers = await sessionRepository.ListSurveyAnswersAsync(tenantId.Value, parsedSiteId, context.RequestAborted);
+        var total = answers.Count;
+        var breakdown = answers
+            .GroupBy(a => a, StringComparer.OrdinalIgnoreCase)
+            .OrderByDescending(g => g.Count())
+            .Select(g => new SurveyOptionBreakdownResponse(g.Key, g.Count(), total > 0 ? Math.Round((double)g.Count() / total * 100, 1) : 0))
+            .ToArray();
+
+        return Results.Ok(new SurveyResultsResponse(total, breakdown));
     }
 
     public static async Task<IResult> ResetAbTestAsync(string? siteId, HttpContext context, IEngageBotRepository botRepository)

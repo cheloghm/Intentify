@@ -1,6 +1,6 @@
 namespace Intentify.Modules.Engage.Api;
 
-public sealed record WidgetBootstrapResponse(string SiteId, string Domain, string DisplayName, string BotName, string? PrimaryColor = null, bool? LauncherVisible = null, string? AutoTriggerRulesJson = null, bool HideBranding = false, string? CustomBrandingText = null, string? OpeningMessage = null, string? AbTestVariant = null);
+public sealed record WidgetBootstrapResponse(string SiteId, string Domain, string DisplayName, string BotName, string? PrimaryColor = null, bool? LauncherVisible = null, string? AutoTriggerRulesJson = null, bool HideBranding = false, string? CustomBrandingText = null, string? OpeningMessage = null, string? AbTestVariant = null, bool SurveyEnabled = false, string? SurveyQuestion = null, string? SurveyOptions = null, bool ExitIntentEnabled = false, string? ExitIntentMessage = null);
 
 public sealed record EngageChatSendRequest(
     string WidgetKey,
@@ -16,7 +16,8 @@ public sealed record EngageChatSendRequest(
     string? ProductCategory = null,
     string? ProductCurrency = null,
     bool? ProductAvailable = null,
-    string? AbTestVariant = null);
+    string? AbTestVariant = null,
+    string? SurveyAnswer = null);
 
 public sealed record EngageCitationResponse(string SourceId, string ChunkId, int ChunkIndex);
 
@@ -123,7 +124,12 @@ public sealed record EngageBotResponse(
     int AbTestImpressionCountA = 0,
     int AbTestImpressionCountB = 0,
     int AbTestConversionCountA = 0,
-    int AbTestConversionCountB = 0);
+    int AbTestConversionCountB = 0,
+    bool SurveyEnabled = false,
+    string? SurveyQuestion = null,
+    string? SurveyOptions = null,
+    bool ExitIntentEnabled = false,
+    string? ExitIntentMessage = null);
 
 public sealed record UpdateEngageBotRequest(
     string Name,
@@ -144,6 +150,15 @@ public sealed record UpdateEngageBotRequest(
     string? CustomBrandingText = null,
     bool AbTestEnabled = false,
     string? OpeningMessageA = null,
-    string? OpeningMessageB = null);
+    string? OpeningMessageB = null,
+    bool SurveyEnabled = false,
+    string? SurveyQuestion = null,
+    string? SurveyOptions = null,
+    bool ExitIntentEnabled = false,
+    string? ExitIntentMessage = null);
 
 public sealed record DigestSendRequest(string SiteId);
+
+public sealed record SurveyOptionBreakdownResponse(string Option, int Count, double Pct);
+
+public sealed record SurveyResultsResponse(int TotalResponses, IReadOnlyCollection<SurveyOptionBreakdownResponse> Breakdown);

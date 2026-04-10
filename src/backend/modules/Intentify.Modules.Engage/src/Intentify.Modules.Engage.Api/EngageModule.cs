@@ -147,5 +147,6 @@ public sealed class EngageModule : IAppModule
         adminGroup.MapPost("/generate-followup", EngageEndpoints.GenerateFollowUpAsync);
         adminGroup.MapGet("/ab-test-results", EngageEndpoints.GetAbTestResultsAsync);
         adminGroup.MapPost("/ab-test/reset", EngageEndpoints.ResetAbTestAsync);
+        adminGroup.MapGet("/survey-results", EngageEndpoints.GetSurveyResultsAsync);
     }
 }

@@ -11,4 +11,5 @@ public interface IEngageChatSessionRepository
     Task UpdateStateAsync(EngageChatSession session, CancellationToken cancellationToken = default);
     Task SetCollectorSessionIdIfEmptyAsync(Guid sessionId, string collectorSessionId, CancellationToken cancellationToken = default);
     Task<IReadOnlyCollection<EngageChatSession>> ListBySiteAsync(Guid tenantId, Guid siteId, string? collectorSessionId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyCollection<string>> ListSurveyAnswersAsync(Guid tenantId, Guid siteId, CancellationToken cancellationToken = default);
 }

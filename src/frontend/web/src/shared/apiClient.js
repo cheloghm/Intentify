@@ -474,6 +474,9 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
   const getEngageAbTestResults = async (siteId) =>
     request(`/engage/ab-test-results${buildQueryString({ siteId })}`);
 
+  const getEngageSurveyResults = async (siteId) =>
+    request(`/engage/survey-results${buildQueryString({ siteId })}`);
+
   const resetEngageAbTest = async (siteId) =>
     request(`/engage/ab-test/reset${buildQueryString({ siteId })}`, {
       method: 'POST',
@@ -704,6 +707,7 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
       generateFollowUp: generateEngageFollowUp,
       getAbTestResults: getEngageAbTestResults,
       resetAbTest: resetEngageAbTest,
+      getSurveyResults: getEngageSurveyResults,
     },
     tickets: {
       listTickets,

@@ -60,6 +60,11 @@ public sealed class EngageOrchestrator
         var bot = await _botRepository.GetOrCreateForSiteAsync(site.TenantId, site.Id, cancellationToken);
         var session = await ResolveOrCreateSessionAsync(site, bot, command, cancellationToken);
 
+        if (!string.IsNullOrWhiteSpace(command.SurveyAnswer) && string.IsNullOrWhiteSpace(session.SurveyAnswer))
+        {
+            session.SurveyAnswer = command.SurveyAnswer.Trim();
+        }
+
         await _messageRepository.InsertAsync(new EngageChatMessage
         {
             SessionId = session.Id,
