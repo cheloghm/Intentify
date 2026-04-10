@@ -146,6 +146,12 @@ internal sealed class DigestSchedulerService(
 
     private static string BuildDigestHtml(string botName, DigestResult d)
     {
+        var aiNarrativeHtml = string.IsNullOrWhiteSpace(d.AiNarrative) ? "" :
+            $"<div style='background:linear-gradient(135deg,#0f172a,#1e293b);border-radius:12px;padding:20px 24px;margin-bottom:24px'>" +
+            $"<div style='color:#818cf8;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px'>🤖 AI Weekly Summary</div>" +
+            $"<div style='color:#f1f5f9;font-size:14px;line-height:1.7'>{Esc(d.AiNarrative)}</div>" +
+            $"</div>";
+
         var leadRows = d.NewLeads.Any()
             ? string.Join("", d.NewLeads.Take(5).Select(l =>
                 $"<tr>" +
@@ -171,6 +177,7 @@ internal sealed class DigestSchedulerService(
                 <h1 style="color:#f8fafc;margin:0 0 4px;font-size:18px;font-weight:700;letter-spacing:-.01em">📊 Weekly Report</h1>
                 <p style="color:#64748b;margin:0;font-size:13px">{Esc(botName)} · {DateTime.UtcNow:MMMM d, yyyy}</p>
               </div>
+              {aiNarrativeHtml}
               <table width="100%" style="border-collapse:collapse;margin-bottom:20px"><tr>
                 {StatCard("⭐","New Leads",d.NewLeadsCount.ToString())}
                 {StatCard("🎫","New Tickets",d.NewTicketsCount.ToString())}

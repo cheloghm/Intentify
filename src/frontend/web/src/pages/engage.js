@@ -616,7 +616,7 @@ export const renderEngageView = async (container, { apiClient, toast } = {}) => 
   botBody.appendChild(el('hr', { style: 'border:none;border-top:1px solid #f1f5f9;margin:20px 0' }));
   botBody.appendChild(el('div', { style: 'font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#94a3b8;margin-bottom:6px' }, 'Weekly Digest Preview'));
   botBody.appendChild(el('div', { style: 'font-size:12px;color:#64748b;margin-bottom:12px;line-height:1.6' },
-    'Your digest runs automatically every Monday at 08:00. Click below to send a test digest to the configured recipients now.'
+    'Your digest runs every Monday at 08:00 and includes an AI-written summary of your week\'s key insights. Click below to send a test digest to the configured recipients now.'
   ));
 
   const digestBtn = el('button', { class: 'e-btn e-btn-outline', style: 'font-size:12.5px' }, '📨 Send digest now');

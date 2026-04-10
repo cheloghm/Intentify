@@ -167,4 +167,5 @@ public sealed record DigestResult(
     int NewTicketsCount,
     IReadOnlyCollection<DigestTicketEntry> NewTickets,
     int ConversationsCount,
-    DigestLeadEntry? TopOpportunity);
+    DigestLeadEntry? TopOpportunity,
+    string? AiNarrative = null);
