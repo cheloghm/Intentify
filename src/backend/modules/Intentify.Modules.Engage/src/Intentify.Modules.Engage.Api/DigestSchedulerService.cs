@@ -144,7 +144,7 @@ internal sealed class DigestSchedulerService(
         }
     }
 
-    private static string BuildDigestHtml(string botName, DigestResult d)
+    internal static string BuildDigestHtml(string botName, DigestResult d)
     {
         var aiNarrativeHtml = string.IsNullOrWhiteSpace(d.AiNarrative) ? "" :
             $"<div style='background:linear-gradient(135deg,#0f172a,#1e293b);border-radius:12px;padding:20px 24px;margin-bottom:24px'>" +

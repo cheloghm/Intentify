@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Intentify.Modules.Auth.Application;
 using Intentify.Modules.Engage.Application;
+using Intentify.Modules.Flows.Application;
 using Intentify.Modules.Sites.Application;
 using Intentify.Shared.AI;
 using Intentify.Shared.Validation;
@@ -421,7 +422,12 @@ internal static class EngageEndpoints
 
 
 
-    public static async Task<IResult> DigestSendAsync(DigestSendRequest request, HttpContext context, GenerateDigestHandler handler)
+    public static async Task<IResult> DigestSendAsync(
+        DigestSendRequest request,
+        HttpContext context,
+        GenerateDigestHandler handler,
+        IEngageBotRepository botRepository,
+        ResendEmailService emailService)
     {
         if (string.IsNullOrWhiteSpace(request.SiteId) || !Guid.TryParse(request.SiteId, out var parsedSiteId))
         {
@@ -433,12 +439,34 @@ internal static class EngageEndpoints
 
         var tenantId = TryGetTenantId(context.User);
         if (tenantId is null)
-        {
             return Results.Unauthorized();
+
+        var bot = await botRepository.GetBySiteAsync(tenantId.Value, parsedSiteId);
+        if (bot is null)
+            return Results.Ok(new { sent = false, recipientCount = 0, reason = "Bot not found for this site." });
+
+        var recipients = (bot.DigestEmailRecipients ?? string.Empty)
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        if (recipients.Length == 0)
+            return Results.Ok(new { sent = false, recipientCount = 0, reason = "No recipients configured — add email addresses in Bot Config → Digest Email." });
+
+        if (!emailService.IsConfigured)
+            return Results.Ok(new { sent = false, recipientCount = 0, reason = "Email not configured — add Resend API key to environment variables." });
+
+        var result  = await handler.HandleAsync(new GenerateDigestQuery(tenantId.Value, parsedSiteId), context.RequestAborted);
+        var botName = bot.Name ?? bot.DisplayName ?? parsedSiteId.ToString();
+        var subject = $"📊 Your Weekly Hven Report — {DateTime.UtcNow:MMMM d, yyyy}";
+        var html    = DigestSchedulerService.BuildDigestHtml(botName, result);
+
+        var sent = 0;
+        foreach (var recipient in recipients)
+        {
+            var (success, _) = await emailService.SendAsync(recipient, subject, html, context.RequestAborted);
+            if (success) sent++;
         }
 
-        var result = await handler.HandleAsync(new GenerateDigestQuery(tenantId.Value, parsedSiteId), context.RequestAborted);
-        return Results.Ok(result);
+        return Results.Ok(new { sent = true, recipientCount = sent });
     }
 
     public static async Task<IResult> GetAbTestResultsAsync(string? siteId, HttpContext context, IEngageBotRepository botRepository)

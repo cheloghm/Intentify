@@ -625,8 +625,12 @@ export const renderEngageView = async (container, { apiClient, toast } = {}) => 
     digestBtn.disabled = true;
     digestBtn.textContent = '⏳ Sending…';
     try {
-      await client.engage.sendDigest(state.siteId);
-      notifier.show({ message: 'Digest sent successfully', variant: 'success' });
+      const result = await client.engage.sendDigest(state.siteId);
+      if (result.sent) {
+        notifier.show({ message: `✓ Digest sent to ${result.recipientCount} recipient${result.recipientCount === 1 ? '' : 's'}.`, variant: 'success' });
+      } else {
+        notifier.show({ message: result.reason || 'Digest not sent — check recipients are configured.', variant: 'warning' });
+      }
     } catch (err) {
       notifier.show({ message: mapApiError(err).message, variant: 'danger' });
     } finally {

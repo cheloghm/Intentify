@@ -87,14 +87,17 @@ export const renderAdsView = (container, { apiClient, toast } = {}) => {
   injectStyles();
   const client   = apiClient || createApiClient();
   const notifier = toast     || createToastManager();
-  const state    = { sites:[], campaigns:[], siteId:'', selectedId:'', selectedCampaign:null, report:null, placements:[] };
+  const state    = { sites:[], campaigns:[], siteId:'', selectedId:'', selectedCampaign:null, report:null, placements:[], comingSoon:false };
 
   const root = el('div',{class:'ad-root'});
   container.appendChild(root);
 
   // ── Hero ───────────────────────────────────────────────────────────────────
   const hero = el('div',{class:'ad-hero'});
-  hero.appendChild(el('div',{class:'ad-hero-title'},'📢 Ads'));
+  const heroTop = el('div',{style:'display:flex;align-items:center;gap:10px;margin-bottom:4px'});
+  heroTop.appendChild(el('div',{class:'ad-hero-title',style:'margin-bottom:0'},'📢 Ads'));
+  heroTop.appendChild(el('span',{style:'display:inline-flex;align-items:center;gap:5px;background:rgba(99,102,241,.15);border:1px solid rgba(99,102,241,.3);border-radius:99px;padding:3px 10px;font-size:10px;font-weight:700;color:#a5b4fc;letter-spacing:.06em;text-transform:uppercase'},'✦ Coming Soon'));
+  hero.appendChild(heroTop);
   hero.appendChild(el('div',{class:'ad-hero-sub'},'Manage advertising campaigns, placements, and view performance reports'));
   const heroStats = el('div',{class:'ad-hero-stats'});
   const mkS = lbl => { const w=el('div',{class:'ad-stat'}); const v=el('div',{class:'ad-stat-val'},'—'); w.append(v,el('div',{class:'ad-stat-lbl'},lbl)); heroStats.appendChild(w); return v; };
@@ -287,15 +290,34 @@ export const renderAdsView = (container, { apiClient, toast } = {}) => {
   const loadCampaigns = async () => {
     if (!state.siteId) { state.campaigns=[]; renderCampaignList(); return; }
     try {
-      state.campaigns = await client.ads.listCampaigns(state.siteId);
+      state.campaigns   = await client.ads.listCampaigns(state.siteId);
+      state.comingSoon  = false;
       hCampaigns.textContent = String(state.campaigns.length);
       hActive.textContent    = String(state.campaigns.filter(c=>c.isActive).length);
       renderCampaignList();
-    } catch(err){ notifier.show({message:mapApiError(err).message,variant:'danger'}); }
+    } catch {
+      state.campaigns  = [];
+      state.comingSoon = true;
+      renderCampaignList();
+    }
   };
 
   const renderCampaignList = () => {
     campaignList.replaceChildren();
+    if (state.comingSoon) {
+      const empty = el('div', { class: 'ad-empty', style: 'padding:48px 24px;text-align:center' });
+      empty.innerHTML = `
+        <div style="font-size:36px;margin-bottom:12px">📢</div>
+        <div style="font-size:16px;font-weight:700;color:#0f172a;margin-bottom:8px">Ads — Coming Soon</div>
+        <div style="font-size:13px;color:#64748b;max-width:340px;margin:0 auto;line-height:1.7">
+          Run targeted ad campaigns directly from Hven, powered by visitor intent data.
+          Create campaigns that reach the right companies at exactly the right moment.
+        </div>
+        <div style="margin-top:20px;padding:12px 16px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;display:inline-block;font-size:11px;color:#6366f1;font-weight:700">✦ Planned for Q3 2026</div>
+      `;
+      campaignList.appendChild(empty);
+      return;
+    }
     if (!state.campaigns.length) {
       const empty = el('div',{class:'ad-empty'});
       empty.innerHTML = '<div style="font-size:28px;margin-bottom:8px">📢</div><div style="font-weight:600;color:#475569;margin-bottom:4px">No campaigns yet</div><div>Create your first ad campaign to start driving targeted traffic.</div>';
