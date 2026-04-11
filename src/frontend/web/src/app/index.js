@@ -12,7 +12,6 @@ import { renderPromosView } from '../pages/promos.js';
 import { renderLeadsView } from '../pages/leads.js';
 import { renderTicketsView } from '../pages/tickets.js';
 import { renderIntelligenceView } from '../pages/intelligence.js';
-import { renderAdsView } from '../pages/ads.js';
 import { renderTeamView } from '../pages/team.js';
 import { renderDashboardView } from '../pages/dashboard.js';
 import { renderIntegrationsView } from '../pages/integrations.js';
@@ -460,7 +459,6 @@ const createAuthenticatedShell = ({ route, canAccessPlatformAdmin, canAccessTeam
   ]);
 
   addNavSection('MARKETING', [
-    { label: 'Ads',        href: '#/ads' },
     { label: 'Promos',     href: '#/promos' },
     { label: '🔗 Link Hub',  href: '#/linktree' },
     { label: '🌐 Micro-Site', href: '#/microsite' },
@@ -1111,7 +1109,6 @@ const routes = {
   '/engage':                              renderEngageView,
   '/promos':                              renderPromosView,
   '/intelligence':                        renderIntelligenceView,
-  '/ads':                                 renderAdsView,
   '/leads':                               renderLeadsView,
   '/tickets':                             renderTicketsView,
   '/analytics':                           renderMultiSiteAnalyticsView,
@@ -1210,7 +1207,7 @@ const renderApp = () => {
 
   const protectedRoutes = [
     '/dashboard', '/team', '/sites', '/visitors', '/visitors/:visitorId',
-    '/knowledge', '/engage', '/promos', '/intelligence', '/ads', '/leads', '/tickets',
+    '/knowledge', '/engage', '/promos', '/intelligence', '/leads', '/tickets',
     '/analytics', '/platform-admin', '/platform-admin/tenant/:tenantId',
   ];
 
@@ -1262,7 +1259,7 @@ const renderApp = () => {
   }
 
   // Viewer role cannot access write-heavy routes
-  const WRITE_ROUTES = ['/sites', '/flows', '/engage', '/knowledge', '/promos', '/ads', '/intelligence'];
+  const WRITE_ROUTES = ['/sites', '/flows', '/engage', '/knowledge', '/promos', '/intelligence'];
   if (isAuthenticated && WRITE_ROUTES.includes(route) && authState.loaded) {
     if (getPrimaryRole(authState.roles) === 'user') {
       window.location.hash = '#/dashboard';
