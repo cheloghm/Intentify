@@ -17,7 +17,7 @@ import { renderDashboardView } from '../pages/dashboard.js';
 import { renderIntegrationsView } from '../pages/integrations.js';
 import { renderPlatformAdminTenantDetailView, renderPlatformAdminView } from '../pages/platformAdmin.js';
 import { renderMultiSiteAnalyticsView } from '../pages/multiSiteAnalytics.js';
-import { renderLinkTreeView } from '../pages/linktree.js';
+import { renderLinkHubView } from '../pages/linktree.js';
 import { renderMicroSiteView } from '../pages/microsite.js';
 import { renderFeedbackView } from '../pages/feedback.js';
 import { showBotWizard } from '../pages/botWizard.js';
@@ -1112,7 +1112,8 @@ const routes = {
   '/leads':                               renderLeadsView,
   '/tickets':                             renderTicketsView,
   '/analytics':                           renderMultiSiteAnalyticsView,
-  '/linktree':                            renderLinkTreeView,
+  '/linktree':                            renderLinkHubView,
+  '/linkhub':                             renderLinkHubView,
   '/microsite':                           renderMicroSiteView,
   '/integrations':                        renderIntegrationsView,
   '/feedback':                            renderFeedbackView,

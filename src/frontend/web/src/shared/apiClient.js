@@ -778,6 +778,11 @@ export const createApiClient = ({ baseUrl = API_BASE } = {}) => {
       deleteWebhook,
       testWebhook,
     },
+    linkHub: {
+      getProfile: () => request('/linkhub/profile'),
+      saveProfile: (payload) => request('/linkhub/profile', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }),
+      getAnalytics: (days = 30) => request(`/linkhub/analytics?days=${days}`),
+    },
     notify: {
       registerFeatureInterest: (feature) => request('/notify/feature', {
         method: 'POST',

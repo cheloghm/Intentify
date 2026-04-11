@@ -1,4 +1,5 @@
 using Intentify.Modules.Ads.Api;
+using Intentify.Modules.LinkHub.Api;
 using Intentify.Modules.Auth.Api;
 using Intentify.Modules.Collector.Api;
 using Intentify.Modules.Engage.Api;
@@ -34,7 +35,8 @@ public static class AppModuleCatalog
         new FlowsModule(),
         new VisitorsModule(),
         new TicketsModule(),
-        new PlatformAdminModule()
+        new PlatformAdminModule(),
+        new LinkHubModule(),
     ];
 }
 
