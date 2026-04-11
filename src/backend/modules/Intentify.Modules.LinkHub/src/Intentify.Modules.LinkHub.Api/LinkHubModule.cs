@@ -28,9 +28,10 @@ public sealed class LinkHubModule : IAppModule
     {
         // Admin routes (require auth)
         var admin = endpoints.MapGroup("/linkhub").AddEndpointFilter<RequireAuthFilter>();
-        admin.MapGet("/profile",            LinkHubEndpoints.GetProfileAsync);
-        admin.MapPut("/profile",            LinkHubEndpoints.SaveProfileAsync);
-        admin.MapGet("/analytics",          LinkHubEndpoints.GetAnalyticsAsync);
+        admin.MapGet("/profile",              LinkHubEndpoints.GetProfileAsync);
+        admin.MapPut("/profile",              LinkHubEndpoints.SaveProfileAsync);
+        admin.MapPost("/profile/avatar",     LinkHubEndpoints.UploadAvatarAsync);
+        admin.MapGet("/analytics",           LinkHubEndpoints.GetAnalyticsAsync);
 
         // Public routes (no auth)
         var pub = endpoints.MapGroup("/hub");

@@ -72,6 +72,44 @@ internal static class LinkHubEndpoints
         return Results.Ok(result);
     }
 
+    // ── Admin: POST /linkhub/profile/avatar ───────────────────────────────
+    public static async Task<IResult> UploadAvatarAsync(
+        HttpContext context,
+        ILinkHubRepository repository)
+    {
+        var tenantId = TryGetTenantId(context.User);
+        if (tenantId is null) return Results.Unauthorized();
+
+        if (!context.Request.HasFormContentType)
+            return Results.BadRequest(new { error = "Expected multipart/form-data." });
+
+        var form = await context.Request.ReadFormAsync(context.RequestAborted);
+        var file = form.Files.GetFile("file");
+
+        if (file is null || file.Length == 0)
+            return Results.BadRequest(new { error = "No file provided." });
+
+        if (!file.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+            return Results.BadRequest(new { error = "File must be an image." });
+
+        if (file.Length > 5 * 1024 * 1024)
+            return Results.BadRequest(new { error = "Image must be under 5MB." });
+
+        using var ms = new MemoryStream();
+        await file.CopyToAsync(ms, context.RequestAborted);
+        var base64  = Convert.ToBase64String(ms.ToArray());
+        var dataUri = $"data:{file.ContentType};base64,{base64}";
+
+        var profile = await repository.GetByTenantAsync(tenantId.Value, context.RequestAborted);
+        if (profile is null) return Results.NotFound();
+
+        profile.ProfilePictureUrl = dataUri;
+        profile.UpdatedAtUtc      = DateTime.UtcNow;
+        await repository.UpsertAsync(profile, context.RequestAborted);
+
+        return Results.Ok(new { url = dataUri });
+    }
+
     // ── Public: GET /hub/{slug} ────────────────────────────────────────────
     public static async Task<IResult> GetPublicPageAsync(
         string slug,
