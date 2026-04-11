@@ -460,7 +460,7 @@ const createAuthenticatedShell = ({ route, canAccessPlatformAdmin, canAccessTeam
 
   addNavSection('MARKETING', [
     { label: 'Promos',     href: '#/promos' },
-    { label: '🔗 Link Hub',  href: '#/linktree' },
+    { label: '🔗 Link Hub',  href: '#/linkhub' },
     { label: '🌐 Micro-Site', href: '#/microsite' },
   ]);
 
@@ -1112,7 +1112,6 @@ const routes = {
   '/leads':                               renderLeadsView,
   '/tickets':                             renderTicketsView,
   '/analytics':                           renderMultiSiteAnalyticsView,
-  '/linktree':                            renderLinkHubView,
   '/linkhub':                             renderLinkHubView,
   '/microsite':                           renderMicroSiteView,
   '/integrations':                        renderIntegrationsView,

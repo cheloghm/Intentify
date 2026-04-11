@@ -9,6 +9,9 @@ public sealed record SaveProfileCommand(
     string? Bio,
     string? AvatarEmoji,
     string? AvatarInitials,
+    string? ProfilePictureUrl,
+    string? BackgroundType,
+    string? BackgroundValue,
     string? BrandColor,
     string? Theme,
     bool IsPublished,
@@ -24,7 +27,8 @@ public sealed record SaveLinkDto(
     string? Platform,
     string? IconEmoji,
     int Order,
-    bool IsActive);
+    bool IsActive,
+    string DisplayMode = "icon-label");
 
 public sealed record RecordClickCommand(
     Guid ProfileId,
@@ -44,6 +48,9 @@ public sealed record LinkHubProfileResult(
     string? Bio,
     string? AvatarEmoji,
     string? AvatarInitials,
+    string? ProfilePictureUrl,
+    string? BackgroundType,
+    string? BackgroundValue,
     string? BrandColor,
     string? Theme,
     bool IsPublished,
@@ -60,7 +67,8 @@ public sealed record LinkResult(
     string? IconEmoji,
     int Order,
     bool IsActive,
-    int ClickCount);
+    int ClickCount,
+    string DisplayMode = "icon-label");
 
 public sealed record LinkHubAnalyticsResult(
     int TotalViews,

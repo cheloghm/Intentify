@@ -9,6 +9,9 @@ public sealed class LinkHubProfile
     public string? Bio { get; set; }
     public string? AvatarEmoji { get; set; } = "👤";
     public string? AvatarInitials { get; set; }
+    public string? ProfilePictureUrl { get; set; }
+    public string? BackgroundType { get; set; } = "color";
+    public string? BackgroundValue { get; set; } = "#ffffff";
     public string? BrandColor { get; set; } = "#6366f1";
     public string? Theme { get; set; } = "light";
     public bool IsPublished { get; set; } = false;

@@ -10,4 +10,5 @@ public sealed class LinkHubLink
     public int Order { get; set; }
     public bool IsActive { get; set; } = true;
     public int ClickCount { get; set; }
+    public string DisplayMode { get; set; } = "icon-label";
 }

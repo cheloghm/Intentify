@@ -7,11 +7,13 @@ internal static class ProfileMapper
 {
     internal static LinkHubProfileResult ToResult(LinkHubProfile profile) =>
         new(profile.Id, profile.TenantId, profile.Slug, profile.DisplayName, profile.Bio,
-            profile.AvatarEmoji, profile.AvatarInitials, profile.BrandColor, profile.Theme,
+            profile.AvatarEmoji, profile.AvatarInitials,
+            profile.ProfilePictureUrl, profile.BackgroundType, profile.BackgroundValue,
+            profile.BrandColor, profile.Theme,
             profile.IsPublished, profile.EngageBotEnabled, profile.WidgetKey, profile.SiteKey,
             profile.Links
                 .OrderBy(l => l.Order)
-                .Select(l => new LinkResult(l.Id, l.Label, l.Url, l.Platform, l.IconEmoji, l.Order, l.IsActive, l.ClickCount))
+                .Select(l => new LinkResult(l.Id, l.Label, l.Url, l.Platform, l.IconEmoji, l.Order, l.IsActive, l.ClickCount, l.DisplayMode))
                 .ToList());
 }
 
@@ -54,9 +56,12 @@ public sealed class SaveProfileHandler(ILinkHubRepository repository)
         profile.Slug             = slug;
         profile.DisplayName      = command.DisplayName;
         profile.Bio              = command.Bio;
-        profile.AvatarEmoji      = command.AvatarEmoji;
-        profile.AvatarInitials   = command.AvatarInitials;
-        profile.BrandColor       = command.BrandColor ?? "#6366f1";
+        profile.AvatarEmoji        = command.AvatarEmoji;
+        profile.AvatarInitials     = command.AvatarInitials;
+        profile.ProfilePictureUrl  = command.ProfilePictureUrl;
+        profile.BackgroundType     = command.BackgroundType ?? "color";
+        profile.BackgroundValue    = command.BackgroundValue ?? "#ffffff";
+        profile.BrandColor         = command.BrandColor ?? "#6366f1";
         profile.Theme            = command.Theme ?? "light";
         profile.IsPublished      = command.IsPublished;
         profile.EngageBotEnabled = command.EngageBotEnabled;
@@ -66,14 +71,15 @@ public sealed class SaveProfileHandler(ILinkHubRepository repository)
 
         profile.Links = command.Links.Select(l => new LinkHubLink
         {
-            Id         = string.IsNullOrWhiteSpace(l.Id) ? Guid.NewGuid().ToString("N") : l.Id,
-            Label      = l.Label,
-            Url        = l.Url,
-            Platform   = l.Platform,
-            IconEmoji  = l.IconEmoji,
-            Order      = l.Order,
-            IsActive   = l.IsActive,
-            ClickCount = existing?.Links.FirstOrDefault(x => x.Id == l.Id)?.ClickCount ?? 0,
+            Id          = string.IsNullOrWhiteSpace(l.Id) ? Guid.NewGuid().ToString("N") : l.Id,
+            Label       = l.Label,
+            Url         = l.Url,
+            Platform    = l.Platform,
+            IconEmoji   = l.IconEmoji,
+            Order       = l.Order,
+            IsActive    = l.IsActive,
+            ClickCount  = existing?.Links.FirstOrDefault(x => x.Id == l.Id)?.ClickCount ?? 0,
+            DisplayMode = l.DisplayMode,
         }).ToList();
 
         await repository.UpsertAsync(profile, ct);

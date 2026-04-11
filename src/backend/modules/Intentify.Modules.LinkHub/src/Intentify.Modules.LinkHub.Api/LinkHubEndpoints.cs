@@ -37,13 +37,16 @@ internal static class LinkHubEndpoints
             request.Bio,
             request.AvatarEmoji,
             request.AvatarInitials,
+            request.ProfilePictureUrl,
+            request.BackgroundType,
+            request.BackgroundValue,
             request.BrandColor,
             request.Theme,
             request.IsPublished,
             request.EngageBotEnabled,
             request.WidgetKey,
             request.SiteKey,
-            request.Links?.Select(l => new SaveLinkDto(l.Id, l.Label, l.Url, l.Platform, l.IconEmoji, l.Order, l.IsActive)).ToList()
+            request.Links?.Select(l => new SaveLinkDto(l.Id, l.Label, l.Url, l.Platform, l.IconEmoji, l.Order, l.IsActive, l.DisplayMode)).ToList()
                 ?? []);
 
         var (result, error) = await handler.HandleAsync(command, context.RequestAborted);
@@ -150,6 +153,9 @@ public sealed record SaveProfileRequest(
     string? Bio,
     string? AvatarEmoji,
     string? AvatarInitials,
+    string? ProfilePictureUrl,
+    string? BackgroundType,
+    string? BackgroundValue,
     string? BrandColor,
     string? Theme,
     bool IsPublished,
@@ -165,7 +171,8 @@ public sealed record SaveLinkRequest(
     string? Platform,
     string? IconEmoji,
     int Order,
-    bool IsActive);
+    bool IsActive,
+    string DisplayMode = "icon-label");
 
 public sealed record PublicClickRequest(
     string? LinkId,
